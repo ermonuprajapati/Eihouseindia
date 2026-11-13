@@ -76,7 +76,11 @@ export default function AuthorDashboardPage() {
     if (!firebaseUser) return;
     let cancelled = false;
     Promise.all([
-      getAuthorPostsPaginated({ authorId: firebaseUser.uid, pageSize: 50 }),
+      getAuthorPostsPaginated({ authorId: firebaseUser.uid, pageSize: 50 }).catch(() => ({
+        posts: [],
+        lastDoc: null,
+        hasMore: false,
+      })),
       getUserNotifications(firebaseUser.uid).catch(() => []),
     ])
       .then(([postRes, notifRes]) => {

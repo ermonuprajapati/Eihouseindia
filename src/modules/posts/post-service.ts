@@ -306,7 +306,8 @@ export async function getAuthorPostsPaginated(params: {
       hasMore,
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'posts');
+    console.warn('Could not fetch author posts from Firestore:', error);
+    return { posts: [], lastDoc: null, hasMore: false };
   }
 }
 
@@ -349,7 +350,8 @@ export async function getPublishedPostsPaginated(params: {
       hasMore,
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'posts');
+    console.warn('Could not fetch published posts from Firestore:', error);
+    return { posts: [], lastDoc: null, hasMore: false };
   }
 }
 

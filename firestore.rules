@@ -318,9 +318,9 @@ service cloud.firestore {
         existing().status == 'PUBLISHED' ||
         (isSignedIn() && (existing().authorId == request.auth.uid || isEditor()))
       );
-      allow list: if resource.data.status == 'PUBLISHED' || (
-        isSignedIn() && (resource.data.authorId == request.auth.uid || isEditor())
-      );
+      allow list: if resource.data.status == 'PUBLISHED'
+        || (isSignedIn() && resource.data.authorId == request.auth.uid)
+        || isEditor();
       allow create: if isSignedIn()
         && isValidId(postId)
         && isValidPost(incoming())

@@ -50,7 +50,10 @@ export function handleFirestoreError(
     path,
   };
   console.error('Firestore Error:', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  const cleanMsg = isPermissionDeniedError(error)
+    ? 'Access denied: Firestore security rules need to be deployed in Firebase Console.'
+    : (error instanceof Error ? error.message : 'Database operation failed.');
+  throw new Error(cleanMsg);
 }
 
 export function isPermissionDeniedError(error: unknown): boolean {
