@@ -17,7 +17,7 @@
 
 1. [Architecture & Features Overview](#-architecture--features-overview)
 2. [Project Structure](#-project-structure)
-3. [Environment Configuration (`.env.local`)](#-environment-configuration-envlocal)
+3. [Environment Setup](#-environment-setup)
 4. [Vercel Deployment Guide](#-vercel-deployment-guide)
 5. [Firebase Setup & Deployment](#-firebase-setup--deployment)
 6. [Resend Email Setup](#-resend-email-setup)
@@ -89,48 +89,16 @@ eihouse/
 
 ---
 
-## 🔐 Environment Configuration (`.env.local`)
+## 🔐 Environment Setup
 
-A pre-configured template is available at `.env.example`. Create `.env.local` in the project root:
+All configuration is managed via standard environment variables. A template is provided in `.env.example`:
 
-```env
-# ==============================================================================
-# EIHOUSE INDIA - Environment Configuration
-# ==============================================================================
-
-# Application URL
-APP_URL="https://eihouseindia.in"
-NEXT_PUBLIC_APP_URL="https://eihouseindia.in"
-
-# Firebase Web Client Configuration (Project: eihouseindia)
-NEXT_PUBLIC_FIREBASE_API_KEY="AIzaSyC2lJt0ATzGnHhA8mPk1Y_sBs6Zob2EsNY"
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="eihouseindia.firebaseapp.com"
-NEXT_PUBLIC_FIREBASE_PROJECT_ID="eihouseindia"
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="eihouseindia.firebasestorage.app"
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="836043240644"
-NEXT_PUBLIC_FIREBASE_APP_ID="1:836043240644:web:8276e02bcdfdfd63e08591"
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="G-EYDGDV169H"
-NEXT_PUBLIC_FIREBASE_DATABASE_ID="(default)"
-
-# Firebase Admin SDK (Server-Side Only - Private Key)
-# Obtain from: Firebase Console > Project Settings > Service Accounts > Generate new private key
-FIREBASE_PROJECT_ID="eihouseindia"
-FIREBASE_CLIENT_EMAIL="firebase-adminsdk@eihouseindia.iam.gserviceaccount.com"
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_HERE\n-----END PRIVATE KEY-----\n"
-# Alternative: Provide the full service account JSON string:
-# FIREBASE_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
-
-# Resend Email Configuration (Server-Side Only)
-RESEND_API_KEY="re_YOUR_RESEND_API_KEY"
-RESEND_FROM_EMAIL="EIHOUSE INDIA <info@eihouseindia.in>"
-CONTACT_EMAIL="info@eihouseindia.in"
-
-# Bootstrap Administrator Email
-BOOTSTRAP_ADMIN_EMAIL="er.monuprajapati.2024@gmail.com"
-
-# Optional Gemini API Key
-GEMINI_API_KEY=""
+```bash
+# Create your local environment file
+cp .env.example .env.local
 ```
+
+Populate `.env.local` with your Firebase credentials, Resend API key, and Administrator email. For production deployments on Vercel, add the identical keys under **Project Settings ➔ Environment Variables**.
 
 ---
 
@@ -159,31 +127,19 @@ git push -u origin main
    - **Install Command**: `npm install`
    - **Node.js Version**: `20.x` (or `22.x`)
 
-### Step 3: Add Environment Variables in Vercel
-Navigate to **Settings** ➔ **Environment Variables** in your Vercel project and add the following keys for **Production**, **Preview**, and **Development**:
+### Step 3: Configure Environment Variables in Vercel
+In your Vercel project, go to **Settings ➔ Environment Variables** and add the keys outlined in `.env.example`:
 
-| Variable Name | Recommended Value | Scope |
-| :--- | :--- | :--- |
-| `NEXT_PUBLIC_APP_URL` | `https://eihouseindia.in` | Public (Client + Server) |
-| `APP_URL` | `https://eihouseindia.in` | Server |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | `AIzaSyC2lJt0ATzGnHhA8mPk1Y_sBs6Zob2EsNY` | Public |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `eihouseindia.firebaseapp.com` | Public |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | `eihouseindia` | Public |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | `eihouseindia.firebasestorage.app` | Public |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | `836043240644` | Public |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | `1:836043240644:web:8276e02bcdfdfd63e08591` | Public |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | `G-EYDGDV169H` | Public |
-| `NEXT_PUBLIC_FIREBASE_DATABASE_ID` | `(default)` | Public |
-| `RESEND_API_KEY` | `re_YOUR_RESEND_API_KEY` | Secret (Server only) |
-| `RESEND_FROM_EMAIL` | `EIHOUSE INDIA <info@eihouseindia.in>` | Server |
-| `CONTACT_EMAIL` | `info@eihouseindia.in` | Server |
-| `BOOTSTRAP_ADMIN_EMAIL` | `er.monuprajapati.2024@gmail.com` | Server |
-| `FIREBASE_PROJECT_ID` | `eihouseindia` | Server |
-| `FIREBASE_CLIENT_EMAIL` | `firebase-adminsdk@eihouseindia.iam.gserviceaccount.com` | Server |
-| `FIREBASE_PRIVATE_KEY` | `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n` | Secret (Server only) |
-
-> [!TIP]
-> If you prefer, instead of setting `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` separately, you can set a single environment variable `FIREBASE_SERVICE_ACCOUNT_KEY` containing the entire JSON downloaded from the Firebase Console.
+| Environment Variable | Description |
+| :--- | :--- |
+| `NEXT_PUBLIC_APP_URL` / `APP_URL` | Application root URL (`https://eihouseindia.in`) |
+| `NEXT_PUBLIC_FIREBASE_*` | Firebase Client SDK credentials (from Firebase Web App) |
+| `RESEND_API_KEY` | Resend API key for editorial email notifications |
+| `RESEND_FROM_EMAIL` | Sender email address (`EIHOUSE INDIA <info@eihouseindia.in>`) |
+| `CONTACT_EMAIL` | Primary contact address (`info@eihouseindia.in`) |
+| `BOOTSTRAP_ADMIN_EMAIL` | Designated administrator email (`er.monuprajapati.2024@gmail.com`) |
+| `FIREBASE_PROJECT_ID` | Firebase project identifier |
+| `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | Service account credentials (or full JSON via `FIREBASE_SERVICE_ACCOUNT_KEY`) |
 
 ### Step 4: Configure Custom Domain (`eihouseindia.in`)
 1. In Vercel Project Settings, navigate to **Domains**.
