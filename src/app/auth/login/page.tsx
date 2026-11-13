@@ -10,20 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/modules/auth/auth-context';
-
-function mapAuthError(error: unknown): string {
-  const code = (error as { code?: string })?.code || '';
-  if (code === 'auth/operation-not-allowed') {
-    return 'This sign-in provider is not enabled yet in Firebase Console (Authentication > Sign-in method).';
-  }
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-    return 'Invalid email or password.';
-  }
-  if (code === 'auth/popup-closed-by-user') {
-    return 'Google sign-in popup was closed before completion.';
-  }
-  return error instanceof Error ? error.message : 'Authentication failed.';
-}
+import { mapAuthError } from '@/lib/auth-errors';
 
 export default function LoginPage() {
   const router = useRouter();

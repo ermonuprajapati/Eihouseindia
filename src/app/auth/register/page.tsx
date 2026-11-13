@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/modules/auth/auth-context';
+import { mapAuthError } from '@/lib/auth-errors';
 import { USERNAME_PATTERN } from '@/lib/validation';
 
 export default function RegisterPage() {
@@ -50,14 +51,7 @@ export default function RegisterPage() {
       toast.success('Account created! Please check your inbox to verify your email.');
       router.push('/dashboard');
     } catch (error) {
-      const code = (error as { code?: string })?.code || '';
-      if (code === 'auth/operation-not-allowed') {
-        toast.error('Enable Email/Password sign-in in Firebase Console (Authentication > Sign-in method).');
-      } else if (code === 'auth/email-already-in-use') {
-        toast.error('An account with this email already exists.');
-      } else {
-        toast.error(error instanceof Error ? error.message : 'Registration failed.');
-      }
+      toast.error(mapAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +64,7 @@ export default function RegisterPage() {
       toast.success('Signed in with Google.');
       router.push('/dashboard');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Google sign-in failed.');
+      toast.error(mapAuthError(error));
     } finally {
       setSubmitting(false);
     }

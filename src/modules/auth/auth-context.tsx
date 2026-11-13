@@ -6,6 +6,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   sendEmailVerification,
@@ -24,7 +26,6 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { SITE_CONFIG } from '@/config/site';
-import { handleFirestoreError, OperationType } from '@/lib/firestore-errors';
 import type { UserProfile, UserRole } from '@/types';
 
 interface AuthContextValue {
@@ -68,7 +69,8 @@ function deriveSafeUsername(raw: string, uid: string): string {
   if (cleaned.length >= 3) {
     return cleaned.slice(0, 24);
   }
-  return `eng_${uid.slice(0, 8).toLowerCase()}`;
+  const cleanUid = uid.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 8) || 'user';
+  return `eng_${cleanUid}`.slice(0, 24);
 }
 
 async function ensureUserProfileDocument(
@@ -82,7 +84,7 @@ async function ensureUserProfileDocument(
   try {
     existingSnap = await getDoc(userRef);
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+    console.warn('Could not read user profile from Firestore:', error);
   }
 
   if (existingSnap && existingSnap.exists()) {
@@ -102,11 +104,18 @@ async function ensureUserProfileDocument(
     };
   }
 
-  const displayName =
+  let displayName =
     overrides?.displayName?.trim() ||
     user.displayName?.trim() ||
     user.email?.split('@')[0] ||
     'Engineer';
+  if (displayName.length < 2) {
+    displayName = `${displayName || 'User'}_`;
+  }
+  if (displayName.length > 80) {
+    displayName = displayName.slice(0, 80);
+  }
+
   const username = deriveSafeUsername(
     overrides?.username || user.email?.split('@')[0] || displayName,
     user.uid
@@ -144,7 +153,7 @@ async function ensureUserProfileDocument(
   try {
     await batch.commit();
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}`);
+    console.warn('Could not write user profile to Firestore:', error);
   }
 
   return {
@@ -166,6 +175,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Process redirect sign-in results (e.g. on mobile or after popup blocked fallback)
+    getRedirectResult(auth)
+      .then((credential) => {
+        if (credential?.user) {
+          ensureUserProfileDocument(credential.user).catch((e) =>
+            console.warn('Redirect profile sync error:', e)
+          );
+        }
+      })
+      .catch((error) => {
+        console.warn('Redirect sign-in error:', error);
+      });
+  }, []);
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
@@ -267,8 +291,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    const credential = await signInWithPopup(auth, provider);
-    await ensureUserProfileDocument(credential.user);
+    try {
+      const credential = await signInWithPopup(auth, provider);
+      await ensureUserProfileDocument(credential.user).catch((e) =>
+        console.warn('Profile sync warning on Google login:', e)
+      );
+    } catch (popupError: unknown) {
+      const code = (popupError as { code?: string })?.code;
+      if (code === 'auth/popup-blocked') {
+        console.info('Google sign-in popup blocked; falling back to signInWithRedirect');
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      throw popupError;
+    }
   }, []);
 
   const logout = useCallback(async () => {
