@@ -23,6 +23,7 @@ import { SITE_CONFIG } from '@/config/site';
 import { handleFirestoreError, OperationType } from '@/lib/firestore-errors';
 import {
   calculateReadingStats,
+  extractPlainTextFromTiptap,
   postEditorSchema,
   sanitizeTiptapDocument,
   shouldInvalidateApprovalOnAuthorEdit,
@@ -105,17 +106,45 @@ export async function saveOrSubmitAuthorPost(
   }
 
   const sanitizedContent = sanitizeTiptapDocument(input.content);
-  const parsed = postEditorSchema.parse({
-    title: input.title,
-    slug: slugify(input.slug || input.title),
-    excerpt: input.excerpt,
-    coverImage: input.coverImage || '',
-    categoryId: input.category.id,
-    tags: input.tags.slice(0, 10),
-    metaTitle: input.metaTitle || input.title.slice(0, 120),
-    metaDescription: input.metaDescription || input.excerpt.slice(0, 200),
-    content: sanitizedContent,
-  });
+
+  // Auto-generate excerpt from content if left empty or shorter than 20 characters
+  let cleanExcerpt = input.excerpt?.trim() || '';
+  if (cleanExcerpt.length < 20) {
+    const plainText = extractPlainTextFromTiptap(sanitizedContent).trim();
+    if (plainText.length >= 20) {
+      cleanExcerpt = plainText.slice(0, 300).trim();
+    } else {
+      const fallback = `${input.title.trim()} — Technical article published on ${SITE_CONFIG.name}.`;
+      cleanExcerpt = fallback.slice(0, 300);
+    }
+  }
+  if (cleanExcerpt.length < 20) {
+    cleanExcerpt = cleanExcerpt.padEnd(20, '.');
+  }
+  if (cleanExcerpt.length > 400) {
+    cleanExcerpt = cleanExcerpt.slice(0, 400);
+  }
+
+  let parsed;
+  try {
+    parsed = postEditorSchema.parse({
+      title: input.title,
+      slug: slugify(input.slug || input.title),
+      excerpt: cleanExcerpt,
+      coverImage: input.coverImage || '',
+      categoryId: input.category.id,
+      tags: input.tags.slice(0, 10),
+      metaTitle: input.metaTitle || input.title.slice(0, 120),
+      metaDescription: input.metaDescription || cleanExcerpt.slice(0, 200),
+      content: sanitizedContent,
+    });
+  } catch (zodError: unknown) {
+    const issues = (zodError as { issues?: { message?: string }[] })?.issues;
+    if (Array.isArray(issues) && issues.length > 0 && issues[0]?.message) {
+      throw new Error(issues[0].message);
+    }
+    throw zodError;
+  }
 
   const { wordCount, readingTime } = calculateReadingStats(sanitizedContent);
   const postId = input.postId || `post_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

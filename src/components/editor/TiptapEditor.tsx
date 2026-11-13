@@ -37,7 +37,7 @@ import { useAuth } from '@/modules/auth/auth-context';
 import { fetchCategories } from '@/modules/categories/category-service';
 import { saveOrSubmitAuthorPost } from '@/modules/posts/post-service';
 import { uploadEditorialImage } from '@/modules/storage/storage-service';
-import { calculateReadingStats, slugify } from '@/lib/validation';
+import { calculateReadingStats, extractPlainTextFromTiptap, slugify } from '@/lib/validation';
 import { TiptapArticleRenderer } from '@/lib/tiptap-renderer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -235,12 +235,21 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
 
       setSaving(true);
       try {
+        let activeExcerpt = excerpt.trim();
+        if (activeExcerpt.length < 20) {
+          const plain = extractPlainTextFromTiptap(currentDoc).trim();
+          if (plain.length >= 20) {
+            activeExcerpt = plain.slice(0, 300).trim();
+            setExcerpt(activeExcerpt);
+          }
+        }
+
         const result = await saveOrSubmitAuthorPost(
           {
             postId,
             title,
             slug,
-            excerpt,
+            excerpt: activeExcerpt,
             content: currentDoc,
             coverImage,
             category: selectedCategory,
@@ -286,7 +295,21 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
           );
         }
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Unable to save article.');
+        let msg = 'Unable to save article.';
+        if (error instanceof Error) {
+          msg = error.message;
+          if (msg.startsWith('[') && msg.includes('message')) {
+            try {
+              const issues = JSON.parse(msg);
+              if (Array.isArray(issues) && issues[0]?.message) {
+                msg = issues[0].message;
+              }
+            } catch {
+              // ignore JSON parse error
+            }
+          }
+        }
+        toast.error(msg);
       } finally {
         setSaving(false);
       }
@@ -460,11 +483,14 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                 id="article-excerpt"
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
-                placeholder="A concise technical summary (20–400 characters) shown on article cards and search results."
+                placeholder="A concise technical summary (min 20 characters). If left blank, it will be automatically generated from your article."
                 rows={3}
                 maxLength={400}
               />
-              <p className="text-xs text-slate-500 tabular-nums">{excerpt.length}/400</p>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>Min 20 characters (auto-generated from article if empty)</span>
+                <span className="tabular-nums">{excerpt.length}/400</span>
+              </div>
             </div>
 
             {/* Tiptap Toolbar & Surface */}
