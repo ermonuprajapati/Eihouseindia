@@ -1,0 +1,6 @@
+{
+  "name": "EIHOUSE INDIA",
+  "description": "Electronics. Engineering. AI. Innovation. A global technology editorial and community publishing platform for engineers, researchers, and developers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

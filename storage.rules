@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'er.monuprajapati.2024@gmail.com';
+    }
+
+    function isValidImageUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
+    }
+
+    // Public read access for published editorial imagery
+    match /uploads/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidImageUpload();
+      allow delete: if isSignedIn()
+        && (request.auth.uid == userId || isBootstrapAdmin());
+    }
+
+    // Default deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

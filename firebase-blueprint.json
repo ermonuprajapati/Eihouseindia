@@ -1,0 +1,274 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Private user account record storing role, status, and contact email.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-z0-9_]{3,30}$" },
+        "displayName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "avatar": { "type": "string", "maxLength": 1000 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "website": { "type": "string", "maxLength": 250 },
+        "role": { "type": "string", "enum": ["USER", "EDITOR", "ADMIN"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "username", "displayName", "role", "status", "createdAt", "updatedAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Publicly readable author profile without PII.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30 },
+        "displayName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "avatar": { "type": "string", "maxLength": 1000 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "website": { "type": "string", "maxLength": 250 },
+        "role": { "type": "string", "enum": ["USER", "EDITOR", "ADMIN"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "displayName", "role", "status", "createdAt", "updatedAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Editorial technology article with structured Tiptap JSON and workflow status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 80 },
+        "authorUsername": { "type": "string", "maxLength": 30 },
+        "authorAvatar": { "type": "string", "maxLength": 1000 },
+        "title": { "type": "string", "minLength": 5, "maxLength": 160 },
+        "slug": { "type": "string", "minLength": 3, "maxLength": 140 },
+        "excerpt": { "type": "string", "minLength": 20, "maxLength": 400 },
+        "content": { "type": "object" },
+        "coverImage": { "type": "string", "maxLength": 1000 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "categoryName": { "type": "string", "maxLength": 80 },
+        "categorySlug": { "type": "string", "maxLength": 80 },
+        "tags": { "type": "array" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING", "PUBLISHED", "REJECTED", "ARCHIVED"] },
+        "metaTitle": { "type": "string", "maxLength": 120 },
+        "metaDescription": { "type": "string", "maxLength": 200 },
+        "canonicalUrl": { "type": "string", "maxLength": 500 },
+        "locale": { "type": "string", "maxLength": 16 },
+        "readingTime": { "type": "number" },
+        "wordCount": { "type": "number" },
+        "featured": { "type": "boolean" },
+        "viewCount": { "type": "number" },
+        "reviewerId": { "type": "string" },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "authorId", "title", "slug", "excerpt", "content", "categoryId", "tags", "status", "locale", "readingTime", "wordCount", "featured", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Editorial knowledge category.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 300 },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "name", "slug", "description", "order"]
+    },
+    "Tag": {
+      "title": "Tag",
+      "description": "Topic tag linked to published articles.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 40 },
+        "slug": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["id", "name", "slug"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Authenticated reader comment on a published article.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "postId": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 80 },
+        "authorUsername": { "type": "string", "maxLength": 30 },
+        "content": { "type": "string", "minLength": 3, "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["VISIBLE", "HIDDEN", "FLAGGED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "postId", "authorId", "content", "status", "createdAt", "updatedAt"]
+    },
+    "Media": {
+      "title": "Media",
+      "description": "Uploaded image metadata stored in Firebase Storage.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "uploaderId": { "type": "string", "maxLength": 128 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "storagePath": { "type": "string", "maxLength": 500 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "mimeType": { "type": "string", "maxLength": 64 },
+        "sizeBytes": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uploaderId", "url", "storagePath", "fileName", "mimeType", "sizeBytes", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notification for author workflow updates.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 120 },
+        "message": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "enum": ["SUBMISSION", "APPROVED", "REJECTED", "CHANGES_REQUESTED", "SYSTEM"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Moderation report filed by an authenticated user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "targetType": { "type": "string", "enum": ["POST", "COMMENT"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "reporterId": { "type": "string", "maxLength": 128 },
+        "reason": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["OPEN", "RESOLVED", "DISMISSED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "targetType", "targetId", "reporterId", "reason", "status", "createdAt", "updatedAt"]
+    },
+    "ModerationLog": {
+      "title": "ModerationLog",
+      "description": "Immutable audit log of sensitive administrative actions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "actorRole": { "type": "string", "enum": ["USER", "EDITOR", "ADMIN"] },
+        "action": { "type": "string", "maxLength": 64 },
+        "targetType": { "type": "string", "maxLength": 32 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "reason": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorId", "actorRole", "action", "targetType", "targetId", "createdAt"]
+    },
+    "PostView": {
+      "title": "PostView",
+      "description": "Article read telemetry event.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "maxLength": 128 },
+        "viewerId": { "type": "string", "maxLength": 128 },
+        "viewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "viewedAt"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Editorial digest subscriber record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "subscribedAt": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["email", "subscribedAt"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global platform configuration controlled by admins.",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string", "maxLength": 80 },
+        "tagline": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 300 },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "allowRegistrations": { "type": "boolean" },
+        "requireEmailVerification": { "type": "boolean" },
+        "maintenanceMode": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["siteName", "tagline", "allowRegistrations", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user account profiles with PII (email) restricted to owner or admin."
+    },
+    "/publicProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/PublicProfile" },
+      "description": "Public author profiles safe for unauthenticated reading."
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Editorial articles across DRAFT, PENDING, PUBLISHED, REJECTED, and ARCHIVED states."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Technology and engineering article categories."
+    },
+    "/tags/{tagId}": {
+      "schema": { "$ref": "#/entities/Tag" },
+      "description": "Article topic tags."
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Authenticated reader comments on published posts."
+    },
+    "/media/{mediaId}": {
+      "schema": { "$ref": "#/entities/Media" },
+      "description": "Uploaded media records owned by authors or moderated by editors."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Author and reviewer workflow notifications."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Content moderation reports."
+    },
+    "/moderationLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ModerationLog" },
+      "description": "Immutable admin/editor moderation audit logs."
+    },
+    "/postViews/{viewId}": {
+      "schema": { "$ref": "#/entities/PostView" },
+      "description": "Article view events."
+    },
+    "/newsletterSubscribers/{subscriberId}": {
+      "schema": { "$ref": "#/entities/NewsletterSubscriber" },
+      "description": "Newsletter subscription emails."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Site-wide editorial configuration."
+    }
+  }
+}

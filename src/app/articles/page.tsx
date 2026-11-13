@@ -1,0 +1,43 @@
+import type { Metadata } from 'next';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
+import { PaginatedArticlesList } from '@/components/articles/PaginatedArticlesList';
+import { SITE_CONFIG } from '@/config/site';
+import { getPublicCategories, getPublishedPosts } from '@/modules/posts/public-queries';
+
+export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'All Published Articles',
+  description:
+    'Explore peer-reviewed articles across electronics components, semiconductor technology, embedded systems, robotics, and AI.',
+  alternates: {
+    canonical: `${SITE_CONFIG.url}/articles`,
+  },
+};
+
+export default async function ArticlesPage() {
+  const [posts, categories] = await Promise.all([
+    getPublishedPosts({ limitCount: 9 }),
+    getPublicCategories(),
+  ]);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#FAFBFD]">
+      <SiteHeader />
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mb-8 space-y-2">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[#0B1528]">
+            Technical Articles & Dispatches
+          </h1>
+          <p className="text-base text-slate-600 max-w-2xl">
+            Curated engineering articles reviewed by the EIHOUSE INDIA editorial board.
+          </p>
+        </div>
+
+        <PaginatedArticlesList initialPosts={posts} categories={categories} />
+      </main>
+      <SiteFooter />
+    </div>
+  );
+}
