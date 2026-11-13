@@ -5,6 +5,7 @@ import { sendEditorialEmail } from '@/modules/email/email-service';
 const emailRequestSchema = z.object({
   to: z.string().email(),
   event: z.enum([
+    'WELCOME',
     'EMAIL_VERIFICATION_NOTICE',
     'ARTICLE_SUBMITTED',
     'ARTICLE_APPROVED',
@@ -19,6 +20,9 @@ const emailRequestSchema = z.object({
   customMessage: z.string().max(1000).optional(),
 });
 
+// Cache recently dispatched welcome emails to prevent duplicate sends during fast reloads
+const sentWelcomeCache = new Set<string>();
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -28,6 +32,18 @@ export async function POST(request: Request) {
         { error: parsed.error.issues[0]?.message || 'Invalid email payload' },
         { status: 400 }
       );
+    }
+
+    const { to, event } = parsed.data;
+    if (event === 'WELCOME') {
+      const normalizedTo = to.trim().toLowerCase();
+      if (sentWelcomeCache.has(normalizedTo)) {
+        return NextResponse.json(
+          { sent: true, provider: 'resend', reason: 'Welcome email already delivered to this recipient.' },
+          { status: 200 }
+        );
+      }
+      sentWelcomeCache.add(normalizedTo);
     }
 
     const result = await sendEditorialEmail(parsed.data);

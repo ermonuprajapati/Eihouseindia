@@ -60,6 +60,35 @@ function serializeTimestamp(val: unknown): string {
   return new Date().toISOString();
 }
 
+const welcomedUsers = new Set<string>();
+
+function sendWelcomeEmailNotice(email: string, displayName: string, uid: string) {
+  if (typeof window === 'undefined' || !email) return;
+
+  if (welcomedUsers.has(uid)) return;
+  welcomedUsers.add(uid);
+
+  try {
+    const storageKey = `eihouse_welcome_sent_${uid}`;
+    if (localStorage.getItem(storageKey)) return;
+    localStorage.setItem(storageKey, '1');
+  } catch {
+    // ignore local storage restrictions in strict/private mode
+  }
+
+  fetch('/api/notifications/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: email,
+      event: 'WELCOME',
+      recipientName: displayName,
+    }),
+  }).catch((err) => {
+    console.warn('Welcome email notification dispatch failed:', err);
+  });
+}
+
 function deriveSafeUsername(raw: string, uid: string): string {
   const cleaned = raw
     .toLowerCase()
@@ -154,6 +183,11 @@ async function ensureUserProfileDocument(
     await batch.commit();
   } catch (error) {
     console.warn('Could not write user profile to Firestore:', error);
+  }
+
+  // Send branded welcome email on first time registration / Google sign-in
+  if (email) {
+    sendWelcomeEmailNotice(email, displayName, user.uid);
   }
 
   return {
