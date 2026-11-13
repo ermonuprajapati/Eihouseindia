@@ -2,13 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global safety net: default deny
+    // Global default: deny unless explicitly allowed below
     match /{document=**} {
       allow read, write: if false;
     }
 
     // -------------------------------------------------------------------------
-    // Core Security Primitives
+    // Core Security & Identity Primitives
     // -------------------------------------------------------------------------
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
@@ -62,175 +62,28 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'username', 'displayName', 'avatar', 'bio', 'website', 'role', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'email', 'username', 'displayName', 'avatar', 'bio', 'website', 'role', 'status', 'createdAt', 'updatedAt'])
         && isValidId(data.uid)
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
-        && data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-z0-9_]{3,30}$')
-        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 80
-        && data.avatar is string && data.avatar.size() <= 1000
-        && data.bio is string && data.bio.size() <= 500
-        && data.website is string && data.website.size() <= 250
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 30
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
         && data.role in ['USER', 'EDITOR', 'ADMIN']
-        && data.status in ['ACTIVE', 'SUSPENDED']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
+        && data.status in ['ACTIVE', 'SUSPENDED'];
     }
 
     function isValidPublicProfile(data) {
       return data.keys().hasAll(['uid', 'username', 'displayName', 'avatar', 'bio', 'website', 'role', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'username', 'displayName', 'avatar', 'bio', 'website', 'role', 'status', 'createdAt', 'updatedAt'])
         && isValidId(data.uid)
-        && data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-z0-9_]{3,30}$')
-        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 80
-        && data.avatar is string && data.avatar.size() <= 1000
-        && data.bio is string && data.bio.size() <= 500
-        && data.website is string && data.website.size() <= 250
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 30
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
         && data.role in ['USER', 'EDITOR', 'ADMIN']
-        && data.status in ['ACTIVE', 'SUSPENDED']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
-    function isValidPost(data) {
-      return data.keys().hasAll([
-          'id', 'authorId', 'authorName', 'authorUsername', 'authorAvatar',
-          'title', 'slug', 'excerpt', 'content', 'coverImage',
-          'categoryId', 'categoryName', 'categorySlug', 'tags', 'status',
-          'metaTitle', 'metaDescription', 'canonicalUrl', 'locale',
-          'readingTime', 'wordCount', 'featured', 'viewCount',
-          'reviewerId', 'rejectionReason', 'createdAt', 'updatedAt', 'submittedAt', 'publishedAt'
-        ])
-        && data.keys().hasOnly([
-          'id', 'authorId', 'authorName', 'authorUsername', 'authorAvatar',
-          'title', 'slug', 'excerpt', 'content', 'coverImage',
-          'categoryId', 'categoryName', 'categorySlug', 'tags', 'status',
-          'metaTitle', 'metaDescription', 'canonicalUrl', 'locale',
-          'readingTime', 'wordCount', 'featured', 'viewCount',
-          'reviewerId', 'rejectionReason', 'createdAt', 'updatedAt', 'submittedAt', 'publishedAt'
-        ])
-        && isValidId(data.id)
-        && isValidId(data.authorId)
-        && data.authorName is string && data.authorName.size() <= 80
-        && data.authorUsername is string && data.authorUsername.size() <= 30
-        && data.authorAvatar is string && data.authorAvatar.size() <= 1000
-        && data.title is string && data.title.size() >= 5 && data.title.size() <= 160
-        && data.slug is string && data.slug.size() >= 3 && data.slug.size() <= 140
-        && data.excerpt is string && data.excerpt.size() >= 20 && data.excerpt.size() <= 400
-        && data.content is map
-        && data.coverImage is string && data.coverImage.size() <= 1000
-        && isValidId(data.categoryId)
-        && data.categoryName is string && data.categoryName.size() <= 80
-        && data.categorySlug is string && data.categorySlug.size() <= 80
-        && data.tags is list && data.tags.size() <= 10
-        && (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 40))
-        && data.status in ['DRAFT', 'PENDING', 'PUBLISHED', 'REJECTED', 'ARCHIVED']
-        && data.metaTitle is string && data.metaTitle.size() <= 120
-        && data.metaDescription is string && data.metaDescription.size() <= 200
-        && data.canonicalUrl is string && data.canonicalUrl.size() <= 500
-        && data.locale is string && data.locale.size() >= 2 && data.locale.size() <= 16
-        && data.readingTime is number && data.readingTime >= 1 && data.readingTime <= 240
-        && data.wordCount is number && data.wordCount >= 0 && data.wordCount <= 50000
-        && data.featured is bool
-        && data.viewCount is number && data.viewCount >= 0
-        && (data.reviewerId == null || isValidId(data.reviewerId))
-        && (data.rejectionReason == null || (data.rejectionReason is string && data.rejectionReason.size() <= 500))
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp
-        && (data.submittedAt == null || data.submittedAt is timestamp)
-        && (data.publishedAt == null || data.publishedAt is timestamp);
-    }
-
-    function isValidCategory(data) {
-      return data.keys().hasAll(['id', 'name', 'slug', 'description', 'order', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'name', 'slug', 'description', 'order', 'createdAt', 'updatedAt'])
-        && isValidId(data.id)
-        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
-        && data.slug is string && data.slug.size() >= 2 && data.slug.size() <= 80
-        && data.description is string && data.description.size() >= 10 && data.description.size() <= 300
-        && data.order is number && data.order >= 1 && data.order <= 100
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
-    function isValidTag(data) {
-      return data.keys().hasAll(['id', 'name', 'slug', 'createdAt'])
-        && data.keys().hasOnly(['id', 'name', 'slug', 'postCount', 'createdAt'])
-        && isValidId(data.id)
-        && data.name is string && data.name.size() >= 1 && data.name.size() <= 40
-        && data.slug is string && data.slug.size() >= 1 && data.slug.size() <= 40
-        && data.createdAt is timestamp;
-    }
-
-    function isValidComment(data) {
-      return data.keys().hasAll(['id', 'postId', 'authorId', 'authorName', 'authorUsername', 'authorAvatar', 'content', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'postId', 'authorId', 'authorName', 'authorUsername', 'authorAvatar', 'content', 'status', 'createdAt', 'updatedAt'])
-        && isValidId(data.id)
-        && isValidId(data.postId)
-        && isValidId(data.authorId)
-        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80
-        && data.authorUsername is string && data.authorUsername.size() >= 1 && data.authorUsername.size() <= 30
-        && data.authorAvatar is string && data.authorAvatar.size() <= 1000
-        && data.content is string && data.content.size() >= 3 && data.content.size() <= 2000
-        && data.status in ['VISIBLE', 'HIDDEN', 'FLAGGED']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
-    function isValidMedia(data) {
-      return data.keys().hasAll(['id', 'uploaderId', 'url', 'storagePath', 'fileName', 'mimeType', 'sizeBytes', 'createdAt'])
-        && data.keys().hasOnly(['id', 'uploaderId', 'url', 'storagePath', 'fileName', 'mimeType', 'sizeBytes', 'createdAt'])
-        && isValidId(data.id)
-        && isValidId(data.uploaderId)
-        && data.url is string && data.url.size() <= 1000
-        && data.storagePath is string && data.storagePath.size() <= 500
-        && data.fileName is string && data.fileName.size() <= 200
-        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'image/avif']
-        && data.sizeBytes is number && data.sizeBytes > 0 && data.sizeBytes <= 5242880
-        && data.createdAt is timestamp;
-    }
-
-    function isValidNotification(data) {
-      return data.keys().hasAll(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt'])
-        && data.keys().hasOnly(['id', 'userId', 'title', 'message', 'type', 'postId', 'read', 'createdAt'])
-        && isValidId(data.id)
-        && isValidId(data.userId)
-        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
-        && data.message is string && data.message.size() >= 1 && data.message.size() <= 500
-        && data.type in ['SUBMISSION', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'SYSTEM']
-        && data.read is bool
-        && data.createdAt is timestamp;
-    }
-
-    function isValidReport(data) {
-      return data.keys().hasAll(['id', 'targetType', 'targetId', 'reporterId', 'reason', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'targetType', 'targetId', 'targetTitle', 'reporterId', 'reason', 'status', 'resolvedBy', 'resolutionNote', 'createdAt', 'updatedAt'])
-        && isValidId(data.id)
-        && data.targetType in ['POST', 'COMMENT']
-        && isValidId(data.targetId)
-        && isValidId(data.reporterId)
-        && data.reason is string && data.reason.size() >= 10 && data.reason.size() <= 500
-        && data.status in ['OPEN', 'RESOLVED', 'DISMISSED']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
-    function isValidModerationLog(data) {
-      return data.keys().hasAll(['id', 'actorId', 'actorRole', 'action', 'targetType', 'targetId', 'createdAt'])
-        && data.keys().hasOnly(['id', 'actorId', 'actorEmail', 'actorRole', 'action', 'targetType', 'targetId', 'reason', 'createdAt'])
-        && isValidId(data.id)
-        && isValidId(data.actorId)
-        && data.actorRole in ['USER', 'EDITOR', 'ADMIN']
-        && data.action is string && data.action.size() >= 2 && data.action.size() <= 64
-        && data.targetType in ['POST', 'USER', 'CATEGORY', 'COMMENT', 'REPORT', 'SETTINGS']
-        && isValidId(data.targetId)
-        && data.createdAt is timestamp;
+        && data.status in ['ACTIVE', 'SUSPENDED'];
     }
 
     // -------------------------------------------------------------------------
     // Collection Rules
     // -------------------------------------------------------------------------
 
-    // Private User Accounts (PII isolated to owner or admin)
+    // 1. Private User Accounts
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
@@ -239,33 +92,17 @@ service cloud.firestore {
         && isOwner(userId)
         && isValidUser(incoming())
         && incoming().uid == request.auth.uid
-        && incoming().role == 'USER'
-        && incoming().status == 'ACTIVE'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().role == 'USER';
       allow update: if isSignedIn()
         && isValidId(userId)
-        && isValidUser(incoming())
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
         && (
-          (
-            isOwner(userId)
-            && existing().status == 'ACTIVE'
-            && incoming().role == existing().role
-            && incoming().status == existing().status
-            && incoming().email == existing().email
-            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'username', 'bio', 'website', 'avatar', 'updatedAt'])
-          ) || (
-            isAdmin()
-            && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'status', 'displayName', 'username', 'bio', 'website', 'avatar', 'updatedAt'])
-          )
+          (isOwner(userId) && incoming().uid == existing().uid && incoming().role == existing().role) ||
+          isAdmin()
         );
       allow delete: if isAdmin() && isValidId(userId);
     }
 
-    // Public Author Profiles (Non-PII, safe for public author pages)
+    // 2. Public Author Profiles
     match /publicProfiles/{userId} {
       allow get: if isValidId(userId);
       allow list: if true;
@@ -273,33 +110,17 @@ service cloud.firestore {
         && isValidId(userId)
         && isOwner(userId)
         && isValidPublicProfile(incoming())
-        && incoming().uid == request.auth.uid
-        && incoming().role == 'USER'
-        && incoming().status == 'ACTIVE'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().uid == request.auth.uid;
       allow update: if isSignedIn()
         && isValidId(userId)
-        && isValidPublicProfile(incoming())
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
         && (
-          (
-            isOwner(userId)
-            && existing().status == 'ACTIVE'
-            && incoming().role == existing().role
-            && incoming().status == existing().status
-            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'username', 'bio', 'website', 'avatar', 'updatedAt'])
-          ) || (
-            isAdmin()
-            && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'status', 'displayName', 'username', 'bio', 'website', 'avatar', 'updatedAt'])
-          )
+          (isOwner(userId) && incoming().uid == existing().uid) ||
+          isAdmin()
         );
       allow delete: if isAdmin() && isValidId(userId);
     }
 
-    // Role Marker Collections (Admin/Editor privilege gates)
+    // 3. Role Marker Collections
     match /admins/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
@@ -312,7 +133,7 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() && isValidId(userId);
     }
 
-    // Editorial Posts
+    // 4. Articles & Blog Posts
     match /posts/{postId} {
       allow get: if isValidId(postId) && (
         existing().status == 'PUBLISHED' ||
@@ -323,241 +144,118 @@ service cloud.firestore {
         || isEditor();
       allow create: if isSignedIn()
         && isValidId(postId)
-        && isValidPost(incoming())
         && incoming().id == postId
         && incoming().authorId == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && isActiveUser()
-        && (
-          (isEditor() && incoming().status in ['DRAFT', 'PENDING', 'PUBLISHED']) ||
-          (
-            incoming().status in ['DRAFT', 'PENDING']
-            && incoming().featured == false
-            && incoming().reviewerId == null
-            && incoming().rejectionReason == null
-            && incoming().publishedAt == null
+        && (incoming().status in ['DRAFT', 'PENDING'] || isEditor());
+      allow update: if isValidId(postId) && (
+        // Allow public view count increment on published posts
+        (
+          existing().status == 'PUBLISHED' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['viewCount']) &&
+          incoming().viewCount is number
+        ) ||
+        // Allow full edit by author (drafts/pending) or editor/admin
+        (
+          isSignedIn()
+          && incoming().id == existing().id
+          && (
+            isEditor() ||
+            (
+              existing().authorId == request.auth.uid
+              && incoming().authorId == existing().authorId
+              && (incoming().status in ['DRAFT', 'PENDING'] || isEditor())
+            )
           )
-        );
-      allow update: if isSignedIn()
-        && isValidId(postId)
-        && isValidPost(incoming())
-        && incoming().id == existing().id
-        && incoming().authorId == existing().authorId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && (
-          (
-            // Tier 1: Editor/Admin moderation & editorial updates
-            isEditor()
-            && incoming().diff(existing()).affectedKeys().hasOnly([
-              'title', 'slug', 'excerpt', 'content', 'coverImage',
-              'categoryId', 'categoryName', 'categorySlug', 'tags',
-              'metaTitle', 'metaDescription', 'canonicalUrl',
-              'wordCount', 'readingTime', 'status', 'featured',
-              'reviewerId', 'rejectionReason', 'publishedAt', 'submittedAt', 'updatedAt'
-            ])
-          ) || (
-            // Tier 2: Author draft/resubmit edits (cannot self-publish or feature)
-            existing().authorId == request.auth.uid
-            && isActiveUser()
-            && existing().status != 'ARCHIVED'
-            && incoming().status in ['DRAFT', 'PENDING']
-            && incoming().featured == existing().featured
-            && incoming().viewCount == existing().viewCount
-            && incoming().reviewerId == null
-            && (existing().status != 'PUBLISHED' || incoming().status == 'PENDING')
-            && incoming().diff(existing()).affectedKeys().hasOnly([
-              'title', 'slug', 'excerpt', 'content', 'coverImage',
-              'categoryId', 'categoryName', 'categorySlug', 'tags',
-              'metaTitle', 'metaDescription', 'canonicalUrl',
-              'wordCount', 'readingTime', 'status', 'submittedAt',
-              'publishedAt', 'reviewerId', 'rejectionReason', 'updatedAt'
-            ])
-          )
-        );
+        )
+      );
       allow delete: if isSignedIn()
         && isValidId(postId)
-        && (
-          isAdmin() ||
-          (existing().authorId == request.auth.uid && existing().status == 'DRAFT')
-        );
+        && (isAdmin() || (existing().authorId == request.auth.uid && existing().status in ['DRAFT', 'PENDING']));
     }
 
-    // Categories
+    // 4a. Post View Telemetry
+    match /postViews/{viewId} {
+      allow create: if isValidId(viewId);
+      allow read, delete: if isAdmin();
+    }
+
+    // 5. Categories
     match /categories/{categoryId} {
-      allow get: if isValidId(categoryId);
-      allow list: if true;
-      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
-      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming()) && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
-      allow delete: if isAdmin() && isValidId(categoryId);
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
-    // Tags
+    // 6. Tags
     match /tags/{tagId} {
-      allow get: if isValidId(tagId);
-      allow list: if true;
-      allow create: if isSignedIn() && isValidId(tagId) && isValidTag(incoming()) && incoming().createdAt == request.time && isActiveUser();
-      allow update: if isEditor() && isValidId(tagId) && isValidTag(incoming()) && incoming().createdAt == existing().createdAt;
+      allow get, list: if true;
+      allow create, update: if isSignedIn() && isValidId(tagId);
       allow delete: if isAdmin() && isValidId(tagId);
     }
 
-    // Comments
+    // 7. Comments
     match /comments/{commentId} {
-      allow get: if isValidId(commentId) && (
-        existing().status == 'VISIBLE' ||
-        (isSignedIn() && (existing().authorId == request.auth.uid || isEditor()))
-      );
-      allow list: if resource.data.status == 'VISIBLE' || (
-        isSignedIn() && (resource.data.authorId == request.auth.uid || isEditor())
-      );
+      allow get, list: if true;
       allow create: if isSignedIn()
         && isValidId(commentId)
-        && isValidComment(incoming())
         && incoming().id == commentId
-        && incoming().authorId == request.auth.uid
-        && incoming().status == 'VISIBLE'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && isActiveUser()
-        && exists(/databases/$(database)/documents/posts/$(incoming().postId))
-        && get(/databases/$(database)/documents/posts/$(incoming().postId)).data.status == 'PUBLISHED';
+        && incoming().authorId == request.auth.uid;
       allow update: if isSignedIn()
         && isValidId(commentId)
-        && isValidComment(incoming())
-        && incoming().id == existing().id
-        && incoming().postId == existing().postId
-        && incoming().authorId == existing().authorId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && (
-          (isEditor() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
-          (existing().authorId == request.auth.uid && existing().status == 'VISIBLE' && isActiveUser() && incoming().status == existing().status && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']))
-        );
-      allow delete: if isSignedIn() && isValidId(commentId) && (isAdmin() || existing().authorId == request.auth.uid);
+        && (isEditor() || (existing().authorId == request.auth.uid));
+      allow delete: if isSignedIn()
+        && isValidId(commentId)
+        && (isAdmin() || existing().authorId == request.auth.uid);
     }
 
-    // Media Library
+    // 8. Media Library & Uploads
     match /media/{mediaId} {
-      allow get: if isSignedIn() && isValidId(mediaId) && (existing().uploaderId == request.auth.uid || isEditor());
-      allow list: if isSignedIn() && (resource.data.uploaderId == request.auth.uid || isEditor());
-      allow create: if isSignedIn()
-        && isValidId(mediaId)
-        && isValidMedia(incoming())
-        && incoming().id == mediaId
-        && incoming().uploaderId == request.auth.uid
-        && incoming().createdAt == request.time
-        && isActiveUser();
-      allow delete: if isSignedIn() && isValidId(mediaId) && (isAdmin() || existing().uploaderId == request.auth.uid);
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(mediaId);
+      allow delete: if isSignedIn() && (isAdmin() || existing().uploaderId == request.auth.uid);
     }
 
-    // Notifications
+    match /mediaFiles/{mediaId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // 9. Notifications
     match /notifications/{notificationId} {
-      allow get: if isSignedIn() && isValidId(notificationId) && existing().userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn()
-        && isValidId(notificationId)
-        && isValidNotification(incoming())
-        && incoming().createdAt == request.time
-        && (isEditor() || incoming().userId == request.auth.uid);
-      allow update: if isSignedIn()
-        && isValidId(notificationId)
-        && existing().userId == request.auth.uid
-        && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
-        && incoming().read is bool;
-      allow delete: if isSignedIn() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(notificationId);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Reports
+    // 10. Site Settings & Reports
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /reports/{reportId} {
-      allow get: if isSignedIn() && isValidId(reportId) && (isEditor() || existing().reporterId == request.auth.uid);
-      allow list: if isEditor() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
-      allow create: if isSignedIn()
-        && isValidId(reportId)
-        && isValidReport(incoming())
-        && incoming().reporterId == request.auth.uid
-        && incoming().status == 'OPEN'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && isActiveUser();
-      allow update: if isEditor()
-        && isValidId(reportId)
-        && isValidReport(incoming())
-        && incoming().reporterId == existing().reporterId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedBy', 'resolutionNote', 'updatedAt']);
-      allow delete: if isAdmin() && isValidId(reportId);
+      allow read: if isEditor();
+      allow create: if isSignedIn() && isValidId(reportId);
+      allow update, delete: if isEditor();
     }
 
-    // Moderation Audit Logs (Immutable)
+    // 11. Public Engagement (Newsletter & Contact Inquiries)
+    match /newsletterSubscribers/{subId} {
+      allow create: if isValidId(subId) && incoming().email is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /contactMessages/{msgId} {
+      allow create: if isValidId(msgId) && incoming().email is string && incoming().message is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 12. Immutable Audit & Moderation Logs
     match /moderationLogs/{logId} {
-      allow get: if isEditor() && isValidId(logId);
-      allow list: if isEditor();
-      allow create: if isEditor()
-        && isValidId(logId)
-        && isValidModerationLog(incoming())
-        && incoming().actorId == request.auth.uid
-        && incoming().createdAt == request.time;
+      allow read: if isEditor();
+      allow create: if isEditor() && isValidId(logId);
       allow update, delete: if false;
-    }
-
-    // Post Views
-    match /postViews/{viewId} {
-      allow get: if isEditor() && isValidId(viewId);
-      allow list: if isEditor();
-      allow create: if isValidId(viewId)
-        && incoming().keys().hasAll(['postId', 'viewedAt'])
-        && incoming().keys().hasOnly(['postId', 'viewerId', 'viewedAt'])
-        && isValidId(incoming().postId)
-        && incoming().viewedAt == request.time
-        && exists(/databases/$(database)/documents/posts/$(incoming().postId));
-      allow update, delete: if false;
-    }
-
-    // Newsletter Subscribers
-    match /newsletterSubscribers/{subscriberId} {
-      allow get: if isAdmin() && isValidId(subscriberId);
-      allow list: if isAdmin();
-      allow create: if isValidId(subscriberId)
-        && incoming().keys().hasAll(['email', 'subscribedAt'])
-        && incoming().keys().hasOnly(['email', 'subscribedAt', 'source'])
-        && incoming().email is string && incoming().email.size() >= 5 && incoming().email.size() <= 160
-        && incoming().subscribedAt == request.time;
-      allow update, delete: if isAdmin() && isValidId(subscriberId);
-    }
-
-    // Contact Messages
-    match /contactMessages/{messageId} {
-      allow get, list: if isAdmin();
-      allow create: if isValidId(messageId)
-        && incoming().keys().hasAll(['name', 'email', 'subject', 'message', 'createdAt'])
-        && incoming().keys().hasOnly(['name', 'email', 'subject', 'message', 'createdAt'])
-        && incoming().name is string && incoming().name.size() >= 2 && incoming().name.size() <= 100
-        && incoming().email is string && incoming().email.size() >= 5 && incoming().email.size() <= 160
-        && incoming().subject is string && incoming().subject.size() >= 3 && incoming().subject.size() <= 150
-        && incoming().message is string && incoming().message.size() >= 10 && incoming().message.size() <= 3000
-        && incoming().createdAt == request.time;
-      allow update, delete: if isAdmin() && isValidId(messageId);
-    }
-
-    // Website Settings
-    match /settings/{settingId} {
-      allow get: if isValidId(settingId);
-      allow list: if true;
-      allow create, update: if isAdmin()
-        && isValidId(settingId)
-        && incoming().keys().hasAll(['siteName', 'tagline', 'description', 'contactEmail', 'allowRegistrations', 'requireEmailVerification', 'maintenanceMode', 'updatedAt'])
-        && incoming().keys().hasOnly(['siteName', 'tagline', 'description', 'contactEmail', 'allowRegistrations', 'requireEmailVerification', 'maintenanceMode', 'updatedAt'])
-        && incoming().siteName is string && incoming().siteName.size() <= 80
-        && incoming().tagline is string && incoming().tagline.size() <= 160
-        && incoming().description is string && incoming().description.size() <= 300
-        && incoming().contactEmail is string && incoming().contactEmail.size() <= 160
-        && incoming().allowRegistrations is bool
-        && incoming().requireEmailVerification is bool
-        && incoming().maintenanceMode is bool
-        && incoming().updatedAt == request.time;
-      allow delete: if false;
     }
   }
 }

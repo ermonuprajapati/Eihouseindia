@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { SITE_CONFIG } from '@/config/site';
 import { INITIAL_CATEGORIES } from '@/config/categories';
 
@@ -10,8 +11,15 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-4">
           <div className="md:col-span-1 space-y-3">
-            <Link href="/" className="font-display text-xl font-bold tracking-tight text-white">
-              {SITE_CONFIG.name}
+            <Link href="/" className="font-display text-xl font-bold tracking-tight text-white flex items-center gap-2.5">
+              <Image
+                src="/images/logo.png"
+                alt="EIHOUSE INDIA Logo"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain rounded bg-white p-0.5"
+              />
+              <span>{SITE_CONFIG.name}</span>
             </Link>
             <p className="text-sm font-medium text-slate-200">{SITE_CONFIG.tagline}</p>
             <p className="text-sm leading-relaxed text-slate-400">

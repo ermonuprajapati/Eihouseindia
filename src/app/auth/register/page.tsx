@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -75,7 +76,17 @@ export default function RegisterPage() {
       <SiteHeader />
       <main className="flex-1 flex items-center justify-center px-4 py-14">
         <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-8 space-y-6">
-          <div className="space-y-2">
+          <div className="space-y-3 text-center">
+            <Link href="/" className="inline-block">
+              <Image
+                src="/images/logo.png"
+                alt="EIHOUSE INDIA Logo"
+                width={56}
+                height={56}
+                className="mx-auto h-14 w-14 object-contain rounded"
+                priority
+              />
+            </Link>
             <h1 className="font-display text-2xl font-semibold text-[#0B1528]">
               Join EIHOUSE INDIA
             </h1>

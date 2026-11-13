@@ -44,14 +44,17 @@ function wrapEmailTemplate(contentHtml: string, previewText: string = ''): strin
         <table role="presentation" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0;" cellspacing="0" cellpadding="0">
           <!-- Header -->
           <tr>
-            <td style="background-color: #0B1528; padding: 28px 32px; text-align: left; border-bottom: 3px solid #1D4ED8;">
+            <td style="background-color: #0B1528; padding: 24px 32px; text-align: left; border-bottom: 3px solid #1D4ED8;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td>
-                    <span style="font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; text-transform: uppercase; display: inline-block;">
+                  <td style="vertical-align: middle; width: 48px;">
+                    <img src="${SITE_CONFIG.url}/images/logo.png" width="40" height="40" alt="EIHOUSE INDIA Logo" style="display: block; border-radius: 6px; background-color: #ffffff; padding: 2px;" />
+                  </td>
+                  <td style="vertical-align: middle; padding-left: 14px;">
+                    <span style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; text-transform: uppercase; display: inline-block;">
                       ${SITE_CONFIG.name}
                     </span>
-                    <span style="display: block; font-size: 12px; color: #94A3B8; margin-top: 4px; font-weight: 500;">
+                    <span style="display: block; font-size: 12px; color: #94A3B8; margin-top: 2px; font-weight: 500;">
                       India's Engineering &amp; Technology Publishing Platform
                     </span>
                   </td>

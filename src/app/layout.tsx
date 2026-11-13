@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/modules/auth/auth-context';
@@ -28,6 +28,13 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
 });
 
+export const viewport: Viewport = {
+  themeColor: '#0B1528',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_CONFIG.url),
   title: {
@@ -35,6 +42,22 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_CONFIG.name}`,
   },
   description: SITE_CONFIG.description,
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: SITE_CONFIG.name,
+  },
   keywords: [
     'Electronics Engineering',
     'Semiconductor Technology',

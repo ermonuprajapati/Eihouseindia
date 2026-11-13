@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Menu, X, PenLine, LayoutDashboard, ShieldCheck, LogOut, User } from 'lucide-react';
 import { useAuth } from '@/modules/auth/auth-context';
@@ -28,12 +29,20 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 lg:px-8">
-        {/* Zone 1: Brand wordmark (single line, no descriptor) */}
+        {/* Zone 1: Brand wordmark with logo */}
         <Link
           href="/"
-          className="font-display text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0"
+          className="font-display text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5"
         >
-          EIHOUSE INDIA
+          <Image
+            src="/images/logo.png"
+            alt="EIHOUSE INDIA Logo"
+            width={34}
+            height={34}
+            className="h-8 w-8 object-contain rounded"
+            priority
+          />
+          <span>EIHOUSE INDIA</span>
         </Link>
 
         {/* Zone 2: 5 concise single-line nav links */}
