@@ -311,55 +311,24 @@ export async function getAuthorPostsPaginated(params: {
     if (params.statusFilter) {
       constraints.push(where('status', '==', params.statusFilter));
     }
-    const q = params.cursor
-      ? query(
-          collection(db, 'posts'),
-          ...constraints,
-          orderBy('updatedAt', 'desc'),
-          startAfter(params.cursor),
-          limit(pageSize + 1)
-        )
-      : query(
-          collection(db, 'posts'),
-          ...constraints,
-          orderBy('updatedAt', 'desc'),
-          limit(pageSize + 1)
-        );
-    const snap = await getDocs(q);
-    const docs = snap.docs;
-    const hasMore = docs.length > pageSize;
-    const sliced = hasMore ? docs.slice(0, pageSize) : docs;
+    // Query directly with equality filter and sort in-memory to prevent missing composite index failures
+    const snap = await getDocs(query(collection(db, 'posts'), ...constraints));
+    const list = snap.docs.map((d) => mapSnapshotToPost(d));
+    list.sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+      return timeB - timeA;
+    });
+    const hasMore = list.length > pageSize;
+    const sliced = hasMore ? list.slice(0, pageSize) : list;
     return {
-      posts: sliced.map((d) => mapSnapshotToPost(d)),
-      lastDoc: sliced.length > 0 ? sliced[sliced.length - 1] : null,
+      posts: sliced,
+      lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
       hasMore,
     };
   } catch (error) {
-    console.warn('Falling back to in-memory sort in getAuthorPostsPaginated:', error);
-    try {
-      const fallbackSnap = await getDocs(
-        query(collection(db, 'posts'), where('authorId', '==', params.authorId))
-      );
-      let list = fallbackSnap.docs.map((d) => mapSnapshotToPost(d));
-      if (params.statusFilter) {
-        list = list.filter((p) => p.status === params.statusFilter);
-      }
-      list.sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
-        return timeB - timeA;
-      });
-      const hasMore = list.length > pageSize;
-      const sliced = hasMore ? list.slice(0, pageSize) : list;
-      return {
-        posts: sliced,
-        lastDoc: null,
-        hasMore,
-      };
-    } catch (fallbackError) {
-      console.error('getAuthorPostsPaginated completely failed:', fallbackError);
-      return { posts: [], lastDoc: null, hasMore: false };
-    }
+    console.error('getAuthorPostsPaginated failed:', error);
+    return { posts: [], lastDoc: null, hasMore: false };
   }
 }
 
@@ -573,14 +542,10 @@ export async function updateAuthorProfile(
 
 export async function getUserNotifications(userId: string): Promise<NotificationItem[]> {
   try {
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(20)
+    const snap = await getDocs(
+      query(collection(db, 'notifications'), where('userId', '==', userId))
     );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => {
+    const list: NotificationItem[] = snap.docs.map((d) => {
       const data = d.data();
       return {
         id: d.id,
@@ -593,8 +558,11 @@ export async function getUserNotifications(userId: string): Promise<Notification
         createdAt: toIso(data.createdAt),
       };
     });
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list.slice(0, 30);
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'notifications');
+    console.warn('getUserNotifications fallback to empty on error:', error);
+    return [];
   }
 }
 

@@ -109,6 +109,36 @@ export async function POST(request: Request) {
       createdAt: FieldValue.serverTimestamp(),
     });
 
+    // In-app notification for author
+    const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const notifTitle =
+      decision === 'APPROVE'
+        ? 'Article Approved & Published 🎉'
+        : decision === 'REJECT'
+        ? 'Article Rejected'
+        : decision === 'REQUEST_CHANGES'
+        ? 'Changes Requested on Article'
+        : 'Article Archived';
+    const notifMsg =
+      decision === 'APPROVE'
+        ? `Congratulations! Your article "${postData.title}" has been approved by the editorial team and is now live.`
+        : decision === 'REJECT'
+        ? `Your article "${postData.title}" was not approved. ${reason ? `Reason: ${reason}` : ''}`
+        : decision === 'REQUEST_CHANGES'
+        ? `Reviewers requested revisions on "${postData.title}". ${reason ? `Note: ${reason}` : ''}`
+        : `Your article "${postData.title}" was archived.`;
+
+    batch.set(adminDb.collection('notifications').doc(notifId), {
+      id: notifId,
+      userId: postData.authorId,
+      title: notifTitle,
+      message: notifMsg,
+      type: decision === 'APPROVE' ? 'APPROVED' : decision === 'REJECT' ? 'REJECTED' : 'SYSTEM',
+      postId,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
     await batch.commit();
 
     // Trigger author email if author record exists

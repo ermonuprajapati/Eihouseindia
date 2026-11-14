@@ -75,27 +75,54 @@ export default function AuthorDashboardPage() {
   useEffect(() => {
     if (!firebaseUser) return;
     let cancelled = false;
-    Promise.all([
-      getAuthorPostsPaginated({ authorId: firebaseUser.uid, pageSize: 50 }).catch(() => ({
-        posts: [],
-        lastDoc: null,
-        hasMore: false,
-      })),
-      getUserNotifications(firebaseUser.uid).catch(() => []),
-    ])
-      .then(([postRes, notifRes]) => {
-        if (cancelled) return;
-        setPosts(postRes.posts);
-        setNotifications(notifRes);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          toast.error(error instanceof Error ? error.message : 'Unable to load your articles.');
+
+    async function loadWorkspaceData() {
+      try {
+        const idToken = await firebaseUser!.getIdToken().catch(() => null);
+        if (idToken) {
+          const res = await fetch('/api/author/workspace', {
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (!cancelled && Array.isArray(data.posts)) {
+              setPosts(data.posts);
+              setNotifications(data.notifications || []);
+              setLoadingData(false);
+              return;
+            }
+          }
         }
-      })
-      .finally(() => {
+      } catch (apiError) {
+        console.warn('Workspace API route fallback:', apiError);
+      }
+
+      // Fallback to resilient direct Firestore queries
+      try {
+        const [postRes, notifRes] = await Promise.all([
+          getAuthorPostsPaginated({ authorId: firebaseUser!.uid, pageSize: 50 }).catch(() => ({
+            posts: [],
+            lastDoc: null,
+            hasMore: false,
+          })),
+          getUserNotifications(firebaseUser!.uid).catch(() => []),
+        ]);
+        if (!cancelled) {
+          setPosts(postRes.posts);
+          setNotifications(notifRes);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : 'Unable to load your articles.');
+        }
+      } finally {
         if (!cancelled) setLoadingData(false);
-      });
+      }
+    }
+
+    loadWorkspaceData();
     return () => {
       cancelled = true;
     };
