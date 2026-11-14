@@ -75,6 +75,13 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<string>('Idle');
   const [currentDoc, setCurrentDoc] = useState<TiptapDocument>(initialPost?.content || DEFAULT_DOC);
+  const [showMathMenu, setShowMathMenu] = useState(false);
+  const [customFormula, setCustomFormula] = useState('');
+
+  const insertFormula = (formulaText: string) => {
+    if (!editor) return;
+    editor.chain().focus().insertContent(` ${formulaText} `).run();
+  };
 
   const coverFileInputRef = useRef<HTMLInputElement>(null);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
@@ -685,6 +692,118 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                     </button>
                   </>
                 )}
+
+                <span className="mx-1 h-5 w-px bg-slate-200" />
+
+                {/* Math / Formula Inserter */}
+                <div className="relative inline-flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowMathMenu(!showMathMenu)}
+                    aria-label="Insert math formula"
+                    title="Insert math / LaTeX formula (Sigma, equations, etc.)"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer"
+                  >
+                    <span className="font-serif font-bold text-sm leading-none">∑</span>
+                    <span>Formula</span>
+                  </button>
+
+                  {showMathMenu && (
+                    <div className="absolute left-0 top-full mt-1.5 z-30 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl space-y-2 text-xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                        <span className="font-semibold text-slate-800">Insert Math / Sigma Formula</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowMathMenu(false)}
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            insertFormula('$$ \\sum_{i=1}^{n} x_i $$');
+                            setShowMathMenu(false);
+                          }}
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                        >
+                          <span className="font-medium">∑ Summation (Sigma)</span>
+                          <code className="text-[10px] text-slate-400 font-mono">$$\sum x_i$$</code>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            insertFormula('$$ \\sigma = \\sqrt{\\frac{1}{N} \\sum_{i=1}^{N} (x_i - \\mu)^2} $$');
+                            setShowMathMenu(false);
+                          }}
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                        >
+                          <span className="font-medium">σ Std Dev / Variance</span>
+                          <code className="text-[10px] text-slate-400 font-mono">$$\sigma = ...$$</code>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            insertFormula('$$ V = I \\cdot R $$');
+                            setShowMathMenu(false);
+                          }}
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                        >
+                          <span className="font-medium">⚡ Ohm&#39;s Law</span>
+                          <code className="text-[10px] text-slate-400 font-mono">$$V = I \cdot R$$</code>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            insertFormula('$ \\sigma $');
+                            setShowMathMenu(false);
+                          }}
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                        >
+                          <span className="font-medium">Inline Symbol (σ)</span>
+                          <code className="text-[10px] text-slate-400 font-mono">$\sigma$</code>
+                        </button>
+                      </div>
+                      <div className="pt-1.5 border-t border-slate-100 flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Custom LaTeX: e.g. E = mc^2"
+                          value={customFormula}
+                          onChange={(e) => setCustomFormula(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (customFormula.trim()) {
+                                insertFormula(`$$ ${customFormula.trim()} $$`);
+                                setCustomFormula('');
+                                setShowMathMenu(false);
+                              }
+                            }
+                          }}
+                          className="h-7 w-full px-2 rounded border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (customFormula.trim()) {
+                              insertFormula(`$$ ${customFormula.trim()} $$`);
+                              setCustomFormula('');
+                              setShowMathMenu(false);
+                            }
+                          }}
+                          className="h-7 px-2.5 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 whitespace-nowrap"
+                        >
+                          Insert
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        Tip: You can also type <code>$$...$$</code> for equations or <code>$...$</code> for inline symbols anywhere in the editor.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <input

@@ -58,4 +58,26 @@ describe('Editorial UI Components', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Vector Pipelines' })).toBeInTheDocument();
     expect(screen.getByText('RVV 1.0 decouples vector length from ISA.')).toBeInTheDocument();
   });
+
+  it('renders mathematical formulas and sigma symbols using KaTeX without mangling characters', () => {
+    const mathDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'The variance formula is $$ \\sigma = \\sqrt{\\frac{1}{N} \\sum_{i=1}^N (x_i - \\mu)^2} $$ and inline symbol $\\sigma$.',
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(<TiptapArticleRenderer document={mathDoc} />);
+    expect(container.querySelector('.katex')).toBeInTheDocument();
+    expect(container.querySelector('.block-math')).toBeInTheDocument();
+    expect(container.querySelector('.inline-math')).toBeInTheDocument();
+  });
 });

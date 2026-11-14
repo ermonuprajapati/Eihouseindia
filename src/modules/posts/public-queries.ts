@@ -102,6 +102,14 @@ export async function getPublicCategories(): Promise<Category[]> {
   }
 }
 
+function sortPostsDescending(posts: Post[]): Post[] {
+  return posts.sort((a, b) => {
+    const timeA = new Date(a.publishedAt || a.createdAt).getTime();
+    const timeB = new Date(b.publishedAt || b.createdAt).getTime();
+    return timeB - timeA;
+  });
+}
+
 export async function getPublishedPosts(options?: {
   limitCount?: number;
   categoryId?: string;
@@ -111,35 +119,82 @@ export async function getPublishedPosts(options?: {
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
-      let ref: AdminQuery = adminDb
+      try {
+        let ref: AdminQuery = adminDb
+          .collection('posts')
+          .where('status', '==', 'PUBLISHED');
+        if (options?.categoryId) {
+          ref = ref.where('categoryId', '==', options.categoryId);
+        }
+        if (options?.featuredOnly) {
+          ref = ref.where('featured', '==', true);
+        }
+        const snap = await ref.orderBy('publishedAt', 'desc').limit(limitCount).get();
+        if (!snap.empty) {
+          return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+        }
+      } catch (adminIndexError) {
+        console.warn(
+          'Falling back to non-indexed query for published posts in Admin SDK:',
+          adminIndexError instanceof Error ? adminIndexError.message : adminIndexError
+        );
+      }
+
+      // Resilient fallback: Query by status without composite orderBy, sort in-memory
+      const snap = await adminDb
         .collection('posts')
-        .where('status', '==', 'PUBLISHED');
+        .where('status', '==', 'PUBLISHED')
+        .get();
+
+      let posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
       if (options?.categoryId) {
-        ref = ref.where('categoryId', '==', options.categoryId);
+        posts = posts.filter((p) => p.categoryId === options.categoryId);
       }
       if (options?.featuredOnly) {
-        ref = ref.where('featured', '==', true);
+        posts = posts.filter((p) => p.featured);
       }
-      const snap = await ref.orderBy('publishedAt', 'desc').limit(limitCount).get();
-      return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      return sortPostsDescending(posts).slice(0, limitCount);
     }
 
-    const constraints = [where('status', '==', 'PUBLISHED')];
+    // Client SDK fallback
+    try {
+      const constraints = [where('status', '==', 'PUBLISHED')];
+      if (options?.categoryId) {
+        constraints.push(where('categoryId', '==', options.categoryId));
+      }
+      if (options?.featuredOnly) {
+        constraints.push(where('featured', '==', true));
+      }
+      const q = query(
+        collection(db, 'posts'),
+        ...constraints,
+        orderBy('publishedAt', 'desc'),
+        limit(limitCount)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
+      }
+    } catch (clientIndexError) {
+      console.warn(
+        'Falling back to non-indexed query for published posts in client SDK:',
+        clientIndexError instanceof Error ? clientIndexError.message : clientIndexError
+      );
+    }
+
+    const fallbackSnap = await getDocs(
+      query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
+    );
+    let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
     if (options?.categoryId) {
-      constraints.push(where('categoryId', '==', options.categoryId));
+      posts = posts.filter((p) => p.categoryId === options.categoryId);
     }
     if (options?.featuredOnly) {
-      constraints.push(where('featured', '==', true));
+      posts = posts.filter((p) => p.featured);
     }
-    const q = query(
-      collection(db, 'posts'),
-      ...constraints,
-      orderBy('publishedAt', 'desc'),
-      limit(limitCount)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
-  } catch {
+    return sortPostsDescending(posts).slice(0, limitCount);
+  } catch (err) {
+    console.error('getPublishedPosts failed completely:', err);
     return [];
   }
 }
@@ -244,25 +299,54 @@ export async function getPublishedPostsByAuthorId(
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
-      const snap = await adminDb
+      try {
+        const snap = await adminDb
+          .collection('posts')
+          .where('status', '==', 'PUBLISHED')
+          .where('authorId', '==', authorId)
+          .orderBy('publishedAt', 'desc')
+          .limit(limitCount)
+          .get();
+        if (!snap.empty) {
+          return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+        }
+      } catch (err) {
+        console.warn('Fallback getPublishedPostsByAuthorId admin:', err);
+      }
+      const fallbackSnap = await adminDb
         .collection('posts')
         .where('status', '==', 'PUBLISHED')
         .where('authorId', '==', authorId)
-        .orderBy('publishedAt', 'desc')
-        .limit(limitCount)
         .get();
-      return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      const posts = fallbackSnap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      return sortPostsDescending(posts).slice(0, limitCount);
     }
 
-    const q = query(
-      collection(db, 'posts'),
-      where('status', '==', 'PUBLISHED'),
-      where('authorId', '==', authorId),
-      orderBy('publishedAt', 'desc'),
-      limit(limitCount)
+    try {
+      const q = query(
+        collection(db, 'posts'),
+        where('status', '==', 'PUBLISHED'),
+        where('authorId', '==', authorId),
+        orderBy('publishedAt', 'desc'),
+        limit(limitCount)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
+      }
+    } catch (err) {
+      console.warn('Fallback getPublishedPostsByAuthorId client:', err);
+    }
+
+    const fallbackSnap = await getDocs(
+      query(
+        collection(db, 'posts'),
+        where('status', '==', 'PUBLISHED'),
+        where('authorId', '==', authorId)
+      )
     );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
+    const posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
+    return sortPostsDescending(posts).slice(0, limitCount);
   } catch {
     return [];
   }

@@ -7,6 +7,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { SiteTrafficTracker } from '@/components/analytics/SiteTrafficTracker';
 import { buildOrganizationJsonLd, buildWebsiteJsonLd } from '@/lib/seo';
 import './globals.css';
+import 'katex/dist/katex.min.css';
 
 const fraunces = Fraunces({
   subsets: ['latin'],

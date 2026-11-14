@@ -379,8 +379,31 @@ export async function getPublishedPostsPaginated(params: {
       hasMore,
     };
   } catch (error) {
-    console.warn('Could not fetch published posts from Firestore:', error);
-    return { posts: [], lastDoc: null, hasMore: false };
+    console.warn('Falling back to in-memory sort in getPublishedPostsPaginated:', error);
+    try {
+      const fallbackSnap = await getDocs(
+        query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
+      );
+      let list = fallbackSnap.docs.map((d) => mapSnapshotToPost(d));
+      if (params.categoryId) {
+        list = list.filter((p) => p.categoryId === params.categoryId);
+      }
+      list.sort((a, b) => {
+        const timeA = new Date(a.publishedAt || a.createdAt).getTime();
+        const timeB = new Date(b.publishedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+      const hasMore = list.length > pageSize;
+      const sliced = hasMore ? list.slice(0, pageSize) : list;
+      return {
+        posts: sliced,
+        lastDoc: null,
+        hasMore,
+      };
+    } catch (fallbackError) {
+      console.error('getPublishedPostsPaginated completely failed:', fallbackError);
+      return { posts: [], lastDoc: null, hasMore: false };
+    }
   }
 }
 

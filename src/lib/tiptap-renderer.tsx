@@ -1,6 +1,109 @@
 import React from 'react';
+import katex from 'katex';
 import type { TiptapDocument, TiptapMark, TiptapNode } from '@/types';
 import { sanitizeTiptapDocument, sanitizeUrl } from '@/lib/validation';
+
+const ENTITY_MAP: Record<string, string> = {
+  '&Sigma;': 'Σ',
+  '&sigma;': 'σ',
+  '&sum;': '∑',
+  '&Delta;': 'Δ',
+  '&delta;': 'δ',
+  '&Omega;': 'Ω',
+  '&omega;': 'ω',
+  '&mu;': 'μ',
+  '&pi;': 'π',
+  '&alpha;': 'α',
+  '&beta;': 'β',
+  '&gamma;': 'γ',
+  '&theta;': 'θ',
+  '&lambda;': 'λ',
+  '&infin;': '∞',
+  '&radic;': '√',
+  '&int;': '∫',
+  '&approx;': '≈',
+  '&ne;': '≠',
+  '&le;': '≤',
+  '&ge;': '≥',
+  '&plusmn;': '±',
+  '&times;': '×',
+  '&divide;': '÷',
+  '&sup2;': '²',
+  '&sup3;': '³',
+  '&deg;': '°',
+  '&micro;': 'µ',
+  '&ohm;': 'Ω',
+};
+
+function decodeCommonEntities(str: string): string {
+  return str.replace(/&(?:[a-zA-Z]+|#\d+|#x[a-fA-F0-9]+);/g, (match) => {
+    if (ENTITY_MAP[match]) return ENTITY_MAP[match];
+    if (match.startsWith('&#x')) {
+      const code = parseInt(match.slice(3, -1), 16);
+      return !isNaN(code) ? String.fromCodePoint(code) : match;
+    }
+    if (match.startsWith('&#')) {
+      const code = parseInt(match.slice(2, -1), 10);
+      return !isNaN(code) ? String.fromCodePoint(code) : match;
+    }
+    return match;
+  });
+}
+
+function renderMathToHtml(formula: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(formula.trim(), {
+      displayMode,
+      throwOnError: false,
+      output: 'htmlAndMathml',
+    });
+  } catch {
+    return formula;
+  }
+}
+
+interface MathSegment {
+  type: 'text' | 'inlineMath' | 'blockMath';
+  content: string;
+}
+
+function parseMathSegments(rawText: string): MathSegment[] {
+  const decoded = decodeCommonEntities(rawText);
+  // Matches:
+  // 1. $$ ... $$ (block math)
+  // 2. \[ ... \] (LaTeX block math)
+  // 3. $ ... $ (inline math, excluding currency digits like $50)
+  // 4. \( ... \) (LaTeX inline math)
+  const mathRegex =
+    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|(?<!\\)\$(?!\s)(?!\d+(?:\.\d+)?(?:\s|$))(?:\\\$|[^\$])+?(?<!\s)\$(?!\d)|\\\([\s\S]+?\\\))/g;
+
+  const segments: MathSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mathRegex.exec(decoded)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', content: decoded.slice(lastIndex, match.index) });
+    }
+    const raw = match[0];
+    if (raw.startsWith('$$') && raw.endsWith('$$')) {
+      segments.push({ type: 'blockMath', content: raw.slice(2, -2).trim() });
+    } else if (raw.startsWith('\\[') && raw.endsWith('\\]')) {
+      segments.push({ type: 'blockMath', content: raw.slice(2, -2).trim() });
+    } else if (raw.startsWith('$') && raw.endsWith('$')) {
+      segments.push({ type: 'inlineMath', content: raw.slice(1, -1).trim() });
+    } else if (raw.startsWith('\\(') && raw.endsWith('\\)')) {
+      segments.push({ type: 'inlineMath', content: raw.slice(2, -2).trim() });
+    }
+    lastIndex = match.index + raw.length;
+  }
+
+  if (lastIndex < decoded.length) {
+    segments.push({ type: 'text', content: decoded.slice(lastIndex) });
+  }
+
+  return segments;
+}
 
 function applyMarks(text: React.ReactNode, marks: TiptapMark[] | undefined, keyPrefix: string): React.ReactNode {
   if (!marks || marks.length === 0) return text;
@@ -43,9 +146,48 @@ function applyMarks(text: React.ReactNode, marks: TiptapMark[] | undefined, keyP
   }, text);
 }
 
+function renderTextWithMath(
+  text: string,
+  marks: TiptapMark[] | undefined,
+  keyPrefix: string
+): React.ReactNode {
+  const segments = parseMathSegments(text);
+
+  if (segments.length === 1 && segments[0].type === 'text') {
+    return applyMarks(segments[0].content, marks, keyPrefix);
+  }
+
+  return (
+    <React.Fragment key={keyPrefix}>
+      {segments.map((seg, idx) => {
+        const segKey = `${keyPrefix}-seg-${idx}`;
+        if (seg.type === 'inlineMath') {
+          return (
+            <span
+              key={segKey}
+              className="inline-math inline-block px-1 align-baseline text-[#0B1528]"
+              dangerouslySetInnerHTML={{ __html: renderMathToHtml(seg.content, false) }}
+            />
+          );
+        }
+        if (seg.type === 'blockMath') {
+          return (
+            <span
+              key={segKey}
+              className="block-math block my-4 overflow-x-auto py-2.5 px-4 rounded-xl bg-slate-50/90 border border-slate-200/80 text-center text-[#0B1528] shadow-xs"
+              dangerouslySetInnerHTML={{ __html: renderMathToHtml(seg.content, true) }}
+            />
+          );
+        }
+        return <React.Fragment key={segKey}>{applyMarks(seg.content, marks, segKey)}</React.Fragment>;
+      })}
+    </React.Fragment>
+  );
+}
+
 function renderNode(node: TiptapNode, key: string): React.ReactNode {
   if (node.type === 'text') {
-    return <React.Fragment key={key}>{applyMarks(node.text ?? '', node.marks, key)}</React.Fragment>;
+    return <React.Fragment key={key}>{renderTextWithMath(node.text ?? '', node.marks, key)}</React.Fragment>;
   }
 
   const children = node.content?.map((child, idx) => renderNode(child, `${key}-${idx}`)) ?? null;
@@ -53,12 +195,34 @@ function renderNode(node: TiptapNode, key: string): React.ReactNode {
   switch (node.type) {
     case 'doc':
       return <React.Fragment key={key}>{children}</React.Fragment>;
-    case 'paragraph':
+    case 'paragraph': {
+      // If the paragraph contains exactly one text child that is pure block math ($$...$$)
+      if (
+        node.content?.length === 1 &&
+        node.content[0].type === 'text' &&
+        typeof node.content[0].text === 'string'
+      ) {
+        const raw = node.content[0].text.trim();
+        if (
+          (raw.startsWith('$$') && raw.endsWith('$$')) ||
+          (raw.startsWith('\\[') && raw.endsWith('\\]'))
+        ) {
+          const formula = raw.startsWith('$$') ? raw.slice(2, -2).trim() : raw.slice(2, -2).trim();
+          return (
+            <div
+              key={key}
+              className="my-6 overflow-x-auto rounded-xl bg-slate-50/90 p-4 border border-slate-200/80 text-center text-[#0B1528] shadow-xs"
+              dangerouslySetInnerHTML={{ __html: renderMathToHtml(formula, true) }}
+            />
+          );
+        }
+      }
       return (
         <p key={key} className="my-5 text-[17px] leading-[1.78] text-slate-800">
           {children && children.length > 0 ? children : <br />}
         </p>
       );
+    }
     case 'heading': {
       const level = Number(node.attrs?.level) || 2;
       if (level === 1) {
@@ -112,8 +276,17 @@ function renderNode(node: TiptapNode, key: string): React.ReactNode {
         </blockquote>
       );
     case 'codeBlock': {
-      const language = typeof node.attrs?.language === 'string' ? node.attrs.language : '';
+      const language = typeof node.attrs?.language === 'string' ? node.attrs.language.toLowerCase() : '';
       const rawText = node.content?.map((c) => c.text ?? '').join('') ?? '';
+      if (language === 'math' || language === 'latex' || language === 'katex') {
+        return (
+          <div
+            key={key}
+            className="my-6 overflow-x-auto rounded-xl bg-slate-50/90 p-4 border border-slate-200/80 text-center text-[#0B1528] shadow-xs"
+            dangerouslySetInnerHTML={{ __html: renderMathToHtml(rawText, true) }}
+          />
+        );
+      }
       return (
         <div key={key} className="my-6 overflow-hidden rounded-lg border border-slate-800 bg-[#0B1528]">
           {language ? (

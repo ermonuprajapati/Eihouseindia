@@ -56,6 +56,51 @@ export interface AdminDashboardStats {
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   try {
+    const fetchRecentPending = async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, 'posts'),
+            where('status', '==', 'PENDING'),
+            orderBy('submittedAt', 'desc'),
+            limit(5)
+          )
+        );
+        return snap.docs.map((d) => mapSnapshotToPost(d));
+      } catch {
+        const snap = await getDocs(
+          query(collection(db, 'posts'), where('status', '==', 'PENDING'))
+        );
+        return snap.docs
+          .map((d) => mapSnapshotToPost(d))
+          .sort(
+            (a, b) =>
+              new Date(b.submittedAt || b.createdAt).getTime() -
+              new Date(a.submittedAt || a.createdAt).getTime()
+          )
+          .slice(0, 5);
+      }
+    };
+
+    const fetchPublishedPopular = async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, 'posts'),
+            where('status', '==', 'PUBLISHED'),
+            orderBy('publishedAt', 'desc'),
+            limit(10)
+          )
+        );
+        return snap.docs.map((d) => mapSnapshotToPost(d));
+      } catch {
+        const snap = await getDocs(
+          query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
+        );
+        return snap.docs.map((d) => mapSnapshotToPost(d));
+      }
+    };
+
     const [
       usersCountSnap,
       totalPostsSnap,
@@ -64,8 +109,8 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       rejectedPostsSnap,
       commentsCountSnap,
       openReportsSnap,
-      recentPendingSnap,
-      popularSnap,
+      recentPendingPosts,
+      publishedPostsList,
     ] = await Promise.all([
       getCountFromServer(collection(db, 'publicProfiles')),
       getCountFromServer(collection(db, 'posts')),
@@ -74,26 +119,11 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       getCountFromServer(query(collection(db, 'posts'), where('status', '==', 'REJECTED'))),
       getCountFromServer(collection(db, 'comments')),
       getCountFromServer(query(collection(db, 'reports'), where('status', '==', 'OPEN'))),
-      getDocs(
-        query(
-          collection(db, 'posts'),
-          where('status', '==', 'PENDING'),
-          orderBy('submittedAt', 'desc'),
-          limit(5)
-        )
-      ),
-      getDocs(
-        query(
-          collection(db, 'posts'),
-          where('status', '==', 'PUBLISHED'),
-          orderBy('publishedAt', 'desc'),
-          limit(10)
-        )
-      ),
+      fetchRecentPending(),
+      fetchPublishedPopular(),
     ]);
 
-    const popularSorted = popularSnap.docs
-      .map((d) => mapSnapshotToPost(d))
+    const popularSorted = publishedPostsList
       .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
       .slice(0, 5);
 
@@ -105,7 +135,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       rejectedArticles: rejectedPostsSnap.data().count,
       totalComments: commentsCountSnap.data().count,
       openReports: openReportsSnap.data().count,
-      recentSubmissions: recentPendingSnap.docs.map((d) => mapSnapshotToPost(d)),
+      recentSubmissions: recentPendingPosts,
       popularArticles: popularSorted,
     };
   } catch (error) {
