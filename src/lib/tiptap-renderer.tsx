@@ -128,12 +128,13 @@ function applyMarks(text: React.ReactNode, marks: TiptapMark[] | undefined, keyP
       case 'link': {
         const href = typeof mark.attrs?.href === 'string' ? sanitizeUrl(mark.attrs.href) : null;
         if (!href) return acc;
+        const rel = typeof mark.attrs?.rel === 'string' ? mark.attrs.rel : 'noopener noreferrer';
         return (
           <a
             key={key}
             href={href}
             target="_blank"
-            rel="noopener noreferrer nofollow"
+            rel={rel}
             className="text-[#1D4ED8] underline underline-offset-4 decoration-[#1D4ED8]/40 hover:decoration-[#1D4ED8] transition-colors"
           >
             {acc}
