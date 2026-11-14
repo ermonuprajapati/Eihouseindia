@@ -265,14 +265,30 @@ export default function AboutPage() {
                   <div className="absolute top-0 right-0 h-32 w-32 bg-gradient-to-bl from-[#172D4D]/10 to-transparent rounded-bl-full pointer-events-none" />
 
                   <div className="flex items-center gap-4">
-                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-[#172D4D] to-[#0B1528] text-white flex items-center justify-center font-display font-extrabold text-2xl shadow-md border-2 border-amber-400/40">
-                      MP
+                    <div className="relative shrink-0 overflow-hidden rounded-2xl border-2 border-amber-400/60 shadow-lg bg-slate-900 h-24 w-24">
+                      <Image
+                        src="/images/founder/monu-prajapati-square.jpg"
+                        alt="Monu Prajapati — Founder & Proprietor, Engineering Innovation House"
+                        width={192}
+                        height={192}
+                        priority
+                        className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent py-0.5 text-center">
+                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest font-mono">
+                          Founder
+                        </span>
+                      </div>
                     </div>
                     <div>
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#F59E0B] uppercase tracking-wider">
+                        <UserCheck className="h-3.5 w-3.5" />
+                        <span>Leadership &amp; Founder</span>
+                      </div>
                       <h3 className="font-display text-xl font-bold text-[#0B1528] leading-tight">
-                        {SITE_CONFIG.founder.name}
+                        {SITE_CONFIG.founder.fullNameWithPrefix}
                       </h3>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-0.5">
                         {SITE_CONFIG.founder.designation}
                       </p>
                       <p className="text-xs text-[#172D4D] font-medium pt-0.5">

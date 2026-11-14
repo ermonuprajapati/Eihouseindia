@@ -142,9 +142,20 @@ export default async function HomePage() {
                     </div>
 
                     <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
-                      <span>Founded by {SITE_CONFIG.founder.fullNameWithPrefix}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full overflow-hidden border border-amber-400/60 shrink-0 bg-slate-800">
+                          <Image
+                            src="/images/founder/monu-prajapati-square.jpg"
+                            alt="Er. Monu Prajapati — Founder"
+                            width={24}
+                            height={24}
+                            className="h-full w-full object-cover object-top"
+                          />
+                        </div>
+                        <span>Founded by <strong>{SITE_CONFIG.founder.fullNameWithPrefix}</strong></span>
+                      </div>
                       <Link href="/about#founder" className="text-[#F59E0B] font-semibold hover:underline">
-                        Founder &amp; Leadership →
+                        Founder Profile →
                       </Link>
                     </div>
                   </div>

@@ -23,6 +23,7 @@ export function buildOrganizationJsonLd() {
       honorificPrefix: SITE_CONFIG.founder.honorificPrefix,
       jobTitle: SITE_CONFIG.founder.designation,
       description: SITE_CONFIG.founder.bio,
+      image: `${SITE_CONFIG.url}${SITE_CONFIG.founder.image}`,
       url: `${SITE_CONFIG.url}/about#founder`,
       email: SITE_CONFIG.founder.email,
       knowsAbout: [...SITE_CONFIG.founder.expertise],
@@ -54,6 +55,7 @@ export function buildFounderJsonLd() {
     honorificPrefix: SITE_CONFIG.founder.honorificPrefix,
     jobTitle: SITE_CONFIG.founder.designation,
     description: SITE_CONFIG.founder.bio,
+    image: `${SITE_CONFIG.url}${SITE_CONFIG.founder.image}`,
     url: `${SITE_CONFIG.url}/about#founder`,
     email: SITE_CONFIG.founder.email,
     worksFor: {

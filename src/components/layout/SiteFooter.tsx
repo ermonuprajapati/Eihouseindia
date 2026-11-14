@@ -31,13 +31,24 @@ export function SiteFooter() {
             <p className="text-sm leading-relaxed text-slate-400 max-w-md">
               {SITE_CONFIG.description}
             </p>
-            <div className="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
-              <p className="text-slate-300 font-medium">
-                Founder &amp; Proprietor:{' '}
-                <Link href="/about#founder" className="text-[#F59E0B] hover:underline font-semibold">
-                  {SITE_CONFIG.founder.fullNameWithPrefix}
-                </Link>
-              </p>
+            <div className="pt-2 text-xs text-slate-400 space-y-1.5 border-t border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-full overflow-hidden border border-amber-400/60 shrink-0 bg-slate-850">
+                  <Image
+                    src="/images/founder/monu-prajapati-square.jpg"
+                    alt="Er. Monu Prajapati"
+                    width={24}
+                    height={24}
+                    className="h-full w-full object-cover object-top"
+                  />
+                </div>
+                <p className="text-slate-300 font-medium">
+                  Founder &amp; Proprietor:{' '}
+                  <Link href="/about#founder" className="text-[#F59E0B] hover:underline font-semibold">
+                    {SITE_CONFIG.founder.fullNameWithPrefix}
+                  </Link>
+                </p>
+              </div>
               <p className="text-slate-400">{SITE_CONFIG.entity.legalType} · {SITE_CONFIG.entity.country}</p>
               <p>Email: <a href={`mailto:${SITE_CONFIG.contactEmail}`} className="text-slate-300 hover:text-white underline">{SITE_CONFIG.contactEmail}</a></p>
             </div>

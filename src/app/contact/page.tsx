@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Building2,
   UserCheck,
@@ -66,9 +67,16 @@ export default function ContactPage() {
             <div className="lg:col-span-5 space-y-6">
               {/* Founder Desk Card */}
               <div id="founder" className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 shadow-sm space-y-5 relative overflow-hidden">
-                <div className="flex items-center gap-3.5">
-                  <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-[#172D4D] to-[#0B1528] text-white flex items-center justify-center font-display font-bold text-lg shadow-sm border border-amber-400/40">
-                    MP
+                <div className="flex items-center gap-4">
+                  <div className="relative shrink-0 overflow-hidden rounded-xl border border-amber-400/50 shadow-md bg-slate-900 h-16 w-16">
+                    <Image
+                      src="/images/founder/monu-prajapati-square.jpg"
+                      alt="Er. Monu Prajapati — Founder & Proprietor"
+                      width={128}
+                      height={128}
+                      priority
+                      className="h-full w-full object-cover object-top hover:scale-105 transition-transform duration-300"
+                    />
                   </div>
                   <div>
                     <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#F59E0B] uppercase tracking-wider">

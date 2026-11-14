@@ -28,6 +28,8 @@ export const SITE_CONFIG = {
     designation: 'Founder & Proprietor',
     professionalIdentity: 'Engineering Professional | Technology Entrepreneur',
     organization: 'Engineering Innovation House (EI House)',
+    image: '/images/founder/monu-prajapati.jpg',
+    avatarImage: '/images/founder/monu-prajapati-square.jpg',
     brandTagline: 'Where Ideas Become Things.',
     bio: 'Monu Prajapati is an Engineering Professional, Technology Entrepreneur and the Founder & Proprietor of Engineering Innovation House (EI House), an engineering and technology-driven organization focused on advancing innovation, research, engineering development and technological solutions.',
     extendedBio: 'With a strong professional orientation towards electronics engineering, research and development, and practical technology implementation, he brings together technical expertise, analytical thinking and an innovation-driven approach to engineering challenges. Driven by the belief that engineering should extend beyond theoretical knowledge into practical innovation, he established EI House with the vision of creating an integrated ecosystem that connects technical education, research-oriented development, product innovation, engineering services and emerging technologies.',
