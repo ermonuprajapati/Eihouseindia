@@ -13,6 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/projects`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
     { url: `${baseUrl}/products`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.9 },
     { url: `${baseUrl}/services`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.85 },
+    { url: `${baseUrl}/blog`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.95 },
     { url: `${baseUrl}/articles`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
     { url: `${baseUrl}/community`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
     { url: `${baseUrl}/partnerships`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
@@ -47,5 +48,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.85,
     }));
 
-  return [...staticRoutes, ...categoryRoutes, ...articleRoutes];
+  // Include public author profiles with published articles
+  const authorUsernames = Array.from(
+    new Set(
+      publishedPosts
+        .filter((post) => post.status === 'PUBLISHED' && Boolean(post.authorUsername))
+        .map((post) => String(post.authorUsername).toLowerCase())
+    )
+  );
+
+  const authorRoutes: MetadataRoute.Sitemap = authorUsernames.map((username) => ({
+    url: `${baseUrl}/author/${username}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly',
+    priority: 0.75,
+  }));
+
+  return [...staticRoutes, ...categoryRoutes, ...articleRoutes, ...authorRoutes];
 }

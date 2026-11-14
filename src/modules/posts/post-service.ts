@@ -335,8 +335,31 @@ export async function getAuthorPostsPaginated(params: {
       hasMore,
     };
   } catch (error) {
-    console.warn('Could not fetch author posts from Firestore:', error);
-    return { posts: [], lastDoc: null, hasMore: false };
+    console.warn('Falling back to in-memory sort in getAuthorPostsPaginated:', error);
+    try {
+      const fallbackSnap = await getDocs(
+        query(collection(db, 'posts'), where('authorId', '==', params.authorId))
+      );
+      let list = fallbackSnap.docs.map((d) => mapSnapshotToPost(d));
+      if (params.statusFilter) {
+        list = list.filter((p) => p.status === params.statusFilter);
+      }
+      list.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+      const hasMore = list.length > pageSize;
+      const sliced = hasMore ? list.slice(0, pageSize) : list;
+      return {
+        posts: sliced,
+        lastDoc: null,
+        hasMore,
+      };
+    } catch (fallbackError) {
+      console.error('getAuthorPostsPaginated completely failed:', fallbackError);
+      return { posts: [], lastDoc: null, hasMore: false };
+    }
   }
 }
 

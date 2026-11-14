@@ -285,12 +285,20 @@ export default function AuthorDashboardPage() {
         {/* Top Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Contributor Workspace
-            </p>
-            <h1 className="font-display text-3xl font-semibold text-[#0B1528]">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Contributor Workspace
+              </p>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {profile?.role || 'CONTRIBUTOR'}
+              </span>
+            </div>
+            <h1 className="font-display text-3xl font-semibold text-[#0B1528] mt-1">
               Welcome, {profile?.displayName || firebaseUser.displayName || 'Engineer'}
             </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Signed in as: <strong className="font-mono text-slate-700">{firebaseUser.email}</strong> · Handle: <strong className="text-[#1D4ED8]">@{profile?.username || 'contributor'}</strong>
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {isEditor && (
