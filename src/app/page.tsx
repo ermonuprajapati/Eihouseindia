@@ -168,6 +168,17 @@ export default async function HomePage() {
               </p>
             </div>
 
+            {/* Ecosystem Showcase Visual Infographic */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-lg max-w-4xl mx-auto bg-white p-2 sm:p-4 flex items-center justify-center">
+              <Image
+                src="/images/ecosystem/integrated-ecosystem.jpg"
+                alt="Integrated Engineering Education, Innovation, Products, Services and Technology Community Ecosystem"
+                width={1024}
+                height={1024}
+                className="w-full h-auto max-h-[460px] object-contain rounded-xl"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
                 <div className="space-y-3">

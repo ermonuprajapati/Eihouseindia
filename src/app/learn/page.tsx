@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Clock,
   Award,
@@ -31,6 +32,7 @@ export default function LearnPage() {
       badge: 'Flagship 45-Day Program',
       duration: '45 Days / 90 Hours',
       level: 'Beginner to Advanced',
+      image: '/images/learn/embedded-systems-dev.jpg',
       modes: ['Online Live Sessions', 'Offline Hands-on Lab'],
       description:
         'Master ARM Cortex-M architecture, STM32 registers, HAL drivers, FreeRTOS multi-threading, and ESP32 dual-core programming with real hardware debugging.',
@@ -103,28 +105,47 @@ export default function LearnPage() {
         {/* Hero */}
         <section className="border-b border-slate-200 bg-white py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl space-y-5">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
-                EI House Education & STEM Platform
-              </span>
-              <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[#0B1528] tracking-tight leading-[1.1]">
-                Master Real Engineering On The Bench.
-              </h1>
-              <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-                We believe engineering cannot be learned through slides alone. Our structured practical training,
-                hardware kits, and offline lab environments give you the skills needed to design, build, and debug
-                real-world technology.
-              </p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
-                  <a href="#courses">
-                    <span>View Courses</span>
-                    <ArrowRight className="h-4 w-4 ml-1.5" />
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="lg">
-                  <Link href="/contact?subject=Course%20Enrollment%20Inquiry">Enrollment Inquiry</Link>
-                </Button>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+              <div className="lg:col-span-7 space-y-5">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+                  EI House Education & STEM Platform
+                </span>
+                <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[#0B1528] tracking-tight leading-[1.1]">
+                  Master Real Engineering On The Bench.
+                </h1>
+                <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+                  We believe engineering cannot be learned through slides alone. Our structured practical training,
+                  hardware kits, and offline lab environments give you the skills needed to design, build, and debug
+                  real-world technology.
+                </p>
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                    <a href="#courses">
+                      <span>View Courses</span>
+                      <ArrowRight className="h-4 w-4 ml-1.5" />
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" size="lg">
+                    <Link href="/contact?subject=Course%20Enrollment%20Inquiry">Enrollment Inquiry</Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="lg:col-span-5">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-xl bg-slate-900">
+                  <Image
+                    src="/images/learn/learn-hero.jpg"
+                    alt="Learn — Complete education platform at EI House"
+                    width={1536}
+                    height={1024}
+                    priority
+                    className="aspect-[4/3] w-full object-cover hover:scale-103 transition-transform duration-500"
+                  />
+                  <div className="p-3.5 bg-[#172D4D] text-white flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[#F59E0B]">EI House Learning Platform</span>
+                    <span className="text-slate-300">Hands-on Laboratory</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -197,6 +218,18 @@ export default function LearnPage() {
                         </span>
                         <span className="text-xs font-semibold text-slate-500">{course.duration}</span>
                       </div>
+
+                      {course.image && (
+                        <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                          <Image
+                            src={course.image}
+                            alt={course.title}
+                            width={690}
+                            height={517}
+                            className="aspect-[16/9] w-full object-cover hover:scale-103 transition-transform duration-300"
+                          />
+                        </div>
+                      )}
 
                       <div className="flex items-start gap-3.5">
                         <div className="h-11 w-11 rounded-xl bg-[#172D4D] text-white flex items-center justify-center shrink-0">
