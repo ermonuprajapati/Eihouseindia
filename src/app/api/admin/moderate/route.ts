@@ -5,6 +5,7 @@ import { getAdminAuth, getAdminDb } from '@/config/firebase-admin';
 import { SITE_CONFIG } from '@/config/site';
 import { moderationDecisionSchema } from '@/lib/validation';
 import { sendEditorialEmail } from '@/modules/email/email-service';
+import { invalidateServerQueryCache } from '@/modules/posts/public-queries';
 
 export async function POST(request: Request) {
   const adminAuth = getAdminAuth();
@@ -167,7 +168,9 @@ export async function POST(request: Request) {
       }
     }
 
+    invalidateServerQueryCache();
     revalidatePath('/');
+    revalidatePath('/blog');
     revalidatePath('/articles');
     revalidatePath(`/blog/${postData.slug}`);
 

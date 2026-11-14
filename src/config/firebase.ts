@@ -1,6 +1,14 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer,
+  type Firestore,
+} from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
 
@@ -20,10 +28,28 @@ export const firebaseApp: FirebaseApp = getApps().length > 0 ? getApp() : initia
 
 export const auth: Auth = getAuth(firebaseApp);
 
-export const db: Firestore =
-  firestoreDatabaseId && firestoreDatabaseId !== '(default)'
-    ? getFirestore(firebaseApp, firestoreDatabaseId)
-    : getFirestore(firebaseApp);
+export const db: Firestore = (() => {
+  if (typeof window === 'undefined') {
+    return firestoreDatabaseId && firestoreDatabaseId !== '(default)'
+      ? getFirestore(firebaseApp, firestoreDatabaseId)
+      : getFirestore(firebaseApp);
+  }
+  try {
+    return initializeFirestore(
+      firebaseApp,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      },
+      firestoreDatabaseId && firestoreDatabaseId !== '(default)' ? firestoreDatabaseId : undefined
+    );
+  } catch {
+    return firestoreDatabaseId && firestoreDatabaseId !== '(default)'
+      ? getFirestore(firebaseApp, firestoreDatabaseId)
+      : getFirestore(firebaseApp);
+  }
+})();
 
 export const storage: FirebaseStorage = getStorage(firebaseApp);
 

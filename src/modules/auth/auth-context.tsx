@@ -60,6 +60,41 @@ function serializeTimestamp(val: unknown): string {
   return new Date().toISOString();
 }
 
+function getCachedProfile(uid: string): UserProfile | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(`eihouse_profile_${uid}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setCachedProfile(uid: string, profile: UserProfile): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`eihouse_profile_${uid}`, JSON.stringify(profile));
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+function clearCachedProfile(uid?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (uid) {
+      localStorage.removeItem(`eihouse_profile_${uid}`);
+    } else {
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('eihouse_profile_')) localStorage.removeItem(k);
+      });
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 const welcomedUsers = new Set<string>();
 
 function sendWelcomeEmailNotice(email: string, displayName: string, uid: string) {
@@ -228,7 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = undefined;
@@ -242,15 +277,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Step 1: INSTANT HYDRATION - Load local cache immediately (0ms delay)
+      const cached = getCachedProfile(user.uid);
+      if (cached) {
+        setProfile(cached);
+        setLoading(false);
+      }
+
+      // Step 2: Background sync with Firestore
       try {
-        await ensureUserProfileDocument(user);
         const userRef = doc(db, 'users', user.uid);
         unsubscribeProfile = onSnapshot(
           userRef,
           (snapshot) => {
             if (snapshot.exists()) {
               const data = snapshot.data();
-              setProfile({
+              const updatedProfile: UserProfile = {
                 uid: data.uid,
                 email: data.email,
                 username: data.username,
@@ -262,9 +304,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 status: data.status || 'ACTIVE',
                 createdAt: serializeTimestamp(data.createdAt),
                 updatedAt: serializeTimestamp(data.updatedAt),
-              });
+              };
+              setProfile(updatedProfile);
+              setCachedProfile(user.uid, updatedProfile);
+              setLoading(false);
+            } else {
+              // Create user profile document if this is a fresh account
+              ensureUserProfileDocument(user)
+                .then((createdProfile) => {
+                  setProfile(createdProfile);
+                  setCachedProfile(user.uid, createdProfile);
+                  setLoading(false);
+                })
+                .catch((e) => {
+                  console.error('Failed to create user profile:', e);
+                  setLoading(false);
+                });
             }
-            setLoading(false);
           },
           (error) => {
             console.error('Profile listener error:', error);
@@ -342,9 +398,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    clearCachedProfile(firebaseUser?.uid);
     await firebaseSignOut(auth);
     setProfile(null);
-  }, []);
+  }, [firebaseUser?.uid]);
 
   const resendVerificationEmail = useCallback(async () => {
     if (!auth.currentUser) {
@@ -364,7 +421,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
     if (snap.exists()) {
       const data = snap.data();
-      setProfile({
+      const updatedProfile: UserProfile = {
         uid: data.uid,
         email: data.email,
         username: data.username,
@@ -376,7 +433,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status: data.status || 'ACTIVE',
         createdAt: serializeTimestamp(data.createdAt),
         updatedAt: serializeTimestamp(data.updatedAt),
-      });
+      };
+      setProfile(updatedProfile);
+      setCachedProfile(auth.currentUser.uid, updatedProfile);
     }
   }, []);
 

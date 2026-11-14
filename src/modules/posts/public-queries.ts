@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import {
   collection,
   doc,
@@ -15,6 +16,41 @@ import type { QueryDocumentSnapshot, Query as AdminQuery } from 'firebase-admin/
 import { INITIAL_CATEGORIES } from '@/config/categories';
 import { SITE_CONFIG } from '@/config/site';
 import type { Category, Comment, Post, PublicAuthorProfile, SiteSettings } from '@/types';
+
+interface CacheEntry<T> {
+  data: T;
+  expires: number;
+}
+const serverQueryCache = new Map<string, CacheEntry<unknown>>();
+
+function getFromQueryCache<T>(key: string): T | null {
+  const entry = serverQueryCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) {
+    serverQueryCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setInQueryCache<T>(key: string, data: T, ttlMs = 60_000): void {
+  if (serverQueryCache.size > 250) {
+    serverQueryCache.clear();
+  }
+  serverQueryCache.set(key, { data, expires: Date.now() + ttlMs });
+}
+
+export function invalidateServerQueryCache(prefix?: string): void {
+  if (!prefix) {
+    serverQueryCache.clear();
+    return;
+  }
+  for (const key of serverQueryCache.keys()) {
+    if (key.startsWith(prefix)) {
+      serverQueryCache.delete(key);
+    }
+  }
+}
 
 function toIso(value: unknown): string {
   if (!value) return new Date().toISOString();
@@ -65,12 +101,15 @@ function mapDocToPost(id: string, data: Record<string, unknown>): Post {
 }
 
 export async function getPublicCategories(): Promise<Category[]> {
+  const cached = getFromQueryCache<Category[]>('public_categories');
+  if (cached) return cached;
+
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
       const snap = await adminDb.collection('categories').orderBy('order', 'asc').get();
       if (!snap.empty) {
-        return snap.docs.map((d: QueryDocumentSnapshot) => {
+        const categories = snap.docs.map((d: QueryDocumentSnapshot) => {
           const data = d.data();
           return {
             id: d.id,
@@ -80,6 +119,8 @@ export async function getPublicCategories(): Promise<Category[]> {
             order: Number(data.order || 99),
           };
         });
+        setInQueryCache('public_categories', categories, 300_000);
+        return categories;
       }
       return INITIAL_CATEGORIES;
     }
@@ -87,7 +128,7 @@ export async function getPublicCategories(): Promise<Category[]> {
     const q = query(collection(db, 'categories'), orderBy('order', 'asc'));
     const snap = await getDocs(q);
     if (snap.empty) return INITIAL_CATEGORIES;
-    return snap.docs.map((d) => {
+    const categories = snap.docs.map((d) => {
       const data = d.data();
       return {
         id: d.id,
@@ -97,6 +138,8 @@ export async function getPublicCategories(): Promise<Category[]> {
         order: Number(data.order || 99),
       };
     });
+    setInQueryCache('public_categories', categories, 300_000);
+    return categories;
   } catch {
     return INITIAL_CATEGORIES;
   }
@@ -116,72 +159,30 @@ export async function getPublishedPosts(options?: {
   featuredOnly?: boolean;
 }): Promise<Post[]> {
   const limitCount = options?.limitCount ?? 12;
+  const cacheKey = `posts_${limitCount}_${options?.categoryId || 'all'}_${options?.featuredOnly ? 'feat' : 'all'}`;
+  const cached = getFromQueryCache<Post[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
-      try {
-        let ref: AdminQuery = adminDb
-          .collection('posts')
-          .where('status', '==', 'PUBLISHED');
-        if (options?.categoryId) {
-          ref = ref.where('categoryId', '==', options.categoryId);
-        }
-        if (options?.featuredOnly) {
-          ref = ref.where('featured', '==', true);
-        }
-        const snap = await ref.orderBy('publishedAt', 'desc').limit(limitCount).get();
-        if (!snap.empty) {
-          return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
-        }
-      } catch (adminIndexError) {
-        console.warn(
-          'Falling back to non-indexed query for published posts in Admin SDK:',
-          adminIndexError instanceof Error ? adminIndexError.message : adminIndexError
-        );
-      }
-
-      // Resilient fallback: Query by status without composite orderBy, sort in-memory
-      const snap = await adminDb
+      let ref: AdminQuery = adminDb
         .collection('posts')
-        .where('status', '==', 'PUBLISHED')
-        .get();
-
-      let posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+        .where('status', '==', 'PUBLISHED');
       if (options?.categoryId) {
-        posts = posts.filter((p) => p.categoryId === options.categoryId);
+        ref = ref.where('categoryId', '==', options.categoryId);
       }
       if (options?.featuredOnly) {
-        posts = posts.filter((p) => p.featured);
+        ref = ref.where('featured', '==', true);
       }
-      return sortPostsDescending(posts).slice(0, limitCount);
+      const snap = await ref.get();
+      const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      const sorted = sortPostsDescending(posts).slice(0, limitCount);
+      setInQueryCache(cacheKey, sorted, 60_000);
+      return sorted;
     }
 
     // Client SDK fallback
-    try {
-      const constraints = [where('status', '==', 'PUBLISHED')];
-      if (options?.categoryId) {
-        constraints.push(where('categoryId', '==', options.categoryId));
-      }
-      if (options?.featuredOnly) {
-        constraints.push(where('featured', '==', true));
-      }
-      const q = query(
-        collection(db, 'posts'),
-        ...constraints,
-        orderBy('publishedAt', 'desc'),
-        limit(limitCount)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
-      }
-    } catch (clientIndexError) {
-      console.warn(
-        'Falling back to non-indexed query for published posts in client SDK:',
-        clientIndexError instanceof Error ? clientIndexError.message : clientIndexError
-      );
-    }
-
     const fallbackSnap = await getDocs(
       query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
     );
@@ -192,14 +193,20 @@ export async function getPublishedPosts(options?: {
     if (options?.featuredOnly) {
       posts = posts.filter((p) => p.featured);
     }
-    return sortPostsDescending(posts).slice(0, limitCount);
+    const sorted = sortPostsDescending(posts).slice(0, limitCount);
+    setInQueryCache(cacheKey, sorted, 60_000);
+    return sorted;
   } catch (err) {
     console.error('getPublishedPosts failed completely:', err);
     return [];
   }
 }
 
-export async function getPublishedPostBySlug(slug: string): Promise<Post | null> {
+export const getPublishedPostBySlug = cache(async (slug: string): Promise<Post | null> => {
+  const cacheKey = `post_slug_${slug}`;
+  const cached = getFromQueryCache<Post>(cacheKey);
+  if (cached) return cached;
+
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
@@ -211,7 +218,9 @@ export async function getPublishedPostBySlug(slug: string): Promise<Post | null>
         .get();
       if (snap.empty) return null;
       const d = snap.docs[0];
-      return mapDocToPost(d.id, d.data());
+      const post = mapDocToPost(d.id, d.data());
+      setInQueryCache(cacheKey, post, 60_000);
+      return post;
     }
 
     const q = query(
@@ -223,11 +232,13 @@ export async function getPublishedPostBySlug(slug: string): Promise<Post | null>
     const snap = await getDocs(q);
     if (snap.empty) return null;
     const d = snap.docs[0];
-    return mapDocToPost(d.id, d.data());
+    const post = mapDocToPost(d.id, d.data());
+    setInQueryCache(cacheKey, post, 60_000);
+    return post;
   } catch {
     return null;
   }
-}
+});
 
 export async function getRelatedPublishedPosts(
   postId: string,
@@ -242,20 +253,25 @@ export async function getRelatedPublishedPosts(
   }
 }
 
-export async function getPublicAuthorByUsername(
+export const getPublicAuthorByUsername = cache(async (
   username: string
-): Promise<PublicAuthorProfile | null> {
+): Promise<PublicAuthorProfile | null> => {
+  const cleanUsername = username.toLowerCase().trim();
+  const cacheKey = `author_${cleanUsername}`;
+  const cached = getFromQueryCache<PublicAuthorProfile>(cacheKey);
+  if (cached) return cached;
+
   try {
     const adminDb = getAdminDb();
     if (adminDb) {
       const snap = await adminDb
         .collection('publicProfiles')
-        .where('username', '==', username.toLowerCase())
+        .where('username', '==', cleanUsername)
         .limit(1)
         .get();
       if (snap.empty) return null;
       const data = snap.docs[0].data();
-      return {
+      const author: PublicAuthorProfile = {
         uid: String(data.uid || snap.docs[0].id),
         username: String(data.username || ''),
         displayName: String(data.displayName || ''),
@@ -266,17 +282,19 @@ export async function getPublicAuthorByUsername(
         status: (data.status as PublicAuthorProfile['status']) || 'ACTIVE',
         createdAt: toIso(data.createdAt),
       };
+      setInQueryCache(cacheKey, author, 120_000);
+      return author;
     }
 
     const q = query(
       collection(db, 'publicProfiles'),
-      where('username', '==', username.toLowerCase()),
+      where('username', '==', cleanUsername),
       limit(1)
     );
     const snap = await getDocs(q);
     if (snap.empty) return null;
     const data = snap.docs[0].data();
-    return {
+    const author: PublicAuthorProfile = {
       uid: String(data.uid || snap.docs[0].id),
       username: String(data.username || ''),
       displayName: String(data.displayName || ''),
@@ -287,10 +305,12 @@ export async function getPublicAuthorByUsername(
       status: (data.status as PublicAuthorProfile['status']) || 'ACTIVE',
       createdAt: toIso(data.createdAt),
     };
+    setInQueryCache(cacheKey, author, 120_000);
+    return author;
   } catch {
     return null;
   }
-}
+});
 
 export async function getPublishedPostsByAuthorId(
   authorId: string,

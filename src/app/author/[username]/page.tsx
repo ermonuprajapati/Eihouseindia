@@ -13,7 +13,7 @@ import {
   getPublishedPostsByAuthorId,
 } from '@/modules/posts/public-queries';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export async function generateMetadata({
   params,

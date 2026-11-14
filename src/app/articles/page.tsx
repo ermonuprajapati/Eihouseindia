@@ -5,7 +5,7 @@ import { PaginatedArticlesList } from '@/components/articles/PaginatedArticlesLi
 import { SITE_CONFIG } from '@/config/site';
 import { getPublicCategories, getPublishedPosts } from '@/modules/posts/public-queries';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: 'All Published Articles',

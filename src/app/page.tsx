@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
 import { getPublishedPosts } from '@/modules/posts/public-queries';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export default async function HomePage() {
   const latestPosts = await getPublishedPosts({ limitCount: 12 });
