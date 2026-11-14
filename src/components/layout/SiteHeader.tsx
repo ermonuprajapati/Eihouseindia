@@ -32,58 +32,99 @@ export function SiteHeader() {
         {/* Zone 1: Brand wordmark with logo */}
         <Link
           href="/"
-          className="font-display text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5"
+          className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5"
         >
           <Image
             src="/images/logo.png"
-            alt="EIHOUSE INDIA Logo"
+            alt="EI HOUSE INDIA Logo"
             width={34}
             height={34}
             className="h-8 w-8 object-contain rounded"
             priority
           />
-          <span>EIHOUSE INDIA</span>
+          <div className="flex flex-col">
+            <span className="leading-tight font-extrabold text-[#0B1528]">EI HOUSE</span>
+            <span className="text-[10px] tracking-wider font-semibold text-[#F59E0B] uppercase leading-none hidden sm:inline">
+              Innovation House
+            </span>
+          </div>
         </Link>
 
-        {/* Zone 2: 5 concise single-line nav links */}
+        {/* Zone 2: Ecosystem Nav Links */}
         <nav
           aria-label="Primary navigation"
-          className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600"
+          className="hidden lg:flex items-center gap-5 xl:gap-6 text-sm font-medium text-slate-600"
         >
+          <Link
+            href="/learn"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Learn
+          </Link>
+          <Link
+            href="/projects"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Projects
+          </Link>
+          <Link
+            href="/products"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Store
+          </Link>
+          <Link
+            href="/services"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Services
+          </Link>
           <Link
             href="/articles"
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
-            Articles
+            Blog
           </Link>
           <Link
-            href="/category/semiconductor-technology"
+            href="/community"
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
-            Semiconductors
+            Community
           </Link>
           <Link
-            href="/category/artificial-intelligence"
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            href="/partnerships"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 text-slate-500"
           >
-            AI & Robotics
+            Labs & Franchise
           </Link>
           <Link
-            href="/category/tutorials-projects"
+            href="/about"
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
-            Tutorials
-          </Link>
-          <Link
-            href="/search"
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            Search
+            About
           </Link>
         </nav>
 
-        {/* Zone 3: 1 primary action / account trigger */}
-        <div className="hidden md:flex items-center gap-3 shrink-0">
+        {/* Zone 3: Actions & Account Trigger */}
+        <div className="hidden lg:flex items-center gap-3 shrink-0">
+          <Link
+            href="/search"
+            className="p-2 text-slate-500 hover:text-[#0B1528] rounded-md hover:bg-slate-100 transition-colors"
+            title="Search Platform"
+          >
+            <span className="sr-only">Search</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </Link>
+
+          <Button asChild variant="outline" size="sm" className="hidden xl:inline-flex border-[#0B1528]/20">
+            <Link href="/dashboard/editor">
+              <PenLine className="h-3.5 w-3.5 mr-1" />
+              <span>Write</span>
+            </Link>
+          </Button>
+
           {loading ? (
             <div className="h-9 w-24 rounded-md bg-slate-100 animate-pulse" />
           ) : firebaseUser ? (
@@ -134,9 +175,14 @@ export function SiteHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button asChild size="sm">
-              <Link href="/auth/login">Sign In</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/auth/login">Sign In</Link>
+              </Button>
+              <Button asChild size="sm" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                <Link href="/auth/register">Join</Link>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -144,7 +190,7 @@ export function SiteHeader() {
         <button
           type="button"
           onClick={() => setMobileOpen((prev) => !prev)}
-          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+          className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
           aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -153,34 +199,37 @@ export function SiteHeader() {
 
       {/* Mobile Navigation Drawer */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3">
+        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3">
           <nav className="flex flex-col space-y-2 text-sm font-medium text-slate-700">
-            <Link href="/articles" onClick={() => setMobileOpen(false)} className="py-2">
-              Articles
+            <Link href="/" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#0B1528]">
+              Home
             </Link>
-            <Link
-              href="/category/semiconductor-technology"
-              onClick={() => setMobileOpen(false)}
-              className="py-2"
-            >
-              Semiconductors
+            <Link href="/learn" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Learn (Courses & Training)
             </Link>
-            <Link
-              href="/category/artificial-intelligence"
-              onClick={() => setMobileOpen(false)}
-              className="py-2"
-            >
-              AI & Robotics
+            <Link href="/projects" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Projects & Prototyping
             </Link>
-            <Link
-              href="/category/tutorials-projects"
-              onClick={() => setMobileOpen(false)}
-              className="py-2"
-            >
-              Tutorials
+            <Link href="/products" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Store & Components
             </Link>
-            <Link href="/search" onClick={() => setMobileOpen(false)} className="py-2">
-              Search
+            <Link href="/services" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Engineering Services & R&D
+            </Link>
+            <Link href="/articles" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Technical Blog & Articles
+            </Link>
+            <Link href="/community" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Community & Network
+            </Link>
+            <Link href="/partnerships" onClick={() => setMobileOpen(false)} className="py-1.5">
+              Franchise & College Labs
+            </Link>
+            <Link href="/about" onClick={() => setMobileOpen(false)} className="py-1.5">
+              About EI House
+            </Link>
+            <Link href="/search" onClick={() => setMobileOpen(false)} className="py-1.5 text-slate-500">
+              Universal Search
             </Link>
           </nav>
           <div className="border-t border-slate-200 pt-3 flex flex-col gap-2">

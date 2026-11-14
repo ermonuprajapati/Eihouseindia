@@ -9,27 +9,78 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-slate-200 bg-[#0B1528] text-slate-300">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-4">
-          <div className="md:col-span-1 space-y-3">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-5">
+          <div className="lg:col-span-2 space-y-4">
             <Link href="/" className="font-display text-xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <Image
                 src="/images/logo.png"
-                alt="EIHOUSE INDIA Logo"
-                width={32}
-                height={32}
-                className="h-8 w-8 object-contain rounded bg-white p-0.5"
+                alt="EI HOUSE Logo"
+                width={36}
+                height={36}
+                className="h-9 w-9 object-contain rounded bg-white p-0.5"
               />
-              <span>{SITE_CONFIG.name}</span>
+              <div className="flex flex-col">
+                <span className="leading-tight text-white font-extrabold text-lg">EI HOUSE</span>
+                <span className="text-[10px] tracking-wider font-semibold text-[#F59E0B] uppercase">
+                  Engineering Innovation House
+                </span>
+              </div>
             </Link>
-            <p className="text-sm font-medium text-slate-200">{SITE_CONFIG.tagline}</p>
-            <p className="text-sm leading-relaxed text-slate-400">
+            <p className="text-sm font-semibold text-[#F59E0B] tracking-wide">{SITE_CONFIG.tagline}</p>
+            <p className="text-xs text-slate-400 font-mono">{SITE_CONFIG.subtitle}</p>
+            <p className="text-sm leading-relaxed text-slate-400 max-w-md">
               {SITE_CONFIG.description}
             </p>
+            <div className="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
+              <p className="text-slate-300 font-medium">{SITE_CONFIG.entity.legalType} · {SITE_CONFIG.entity.country}</p>
+              <p>Email: <a href={`mailto:${SITE_CONFIG.contactEmail}`} className="text-slate-300 hover:text-white underline">{SITE_CONFIG.contactEmail}</a></p>
+            </div>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-white mb-4">Editorial Desks</h3>
+            <h3 className="text-sm font-semibold text-white mb-4 tracking-wider uppercase">Ecosystem</h3>
             <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link href="/learn" className="text-slate-400 hover:text-white transition-colors">
+                  Learn & Training
+                </Link>
+              </li>
+              <li>
+                <Link href="/projects" className="text-slate-400 hover:text-white transition-colors">
+                  Projects & Prototypes
+                </Link>
+              </li>
+              <li>
+                <Link href="/products" className="text-slate-400 hover:text-white transition-colors">
+                  Store & Hardware
+                </Link>
+              </li>
+              <li>
+                <Link href="/services" className="text-slate-400 hover:text-white transition-colors">
+                  R&D & Engineering Services
+                </Link>
+              </li>
+              <li>
+                <Link href="/community" className="text-slate-400 hover:text-white transition-colors">
+                  Community & Network
+                </Link>
+              </li>
+              <li>
+                <Link href="/partnerships" className="text-slate-400 hover:text-white transition-colors">
+                  College Innovation Labs
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-4 tracking-wider uppercase">Knowledge</h3>
+            <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link href="/articles" className="text-slate-400 hover:text-white transition-colors">
+                  Technical Blog
+                </Link>
+              </li>
               {primaryCategories.map((cat) => (
                 <li key={cat.id}>
                   <Link
@@ -40,51 +91,35 @@ export function SiteFooter() {
                   </Link>
                 </li>
               ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-white mb-4">Platform</h3>
-            <ul className="space-y-2.5 text-sm">
-              <li>
-                <Link href="/articles" className="text-slate-400 hover:text-white transition-colors">
-                  All Articles
-                </Link>
-              </li>
               <li>
                 <Link href="/search" className="text-slate-400 hover:text-white transition-colors">
-                  Search Archive
-                </Link>
-              </li>
-              <li>
-                <Link href="/dashboard/editor" className="text-slate-400 hover:text-white transition-colors">
-                  Submit an Article
-                </Link>
-              </li>
-              <li>
-                <Link href="/components" className="text-slate-400 hover:text-white transition-colors">
-                  Component Directory (Roadmap)
+                  Universal Search
                 </Link>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-white mb-4">Publication Standards</h3>
+            <h3 className="text-sm font-semibold text-white mb-4 tracking-wider uppercase">Company</h3>
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link href="/about" className="text-slate-400 hover:text-white transition-colors">
-                  About EIHOUSE INDIA
-                </Link>
-              </li>
-              <li>
-                <Link href="/community-guidelines" className="text-slate-400 hover:text-white transition-colors">
-                  Community Guidelines
+                  About EI House
                 </Link>
               </li>
               <li>
                 <Link href="/contact" className="text-slate-400 hover:text-white transition-colors">
-                  Contact Editorial Desk
+                  Contact & Inquiries
+                </Link>
+              </li>
+              <li>
+                <Link href="/dashboard/editor" className="text-slate-400 hover:text-white transition-colors">
+                  Write for EI House
+                </Link>
+              </li>
+              <li>
+                <Link href="/community-guidelines" className="text-slate-400 hover:text-white transition-colors">
+                  Community Standards
                 </Link>
               </li>
               <li>
@@ -102,8 +137,8 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© {new Date().getFullYear()} {SITE_CONFIG.name} ({SITE_CONFIG.domain}). All rights reserved.</p>
-          <p>Published for engineers, researchers, and builders worldwide.</p>
+          <p>© {new Date().getFullYear()} {SITE_CONFIG.name} · {SITE_CONFIG.tagline} All rights reserved.</p>
+          <p>MSME / Udyam Registered Indian Innovation Platform · Built for Engineers & Innovators.</p>
         </div>
       </div>
     </footer>
