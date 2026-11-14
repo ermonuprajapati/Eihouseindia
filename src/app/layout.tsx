@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { AuthProvider } from '@/modules/auth/auth-context';
 import { SITE_CONFIG } from '@/config/site';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { SiteTrafficTracker } from '@/components/analytics/SiteTrafficTracker';
 import { buildOrganizationJsonLd, buildWebsiteJsonLd } from '@/lib/seo';
 import './globals.css';
 
@@ -123,6 +124,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={buildOrganizationJsonLd()} />
         <JsonLd data={buildWebsiteJsonLd()} />
         <AuthProvider>
+          <SiteTrafficTracker />
           {children}
           <Toaster position="bottom-right" richColors closeButton />
         </AuthProvider>

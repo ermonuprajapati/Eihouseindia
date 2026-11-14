@@ -13,10 +13,12 @@ import {
   Trash2,
   ShieldAlert,
   RefreshCw,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+import { UserTrafficAnalytics } from '@/components/admin/UserTrafficAnalytics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -353,7 +355,7 @@ export default function AdminPanelPage() {
     { id: 'comments', label: 'Comments' },
     { id: 'media', label: 'Media Library' },
     { id: 'reports', label: 'Reports' },
-    { id: 'analytics', label: 'Analytics & Logs' },
+    { id: 'analytics', label: 'Traffic & Analytics' },
     { id: 'settings', label: 'Website Settings', adminOnly: true },
   ];
 
@@ -552,6 +554,29 @@ export default function AdminPanelPage() {
                           {stats?.totalComments ?? comments.length}
                         </p>
                       </div>
+
+                      {/* Quick link to live analytics */}
+                      <button
+                        type="button"
+                        onClick={() => setSection('analytics')}
+                        className="rounded-lg border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-5 text-left hover:border-slate-300 transition-all group col-span-2 sm:col-span-3 flex items-center justify-between"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#172D4D]">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Live User Traffic Telemetry</span>
+                          </div>
+                          <p className="font-display text-base font-bold text-[#0B1528]">
+                            View 24h, 30-Day &amp; 3-Month Visitor Analytics →
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            See how many unique users are arriving, top pages viewed, and device distributions.
+                          </p>
+                        </div>
+                        <div className="h-10 w-10 rounded-xl bg-[#172D4D] text-white flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                          <ArrowRight className="h-5 w-5" />
+                        </div>
+                      </button>
                     </div>
 
                     <div className="space-y-3">
@@ -965,49 +990,58 @@ export default function AdminPanelPage() {
                 )}
 
                 {section === 'analytics' && (
-                  <div className="space-y-6">
-                    <h2 className="font-display text-2xl font-semibold text-[#0B1528]">
-                      Moderation Audit Logs
-                    </h2>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                      <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                          <tr>
-                            <th className="px-4 py-3">Timestamp</th>
-                            <th className="px-4 py-3">Actor</th>
-                            <th className="px-4 py-3">Action</th>
-                            <th className="px-4 py-3">Target</th>
-                            <th className="px-4 py-3">Details</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {logs.length === 0 ? (
+                  <div className="space-y-10">
+                    <UserTrafficAnalytics users={users} />
+
+                    <div className="space-y-4 pt-6 border-t border-slate-200">
+                      <div>
+                        <h2 className="font-display text-xl font-bold text-[#0B1528]">
+                          Moderation &amp; Administrative Audit Logs
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Immutable security logs of actions taken by editors and administrators
+                        </p>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <table className="w-full text-left text-sm">
+                          <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
                             <tr>
-                              <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                                No moderation actions logged yet.
-                              </td>
+                              <th className="px-4 py-3">Timestamp</th>
+                              <th className="px-4 py-3">Actor</th>
+                              <th className="px-4 py-3">Action</th>
+                              <th className="px-4 py-3">Target</th>
+                              <th className="px-4 py-3">Details</th>
                             </tr>
-                          ) : (
-                            logs.map((log) => (
-                              <tr key={log.id}>
-                                <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
-                                  {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {logs.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                                  No moderation actions logged yet.
                                 </td>
-                                <td className="px-4 py-3 text-xs text-slate-700">
-                                  {log.actorEmail || log.actorId} ({log.actorRole})
-                                </td>
-                                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0B1528]">
-                                  {log.action}
-                                </td>
-                                <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                                  {log.targetType}:{log.targetId}
-                                </td>
-                                <td className="px-4 py-3 text-xs text-slate-600">{log.reason}</td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                            ) : (
+                              logs.map((log) => (
+                                <tr key={log.id}>
+                                  <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
+                                    {format(new Date(log.createdAt), 'MMM d, HH:mm')}
+                                  </td>
+                                  <td className="px-4 py-3 text-xs text-slate-700">
+                                    {log.actorEmail || log.actorId} ({log.actorRole})
+                                  </td>
+                                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0B1528]">
+                                    {log.action}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                                    {log.targetType}:{log.targetId}
+                                  </td>
+                                  <td className="px-4 py-3 text-xs text-slate-600">{log.reason}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}

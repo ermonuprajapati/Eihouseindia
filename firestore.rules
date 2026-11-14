@@ -179,6 +179,12 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
+    // 4b. Site Visits & Visitor Traffic Telemetry
+    match /siteVisits/{visitId} {
+      allow create: if isValidId(visitId);
+      allow read, delete: if isAdmin();
+    }
+
     // 5. Categories
     match /categories/{categoryId} {
       allow get, list: if true;
