@@ -22,6 +22,7 @@ import { SiteFooter } from '@/components/layout/SiteFooter';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { NewsletterForm } from '@/components/articles/NewsletterForm';
 import { Button } from '@/components/ui/button';
+import { SITE_CONFIG } from '@/config/site';
 import { getPublishedPosts } from '@/modules/posts/public-queries';
 
 export const dynamic = 'force-dynamic';
@@ -141,9 +142,9 @@ export default async function HomePage() {
                     </div>
 
                     <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
-                      <span>MSME Registered Platform</span>
-                      <Link href="/about" className="text-[#F59E0B] font-semibold hover:underline">
-                        About EI House →
+                      <span>Founded by {SITE_CONFIG.founder.fullNameWithPrefix}</span>
+                      <Link href="/about#founder" className="text-[#F59E0B] font-semibold hover:underline">
+                        Founder &amp; Leadership →
                       </Link>
                     </div>
                   </div>

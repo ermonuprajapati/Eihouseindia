@@ -14,16 +14,35 @@ import {
   ShieldCheck,
   Compass,
   Sparkles,
+  UserCheck,
+  Mail,
+  Award,
+  Layers,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildAboutPageJsonLd, buildFounderJsonLd } from '@/lib/seo';
 import { SITE_CONFIG } from '@/config/site';
 
 export const metadata: Metadata = {
-  title: `About ${SITE_CONFIG.name} (EI House) — Where Ideas Become Things`,
+  title: `About EI House | Founded by Monu Prajapati — Engineering Innovation House`,
   description:
-    'Learn about Engineering Innovation House (EI House), an engineering-focused platform dedicated to education, practical projects, innovative products, technical services, and community collaboration.',
+    'Engineering Innovation House (EI House / EIHOUSE INDIA) is an engineering and technology organization founded by Monu Prajapati (Founder & Proprietor). Dedicated to engineering education, hardware prototyping, products, R&D services, and a collaborative technology community.',
+  keywords: [
+    'EI House',
+    'EI House India',
+    'EIHOUSE INDIA',
+    'Engineering Innovation House',
+    'Monu Prajapati',
+    'Er Monu Prajapati',
+    'Monu Prajapati EI House',
+    'Founder of EI House',
+    'Who owns EI House',
+    'Electronics Engineering India',
+    'Embedded Systems Prototyping',
+  ],
   alternates: { canonical: `${SITE_CONFIG.url}/about` },
 };
 
@@ -80,6 +99,8 @@ export default function AboutPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFBFD]">
+      <JsonLd data={buildAboutPageJsonLd()} />
+      <JsonLd data={buildFounderJsonLd()} />
       <SiteHeader />
 
       <main className="flex-1">
@@ -212,6 +233,170 @@ export default function AboutPage() {
                       <span><strong>National STEM Impact:</strong> School & college lab setups.</span>
                     </li>
                   </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Founder & Leadership Section */}
+        <section id="founder" className="py-16 sm:py-24 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50/70">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
+            <div className="max-w-3xl space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
+                <UserCheck className="h-3.5 w-3.5 text-[#F59E0B]" />
+                <span>Founder & Leadership</span>
+              </div>
+              <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0B1528] tracking-tight">
+                {SITE_CONFIG.founder.fullNameWithPrefix}
+              </h2>
+              <p className="text-lg font-semibold text-[#172D4D]">
+                {SITE_CONFIG.founder.designation} · {SITE_CONFIG.founder.organization}
+              </p>
+              <p className="text-xs sm:text-sm font-mono text-[#F59E0B] uppercase tracking-wider">
+                {SITE_CONFIG.founder.professionalIdentity}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+              {/* Profile Card & Identity */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-lg space-y-6 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 h-32 w-32 bg-gradient-to-bl from-[#172D4D]/10 to-transparent rounded-bl-full pointer-events-none" />
+
+                  <div className="flex items-center gap-4">
+                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-[#172D4D] to-[#0B1528] text-white flex items-center justify-center font-display font-extrabold text-2xl shadow-md border-2 border-amber-400/40">
+                      MP
+                    </div>
+                    <div>
+                      <h3 className="font-display text-xl font-bold text-[#0B1528] leading-tight">
+                        {SITE_CONFIG.founder.name}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                        {SITE_CONFIG.founder.designation}
+                      </p>
+                      <p className="text-xs text-[#172D4D] font-medium pt-0.5">
+                        {SITE_CONFIG.name}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+                    <Award className="h-4 w-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">Official Entity Ownership</p>
+                      <p className="text-amber-800/90 text-[11px] leading-relaxed">
+                        Registered Proprietorship under MSME / Udyam (Govt. of India), spearheading engineering innovation, hardware prototyping, and technical education.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Designation:</span>
+                      <span className="font-semibold text-[#0B1528]">{SITE_CONFIG.founder.designation}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Organization:</span>
+                      <span className="font-semibold text-[#0B1528]">EI House ({SITE_CONFIG.brandName})</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Jurisdiction:</span>
+                      <span className="font-semibold text-[#0B1528]">India (Pan-India & Global Reach)</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Brand Tagline:</span>
+                      <span className="font-semibold text-[#F59E0B]">{SITE_CONFIG.tagline}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-slate-500 font-medium">Founder Email:</span>
+                      <a href={`mailto:${SITE_CONFIG.founder.email}`} className="font-semibold text-[#172D4D] hover:underline">
+                        {SITE_CONFIG.founder.email}
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col gap-2">
+                    <Button asChild className="w-full bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                      <Link href="/contact#founder">
+                        <Mail className="h-4 w-4 mr-2" />
+                        <span>Contact Founder Desk</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/services">
+                        <span>Consult on R&D Services</span>
+                        <ArrowRight className="h-4 w-4 ml-1.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Technical Areas of Specialization */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                    <Layers className="h-4 w-4 text-[#172D4D]" />
+                    <span>Areas of Technical Specialization</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {SITE_CONFIG.founder.expertise.map((exp, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-slate-300 transition-colors"
+                      >
+                        {exp}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Founder Narrative & Vision */}
+              <div className="lg:col-span-7 space-y-8">
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-10 shadow-lg space-y-6">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+                      Founder&apos;s Profile
+                    </span>
+                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#0B1528]">
+                      Architecting Practical Engineering Excellence
+                    </h3>
+                  </div>
+
+                  <div className="space-y-4 text-base leading-relaxed text-slate-700">
+                    <p>
+                      <strong>{SITE_CONFIG.founder.name}</strong> is an Engineering Professional, Technology Entrepreneur, and the Founder &amp; Proprietor of <strong>Engineering Innovation House (EI House)</strong>, an engineering and technology-driven organization focused on advancing innovation, research, engineering development, and technological solutions.
+                    </p>
+                    <p>
+                      With a strong professional orientation towards electronics engineering, research and development, and practical technology implementation, he brings together technical expertise, analytical thinking, and an innovation-driven approach to engineering challenges.
+                    </p>
+                    <p>
+                      Driven by the belief that engineering education should extend beyond theoretical knowledge into practical innovation, he established EI House with the vision of creating an integrated ecosystem that connects technical education, research-oriented development, product innovation, engineering services, and emerging technologies.
+                    </p>
+                    <p>
+                      As the Founder, he leads the organization&apos;s vision, strategic direction, and development, with an emphasis on building technical capabilities, encouraging innovation, fostering practical engineering knowledge, and exploring solutions to real-world technological challenges.
+                    </p>
+                  </div>
+
+                  <div className="p-6 rounded-2xl bg-gradient-to-br from-[#172D4D] to-[#0B1528] text-white space-y-3 shadow-md relative overflow-hidden">
+                    <div className="text-4xl font-serif text-[#F59E0B] leading-none select-none">&ldquo;</div>
+                    <blockquote className="text-base sm:text-lg italic font-medium leading-relaxed text-slate-100">
+                      {SITE_CONFIG.founder.quote}
+                    </blockquote>
+                    <div className="pt-2 flex items-center justify-between text-xs text-slate-300 border-t border-slate-700">
+                      <span className="font-semibold text-white">{SITE_CONFIG.founder.fullNameWithPrefix}</span>
+                      <span className="text-[#F59E0B] font-mono">{SITE_CONFIG.tagline}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <h4 className="font-display text-lg font-bold text-[#0B1528]">
+                      Vision &amp; Leadership Direction
+                    </h4>
+                    <p className="text-sm sm:text-base leading-relaxed text-slate-600">
+                      {SITE_CONFIG.founder.vision}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

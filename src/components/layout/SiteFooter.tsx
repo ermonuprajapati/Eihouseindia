@@ -32,7 +32,13 @@ export function SiteFooter() {
               {SITE_CONFIG.description}
             </p>
             <div className="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
-              <p className="text-slate-300 font-medium">{SITE_CONFIG.entity.legalType} · {SITE_CONFIG.entity.country}</p>
+              <p className="text-slate-300 font-medium">
+                Founder &amp; Proprietor:{' '}
+                <Link href="/about#founder" className="text-[#F59E0B] hover:underline font-semibold">
+                  {SITE_CONFIG.founder.fullNameWithPrefix}
+                </Link>
+              </p>
+              <p className="text-slate-400">{SITE_CONFIG.entity.legalType} · {SITE_CONFIG.entity.country}</p>
               <p>Email: <a href={`mailto:${SITE_CONFIG.contactEmail}`} className="text-slate-300 hover:text-white underline">{SITE_CONFIG.contactEmail}</a></p>
             </div>
           </div>
@@ -108,8 +114,13 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/about#founder" className="text-slate-400 hover:text-white transition-colors">
+                  Founder &amp; Leadership
+                </Link>
+              </li>
+              <li>
                 <Link href="/contact" className="text-slate-400 hover:text-white transition-colors">
-                  Contact & Inquiries
+                  Contact &amp; Inquiries
                 </Link>
               </li>
               <li>
@@ -129,7 +140,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link href="/terms" className="text-slate-400 hover:text-white transition-colors">
-                  Terms & Conditions
+                  Terms &amp; Conditions
                 </Link>
               </li>
             </ul>
@@ -138,7 +149,7 @@ export function SiteFooter() {
 
         <div className="mt-12 border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-400">
           <p>© {new Date().getFullYear()} {SITE_CONFIG.name} · {SITE_CONFIG.tagline} All rights reserved.</p>
-          <p>MSME / Udyam Registered Indian Innovation Platform · Built for Engineers & Innovators.</p>
+          <p>Founded by {SITE_CONFIG.founder.fullNameWithPrefix} · MSME / Udyam Registered Indian Platform.</p>
         </div>
       </div>
     </footer>

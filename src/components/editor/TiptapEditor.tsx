@@ -273,7 +273,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
           toast.success('Article published directly to EIHOUSE INDIA.');
           router.push(`/blog/${result.slug}`);
         } else if (intent === 'SUBMIT_REVIEW') {
-          // Trigger non-blocking submission email notification
+          // 1. Trigger confirmation email to author
           fetch('/api/notifications/email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -285,9 +285,43 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
             }),
           }).catch(() => undefined);
 
+          // 2. Trigger review request alert to Founder & Administrator desk (er.monuprajapati.2024@gmail.com)
+          fetch('/api/notifications/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'ADMIN_POST_SUBMITTED',
+              recipientName: 'Monu Prajapati',
+              articleTitle: title,
+              articleSlug: result.slug,
+              authorName: profile.displayName,
+              authorEmail: profile.email,
+              category: selectedCategory,
+              excerpt: activeExcerpt,
+            }),
+          }).catch(() => undefined);
+
           toast.success('Submitted for editorial review.');
           router.push('/dashboard');
         } else {
+          // If editing a post causes it to re-enter PENDING review status, notify admin
+          if (result.status === 'PENDING') {
+            fetch('/api/notifications/email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'ADMIN_POST_SUBMITTED',
+                recipientName: 'Monu Prajapati',
+                articleTitle: title,
+                articleSlug: result.slug,
+                authorName: profile.displayName,
+                authorEmail: profile.email,
+                category: selectedCategory,
+                excerpt: activeExcerpt,
+              }),
+            }).catch(() => undefined);
+          }
+
           toast.success(
             result.status === 'PENDING'
               ? 'Updated and queued for re-review.'

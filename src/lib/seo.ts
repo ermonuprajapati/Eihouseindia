@@ -4,11 +4,125 @@ import type { Post, PublicAuthorProfile } from '@/types';
 export function buildOrganizationJsonLd() {
   return {
     '@context': 'https://schema.org',
-    '@type': 'Organization',
+    '@type': ['Organization', 'ResearchOrganization'],
     name: SITE_CONFIG.name,
+    alternateName: [...SITE_CONFIG.alternateNames],
+    legalName: SITE_CONFIG.entity.legalName,
     url: SITE_CONFIG.url,
+    logo: `${SITE_CONFIG.url}/icon-512.png`,
     description: SITE_CONFIG.description,
+    slogan: SITE_CONFIG.tagline,
     email: SITE_CONFIG.contactEmail,
+    address: {
+      '@type': 'PostalAddress',
+      addressCountry: 'IN',
+    },
+    founder: {
+      '@type': 'Person',
+      name: SITE_CONFIG.founder.name,
+      honorificPrefix: SITE_CONFIG.founder.honorificPrefix,
+      jobTitle: SITE_CONFIG.founder.designation,
+      description: SITE_CONFIG.founder.bio,
+      url: `${SITE_CONFIG.url}/about#founder`,
+      email: SITE_CONFIG.founder.email,
+      knowsAbout: [...SITE_CONFIG.founder.expertise],
+    },
+    contactPoint: [
+      {
+        '@type': 'ContactPoint',
+        contactType: 'General Inquiries & Customer Support',
+        email: SITE_CONFIG.contactEmail,
+        availableLanguage: ['English', 'Hindi'],
+        areaServed: 'IN',
+      },
+      {
+        '@type': 'ContactPoint',
+        contactType: 'Founder & Executive Office',
+        email: SITE_CONFIG.bootstrapAdminEmail,
+        availableLanguage: ['English', 'Hindi'],
+        areaServed: 'IN',
+      },
+    ],
+  };
+}
+
+export function buildFounderJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: SITE_CONFIG.founder.name,
+    honorificPrefix: SITE_CONFIG.founder.honorificPrefix,
+    jobTitle: SITE_CONFIG.founder.designation,
+    description: SITE_CONFIG.founder.bio,
+    url: `${SITE_CONFIG.url}/about#founder`,
+    email: SITE_CONFIG.founder.email,
+    worksFor: {
+      '@type': 'Organization',
+      name: SITE_CONFIG.name,
+      alternateName: [...SITE_CONFIG.alternateNames],
+      url: SITE_CONFIG.url,
+    },
+    knowsAbout: [...SITE_CONFIG.founder.expertise],
+  };
+}
+
+export function buildAboutPageJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: `About Engineering Innovation House (EI House) — Founded by Monu Prajapati`,
+    url: `${SITE_CONFIG.url}/about`,
+    description: SITE_CONFIG.description,
+    mainEntity: {
+      '@type': 'Organization',
+      name: SITE_CONFIG.name,
+      alternateName: [...SITE_CONFIG.alternateNames],
+      url: SITE_CONFIG.url,
+      founder: {
+        '@type': 'Person',
+        name: SITE_CONFIG.founder.name,
+        honorificPrefix: SITE_CONFIG.founder.honorificPrefix,
+        jobTitle: SITE_CONFIG.founder.designation,
+        description: SITE_CONFIG.founder.bio,
+        url: `${SITE_CONFIG.url}/about#founder`,
+      },
+    },
+  };
+}
+
+export function buildContactPageJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ContactPage',
+    name: `Contact Engineering Innovation House (EI House) & Founder Monu Prajapati`,
+    url: `${SITE_CONFIG.url}/contact`,
+    description: `Connect with Engineering Innovation House (EI House) and Founder & Proprietor Monu Prajapati for STEM education, hardware prototyping, R&D services, and partnerships.`,
+    mainEntity: {
+      '@type': 'Organization',
+      name: SITE_CONFIG.name,
+      alternateName: [...SITE_CONFIG.alternateNames],
+      url: SITE_CONFIG.url,
+      founder: {
+        '@type': 'Person',
+        name: SITE_CONFIG.founder.name,
+        jobTitle: SITE_CONFIG.founder.designation,
+        email: SITE_CONFIG.founder.email,
+      },
+      contactPoint: [
+        {
+          '@type': 'ContactPoint',
+          contactType: 'General Inquiries',
+          email: SITE_CONFIG.contactEmail,
+          availableLanguage: ['English', 'Hindi'],
+        },
+        {
+          '@type': 'ContactPoint',
+          contactType: 'Founder Desk',
+          email: SITE_CONFIG.bootstrapAdminEmail,
+          availableLanguage: ['English', 'Hindi'],
+        },
+      ],
+    },
   };
 }
 

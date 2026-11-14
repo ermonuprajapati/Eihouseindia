@@ -28,12 +28,27 @@ export function ContactForm() {
     setSending(true);
     try {
       await submitContactInquiry(parsed.data);
+
+      // Non-blocking email dispatch to Founder & Administrator desk
+      fetch('/api/notifications/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'ADMIN_CONTACT_INQUIRY',
+          recipientName: 'Monu Prajapati',
+          senderName: parsed.data.name,
+          senderEmail: parsed.data.email,
+          subject: parsed.data.subject,
+          message: parsed.data.message,
+        }),
+      }).catch((err) => console.warn('Inquiry notification email dispatch:', err));
+
       setSent(true);
       setName('');
       setEmail('');
       setSubject('');
       setMessage('');
-      toast.success('Message delivered to the editorial desk.');
+      toast.success('Message delivered to the executive & editorial desk.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to send message.');
     } finally {

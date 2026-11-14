@@ -8,7 +8,9 @@ export type EditorialEmailEvent =
   | 'ARTICLE_APPROVED'
   | 'ARTICLE_REJECTED'
   | 'CHANGES_REQUESTED'
-  | 'ACCOUNT_NOTICE';
+  | 'ACCOUNT_NOTICE'
+  | 'ADMIN_POST_SUBMITTED'
+  | 'ADMIN_CONTACT_INQUIRY';
 
 export interface SendEditorialEmailInput {
   to: string;
@@ -18,6 +20,14 @@ export interface SendEditorialEmailInput {
   articleSlug?: string;
   reason?: string;
   customMessage?: string;
+  senderName?: string;
+  senderEmail?: string;
+  subject?: string;
+  message?: string;
+  authorName?: string;
+  authorEmail?: string;
+  category?: string;
+  excerpt?: string;
 }
 
 export interface EmailDispatchResult {
@@ -25,6 +35,16 @@ export interface EmailDispatchResult {
   provider: 'resend' | 'unconfigured';
   id?: string;
   reason?: string;
+}
+
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function wrapEmailTemplate(contentHtml: string, previewText: string = ''): string {
@@ -266,6 +286,153 @@ function getEmailCopy(input: SendEditorialEmailInput): { subject: string; html: 
       };
     }
 
+    case 'ADMIN_POST_SUBMITTED': {
+      const adminUrl = `${siteUrl}/admin`;
+      const postPreviewUrl = input.articleSlug ? `${siteUrl}/blog/${input.articleSlug}` : adminUrl;
+      const content = `
+        <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+          <span style="font-size: 13px; font-weight: 700; color: #92400E; text-transform: uppercase; letter-spacing: 0.5px;">
+            🔔 Editorial Action Required
+          </span>
+          <p style="margin: 4px 0 0 0; font-size: 14px; color: #78350F;">
+            A new article has been submitted by a contributor and is waiting for your review and publication decision.
+          </p>
+        </div>
+
+        <h2 style="color: #0B1528; font-size: 20px; font-weight: 700; margin: 0 0 16px 0;">
+          New Article Submitted for Review
+        </h2>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; margin: 0 0 24px 0; padding: 16px 20px; font-size: 14px;">
+          <tr>
+            <td style="padding: 8px 0; color: #64748B; width: 120px; vertical-align: top;">Article Title:</td>
+            <td style="padding: 8px 0; color: #0F172A; font-weight: 700; font-size: 15px;">
+              ${escapeHtml(input.articleTitle || 'Untitled Article')}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Author:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #0F172A; font-weight: 600;">
+              ${escapeHtml(input.authorName || 'Contributor')} &lt;<a href="mailto:${input.authorEmail || ''}" style="color: #1D4ED8; text-decoration: none;">${escapeHtml(input.authorEmail || 'N/A')}</a>&gt;
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Category:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #0F172A;">
+              <span style="background-color: #E2E8F0; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+                ${escapeHtml(input.category || 'Engineering / STEM')}
+              </span>
+            </td>
+          </tr>
+          ${input.excerpt ? `
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Excerpt:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #334155; line-height: 1.5;">
+              ${escapeHtml(input.excerpt)}
+            </td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Status:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #D97706; font-weight: 700;">
+              PENDING REVIEW
+            </td>
+          </tr>
+        </table>
+
+        <div style="text-align: center; margin: 28px 0 20px 0;">
+          <a href="${adminUrl}" style="background-color: #1D4ED8; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(29, 78, 216, 0.25); margin-right: 8px;">
+            Open Admin Dashboard to Review &amp; Publish →
+          </a>
+          ${input.articleSlug ? `
+          <a href="${postPreviewUrl}" style="background-color: #172D4D; color: #ffffff; text-decoration: none; padding: 14px 24px; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">
+            View Preview
+          </a>` : ''}
+        </div>
+
+        <p style="font-size: 12px; color: #94A3B8; text-align: center; margin: 16px 0 0 0;">
+          Delivered to Founder &amp; Administrator: ${SITE_CONFIG.bootstrapAdminEmail}
+        </p>
+      `;
+      return {
+        subject: `🔔 [EI House Review Request] "${input.articleTitle || 'New Article'}" by ${input.authorName || 'Contributor'}`,
+        html: wrapEmailTemplate(content, `New article "${input.articleTitle || 'Untitled'}" is waiting for your review on EI House.`),
+      };
+    }
+
+    case 'ADMIN_CONTACT_INQUIRY': {
+      const adminUrl = `${siteUrl}/admin`;
+      const replyMailto = input.senderEmail
+        ? `mailto:${input.senderEmail}?subject=Re:%20${encodeURIComponent(input.subject || 'Inquiry on EI House')}`
+        : `mailto:${SITE_CONFIG.contactEmail}`;
+      const content = `
+        <div style="background-color: #EFF6FF; border: 1px solid #3B82F6; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+          <span style="font-size: 13px; font-weight: 700; color: #1E40AF; text-transform: uppercase; letter-spacing: 0.5px;">
+            📩 Website Contact &amp; Business Inquiry
+          </span>
+          <p style="margin: 4px 0 0 0; font-size: 14px; color: #1E3A8A;">
+            A visitor submitted an official inquiry on Engineering Innovation House (EI House).
+          </p>
+        </div>
+
+        <h2 style="color: #0B1528; font-size: 20px; font-weight: 700; margin: 0 0 16px 0;">
+          New Inquiry from ${escapeHtml(input.senderName || 'Visitor')}
+        </h2>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; margin: 0 0 20px 0; padding: 16px 20px; font-size: 14px;">
+          <tr>
+            <td style="padding: 8px 0; color: #64748B; width: 120px; vertical-align: top;">From:</td>
+            <td style="padding: 8px 0; color: #0F172A; font-weight: 700;">
+              ${escapeHtml(input.senderName || 'Visitor')}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Email Address:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #1D4ED8; font-weight: 600;">
+              <a href="mailto:${input.senderEmail || ''}" style="color: #1D4ED8; text-decoration: underline;">
+                ${escapeHtml(input.senderEmail || 'N/A')}
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #64748B; vertical-align: top;">Subject:</td>
+            <td style="padding: 8px 0; border-top: 1px solid #EDF2F7; color: #0F172A; font-weight: 600;">
+              ${escapeHtml(input.subject || 'General Inquiry')}
+            </td>
+          </tr>
+        </table>
+
+        <div style="margin: 0 0 24px 0;">
+          <strong style="color: #334155; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">
+            Inquiry Message:
+          </strong>
+          <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-left: 4px solid #1D4ED8; border-radius: 6px; padding: 16px 18px; color: #1E293B; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">
+${escapeHtml(input.message || '')}
+          </div>
+        </div>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
+          <tr>
+            <td align="center">
+              <a href="${replyMailto}" style="background-color: #10B981; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; margin-right: 12px;">
+                Reply Directly via Email ✉️
+              </a>
+              <a href="${adminUrl}" style="background-color: #172D4D; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+                Admin Panel
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <p style="font-size: 12px; color: #94A3B8; text-align: center; margin: 16px 0 0 0;">
+          Delivered to Founder &amp; Proprietor: ${SITE_CONFIG.bootstrapAdminEmail}
+        </p>
+      `;
+      return {
+        subject: `📩 [EI House Inquiry] ${input.subject || 'New Message'} from ${input.senderName || 'Visitor'}`,
+        html: wrapEmailTemplate(content, `New inquiry from ${input.senderName} (${input.senderEmail}): ${input.subject || ''}`),
+      };
+    }
+
     case 'ACCOUNT_NOTICE':
     default: {
       const content = `
@@ -304,10 +471,12 @@ export async function sendEditorialEmail(
     const resend = new Resend(apiKey);
     const from = process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
     const { subject, html } = getEmailCopy(input);
+    const isAdminEvent = input.event === 'ADMIN_POST_SUBMITTED' || input.event === 'ADMIN_CONTACT_INQUIRY';
+    const recipientTo = isAdminEvent ? (input.to || SITE_CONFIG.bootstrapAdminEmail) : input.to;
 
     const response = await resend.emails.send({
       from,
-      to: input.to,
+      to: recipientTo,
       subject,
       html,
     });
