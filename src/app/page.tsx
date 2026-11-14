@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowRight,
   Search,
@@ -96,6 +97,14 @@ export default async function HomePage() {
               {/* Hero Visual Card */}
               <div className="lg:col-span-5">
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-[#0B1528] shadow-2xl text-white">
+                  <Image
+                    src="/images/about/about-hero.jpg"
+                    alt="Engineering Innovation House (EI House) Ecosystem"
+                    width={1200}
+                    height={675}
+                    priority
+                    className="aspect-[16/9] w-full object-cover"
+                  />
                   <div className="p-7 space-y-5 bg-gradient-to-br from-[#172D4D] to-[#0B1528]">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono text-[#F59E0B] font-bold uppercase tracking-wider">

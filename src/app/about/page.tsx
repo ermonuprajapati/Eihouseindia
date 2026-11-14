@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   GraduationCap,
   Wrench,
@@ -82,45 +83,64 @@ export default function AboutPage() {
       <SiteHeader />
 
       <main className="flex-1">
-        {/* 01. Hero Section */}
+        {/* 01. Hero Section with Hero Image */}
         <section className="border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/50 to-white py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl space-y-5">
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
-                <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
-                <span>{SITE_CONFIG.name}</span>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+              <div className="lg:col-span-7 space-y-5">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
+                  <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
+                  <span>{SITE_CONFIG.name}</span>
+                </div>
+                <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#0B1528] leading-[1.1]">
+                  Where Ideas Become Things.
+                </h1>
+                <p className="text-xl font-medium text-[#172D4D]">
+                  Integrated Engineering Education, Innovation, Products, Services and Technology Community.
+                </p>
+                <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+                  <strong>Engineering Innovation House (EI House)</strong> is an engineering-focused ecosystem dedicated
+                  to bridging the gap between theoretical knowledge and practical engineering. We empower students, engineers,
+                  and institutions to learn, experiment, design, develop, and transform concepts into real-world solutions.
+                </p>
+                <div className="pt-2 flex flex-wrap gap-3">
+                  <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                    <Link href="/learn">
+                      <span>Explore Learning Programs</span>
+                      <ArrowRight className="h-4 w-4 ml-1.5" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg">
+                    <Link href="/projects">Discover Projects</Link>
+                  </Button>
+                </div>
               </div>
-              <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#0B1528] leading-[1.1]">
-                Where Ideas Become Things.
-              </h1>
-              <p className="text-xl font-medium text-[#172D4D]">
-                Integrated Engineering Education, Innovation, Products, Services and Technology Community.
-              </p>
-              <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-                <strong>Engineering Innovation House (EI House)</strong> is an engineering-focused ecosystem dedicated
-                to bridging the gap between theoretical knowledge and practical engineering. We empower students, engineers,
-                and institutions to learn, experiment, design, develop, and transform concepts into real-world solutions.
-              </p>
-              <div className="pt-2 flex flex-wrap gap-3">
-                <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
-                  <Link href="/learn">
-                    <span>Explore Learning Programs</span>
-                    <ArrowRight className="h-4 w-4 ml-1.5" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg">
-                  <Link href="/projects">Discover Projects</Link>
-                </Button>
+
+              <div className="lg:col-span-5">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-xl bg-slate-900">
+                  <Image
+                    src="/images/about/about-hero.jpg"
+                    alt="About Engineering Innovation House (EI House) Hero"
+                    width={1200}
+                    height={675}
+                    priority
+                    className="aspect-[16/9] w-full object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="p-4 bg-[#172D4D] text-white flex items-center justify-between text-xs">
+                    <span className="font-medium text-[#F59E0B]">Engineering Innovation House</span>
+                    <span className="text-slate-300">Where Ideas Become Things.</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 02. Who We Are & Central Business Model */}
+        {/* 02. Who We Are & Central Business Model with Who We Are Image */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-              <div className="lg:col-span-7 space-y-6">
+              <div className="lg:col-span-6 space-y-6">
                 <div className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
                     Identity & Purpose
@@ -158,40 +178,47 @@ export default function AboutPage() {
                 </div>
               </div>
 
-              <div className="lg:col-span-5">
-                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-[#172D4D] to-[#0B1528] p-8 text-white space-y-6 shadow-xl">
-                  <div className="space-y-2">
+              <div className="lg:col-span-6 space-y-6">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-lg bg-slate-100">
+                  <Image
+                    src="/images/about/who-we-are.jpg"
+                    alt="Who We Are — Engineering Innovation House"
+                    width={1408}
+                    height={768}
+                    className="w-full object-cover hover:scale-102 transition-transform duration-500"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-[#172D4D] to-[#0B1528] p-6 text-white space-y-4 shadow-md">
+                  <div className="flex items-center justify-between">
                     <span className="text-xs font-mono uppercase tracking-wider text-[#F59E0B]">Core Ethos</span>
-                    <h3 className="font-display text-2xl font-bold">Innovation Through Engineering</h3>
+                    <span className="text-xs text-slate-300">MSME / Udyam Registered</span>
                   </div>
-                  <ul className="space-y-3.5 text-sm text-slate-200">
-                    <li className="flex items-start gap-2.5">
-                      <CheckCircle2 className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />
-                      <span><strong>Hands-On Bench Skills:</strong> Real soldering, breadboarding, oscilloscope measurements & logic analysis.</span>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-200">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                      <span><strong>Hands-On Bench Skills:</strong> Real soldering, breadboard & logic analysis.</span>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <CheckCircle2 className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />
-                      <span><strong>Indigenous Hardware R&D:</strong> From schematic conception to prototype fabrication and test benches.</span>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                      <span><strong>Indigenous Hardware R&D:</strong> Concept to prototype fabrication.</span>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <CheckCircle2 className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />
-                      <span><strong>Open Technical Knowledge:</strong> Clean tutorials, verified schematics, and reproducible documentation.</span>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                      <span><strong>Open Technical Knowledge:</strong> Clean, verified schematics.</span>
                     </li>
-                    <li className="flex items-start gap-2.5">
-                      <CheckCircle2 className="h-5 w-5 text-[#F59E0B] shrink-0 mt-0.5" />
-                      <span><strong>Government & Institutional Trust:</strong> MSME/Udyam registered enterprise committed to national STEM progress.</span>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                      <span><strong>National STEM Impact:</strong> School & college lab setups.</span>
                     </li>
                   </ul>
-                  <div className="pt-2 border-t border-slate-700/60">
-                    <p className="text-xs text-slate-300">Official Portal: <strong>https://eihouseindia.in</strong></p>
-                  </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 03. What We Do — The 7 Pillars */}
+        {/* 03. What We Do — The 7 Pillars with What We Do Image */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-[#FAFBFD]">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
             <div className="text-center max-w-3xl mx-auto space-y-3">
@@ -204,6 +231,17 @@ export default function AboutPage() {
               <p className="text-base text-slate-600">
                 Our operations span education, prototyping, hardware production, technical media, and institutional partnerships.
               </p>
+            </div>
+
+            {/* What We Do Visual Banner */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-md max-w-4xl mx-auto">
+              <Image
+                src="/images/about/what-we-do.jpg"
+                alt="What We Do — Engineering Innovation House Ecosystem"
+                width={1024}
+                height={572}
+                className="w-full h-auto object-cover"
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -314,9 +352,26 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* 04. Vision & Mission */}
+        {/* 04. Vision & Mission with Vision, Mission & Values Image */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
+            <div className="text-center max-w-2xl mx-auto space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">Strategic Direction</span>
+              <h2 className="font-display text-3xl sm:text-4xl font-bold text-[#0B1528]">Vision, Mission & Values</h2>
+              <p className="text-base text-slate-600">Guiding our technology initiatives, courses, and engineering solutions.</p>
+            </div>
+
+            {/* Vision Mission Values Image */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-lg max-w-4xl mx-auto">
+              <Image
+                src="/images/about/vision-mission-values.jpg"
+                alt="EI House Vision, Mission and Core Values"
+                width={1792}
+                height={1024}
+                className="w-full h-auto object-cover"
+              />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 space-y-4">
                 <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
@@ -373,13 +428,24 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* 06. Technology Domains */}
+        {/* 06. Technology Domains with Technology Domains Image */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
             <div className="text-center max-w-2xl mx-auto space-y-3">
               <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">Engineering Disciplines</span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-[#0B1528]">Our Technology Domains</h2>
               <p className="text-base text-slate-600">Cross-disciplinary capabilities combining hardware, software, and mechanical design.</p>
+            </div>
+
+            {/* Technology Domains Visual Banner */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-md max-w-4xl mx-auto">
+              <Image
+                src="/images/about/technology-domains.jpg"
+                alt="Technology Domains at Engineering Innovation House"
+                width={1402}
+                height={1122}
+                className="w-full h-auto object-cover"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -394,7 +460,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* 07. The Approach Process */}
+        {/* 07. The Approach Process with Our Approach Image */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-[#172D4D] text-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10 text-center">
             <div className="space-y-3 max-w-2xl mx-auto">
@@ -403,6 +469,17 @@ export default function AboutPage() {
               <p className="text-slate-300 text-sm sm:text-base">
                 Meaningful engineering breakthroughs occur when learning connects directly with design and testing.
               </p>
+            </div>
+
+            {/* Our Approach Image Visual */}
+            <div className="overflow-hidden rounded-2xl border border-slate-700 shadow-xl max-w-4xl mx-auto bg-slate-800">
+              <Image
+                src="/images/about/our-approach.jpg"
+                alt="Our Engineering Approach — Learn, Explore, Design, Develop, Test, Improve, Innovate"
+                width={1536}
+                height={1024}
+                className="w-full h-auto object-cover"
+              />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-4">
@@ -416,19 +493,31 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* 08. Be Part of EI House CTA */}
+        {/* 08. Be Part of EI House CTA with Join EI House Image */}
         <section className="py-16 sm:py-20 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-8 sm:p-12 space-y-8">
-              <div className="max-w-2xl space-y-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">Join the Movement</span>
-                <h2 className="font-display text-3xl sm:text-4xl font-bold text-[#0B1528]">
-                  Be Part of the Innovation Ecosystem
-                </h2>
-                <p className="text-base text-slate-600 leading-relaxed">
-                  Whether you are a student developing practical skills, an engineer exploring microcontrollers,
-                  an educator building modern laboratories, or an enterprise needing prototype design, EI House welcomes you.
-                </p>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                <div className="lg:col-span-7 space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">Join the Movement</span>
+                  <h2 className="font-display text-3xl sm:text-4xl font-bold text-[#0B1528]">
+                    Be Part of the Innovation Ecosystem
+                  </h2>
+                  <p className="text-base text-slate-600 leading-relaxed">
+                    Whether you are a student developing practical skills, an engineer exploring microcontrollers,
+                    an educator building modern laboratories, or an enterprise needing prototype design, EI House welcomes you.
+                  </p>
+                </div>
+
+                <div className="lg:col-span-5 overflow-hidden rounded-2xl border border-slate-200 shadow-md">
+                  <Image
+                    src="/images/about/join-ei-house.jpg"
+                    alt="Join Engineering Innovation House Community"
+                    width={1333}
+                    height={768}
+                    className="w-full h-auto object-cover"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
