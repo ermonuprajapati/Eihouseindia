@@ -511,6 +511,7 @@ export async function submitContactInquiry(params: {
       email: params.email.trim().toLowerCase(),
       subject: params.subject.trim(),
       message: params.message.trim(),
+      status: 'PENDING',
       createdAt: serverTimestamp(),
     });
   } catch (error) {

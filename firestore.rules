@@ -259,7 +259,7 @@ service cloud.firestore {
 
     match /contactMessages/{msgId} {
       allow create: if isValidId(msgId) && incoming().email is string && incoming().message is string;
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if isEditor();
     }
 
     // 12. Immutable Audit & Moderation Logs

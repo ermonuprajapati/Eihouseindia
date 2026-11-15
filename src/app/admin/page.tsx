@@ -15,6 +15,12 @@ import {
   ShoppingBag,
   RefreshCw,
   ArrowRight,
+  Mail,
+  MessageCircle,
+  Send,
+  Inbox,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -37,12 +43,14 @@ import {
 import { useAuth } from '@/modules/auth/auth-context';
 import {
   deleteCategoryAdmin,
+  deleteInquiryAdmin,
   deletePostAdmin,
   deleteTagAdmin,
   getAdminDashboardStats,
   getAllTagsAdmin,
   getAllUsersForAdmin,
   getCommentsForAdmin,
+  getInquiriesForAdmin,
   getMediaLibraryAdmin,
   getModerationLogsAdmin,
   getPostsForAdmin,
@@ -50,6 +58,7 @@ import {
   getSiteSettingsClient,
   moderateCommentAdmin,
   moderatePostDecision,
+  replyToInquiryAdmin,
   resolveReportAdmin,
   saveCategoryAdmin,
   saveSiteSettingsAdmin,
@@ -71,6 +80,7 @@ import { categorySchema, slugify } from '@/lib/validation';
 import type {
   Category,
   Comment,
+  ContactInquiryItem,
   MediaItem,
   ModerationLog,
   Post,
@@ -86,6 +96,7 @@ type AdminSection =
   | 'dashboard'
   | 'all-articles'
   | 'products'
+  | 'inquiries'
   | 'pending'
   | 'published'
   | 'rejected'
@@ -167,6 +178,16 @@ export default function AdminPanelPage() {
     isNew: boolean;
   } | null>(null);
 
+  // Inquiries state
+  const [inquiries, setInquiries] = useState<ContactInquiryItem[]>([]);
+  const [replyInquiryTarget, setReplyInquiryTarget] = useState<ContactInquiryItem | null>(null);
+  const [replyMessageText, setReplyMessageText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [deleteInquiryTarget, setDeleteInquiryTarget] = useState<ContactInquiryItem | null>(null);
+  const [deletingInquiry, setDeletingInquiry] = useState(false);
+  const [inquiryFilter, setInquiryFilter] = useState<'ALL' | 'PENDING' | 'REPLIED'>('ALL');
+  const [expandedInquiryId, setExpandedInquiryId] = useState<string | null>(null);
+
   const loadAllAdminData = useCallback(async (showSpinner = true) => {
     if (!firebaseUser || !isEditor) return;
     if (showSpinner) {
@@ -185,6 +206,7 @@ export default function AdminPanelPage() {
         settingsRes,
         usersRes,
         productsRes,
+        inquiriesRes,
       ] = await Promise.all([
         getAdminDashboardStats().catch(() => null),
         getPostsForAdmin().catch(() => []),
@@ -197,6 +219,7 @@ export default function AdminPanelPage() {
         getSiteSettingsClient(),
         isAdmin ? getAllUsersForAdmin().catch(() => []) : Promise.resolve([]),
         fetchProducts().catch(() => []),
+        getInquiriesForAdmin().catch(() => []),
       ]);
 
       setStats(statsRes);
@@ -210,6 +233,7 @@ export default function AdminPanelPage() {
       setSettings(settingsRes);
       setUsers(usersRes);
       setProductsList(productsRes || []);
+      setInquiries(inquiriesRes || []);
     } finally {
       setLoadingData(false);
     }
@@ -548,15 +572,78 @@ export default function AdminPanelPage() {
     }
   };
 
+  const extractPhoneFromText = (text: string): string | null => {
+    const match = text.match(/(?:\+91[\-\s]?)?[6789]\d{9}/);
+    if (!match) return null;
+    const digits = match[0].replace(/\D/g, '');
+    return digits.length === 10 ? `91${digits}` : digits;
+  };
+
+  const handleOpenReplyModal = (inquiry: ContactInquiryItem) => {
+    setReplyInquiryTarget(inquiry);
+    setReplyMessageText('');
+  };
+
+  const handleSendInquiryReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyInquiryTarget || !profile || !replyMessageText.trim()) return;
+    setSendingReply(true);
+    try {
+      await replyToInquiryAdmin({
+        inquiry: replyInquiryTarget,
+        replyMessage: replyMessageText.trim(),
+        actor: profile,
+        actorRole: effectiveRole,
+      });
+      toast.success(`Reply email sent to ${replyInquiryTarget.email}`);
+      setReplyInquiryTarget(null);
+      setReplyMessageText('');
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send reply.');
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const handleConfirmDeleteInquiry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteInquiryTarget || !profile) return;
+    setDeletingInquiry(true);
+    try {
+      await deleteInquiryAdmin({
+        inquiryId: deleteInquiryTarget.id,
+        actor: profile,
+        actorRole: effectiveRole,
+      });
+      toast.success('Inquiry permanently deleted.');
+      setDeleteInquiryTarget(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete inquiry.');
+    } finally {
+      setDeletingInquiry(false);
+    }
+  };
+
   const pendingPosts = posts.filter((p) => p.status === 'PENDING');
   const publishedPosts = posts.filter((p) => p.status === 'PUBLISHED');
   const rejectedPosts = posts.filter((p) => p.status === 'REJECTED');
+  const pendingInquiries = inquiries.filter((i) => i.status === 'PENDING');
+  const repliedInquiries = inquiries.filter((i) => i.status === 'REPLIED');
+
+  const filteredInquiries = inquiries.filter((i) => {
+    if (inquiryFilter === 'PENDING') return i.status === 'PENDING';
+    if (inquiryFilter === 'REPLIED') return i.status === 'REPLIED';
+    return true;
+  });
 
   const navItems: Array<{ id: AdminSection; label: string; adminOnly?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
-    { id: 'all-articles', label: 'All Articles' },
+    { id: 'inquiries', label: `Inquiries (${pendingInquiries.length})` },
     { id: 'products', label: `Store Products (${productsList.length})` },
+    { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
     { id: 'rejected', label: 'Rejected Articles' },
     { id: 'users', label: 'Users Management', adminOnly: true },
@@ -1000,6 +1087,233 @@ export default function AdminPanelPage() {
                                 </td>
                               </tr>
                             ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'inquiries' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                          <Inbox className="h-6 w-6 text-primary" />
+                          Customer Inquiries &amp; Order Messages ({inquiries.length})
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Review messages received from the Contact page and Store Product inquiry modal. Reply directly via email or WhatsApp.
+                        </p>
+                      </div>
+
+                      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setInquiryFilter('ALL')}
+                          className={`rounded px-3 py-1.5 font-medium transition ${
+                            inquiryFilter === 'ALL'
+                              ? 'bg-[#0B1528] text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          All ({inquiries.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInquiryFilter('PENDING')}
+                          className={`rounded px-3 py-1.5 font-medium transition ${
+                            inquiryFilter === 'PENDING'
+                              ? 'bg-amber-500 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Pending ({pendingInquiries.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInquiryFilter('REPLIED')}
+                          className={`rounded px-3 py-1.5 font-medium transition ${
+                            inquiryFilter === 'REPLIED'
+                              ? 'bg-emerald-600 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Replied ({repliedInquiries.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Customer Details</th>
+                            <th className="px-4 py-3">Subject &amp; Message</th>
+                            <th className="px-4 py-3">Date &amp; Status</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {filteredInquiries.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                                <Inbox className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                                No customer inquiries in this filter.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredInquiries.map((inq) => {
+                              const phone = extractPhoneFromText(`${inq.subject} ${inq.message}`);
+                              const isExpanded = expandedInquiryId === inq.id;
+
+                              return (
+                                <React.Fragment key={inq.id}>
+                                  <tr className="hover:bg-slate-50/70 transition">
+                                    <td className="px-4 py-3 align-top min-w-[200px]">
+                                      <p className="font-semibold text-[#0B1528]">{inq.name || 'Anonymous Visitor'}</p>
+                                      <a
+                                        href={`mailto:${inq.email}`}
+                                        className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
+                                      >
+                                        <Mail className="h-3 w-3" />
+                                        <span>{inq.email}</span>
+                                      </a>
+                                      {phone && (
+                                        <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                          <MessageCircle className="h-3 w-3" /> +{phone}
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3 align-top max-w-md">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="font-medium text-[#0B1528] text-sm">
+                                          {inq.subject || 'Inquiry'}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedInquiryId(isExpanded ? null : inq.id)}
+                                          className="text-slate-400 hover:text-slate-600"
+                                          title={isExpanded ? 'Collapse' : 'Expand full message'}
+                                        >
+                                          {isExpanded ? (
+                                            <ChevronUp className="h-4 w-4" />
+                                          ) : (
+                                            <ChevronDown className="h-4 w-4" />
+                                          )}
+                                        </button>
+                                      </div>
+
+                                      <p className="mt-1 text-xs text-slate-600 line-clamp-2">
+                                        {inq.message}
+                                      </p>
+
+                                      {inq.status === 'REPLIED' && inq.replyMessage && !isExpanded && (
+                                        <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-50/80 rounded px-2 py-1 border border-emerald-200/60 truncate">
+                                          <strong>Replied:</strong> {inq.replyMessage}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3 align-top whitespace-nowrap">
+                                      <p className="text-xs text-slate-500">
+                                        {inq.createdAt ? format(new Date(inq.createdAt), 'MMM d, yyyy h:mm a') : '—'}
+                                      </p>
+                                      <div className="mt-1.5">
+                                        {inq.status === 'REPLIED' ? (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Replied
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
+                                            Pending
+                                          </span>
+                                        )}
+                                      </div>
+                                      {inq.repliedBy && (
+                                        <p className="mt-1 text-[10px] text-slate-400">
+                                          by {inq.repliedBy}
+                                        </p>
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <Button
+                                          size="sm"
+                                          variant="primary"
+                                          onClick={() => handleOpenReplyModal(inq)}
+                                          className="h-8 text-xs"
+                                        >
+                                          <Send className="h-3 w-3 mr-1" />
+                                          {inq.status === 'REPLIED' ? 'Reply Again' : 'Reply Email'}
+                                        </Button>
+
+                                        {phone && (
+                                          <a
+                                            href={`https://wa.me/${phone}?text=${encodeURIComponent(
+                                              `Hello ${inq.name}, thank you for reaching out to EI HOUSE INDIA regarding your inquiry "${inq.subject}". How can we help you today?`
+                                            )}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 h-8 px-2.5 rounded text-xs font-medium bg-[#25D366] text-white hover:bg-[#1EBE5D] transition shadow-xs"
+                                            title="Reply directly on WhatsApp"
+                                          >
+                                            <MessageCircle className="h-3.5 w-3.5" />
+                                            <span>WhatsApp</span>
+                                          </a>
+                                        )}
+
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => setDeleteInquiryTarget(inq)}
+                                          title="Delete inquiry"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {isExpanded && (
+                                    <tr className="bg-slate-50/50">
+                                      <td colSpan={4} className="px-6 py-4 border-t border-slate-100">
+                                        <div className="space-y-3">
+                                          <div>
+                                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                                              Full Customer Inquiry:
+                                            </p>
+                                            <div className="mt-1.5 bg-white p-3 rounded border border-slate-200 text-sm text-slate-800 whitespace-pre-wrap">
+                                              {inq.message}
+                                            </div>
+                                          </div>
+
+                                          {inq.replyMessage && (
+                                            <div className="bg-emerald-50/70 border border-emerald-200 rounded p-3">
+                                              <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide flex items-center justify-between">
+                                                <span>Admin Response:</span>
+                                                {inq.repliedAt && (
+                                                  <span className="text-[11px] font-normal text-emerald-600">
+                                                    Sent {format(new Date(inq.repliedAt), 'MMM d, yyyy h:mm a')}
+                                                  </span>
+                                                )}
+                                              </p>
+                                              <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap">
+                                                {inq.replyMessage}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })
                           )}
                         </tbody>
                       </table>
@@ -1979,6 +2293,146 @@ export default function AdminPanelPage() {
               </Button>
               <Button type="submit" variant="destructive" disabled={deletingProduct}>
                 {deletingProduct ? 'Deleting...' : 'Delete Product'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inquiry Reply Dialog */}
+      <Dialog open={Boolean(replyInquiryTarget)} onOpenChange={(o) => !o && setReplyInquiryTarget(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
+              <Send className="h-5 w-5 text-primary" />
+              Reply to Customer Inquiry
+            </DialogTitle>
+            <DialogDescription>
+              Sending official email response to <strong>{replyInquiryTarget?.name}</strong> ({replyInquiryTarget?.email}).
+            </DialogDescription>
+          </DialogHeader>
+
+          {replyInquiryTarget && (
+            <form onSubmit={handleSendInquiryReply} className="space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-semibold text-slate-700">Subject: {replyInquiryTarget.subject}</span>
+                  <span>{replyInquiryTarget.createdAt ? format(new Date(replyInquiryTarget.createdAt), 'MMM d, yyyy') : ''}</span>
+                </div>
+                <div className="text-xs text-slate-700 bg-white p-2.5 rounded border border-slate-200/80 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                  {replyInquiryTarget.message}
+                </div>
+              </div>
+
+              {replyInquiryTarget.replyMessage && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                  <strong>Previous reply:</strong> {replyInquiryTarget.replyMessage}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="replyText" className="text-xs font-semibold text-slate-700">
+                    Your Response Message *
+                  </Label>
+                  <span className="text-[11px] text-slate-400">Will be emailed from official site address</span>
+                </div>
+
+                {/* Quick Templates */}
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReplyMessageText(
+                        `Hello ${replyInquiryTarget.name},\n\nThank you for reaching out to EI HOUSE INDIA. We have received your query and would be glad to assist you. Our engineering team is currently looking into your request and will follow up shortly.`
+                      )
+                    }
+                    className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded border border-slate-200 transition"
+                  >
+                    + Gratitude &amp; Follow-up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReplyMessageText(
+                        `Hello ${replyInquiryTarget.name},\n\nThank you for your order inquiry! This item is currently available for dispatch. Please share your delivery address and contact number so we can calculate shipping and share payment details.`
+                      )
+                    }
+                    className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded border border-slate-200 transition"
+                  >
+                    + Product Order Confirmation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReplyMessageText(
+                        `Hello ${replyInquiryTarget.name},\n\nThank you for reaching out. We also provide direct purchase links to verified suppliers directly on our store page. Feel free to connect directly on our WhatsApp (+91 7080768737) for custom component requests.`
+                      )
+                    }
+                    className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded border border-slate-200 transition"
+                  >
+                    + Verified Supplier Guidance
+                  </button>
+                </div>
+
+                <Textarea
+                  id="replyText"
+                  rows={6}
+                  value={replyMessageText}
+                  onChange={(e) => setReplyMessageText(e.target.value)}
+                  placeholder="Type your official reply to the customer..."
+                  className="font-sans text-sm"
+                  required
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setReplyInquiryTarget(null)}
+                  disabled={sendingReply}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={sendingReply || !replyMessageText.trim()}
+                >
+                  <Send className="h-4 w-4 mr-1.5" />
+                  {sendingReply ? 'Dispatching Email...' : 'Send Reply via Email'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Inquiry Confirmation Dialog */}
+      <Dialog open={Boolean(deleteInquiryTarget)} onOpenChange={(o) => !o && setDeleteInquiryTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Customer Inquiry
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete the inquiry from &ldquo;{deleteInquiryTarget?.name}&rdquo; ({deleteInquiryTarget?.email})?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeleteInquiry} className="space-y-4">
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteInquiryTarget(null)}
+                disabled={deletingInquiry}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingInquiry}>
+                {deletingInquiry ? 'Deleting...' : 'Delete Inquiry'}
               </Button>
             </DialogFooter>
           </form>

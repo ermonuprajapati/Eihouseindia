@@ -21,6 +21,7 @@ import { mapSnapshotToPost } from '@/modules/posts/post-service';
 import type {
   Category,
   Comment,
+  ContactInquiryItem,
   MediaItem,
   ModerationLog,
   Post,
@@ -795,5 +796,137 @@ export async function saveSiteSettingsAdmin(
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'settings/site');
+  }
+}
+
+export async function getInquiriesForAdmin(): Promise<ContactInquiryItem[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'contactMessages'), orderBy('createdAt', 'desc'), limit(150))
+    );
+    return snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        name: String(data.name || 'Anonymous'),
+        email: String(data.email || ''),
+        subject: String(data.subject || 'Inquiry'),
+        message: String(data.message || ''),
+        status: (data.status === 'REPLIED' ? 'REPLIED' : 'PENDING') as 'PENDING' | 'REPLIED',
+        replyMessage: data.replyMessage ? String(data.replyMessage) : undefined,
+        repliedAt: data.repliedAt ? toIso(data.repliedAt) : undefined,
+        repliedBy: data.repliedBy ? String(data.repliedBy) : undefined,
+        createdAt: toIso(data.createdAt),
+      };
+    });
+  } catch {
+    try {
+      const snap = await getDocs(query(collection(db, 'contactMessages'), limit(150)));
+      const list = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: String(data.name || 'Anonymous'),
+          email: String(data.email || ''),
+          subject: String(data.subject || 'Inquiry'),
+          message: String(data.message || ''),
+          status: (data.status === 'REPLIED' ? 'REPLIED' : 'PENDING') as 'PENDING' | 'REPLIED',
+          replyMessage: data.replyMessage ? String(data.replyMessage) : undefined,
+          repliedAt: data.repliedAt ? toIso(data.repliedAt) : undefined,
+          repliedBy: data.repliedBy ? String(data.repliedBy) : undefined,
+          createdAt: toIso(data.createdAt),
+        };
+      });
+      return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch (innerError) {
+      handleFirestoreError(innerError, OperationType.LIST, 'contactMessages');
+      return [];
+    }
+  }
+}
+
+export async function replyToInquiryAdmin(params: {
+  inquiry: ContactInquiryItem;
+  replyMessage: string;
+  actor: UserProfile;
+  actorRole: UserRole;
+}): Promise<void> {
+  const { inquiry, replyMessage, actor, actorRole } = params;
+  const batch = writeBatch(db);
+  const logId = `log_${Date.now()}_reply`;
+
+  batch.update(doc(db, 'contactMessages', inquiry.id), {
+    status: 'REPLIED',
+    replyMessage: replyMessage.trim(),
+    repliedAt: serverTimestamp(),
+    repliedBy: actor.displayName || actor.email,
+  });
+
+  batch.set(doc(db, 'moderationLogs', logId), {
+    id: logId,
+    actorId: actor.uid,
+    actorEmail: actor.email,
+    actorRole,
+    action: 'REPLY_INQUIRY',
+    targetType: 'INQUIRY',
+    targetId: inquiry.id,
+    reason: `Replied to inquiry: "${inquiry.subject}" (${inquiry.email})`,
+    createdAt: serverTimestamp(),
+  });
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `contactMessages/${inquiry.id}`);
+  }
+
+  if (inquiry.email) {
+    try {
+      await fetch('/api/notifications/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inquiry.email,
+          event: 'ADMIN_INQUIRY_REPLY',
+          recipientName: inquiry.name || 'Customer',
+          subject: inquiry.subject,
+          customMessage: replyMessage.trim(),
+          message: inquiry.message,
+        }),
+      });
+    } catch {
+      console.warn('Failed to dispatch reply email to customer:', inquiry.email);
+    }
+  }
+}
+
+export async function deleteInquiryAdmin(params: {
+  inquiryId: string;
+  actor: UserProfile;
+  actorRole: UserRole;
+  reason?: string;
+}): Promise<void> {
+  const { inquiryId, actor, actorRole, reason } = params;
+  const batch = writeBatch(db);
+  const logId = `log_${Date.now()}_delinq`;
+
+  batch.delete(doc(db, 'contactMessages', inquiryId));
+
+  batch.set(doc(db, 'moderationLogs', logId), {
+    id: logId,
+    actorId: actor.uid,
+    actorEmail: actor.email,
+    actorRole,
+    action: 'DELETE_INQUIRY',
+    targetType: 'INQUIRY',
+    targetId: inquiryId,
+    reason: reason?.trim() || 'Deleted inquiry message',
+    createdAt: serverTimestamp(),
+  });
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `contactMessages/${inquiryId}`);
   }
 }

@@ -174,8 +174,10 @@ export interface ModerationLog {
     | 'MODERATE_COMMENT'
     | 'RESOLVE_REPORT'
     | 'MANAGE_PRODUCT'
+    | 'REPLY_INQUIRY'
+    | 'DELETE_INQUIRY'
     | 'UPDATE_SETTINGS';
-  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT';
+  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT' | 'INQUIRY';
   targetId: string;
   reason?: string;
   createdAt: string;
@@ -226,5 +228,18 @@ export interface Product {
   featured?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ContactInquiryItem {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: 'PENDING' | 'REPLIED';
+  replyMessage?: string;
+  repliedAt?: string;
+  repliedBy?: string;
+  createdAt: string;
 }
 

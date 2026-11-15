@@ -15,6 +15,7 @@ const emailRequestSchema = z.object({
     'ACCOUNT_NOTICE',
     'ADMIN_POST_SUBMITTED',
     'ADMIN_CONTACT_INQUIRY',
+    'ADMIN_INQUIRY_REPLY',
   ]),
   recipientName: z.string().min(1).max(100),
   articleTitle: z.string().max(160).optional(),

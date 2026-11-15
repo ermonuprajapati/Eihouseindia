@@ -10,7 +10,8 @@ export type EditorialEmailEvent =
   | 'CHANGES_REQUESTED'
   | 'ACCOUNT_NOTICE'
   | 'ADMIN_POST_SUBMITTED'
-  | 'ADMIN_CONTACT_INQUIRY';
+  | 'ADMIN_CONTACT_INQUIRY'
+  | 'ADMIN_INQUIRY_REPLY';
 
 export interface SendEditorialEmailInput {
   to: string;
@@ -430,6 +431,63 @@ ${escapeHtml(input.message || '')}
       return {
         subject: `📩 [EI House Inquiry] ${input.subject || 'New Message'} from ${input.senderName || 'Visitor'}`,
         html: wrapEmailTemplate(content, `New inquiry from ${input.senderName} (${input.senderEmail}): ${input.subject || ''}`),
+      };
+    }
+
+    case 'ADMIN_INQUIRY_REPLY': {
+      const content = `
+        <div style="background-color: #EFF6FF; border: 1px solid #3B82F6; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+          <span style="font-size: 13px; font-weight: 700; color: #1E40AF; text-transform: uppercase; letter-spacing: 0.5px;">
+            💬 Response from EI HOUSE INDIA
+          </span>
+          <p style="margin: 6px 0 0 0; font-size: 14px; color: #1E3A8A;">
+            Hello <strong>${escapeHtml(input.recipientName || 'Valued Visitor')}</strong>, thank you for reaching out to us. Here is our official response to your inquiry.
+          </p>
+        </div>
+
+        <h2 style="color: #0B1528; font-size: 18px; font-weight: 700; margin: 0 0 12px 0;">
+          Our Message:
+        </h2>
+
+        <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-left: 4px solid #10B981; border-radius: 6px; padding: 18px; color: #1E293B; font-size: 15px; line-height: 1.65; white-space: pre-wrap; margin-bottom: 24px;">
+${escapeHtml(input.customMessage || '')}
+        </div>
+
+        ${
+          input.message
+            ? `
+        <div style="margin: 24px 0 16px 0;">
+          <strong style="color: #64748B; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">
+            Regarding your inquiry (${escapeHtml(input.subject || 'Message')}):
+          </strong>
+          <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 14px 16px; color: #475569; font-size: 13px; line-height: 1.55; white-space: pre-wrap;">
+${escapeHtml(input.message)}
+          </div>
+        </div>
+        `
+            : ''
+        }
+
+        <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 14px 18px; margin-top: 24px;">
+          <p style="margin: 0; font-size: 13px; color: #166534; line-height: 1.5;">
+            Need immediate assistance or direct consultation? You can also connect directly with our engineering &amp; hardware support on WhatsApp at <strong>${SITE_CONFIG.whatsappDisplay}</strong>.
+          </p>
+        </div>
+
+        <p style="font-size: 13px; color: #475569; margin: 24px 0 0 0;">
+          Warm regards,<br />
+          <strong>Engineering Innovation House (EI House) Team</strong><br />
+          <a href="${siteUrl}" style="color: #1D4ED8; text-decoration: none;">${siteUrl}</a>
+        </p>
+      `;
+      return {
+        subject: input.subject?.startsWith('Re:')
+          ? input.subject
+          : `Re: ${input.subject || 'Your Inquiry on EI House'}`,
+        html: wrapEmailTemplate(
+          content,
+          `Response from EI House regarding: ${input.subject || 'Your Inquiry'}`
+        ),
       };
     }
 
