@@ -12,6 +12,7 @@ import {
   Plus,
   Trash2,
   ShieldAlert,
+  ShoppingBag,
   RefreshCw,
   ArrowRight,
 } from 'lucide-react';
@@ -58,7 +59,14 @@ import {
   type AdminDashboardStats,
 } from '@/modules/admin/admin-service';
 import { fetchCategories } from '@/modules/categories/category-service';
-import { deleteEditorialMedia } from '@/modules/storage/storage-service';
+import { deleteEditorialMedia, uploadEditorialImage } from '@/modules/storage/storage-service';
+import {
+  deleteProductAdmin,
+  fetchProducts,
+  POPULAR_SUPPLIER_PRESETS,
+  saveProductAdmin,
+  toggleProductStockAdmin,
+} from '@/modules/products/product-service';
 import { categorySchema, slugify } from '@/lib/validation';
 import type {
   Category,
@@ -66,6 +74,7 @@ import type {
   MediaItem,
   ModerationLog,
   Post,
+  Product,
   ReportItem,
   SiteSettings,
   Tag,
@@ -76,6 +85,7 @@ import type {
 type AdminSection =
   | 'dashboard'
   | 'all-articles'
+  | 'products'
   | 'pending'
   | 'published'
   | 'rejected'
@@ -118,6 +128,35 @@ export default function AdminPanelPage() {
   const [deleteReason, setDeleteReason] = useState('');
   const [deletingPost, setDeletingPost] = useState(false);
 
+  // Products state
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [productModal, setProductModal] = useState<{
+    id?: string;
+    name: string;
+    slug: string;
+    category: string;
+    badge: string;
+    price: string;
+    mrp: string;
+    imageUrl: string;
+    inStock: boolean;
+    features: string;
+    description: string;
+    suppliers: Array<{
+      id?: string;
+      name: string;
+      logoUrl: string;
+      url: string;
+      price: string;
+      badge: string;
+    }>;
+    isNew: boolean;
+  } | null>(null);
+  const [deleteProductTarget, setDeleteProductTarget] = useState<Product | null>(null);
+  const [uploadingProdImage, setUploadingProdImage] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState(false);
+
   // Category modal state
   const [catForm, setCatForm] = useState<{
     id: string;
@@ -145,6 +184,7 @@ export default function AdminPanelPage() {
         logsRes,
         settingsRes,
         usersRes,
+        productsRes,
       ] = await Promise.all([
         getAdminDashboardStats().catch(() => null),
         getPostsForAdmin().catch(() => []),
@@ -156,6 +196,7 @@ export default function AdminPanelPage() {
         getModerationLogsAdmin().catch(() => []),
         getSiteSettingsClient(),
         isAdmin ? getAllUsersForAdmin().catch(() => []) : Promise.resolve([]),
+        fetchProducts().catch(() => []),
       ]);
 
       setStats(statsRes);
@@ -168,6 +209,7 @@ export default function AdminPanelPage() {
       setLogs(logsRes);
       setSettings(settingsRes);
       setUsers(usersRes);
+      setProductsList(productsRes || []);
     } finally {
       setLoadingData(false);
     }
@@ -317,6 +359,138 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleToggleProductStock = async (prod: Product) => {
+    if (!profile) return;
+    try {
+      await toggleProductStockAdmin(prod.id, !prod.inStock, profile, effectiveRole);
+      toast.success(prod.inStock ? 'Product marked Out of Stock.' : 'Product marked In Stock.');
+      loadAllAdminData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update stock status.');
+    }
+  };
+
+  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile || !productModal) return;
+    setUploadingProdImage(true);
+    try {
+      const mediaItem = await uploadEditorialImage(file, profile.uid);
+      setProductModal((prev) => (prev ? { ...prev, imageUrl: mediaItem.url } : null));
+      toast.success('Product image uploaded to Cloudinary.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload product image.');
+    } finally {
+      setUploadingProdImage(false);
+    }
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productModal || !profile) return;
+    if (!productModal.name.trim() || !productModal.price.trim()) {
+      toast.error('Please enter product name and price.');
+      return;
+    }
+    setSavingProduct(true);
+    try {
+      const featuresList = productModal.features
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0);
+
+      await saveProductAdmin(
+        {
+          id: productModal.id,
+          name: productModal.name.trim(),
+          slug: productModal.slug.trim() || slugify(productModal.name),
+          category: productModal.category.trim() || 'General Hardware',
+          badge: productModal.badge.trim() || undefined,
+          price: productModal.price.trim(),
+          mrp: productModal.mrp.trim() || undefined,
+          imageUrl: productModal.imageUrl.trim() || undefined,
+          inStock: productModal.inStock,
+          features: featuresList,
+          description: productModal.description.trim() || undefined,
+          suppliers: productModal.suppliers
+            .filter((s) => s.name.trim().length > 0 && s.url.trim().length > 0)
+            .map((s) => ({
+              id: s.id || `sup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              name: s.name.trim(),
+              logoUrl: s.logoUrl.trim() || undefined,
+              url: s.url.trim(),
+              price: s.price.trim() || undefined,
+              badge: s.badge.trim() || undefined,
+            })),
+        },
+        profile,
+        effectiveRole
+      );
+      toast.success(productModal.isNew ? 'Product added successfully!' : 'Product updated successfully!');
+      setProductModal(null);
+      loadAllAdminData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save product.');
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
+  const handleConfirmDeleteProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteProductTarget || !profile) return;
+    setDeletingProduct(true);
+    try {
+      await deleteProductAdmin(deleteProductTarget.id, deleteProductTarget.name, profile, effectiveRole);
+      toast.success('Product deleted.');
+      setDeleteProductTarget(null);
+      loadAllAdminData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete product.');
+    } finally {
+      setDeletingProduct(false);
+    }
+  };
+
+  const handleAddSupplierRow = () => {
+    if (!productModal) return;
+    setProductModal({
+      ...productModal,
+      suppliers: [
+        ...productModal.suppliers,
+        { name: '', logoUrl: '', url: '', price: '', badge: '' },
+      ],
+    });
+  };
+
+  const handleRemoveSupplierRow = (index: number) => {
+    if (!productModal) return;
+    const next = [...productModal.suppliers];
+    next.splice(index, 1);
+    setProductModal({ ...productModal, suppliers: next });
+  };
+
+  const handleSupplierChange = (index: number, field: string, val: string) => {
+    if (!productModal) return;
+    const next = [...productModal.suppliers];
+    next[index] = { ...next[index], [field]: val };
+    setProductModal({ ...productModal, suppliers: next });
+  };
+
+  const handleSupplierPresetSelect = (index: number, presetName: string) => {
+    if (!productModal) return;
+    const preset = POPULAR_SUPPLIER_PRESETS.find((p) => p.name === presetName);
+    if (!preset) return;
+    const next = [...productModal.suppliers];
+    next[index] = {
+      ...next[index],
+      name: preset.name,
+      logoUrl: preset.logoUrl,
+      badge: next[index].badge || preset.defaultBadge || '',
+    };
+    setProductModal({ ...productModal, suppliers: next });
+  };
+
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catForm) return;
@@ -382,6 +556,7 @@ export default function AdminPanelPage() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
     { id: 'all-articles', label: 'All Articles' },
+    { id: 'products', label: `Store Products (${productsList.length})` },
     { id: 'published', label: 'Published Articles' },
     { id: 'rejected', label: 'Rejected Articles' },
     { id: 'users', label: 'Users Management', adminOnly: true },
@@ -658,6 +833,177 @@ export default function AdminPanelPage() {
                       All Articles ({posts.length})
                     </h2>
                     {renderPostsTable(posts)}
+                  </div>
+                )}
+
+                {section === 'products' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528]">
+                          Store Products &amp; Suppliers Catalog ({productsList.length})
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Manage hardware items, stock status, direct prices, and trusted vendor purchase links with logos.
+                        </p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          setProductModal({
+                            name: '',
+                            slug: '',
+                            category: 'EI House Original Boards',
+                            badge: 'New',
+                            price: '₹',
+                            mrp: '',
+                            imageUrl: '',
+                            inStock: true,
+                            features: '',
+                            description: '',
+                            suppliers: [],
+                            isNew: true,
+                          })
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        <span>Add New Product</span>
+                      </Button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Product</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Price / MRP</th>
+                            <th className="px-4 py-3 text-center">In Stock?</th>
+                            <th className="px-4 py-3">Verified Suppliers</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {productsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                                No products in store catalog yet. Click &ldquo;Add New Product&rdquo; above.
+                              </td>
+                            </tr>
+                          ) : (
+                            productsList.map((prod) => (
+                              <tr key={prod.id} className="hover:bg-slate-50/70">
+                                <td className="px-4 py-3 max-w-xs">
+                                  <div className="flex items-center gap-3">
+                                    {prod.imageUrl ? (
+                                      <div className="h-10 w-10 relative rounded bg-slate-100 shrink-0 border border-slate-200 overflow-hidden">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={prod.imageUrl} alt={prod.name} className="h-full w-full object-contain p-0.5" />
+                                      </div>
+                                    ) : (
+                                      <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200">
+                                        <ShoppingBag className="h-4 w-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="font-medium text-[#0B1528] truncate">{prod.name}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        {prod.badge && (
+                                          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                            {prod.badge}
+                                          </span>
+                                        )}
+                                        <span className="text-xs text-slate-400 font-mono">/{prod.slug}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
+                                  {prod.category}
+                                </td>
+                                <td className="px-4 py-3 text-slate-800 whitespace-nowrap text-xs">
+                                  <span className="font-bold">{prod.price}</span>
+                                  {prod.mrp && <span className="text-slate-400 line-through ml-1.5">{prod.mrp}</span>}
+                                </td>
+                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <Switch
+                                      checked={prod.inStock}
+                                      onCheckedChange={() => handleToggleProductStock(prod)}
+                                    />
+                                    <span className={`text-xs font-semibold ${prod.inStock ? 'text-emerald-700' : 'text-rose-600'}`}>
+                                      {prod.inStock ? 'In Stock' : 'Out of Stock'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-xs text-slate-600">
+                                  {prod.suppliers && prod.suppliers.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 items-center">
+                                      {prod.suppliers.map((s) => (
+                                        <span
+                                          key={s.id}
+                                          className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200"
+                                        >
+                                          {s.logoUrl && (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img src={s.logoUrl} alt="" className="h-3 w-3 object-contain" />
+                                          )}
+                                          <span>{s.name}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">Direct Only</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setProductModal({
+                                        id: prod.id,
+                                        name: prod.name,
+                                        slug: prod.slug,
+                                        category: prod.category,
+                                        badge: prod.badge || '',
+                                        price: prod.price,
+                                        mrp: prod.mrp || '',
+                                        imageUrl: prod.imageUrl || '',
+                                        inStock: prod.inStock,
+                                        features: (prod.features || []).join('\n'),
+                                        description: prod.description || '',
+                                        suppliers: prod.suppliers.map((s) => ({
+                                          id: s.id,
+                                          name: s.name,
+                                          logoUrl: s.logoUrl || '',
+                                          url: s.url,
+                                          price: s.price || '',
+                                          badge: s.badge || '',
+                                        })),
+                                        isNew: false,
+                                      })
+                                    }
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => setDeleteProductTarget(prod)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span>Delete</span>
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
@@ -1316,6 +1662,323 @@ export default function AdminPanelPage() {
               </Button>
               <Button type="submit" variant="destructive" disabled={deletingPost}>
                 {deletingPost ? 'Deleting...' : 'Delete Article'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Add / Edit Dialog */}
+      <Dialog open={Boolean(productModal)} onOpenChange={(o) => !o && setProductModal(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {productModal?.isNew ? 'Add New Hardware Product' : 'Edit Product'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Configure product details, stock availability, and verified supplier outbound links with logos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {productModal && (
+            <form onSubmit={handleSaveProduct} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-name">Product Name *</Label>
+                  <Input
+                    id="prod-name"
+                    value={productModal.name}
+                    onChange={(e) =>
+                      setProductModal({
+                        ...productModal,
+                        name: e.target.value,
+                        slug: productModal.isNew ? slugify(e.target.value) : productModal.slug,
+                      })
+                    }
+                    placeholder="e.g. EI House ESP32-S3 Pro"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-slug">URL Slug *</Label>
+                  <Input
+                    id="prod-slug"
+                    value={productModal.slug}
+                    onChange={(e) =>
+                      setProductModal({ ...productModal, slug: slugify(e.target.value) })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-cat">Category *</Label>
+                  <Input
+                    id="prod-cat"
+                    value={productModal.category}
+                    onChange={(e) =>
+                      setProductModal({ ...productModal, category: e.target.value })
+                    }
+                    placeholder="e.g. Development Boards"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-price">Direct Price (INR) *</Label>
+                  <Input
+                    id="prod-price"
+                    value={productModal.price}
+                    onChange={(e) =>
+                      setProductModal({ ...productModal, price: e.target.value })
+                    }
+                    placeholder="e.g. ₹899"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-mrp">MRP (Strikethrough)</Label>
+                  <Input
+                    id="prod-mrp"
+                    value={productModal.mrp}
+                    onChange={(e) =>
+                      setProductModal({ ...productModal, mrp: e.target.value })
+                    }
+                    placeholder="e.g. ₹1,299"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-badge">Badge (Optional)</Label>
+                  <Input
+                    id="prod-badge"
+                    value={productModal.badge}
+                    onChange={(e) =>
+                      setProductModal({ ...productModal, badge: e.target.value })
+                    }
+                    placeholder="e.g. Bestseller, New Launch, Verified"
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <Switch
+                    id="prod-instock"
+                    checked={productModal.inStock}
+                    onCheckedChange={(v) =>
+                      setProductModal({ ...productModal, inStock: v })
+                    }
+                  />
+                  <Label htmlFor="prod-instock" className="cursor-pointer font-semibold text-sm">
+                    {productModal.inStock ? 'In Stock (Direct Order Enabled)' : 'Out of Stock (Suppliers Only)'}
+                  </Label>
+                </div>
+              </div>
+
+              {/* Image Upload */}
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Product Image (Cloudinary)
+                </Label>
+                <div className="flex items-center gap-4">
+                  {productModal.imageUrl ? (
+                    <div className="h-16 w-16 relative rounded-lg border border-slate-200 bg-white p-1 shrink-0 overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={productModal.imageUrl} alt="Preview" className="h-full w-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 shrink-0">
+                      <ShoppingBag className="h-6 w-6" />
+                    </div>
+                  )}
+                  <div className="space-y-1 flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProductImageUpload}
+                      disabled={uploadingProdImage}
+                      className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#172D4D] file:text-white hover:file:bg-[#0B1528] cursor-pointer"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      {uploadingProdImage ? 'Uploading to Cloudinary...' : 'Uploads directly to Cloudinary CDN.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Features & Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="prod-features">Key Specifications (One bullet point per line)</Label>
+                <Textarea
+                  id="prod-features"
+                  value={productModal.features}
+                  onChange={(e) =>
+                    setProductModal({ ...productModal, features: e.target.value })
+                  }
+                  placeholder="Dual Core 240MHz Xtensa LX7&#10;Built-in 0.96&quot; OLED Display&#10;USB-C Native Debug &amp; OTG"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prod-desc">Product Description (Optional)</Label>
+                <Textarea
+                  id="prod-desc"
+                  value={productModal.description}
+                  onChange={(e) =>
+                    setProductModal({ ...productModal, description: e.target.value })
+                  }
+                  placeholder="Full engineering description and pinout details..."
+                  rows={2}
+                />
+              </div>
+
+              {/* Verified Suppliers Section */}
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      Verified Supplier Outbound Links (With Logos)
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Add supplier links with logos (e.g. Robu, Amazon, Quartz, DigiKey). Users can buy directly from them.
+                    </p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={handleAddSupplierRow}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    <span>Add Supplier</span>
+                  </Button>
+                </div>
+
+                {productModal.suppliers.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-2 text-center">
+                    No suppliers linked yet. Click &ldquo;Add Supplier&rdquo; to add external vendor purchase links.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {productModal.suppliers.map((sup, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-lg border border-slate-200 bg-white p-3 space-y-3 relative shadow-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                          <span className="text-xs font-bold text-slate-700">Supplier #{idx + 1}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-400">Quick Preset:</span>
+                            <select
+                              className="text-xs rounded border border-slate-200 px-2 py-1 bg-white font-medium"
+                              onChange={(e) => handleSupplierPresetSelect(idx, e.target.value)}
+                              defaultValue=""
+                            >
+                              <option value="" disabled>Select Preset Logo...</option>
+                              {POPULAR_SUPPLIER_PRESETS.map((p) => (
+                                <option key={p.name} value={p.name}>{p.name}</option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 h-7 w-7 p-0"
+                              onClick={() => handleRemoveSupplierRow(idx)}
+                              title="Remove supplier"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Supplier Name *</Label>
+                            <Input
+                              value={sup.name}
+                              onChange={(e) => handleSupplierChange(idx, 'name', e.target.value)}
+                              placeholder="e.g. Robu.in or Amazon India"
+                              required
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Direct Product Link URL *</Label>
+                            <Input
+                              value={sup.url}
+                              onChange={(e) => handleSupplierChange(idx, 'url', e.target.value)}
+                              placeholder="https://robu.in/product/..."
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Supplier Logo URL</Label>
+                            <Input
+                              value={sup.logoUrl}
+                              onChange={(e) => handleSupplierChange(idx, 'logoUrl', e.target.value)}
+                              placeholder="https://.../logo.png"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Supplier Price (Optional)</Label>
+                            <Input
+                              value={sup.price}
+                              onChange={(e) => handleSupplierChange(idx, 'price', e.target.value)}
+                              placeholder="e.g. ₹949"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">Supplier Badge (Optional)</Label>
+                            <Input
+                              value={sup.badge}
+                              onChange={(e) => handleSupplierChange(idx, 'badge', e.target.value)}
+                              placeholder="e.g. Prime, Fast Dispatch"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setProductModal(null)} disabled={savingProduct}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingProduct}>
+                  {savingProduct ? 'Saving Product...' : productModal.isNew ? 'Create Product' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Product Confirmation Dialog */}
+      <Dialog open={Boolean(deleteProductTarget)} onOpenChange={(o) => !o && setDeleteProductTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Product Permanently
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deleteProductTarget?.name}&rdquo;?
+              This will remove the product and its supplier links from the store catalog.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeleteProduct} className="space-y-4">
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteProductTarget(null)}
+                disabled={deletingProduct}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingProduct}>
+                {deletingProduct ? 'Deleting...' : 'Delete Product'}
               </Button>
             </DialogFooter>
           </form>

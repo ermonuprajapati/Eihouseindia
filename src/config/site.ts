@@ -14,6 +14,8 @@ export const SITE_CONFIG = {
   locale: 'en-IN',
   contactEmail: process.env.CONTACT_EMAIL || 'info@eihouseindia.in',
   bootstrapAdminEmail: process.env.BOOTSTRAP_ADMIN_EMAIL || 'er.monuprajapati.2024@gmail.com',
+  whatsappNumber: '917080768737',
+  whatsappDisplay: '+91 7080768737',
   entity: {
     legalName: 'Engineering Innovation House',
     legalType: 'MSME / Udyam Registered Proprietorship',

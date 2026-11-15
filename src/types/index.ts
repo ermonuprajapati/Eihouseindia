@@ -173,8 +173,9 @@ export interface ModerationLog {
     | 'MANAGE_CATEGORY'
     | 'MODERATE_COMMENT'
     | 'RESOLVE_REPORT'
+    | 'MANAGE_PRODUCT'
     | 'UPDATE_SETTINGS';
-  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS';
+  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT';
   targetId: string;
   reason?: string;
   createdAt: string;
@@ -198,3 +199,32 @@ export interface ComponentCategorySpec {
   summary: string;
   plannedFields: string[];
 }
+
+export interface SupplierLink {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  url: string;
+  price?: string;
+  badge?: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  badge?: string;
+  price: string;
+  mrp?: string;
+  imageUrl?: string;
+  inStock: boolean;
+  features: string[];
+  description?: string;
+  suppliers: SupplierLink[];
+  orderCount?: number;
+  featured?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
