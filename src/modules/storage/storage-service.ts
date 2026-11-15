@@ -31,8 +31,8 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
 }
 
 /**
- * Stores images directly in Cloud Firestore (within 1 GiB free Spark tier),
- * completely bypassing Firebase Storage billing/bucket requirements.
+ * Optimizes and uploads images via Cloudinary CDN,
+ * recording metadata in Firestore.
  */
 export async function uploadEditorialImage(file: File, userId: string): Promise<MediaItem> {
   const check = validateImageFile(file);
@@ -70,7 +70,12 @@ export async function uploadEditorialImage(file: File, userId: string): Promise<
 
 export async function deleteEditorialMedia(media: MediaItem): Promise<void> {
   try {
-    if (media.storagePath.startsWith('firestore://') || media.url.startsWith('/api/media/')) {
+    if (
+      media.storagePath.startsWith('firestore://') ||
+      media.storagePath.startsWith('cloudinary://') ||
+      media.url.startsWith('/api/media/') ||
+      media.url.includes('cloudinary.com')
+    ) {
       await fetch(`/api/media/${media.id}`, { method: 'DELETE' }).catch(() => undefined);
       return;
     }

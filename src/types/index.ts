@@ -165,6 +165,7 @@ export interface ModerationLog {
     | 'REJECT_POST'
     | 'REQUEST_CHANGES'
     | 'ARCHIVE_POST'
+    | 'DELETE_POST'
     | 'TOGGLE_FEATURED'
     | 'SUSPEND_USER'
     | 'RESTORE_USER'

@@ -36,6 +36,7 @@ import {
 import { useAuth } from '@/modules/auth/auth-context';
 import {
   deleteCategoryAdmin,
+  deletePostAdmin,
   deleteTagAdmin,
   getAdminDashboardStats,
   getAllTagsAdmin,
@@ -111,6 +112,11 @@ export default function AdminPanelPage() {
   } | null>(null);
   const [modReason, setModReason] = useState('');
   const [submittingMod, setSubmittingMod] = useState(false);
+
+  // Delete post modal state
+  const [deletePostTarget, setDeletePostTarget] = useState<Post | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingPost, setDeletingPost] = useState(false);
 
   // Category modal state
   const [catForm, setCatForm] = useState<{
@@ -289,6 +295,28 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleConfirmDeletePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletePostTarget || !profile) return;
+    setDeletingPost(true);
+    try {
+      await deletePostAdmin({
+        post: deletePostTarget,
+        actor: profile,
+        actorRole: effectiveRole,
+        reason: deleteReason.trim() || 'Deleted by admin from Admin Console.',
+      });
+      toast.success('Article permanently deleted.');
+      setDeletePostTarget(null);
+      setDeleteReason('');
+      loadAllAdminData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete article.');
+    } finally {
+      setDeletingPost(false);
+    }
+  };
+
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catForm) return;
@@ -458,6 +486,19 @@ export default function AdminPanelPage() {
                   )}
                   <Button asChild size="sm" variant="ghost">
                     <Link href={`/dashboard/editor/${post.id}`}>Edit</Link>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      setDeletePostTarget(post);
+                      setDeleteReason('');
+                    }}
+                    title="Delete Article"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                    <span>Delete</span>
                   </Button>
                 </td>
               </tr>
@@ -1237,6 +1278,47 @@ export default function AdminPanelPage() {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Article Confirmation Dialog */}
+      <Dialog open={Boolean(deletePostTarget)} onOpenChange={(o) => !o && setDeletePostTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Article Permanently
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deletePostTarget?.title}&rdquo;?
+              This will remove the post completely and cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeletePost} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="del-post-reason" className="text-xs text-slate-600">
+                Reason (optional, recorded in audit logs):
+              </Label>
+              <Input
+                id="del-post-reason"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Duplicate article, outdated, author request..."
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeletePostTarget(null)}
+                disabled={deletingPost}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingPost}>
+                {deletingPost ? 'Deleting...' : 'Delete Article'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

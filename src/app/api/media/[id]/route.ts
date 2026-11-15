@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/config/firebase-admin';
+import { cloudinary, isCloudinaryConfigured } from '@/config/cloudinary';
 
 export async function GET(
   _request: Request,
@@ -16,30 +17,37 @@ export async function GET(
       return NextResponse.json({ error: 'Database service unavailable' }, { status: 503 });
     }
 
+    // 1. Check legacy mediaFiles collection first
     const docSnap = await db.collection('mediaFiles').doc(id).get();
-    if (!docSnap.exists) {
-      return NextResponse.json({ error: 'Media not found' }, { status: 404 });
+    if (docSnap.exists) {
+      const data = docSnap.data();
+      if (data?.data) {
+        const mimeType = (data.mimeType as string) || 'image/jpeg';
+        const buffer = Buffer.from(data.data as string, 'base64');
+
+        return new Response(buffer, {
+          status: 200,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Length': buffer.length.toString(),
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        });
+      }
     }
 
-    const data = docSnap.data();
-    if (!data?.data) {
-      return NextResponse.json({ error: 'Media payload missing' }, { status: 404 });
+    // 2. Check media metadata collection to redirect to Cloudinary if available
+    const metaSnap = await db.collection('media').doc(id).get();
+    if (metaSnap.exists) {
+      const metaData = metaSnap.data();
+      if (metaData?.url && typeof metaData.url === 'string' && metaData.url.startsWith('http')) {
+        return NextResponse.redirect(metaData.url, { status: 307 });
+      }
     }
 
-    const mimeType = (data.mimeType as string) || 'image/jpeg';
-    const buffer = Buffer.from(data.data as string, 'base64');
-
-    return new Response(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type': mimeType,
-        'Content-Length': buffer.length.toString(),
-        // 1-year immutable cache header for optimal performance & zero repeated Firestore reads
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
-    });
+    return NextResponse.json({ error: 'Media not found' }, { status: 404 });
   } catch (error) {
-    console.error('Failed to serve media from Firestore:', error);
+    console.error('Failed to serve media:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Error retrieving media' },
       { status: 500 }
@@ -58,18 +66,32 @@ export async function DELETE(
     }
 
     const db = getAdminDb();
-    if (!db) {
-      return NextResponse.json({ error: 'Database service unavailable' }, { status: 503 });
+
+    // Remove from Cloudinary if stored there
+    if (isCloudinaryConfigured()) {
+      let cloudinaryPublicId = `eihouseindia/${id}`;
+      if (db) {
+        const metaDoc = await db.collection('media').doc(id).get().catch(() => null);
+        if (metaDoc?.exists) {
+          const storagePath = metaDoc.data()?.storagePath;
+          if (typeof storagePath === 'string' && storagePath.startsWith('cloudinary://')) {
+            cloudinaryPublicId = storagePath.replace('cloudinary://', '');
+          }
+        }
+      }
+      await cloudinary.uploader.destroy(cloudinaryPublicId).catch(() => undefined);
     }
 
-    await Promise.all([
-      db.collection('mediaFiles').doc(id).delete().catch(() => undefined),
-      db.collection('media').doc(id).delete().catch(() => undefined),
-    ]);
+    if (db) {
+      await Promise.all([
+        db.collection('mediaFiles').doc(id).delete().catch(() => undefined),
+        db.collection('media').doc(id).delete().catch(() => undefined),
+      ]);
+    }
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error('Failed to delete media from Firestore:', error);
+    console.error('Failed to delete media:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Error deleting media' },
       { status: 500 }

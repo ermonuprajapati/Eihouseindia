@@ -37,7 +37,7 @@ export default function PrivacyPolicyPage() {
         <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">2. Editorial Content & Media</h2>
         <p>
           Draft articles remain private to their authors and authorized editorial reviewers until
-          approved and published. Uploaded images are stored in Firebase Storage under your user ID.
+          approved and published. Uploaded images are securely stored and served via Cloudinary CDN.
         </p>
 
         <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">3. Newsletter & Contact Inquiries</h2>

@@ -267,6 +267,66 @@ export async function moderatePostDecision(params: {
   }
 }
 
+export async function deletePostAdmin(params: {
+  post: Post;
+  actor: UserProfile;
+  actorRole: UserRole;
+  reason?: string;
+}): Promise<void> {
+  const { post, actor, actorRole, reason } = params;
+  if (actorRole !== 'ADMIN' && actorRole !== 'EDITOR') {
+    throw new Error('Unauthorized: Admin or Editor role required to delete articles.');
+  }
+
+  const batch = writeBatch(db);
+  const postRef = doc(db, 'posts', post.id);
+  const logId = `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  // Delete the post document
+  batch.delete(postRef);
+
+  // Write moderation log for audit tracking
+  batch.set(doc(db, 'moderationLogs', logId), {
+    id: logId,
+    actorId: actor.uid,
+    actorEmail: actor.email,
+    actorRole,
+    action: 'DELETE_POST',
+    targetType: 'POST',
+    targetId: post.id,
+    reason: reason?.trim() || 'Deleted article via Admin Console.',
+    createdAt: serverTimestamp(),
+  });
+
+  // Notify the author if another administrator performed the deletion
+  if (post.authorId && post.authorId !== actor.uid) {
+    batch.set(doc(db, 'notifications', notifId), {
+      id: notifId,
+      userId: post.authorId,
+      title: 'Article Deleted',
+      message: `Your article "${post.title}" was deleted by editorial moderation.${reason ? ` Reason: ${reason}` : ''}`.slice(0, 500),
+      type: 'REJECTED',
+      postId: post.id,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  try {
+    await batch.commit();
+
+    // Trigger on-demand cache revalidation
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: post.slug }),
+    }).catch(() => undefined);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `posts/${post.id}`);
+  }
+}
+
 export async function togglePostFeatured(
   post: Post,
   featured: boolean,

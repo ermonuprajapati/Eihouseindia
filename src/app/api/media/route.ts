@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/config/firebase-admin';
+import { cloudinary, isCloudinaryConfigured } from '@/config/cloudinary';
 import type { MediaItem } from '@/types';
 
 const uploadSchema = z.object({
@@ -9,7 +10,7 @@ const uploadSchema = z.object({
   uploaderId: z.string().min(1).max(128),
   fileName: z.string().min(1).max(200),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/avif']),
-  sizeBytes: z.number().positive().max(5 * 1024 * 1024), // Max 5 MB raw, compressed will be < 800 KB
+  sizeBytes: z.number().positive().max(10 * 1024 * 1024), // Max 10 MB raw, compressed will be < 800 KB
   base64: z.string().min(10),
 });
 
@@ -26,38 +27,53 @@ export async function POST(request: Request) {
 
     const { mediaId, uploaderId, fileName, mimeType, sizeBytes, base64 } = parsed.data;
 
-    const db = getAdminDb();
-    if (!db) {
-      return NextResponse.json(
-        { error: 'Firebase Admin Database not initialized on server' },
-        { status: 500 }
+    let url = `/api/media/${mediaId}`;
+    let storagePath = `firestore://${mediaId}`;
+    let uploadedSizeBytes = sizeBytes;
+
+    // 1. Primary: Upload to Cloudinary if configured
+    if (isCloudinaryConfigured()) {
+      const uploadResult = await cloudinary.uploader.upload(
+        `data:${mimeType};base64,${base64}`,
+        {
+          folder: 'eihouseindia',
+          public_id: mediaId,
+          resource_type: 'image',
+          overwrite: true,
+        }
       );
+
+      url = uploadResult.secure_url;
+      storagePath = `cloudinary://${uploadResult.public_id}`;
+      uploadedSizeBytes = uploadResult.bytes || sizeBytes;
     }
 
-    const storagePath = `firestore://${mediaId}`;
-    const url = `/api/media/${mediaId}`;
+    // 2. Persist metadata in Firestore database
+    const db = getAdminDb();
+    if (db) {
+      // If Cloudinary is NOT configured, store raw base64 payload as fallback in Firestore
+      if (!isCloudinaryConfigured()) {
+        await db.collection('mediaFiles').doc(mediaId).set({
+          id: mediaId,
+          uploaderId,
+          data: base64,
+          mimeType,
+          sizeBytes,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
 
-    // 1. Store the image payload in the dedicated mediaFiles collection
-    await db.collection('mediaFiles').doc(mediaId).set({
-      id: mediaId,
-      uploaderId,
-      data: base64,
-      mimeType,
-      sizeBytes,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    // 2. Store metadata in the media library collection
-    await db.collection('media').doc(mediaId).set({
-      id: mediaId,
-      uploaderId,
-      url,
-      storagePath,
-      fileName,
-      mimeType,
-      sizeBytes,
-      createdAt: FieldValue.serverTimestamp(),
-    });
+      await db.collection('media').doc(mediaId).set({
+        id: mediaId,
+        uploaderId,
+        url,
+        storagePath,
+        fileName,
+        mimeType,
+        sizeBytes: uploadedSizeBytes,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
 
     const mediaItem: MediaItem = {
       id: mediaId,
@@ -66,13 +82,13 @@ export async function POST(request: Request) {
       storagePath,
       fileName,
       mimeType,
-      sizeBytes,
+      sizeBytes: uploadedSizeBytes,
       createdAt: new Date().toISOString(),
     };
 
     return NextResponse.json({ media: mediaItem }, { status: 201 });
   } catch (error) {
-    console.error('Failed to save media in Firestore:', error);
+    console.error('Failed to save media:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Media upload failed' },
       { status: 500 }
