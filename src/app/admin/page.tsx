@@ -72,7 +72,6 @@ import { deleteEditorialMedia, uploadEditorialImage } from '@/modules/storage/st
 import {
   deleteProductAdmin,
   fetchProducts,
-  POPULAR_SUPPLIER_PRESETS,
   saveProductAdmin,
   toggleProductStockAdmin,
 } from '@/modules/products/product-service';
@@ -505,44 +504,7 @@ export default function AdminPanelPage() {
     }
   };
 
-  const handleAddSupplierRow = () => {
-    if (!productModal) return;
-    setProductModal({
-      ...productModal,
-      suppliers: [
-        ...productModal.suppliers,
-        { name: '', logoUrl: '', url: '', price: '', badge: '' },
-      ],
-    });
-  };
 
-  const handleRemoveSupplierRow = (index: number) => {
-    if (!productModal) return;
-    const next = [...productModal.suppliers];
-    next.splice(index, 1);
-    setProductModal({ ...productModal, suppliers: next });
-  };
-
-  const handleSupplierChange = (index: number, field: string, val: string) => {
-    if (!productModal) return;
-    const next = [...productModal.suppliers];
-    next[index] = { ...next[index], [field]: val };
-    setProductModal({ ...productModal, suppliers: next });
-  };
-
-  const handleSupplierPresetSelect = (index: number, presetName: string) => {
-    if (!productModal) return;
-    const preset = POPULAR_SUPPLIER_PRESETS.find((p) => p.name === presetName);
-    if (!preset) return;
-    const next = [...productModal.suppliers];
-    next[index] = {
-      ...next[index],
-      name: preset.name,
-      logoUrl: preset.logoUrl,
-      badge: next[index].badge || preset.defaultBadge || '',
-    };
-    setProductModal({ ...productModal, suppliers: next });
-  };
 
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -741,8 +703,8 @@ export default function AdminPanelPage() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
     { id: 'inquiries', label: `Inquiries (${pendingInquiries.length})` },
-    { id: 'products', label: `Store Products (${productsList.length})` },
-    { id: 'suppliers', label: `Verified Suppliers (${suppliersList.length})` },
+    { id: 'products', label: `Store Products (EI House) (${productsList.length})` },
+    { id: 'suppliers', label: `Suppliers (Not in Store) (${suppliersList.length})` },
     { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
     { id: 'rejected', label: 'Rejected Articles' },
@@ -1025,13 +987,34 @@ export default function AdminPanelPage() {
 
                 {section === 'products' && (
                   <div className="space-y-4">
+                    {/* Link banner to Suppliers Directory */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 shadow-xs">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                          <ShoppingBag className="h-4 w-4" />
+                          <span>Jo Product hamare paas nahi hai uske Suppliers manage karein</span>
+                        </p>
+                        <p className="text-xs text-amber-700">
+                          Hamare store par jo specialized components nahi hain, unke verified external suppliers (Robu, Quartz, DigiKey, etc.) ko Suppliers Directory se Add, Edit aur Delete karein.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-400 bg-white hover:bg-amber-100 text-amber-900 text-xs shrink-0 font-semibold"
+                        onClick={() => setSection('suppliers')}
+                      >
+                        Manage Verified Suppliers ({suppliersList.length}) →
+                      </Button>
+                    </div>
+
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <h2 className="font-display text-2xl font-semibold text-[#0B1528]">
-                          Store Products &amp; Suppliers Catalog ({productsList.length})
+                          Store Products (EI House Hardware) ({productsList.length})
                         </h2>
                         <p className="text-xs text-slate-500">
-                          Manage hardware items, stock status, direct prices, and trusted vendor purchase links with logos.
+                          Manage products manufactured and stocked directly by EI House (in stock status, prices, direct pre-orders &amp; WhatsApp orders).
                         </p>
                       </div>
                       <Button
@@ -1067,14 +1050,13 @@ export default function AdminPanelPage() {
                             <th className="px-4 py-3">Category</th>
                             <th className="px-4 py-3">Price / MRP</th>
                             <th className="px-4 py-3 text-center">In Stock?</th>
-                            <th className="px-4 py-3">Verified Suppliers</th>
                             <th className="px-4 py-3 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
                           {productsList.length === 0 ? (
                             <tr>
-                              <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                              <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                                 No products in store catalog yet. Click &ldquo;Add New Product&rdquo; above.
                               </td>
                             </tr>
@@ -1124,26 +1106,6 @@ export default function AdminPanelPage() {
                                     </span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-xs text-slate-600">
-                                  {prod.suppliers && prod.suppliers.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1 items-center">
-                                      {prod.suppliers.map((s) => (
-                                        <span
-                                          key={s.id}
-                                          className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200"
-                                        >
-                                          {s.logoUrl && (
-                                            /* eslint-disable-next-line @next/next/no-img-element */
-                                            <img src={s.logoUrl} alt="" className="h-3 w-3 object-contain" />
-                                          )}
-                                          <span>{s.name}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-400 italic">Direct Only</span>
-                                  )}
-                                </td>
                                 <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
                                   <Button
                                     size="sm"
@@ -1161,7 +1123,7 @@ export default function AdminPanelPage() {
                                         inStock: prod.inStock,
                                         features: (prod.features || []).join('\n'),
                                         description: prod.description || '',
-                                        suppliers: prod.suppliers.map((s) => ({
+                                        suppliers: (prod.suppliers || []).map((s) => ({
                                           id: s.id,
                                           name: s.name,
                                           logoUrl: s.logoUrl || '',
@@ -1198,12 +1160,17 @@ export default function AdminPanelPage() {
                   <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
-                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
-                          <ShoppingBag className="h-6 w-6 text-primary" />
-                          Verified Suppliers Directory ({suppliersList.length})
-                        </h2>
-                        <p className="text-xs text-slate-500">
-                          Manage trusted external component vendors displayed on the store page for products not stocked in our lab.
+                        <div className="flex items-center gap-2">
+                          <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                            <ShoppingBag className="h-6 w-6 text-primary" />
+                            Suppliers Directory ({suppliersList.length})
+                          </h2>
+                          <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded">
+                            Jo products hamare paas nahi hain
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Store page ke &ldquo;Looking for Components Not Available in Our Store?&rdquo; section ke trusted suppliers ko yahan se Add, Edit aur Delete karein.
                         </p>
                       </div>
                       <Button
@@ -2398,112 +2365,15 @@ export default function AdminPanelPage() {
                 />
               </div>
 
-              {/* Verified Suppliers Section */}
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                      Verified Supplier Outbound Links (With Logos)
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Add supplier links with logos (e.g. Robu, Amazon, Quartz, DigiKey). Users can buy directly from them.
-                    </p>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={handleAddSupplierRow}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    <span>Add Supplier</span>
-                  </Button>
-                </div>
-
-                {productModal.suppliers.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic py-2 text-center">
-                    No suppliers linked yet. Click &ldquo;Add Supplier&rdquo; to add external vendor purchase links.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {productModal.suppliers.map((sup, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-lg border border-slate-200 bg-white p-3 space-y-3 relative shadow-xs"
-                      >
-                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                          <span className="text-xs font-bold text-slate-700">Supplier #{idx + 1}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-slate-400">Quick Preset:</span>
-                            <select
-                              className="text-xs rounded border border-slate-200 px-2 py-1 bg-white font-medium"
-                              onChange={(e) => handleSupplierPresetSelect(idx, e.target.value)}
-                              defaultValue=""
-                            >
-                              <option value="" disabled>Select Preset Logo...</option>
-                              {POPULAR_SUPPLIER_PRESETS.map((p) => (
-                                <option key={p.name} value={p.name}>{p.name}</option>
-                              ))}
-                            </select>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 h-7 w-7 p-0"
-                              onClick={() => handleRemoveSupplierRow(idx)}
-                              title="Remove supplier"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-[11px]">Supplier Name *</Label>
-                            <Input
-                              value={sup.name}
-                              onChange={(e) => handleSupplierChange(idx, 'name', e.target.value)}
-                              placeholder="e.g. Robu.in or Amazon India"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[11px]">Direct Product Link URL *</Label>
-                            <Input
-                              value={sup.url}
-                              onChange={(e) => handleSupplierChange(idx, 'url', e.target.value)}
-                              placeholder="https://robu.in/product/..."
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-[11px]">Supplier Logo URL</Label>
-                            <Input
-                              value={sup.logoUrl}
-                              onChange={(e) => handleSupplierChange(idx, 'logoUrl', e.target.value)}
-                              placeholder="https://.../logo.png"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[11px]">Supplier Price (Optional)</Label>
-                            <Input
-                              value={sup.price}
-                              onChange={(e) => handleSupplierChange(idx, 'price', e.target.value)}
-                              placeholder="e.g. ₹949"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[11px]">Supplier Badge (Optional)</Label>
-                            <Input
-                              value={sup.badge}
-                              onChange={(e) => handleSupplierChange(idx, 'badge', e.target.value)}
-                              placeholder="e.g. Prime, Fast Dispatch"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              {/* Fulfillment Note */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-1">
+                <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <ShoppingBag className="h-4 w-4 text-[#172D4D]" />
+                  <span>EI House Direct Store Item</span>
+                </p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Yeh product EI House direct fulfill karta hai. Customer website ke Order Form aur WhatsApp se direct order karenge. Isme kisi external supplier link ki zaroorat nahi hai.
+                </p>
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0">
