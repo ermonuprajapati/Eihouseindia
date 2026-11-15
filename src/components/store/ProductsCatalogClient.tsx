@@ -175,28 +175,28 @@ export function ProductsCatalogClient() {
                 <div className="pt-4 border-t border-slate-200">
                   {/* Direct Buy / Order from EI House */}
                   {item.inStock ? (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      {/* Order from EI House Modal Form */}
+                      <Button
+                        size="sm"
+                        onClick={() => setOrderModalProduct(item)}
+                        className="w-full bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-xs shadow-xs flex items-center justify-center gap-1.5 py-2.5"
+                      >
+                        <ShoppingBag className="h-4 w-4" />
+                        <span>Order from EI House</span>
+                      </Button>
+
                       {/* WhatsApp Buy */}
                       <Button
                         asChild
                         size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs w-full text-xs"
+                        variant="outline"
+                        className="w-full border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-xs flex items-center justify-center gap-1.5"
                       >
                         <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                          <MessageCircle className="h-3.5 w-3.5 mr-1 text-white" />
-                          <span>WhatsApp</span>
+                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Quick Order via WhatsApp</span>
                         </a>
-                      </Button>
-
-                      {/* Order Inquiry Form */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setOrderModalProduct(item)}
-                        className="border-[#172D4D] text-[#172D4D] hover:bg-[#172D4D]/5 font-semibold w-full text-xs"
-                      >
-                        <ShoppingBag className="h-3.5 w-3.5 mr-1" />
-                        <span>Order Form</span>
                       </Button>
                     </div>
                   ) : (
@@ -216,7 +216,7 @@ export function ProductsCatalogClient() {
                         className="w-full text-xs border-slate-300 font-semibold text-slate-700 hover:bg-slate-50"
                       >
                         <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
-                        <span>Pre-Order / Inquire Stock</span>
+                        <span>Pre-Order from EI House</span>
                       </Button>
                     </div>
                   )}
