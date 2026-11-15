@@ -2,23 +2,27 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   ShoppingBag,
   ExternalLink,
   MessageCircle,
   ShieldCheck,
   AlertCircle,
+  BookOpen,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
 import { fetchProducts, DEFAULT_HARDWARE_PRODUCTS } from '@/modules/products/product-service';
 import { fetchSuppliers, DEFAULT_TRUSTED_SUPPLIERS } from '@/modules/suppliers/supplier-service';
 import { ProductOrderModal } from '@/components/store/ProductOrderModal';
-import type { Product, TrustedSupplier } from '@/types';
+import type { Product, TrustedSupplier, Post } from '@/types';
 
 export function ProductsCatalogClient() {
   const [products, setProducts] = useState<Product[]>(DEFAULT_HARDWARE_PRODUCTS);
   const [suppliers, setSuppliers] = useState<TrustedSupplier[]>(DEFAULT_TRUSTED_SUPPLIERS);
+  const [publishedPosts, setPublishedPosts] = useState<Post[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All Hardware');
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
 
@@ -40,6 +44,15 @@ export function ProductsCatalogClient() {
       })
       .catch((err) => console.warn('Could not load suppliers:', err));
 
+    fetch('/api/articles?limit=50')
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.posts && Array.isArray(data.posts)) {
+          setPublishedPosts(data.posts);
+        }
+      })
+      .catch((err) => console.warn('Could not load blog posts:', err));
+
     return () => {
       isMounted = false;
     };
@@ -57,6 +70,48 @@ export function ProductsCatalogClient() {
     if (selectedCategory === 'All Hardware') return products;
     return products.filter((p) => p.category === selectedCategory);
   }, [products, selectedCategory]);
+
+  const resolveRelatedBlog = (item: Product) => {
+    // Only resolve if published posts are available
+    if (!publishedPosts || publishedPosts.length === 0) return null;
+
+    // 1. Explicit relatedBlogSlug configured on product
+    if (item.relatedBlogSlug) {
+      const direct = publishedPosts.find(
+        (p) => p.slug === item.relatedBlogSlug || p.id === item.relatedBlogSlug
+      );
+      if (direct) {
+        return {
+          slug: direct.slug,
+          title: item.relatedBlogTitle?.trim() || direct.title,
+        };
+      }
+      // Blog specified by slug is not currently published -> hide link to avoid 404
+      return null;
+    }
+
+    // 2. Smart automatic matching from published articles on website
+    const productWords = `${item.name} ${item.slug} ${item.category}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .split(/\s+/)
+      .filter(
+        (w) =>
+          w.length >= 3 &&
+          !['the', 'and', 'for', 'pro', 'kit', 'board', 'module', 'with', 'house', 'development', 'sensor'].includes(w)
+      );
+
+    const matched = publishedPosts.find((post) => {
+      const postText = `${post.title} ${post.slug} ${(post.tags || []).join(' ')}`.toLowerCase();
+      return productWords.some((word) => postText.includes(word));
+    });
+
+    if (matched) {
+      return { slug: matched.slug, title: matched.title };
+    }
+
+    return null;
+  };
 
   return (
     <section id="products-catalog" className="py-16 sm:py-20 border-b border-slate-200 bg-white">
@@ -170,6 +225,38 @@ export function ProductsCatalogClient() {
                       </ul>
                     </div>
                   )}
+
+                  {/* Related Blog / Tutorial Guide Link (Only displayed if available) */}
+                  {(() => {
+                    const relatedBlog = resolveRelatedBlog(item);
+                    if (!relatedBlog) return null;
+
+                    return (
+                      <div className="pt-3 border-t border-slate-100">
+                        <Link
+                          href={`/blog/${relatedBlog.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group/blog flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50/70 hover:bg-amber-100/90 border border-amber-200/80 transition-all text-xs text-amber-950 shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="p-1 rounded-md bg-[#F59E0B]/20 text-[#B45309] shrink-0">
+                              <BookOpen className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="truncate text-left">
+                              <span className="text-[10px] uppercase font-bold text-[#B45309] tracking-wider block leading-none">
+                                Read Blog of this Product
+                              </span>
+                              <span className="truncate block font-semibold text-slate-800 group-hover/blog:text-[#0B1528] mt-0.5">
+                                Read Blog: {relatedBlog.title}
+                              </span>
+                            </div>
+                          </div>
+                          <ArrowRight className="h-3.5 w-3.5 text-[#B45309] shrink-0 group-hover/blog:translate-x-0.5 transition-transform" />
+                        </Link>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="pt-4 border-t border-slate-200">

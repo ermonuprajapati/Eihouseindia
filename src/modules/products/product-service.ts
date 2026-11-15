@@ -69,6 +69,8 @@ export const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
       'Onboard LiPo Battery Charging & Management',
     ],
     description: 'Flagship engineering development board designed for advanced IoT, edge AI, and telemetry projects.',
+    relatedBlogSlug: 'getting-started-with-esp32-s3-iot-projects',
+    relatedBlogTitle: 'Getting Started with ESP32-S3 IoT & Edge AI',
     suppliers: [
       {
         id: 'sup_robu_esp32',
@@ -106,6 +108,8 @@ export const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
       'High-grade Breadboard & 65x Jumper Wire Set',
     ],
     description: 'Comprehensive embedded systems starter kit curated for college students and firmware engineers.',
+    relatedBlogSlug: 'stm32-dma-uart-architecture-guide',
+    relatedBlogTitle: 'STM32 Architecture, Registers & ST-Link Setup Guide',
     suppliers: [
       {
         id: 'sup_quartz_stm32',
@@ -135,6 +139,8 @@ export const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
       'Dual logic compatibility 3.3V and 5V',
     ],
     description: 'All-in-one indoor air quality sensing module suitable for weather stations and industrial monitors.',
+    relatedBlogSlug: 'bme680-sensor-interfacing-air-quality-voc',
+    relatedBlogTitle: 'Interfacing BME680 Sensor with Arduino & ESP32',
     suppliers: [
       {
         id: 'sup_robu_bme',
@@ -164,6 +170,8 @@ export const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
       'Ideal for Drone Arms, Robot Brackets & Gear Enclosures',
     ],
     description: 'Industrial-grade composite filament engineered for functional prototypes and structural parts.',
+    relatedBlogSlug: 'carbon-fiber-petg-3d-printing-settings-guide',
+    relatedBlogTitle: 'Optimizing Carbon Fiber PETG 3D Printing Speeds & Temps',
     suppliers: [
       {
         id: 'sup_amazon_petg',
@@ -193,6 +201,8 @@ export const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
       'Ultra-low standby current (1.2µA)',
     ],
     description: 'Long range telemetry module designed for smart agriculture, remote sensors, and drone telemetry.',
+    relatedBlogSlug: 'long-range-lora-sx1262-mesh-network-guide',
+    relatedBlogTitle: 'Building Long-Range Telemetry with SX1262 LoRa',
     suppliers: [
       {
         id: 'sup_robu_lora',
@@ -288,6 +298,8 @@ export async function fetchProducts(): Promise<Product[]> {
             }))
           : [],
         featured: Boolean(data.featured),
+        relatedBlogSlug: data.relatedBlogSlug ? String(data.relatedBlogSlug) : undefined,
+        relatedBlogTitle: data.relatedBlogTitle ? String(data.relatedBlogTitle) : undefined,
         createdAt: serializeTimestamp(data.createdAt),
         updatedAt: serializeTimestamp(data.updatedAt),
       };
@@ -331,6 +343,8 @@ export async function saveProductAdmin(
     inStock: Boolean(productData.inStock),
     features: productData.features.filter((f) => f.trim().length > 0),
     description: productData.description?.trim() || null,
+    relatedBlogSlug: productData.relatedBlogSlug?.trim() || null,
+    relatedBlogTitle: productData.relatedBlogTitle?.trim() || null,
     suppliers: productData.suppliers.map((s) => ({
       id: s.id || `sup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       name: s.name.trim(),
@@ -379,6 +393,8 @@ export async function saveProductAdmin(
       mrp: payload.mrp || undefined,
       imageUrl: payload.imageUrl || undefined,
       description: payload.description || undefined,
+      relatedBlogSlug: payload.relatedBlogSlug || undefined,
+      relatedBlogTitle: payload.relatedBlogTitle || undefined,
       suppliers: payload.suppliers.map((s) => ({
         ...s,
         logoUrl: s.logoUrl || undefined,

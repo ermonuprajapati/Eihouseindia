@@ -228,6 +228,8 @@ export interface Product {
   suppliers: SupplierLink[];
   orderCount?: number;
   featured?: boolean;
+  relatedBlogSlug?: string;
+  relatedBlogTitle?: string;
   createdAt: string;
   updatedAt: string;
 }

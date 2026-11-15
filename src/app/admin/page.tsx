@@ -184,6 +184,8 @@ export default function AdminPanelPage() {
     inStock: boolean;
     features: string;
     description: string;
+    relatedBlogSlug: string;
+    relatedBlogTitle: string;
     suppliers: Array<{
       id?: string;
       name: string;
@@ -549,6 +551,8 @@ export default function AdminPanelPage() {
           inStock: productModal.inStock,
           features: featuresList,
           description: productModal.description.trim() || undefined,
+          relatedBlogSlug: productModal.relatedBlogSlug.trim() || undefined,
+          relatedBlogTitle: productModal.relatedBlogTitle.trim() || undefined,
           suppliers: productModal.suppliers
             .filter((s) => s.name.trim().length > 0 && s.url.trim().length > 0)
             .map((s) => ({
@@ -1240,6 +1244,8 @@ export default function AdminPanelPage() {
                             features: '',
                             description: '',
                             suppliers: [],
+                            relatedBlogSlug: '',
+                            relatedBlogTitle: '',
                             isNew: true,
                           })
                         }
@@ -1338,6 +1344,8 @@ export default function AdminPanelPage() {
                                           price: s.price || '',
                                           badge: s.badge || '',
                                         })),
+                                        relatedBlogSlug: prod.relatedBlogSlug || '',
+                                        relatedBlogTitle: prod.relatedBlogTitle || '',
                                         isNew: false,
                                       })
                                     }
@@ -2894,6 +2902,64 @@ export default function AdminPanelPage() {
                   placeholder="Full engineering description and pinout details..."
                   rows={2}
                 />
+              </div>
+
+              {/* Related Blog Tutorial / Guide */}
+              <div className="space-y-2.5 rounded-xl border border-sky-150 bg-sky-50/60 p-3.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prod-blog-select" className="text-xs font-semibold text-sky-950 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-sky-600" />
+                    <span>Related Blog Tutorial / Student Guide (Optional)</span>
+                  </Label>
+                  <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-semibold">
+                    Tutorial Link
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Agar is component ya development board ka koi practical blog ya tutorial website par published hai, to use yahan link karein. Store page par product card par &ldquo;Read Blog: [Tutorial Title]&rdquo; ka button show hoga. Agar koi blog nahi hai to link automatically hide rahega.
+                </p>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-slate-700">Choose from Published Articles:</label>
+                  <select
+                    id="prod-blog-select"
+                    value={productModal.relatedBlogSlug || ''}
+                    onChange={(e) => {
+                      const selectedSlug = e.target.value;
+                      const matched = publishedPosts.find((p) => p.slug === selectedSlug);
+                      setProductModal({
+                        ...productModal,
+                        relatedBlogSlug: selectedSlug,
+                        relatedBlogTitle: matched ? matched.title : '',
+                      });
+                    }}
+                    className="w-full text-xs rounded-md border border-slate-300 bg-white px-2.5 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  >
+                    <option value="">-- No explicit link / Auto-match keyword --</option>
+                    {publishedPosts.map((p) => (
+                      <option key={p.id || p.slug} value={p.slug}>
+                        {p.title} (/blog/{p.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {productModal.relatedBlogSlug && (
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[11px] font-medium text-slate-700">Display Title / Button Text:</label>
+                    <Input
+                      value={productModal.relatedBlogTitle || ''}
+                      onChange={(e) =>
+                        setProductModal({ ...productModal, relatedBlogTitle: e.target.value })
+                      }
+                      placeholder="e.g. Getting Started with ESP32-S3 & Pinout Guide"
+                      className="text-xs bg-white"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      Destination URL: <code className="font-mono text-sky-700">/blog/{productModal.relatedBlogSlug}</code>
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Fulfillment Note */}

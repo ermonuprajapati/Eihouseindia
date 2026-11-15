@@ -16,6 +16,8 @@ import {
   Sparkles,
   ShoppingBag,
   Zap,
+  ExternalLink,
+  FileCode,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -24,11 +26,19 @@ import { NewsletterForm } from '@/components/articles/NewsletterForm';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
 import { getPublishedPosts } from '@/modules/posts/public-queries';
+import { fetchTools, DEFAULT_ENGINEERING_TOOLS } from '@/modules/tools/tool-service';
 
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const latestPosts = await getPublishedPosts({ limitCount: 12 });
+  const [latestPosts, allTools] = await Promise.all([
+    getPublishedPosts({ limitCount: 12 }),
+    fetchTools().catch(() => DEFAULT_ENGINEERING_TOOLS),
+  ]);
+
+  const featuredTools = (allTools && allTools.length > 0 ? allTools : DEFAULT_ENGINEERING_TOOLS)
+    .filter((t) => t.featured)
+    .slice(0, 12);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFBFD]">
@@ -70,7 +80,10 @@ export default async function HomePage() {
                     <Link href="/projects">Discover Projects</Link>
                   </Button>
                   <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
-                    <Link href="/products">Visit Store →</Link>
+                    <Link href="/tools">Engineering Tools →</Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
+                    <Link href="/products">Store →</Link>
                   </Button>
                 </div>
 
@@ -176,7 +189,7 @@ export default async function HomePage() {
                 Explore Engineering Innovation House
               </h2>
               <p className="text-sm sm:text-base text-slate-600">
-                Six specialized business pillars working together to empower modern technology builders.
+                Eight integrated pillars working together to empower modern technology builders and hardware engineers.
               </p>
             </div>
 
@@ -191,7 +204,7 @@ export default async function HomePage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -201,7 +214,7 @@ export default async function HomePage() {
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">LEARN</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Engineering & STEM Education</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Engineering &amp; STEM Education</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Structured 45-day practical training programs, hands-on offline laboratory sessions, and verified certifications in Embedded Systems, IoT, Robotics, and PCB Design.
                   </p>
@@ -221,7 +234,7 @@ export default async function HomePage() {
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">BUILD</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Projects & Prototyping Hub</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Projects &amp; Prototyping Hub</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Verified schematics, source code repositories, and complete documentation for academic final-year major projects and DIY open-source builds.
                   </p>
@@ -241,7 +254,7 @@ export default async function HomePage() {
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">STORE</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Hardware Store & Components</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Hardware Store &amp; Components</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Authentic development boards, microcontroller modules, sensors, robotics kits, and high-strength 3D printing filaments bench-tested for reliability.
                   </p>
@@ -255,13 +268,53 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Software</span>
+                    <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
+                      <Cpu className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <h3 className="font-display text-xl font-bold text-[#0B1528]">TOOLS</h3>
+                  <p className="text-xs font-semibold text-[#172D4D]">Software &amp; Tools Directory</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Curated directory of 35+ essential tools across Electronics, Mechanical CAD, 3D Printing, Programming, Simulation &amp; Solvers.
+                  </p>
+                </div>
+                <Link href="/tools" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                  <span>Explore Tools Directory</span>
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Link>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Resources</span>
+                    <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <h3 className="font-display text-xl font-bold text-[#0B1528]">LIBRARY</h3>
+                  <p className="text-xs font-semibold text-[#172D4D]">Pinouts, Datasheets &amp; Code</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Engineering reference repository featuring microcontroller pinouts, component datasheets, and ready-to-flash code libraries.
+                  </p>
+                </div>
+                <Link href="/library" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                  <span>Open Engineering Library</span>
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Link>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Solutions</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Lightbulb className="h-5 w-5" />
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">INNOVATE</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Engineering Services & R&D</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Engineering Services &amp; R&amp;D</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Turnkey multi-layer PCB design, embedded firmware development, functional 3D enclosures, and custom IoT hardware prototyping for businesses and innovators.
                   </p>
@@ -281,7 +334,7 @@ export default async function HomePage() {
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">CONNECT</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Community & Peer Network</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Community &amp; Peer Network</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     A collaborative platform to discuss bench problems, ask technical questions, review code, share project builds, and network with fellow engineers.
                   </p>
@@ -301,14 +354,165 @@ export default async function HomePage() {
                     </div>
                   </div>
                   <h3 className="font-display text-xl font-bold text-[#0B1528]">GROW</h3>
-                  <p className="text-xs font-semibold text-[#172D4D]">Franchise & College Labs</p>
+                  <p className="text-xs font-semibold text-[#172D4D]">Franchise &amp; College Labs</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Partnering with universities, polytechnics, and schools to establish cutting-edge Robotics & STEM Innovation Centers with equipment and curriculum.
+                    Partnering with universities, polytechnics, and schools to establish cutting-edge Robotics &amp; STEM Innovation Centers with equipment and curriculum.
                   </p>
                 </div>
                 <Link href="/partnerships" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Partner With Us</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 03. Recommended Engineering Software & Tools (Top 12 Featured Directory) */}
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/60 to-white">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div className="max-w-3xl space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#F59E0B]/15 text-[#B45309] border border-[#F59E0B]/30">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Curated Engineering Ecosystem</span>
+                </div>
+                <h2 className="font-display text-2xl sm:text-4xl font-extrabold tracking-tight text-[#0B1528]">
+                  Recommended Engineering Software &amp; Tools
+                </h2>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Top 12 essential tools for electronics, mechanical CAD, 3D printing, embedded simulation, and IT networking with verified official website links.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <Button asChild variant="outline" size="sm" className="border-slate-300">
+                  <Link href="/library">
+                    <FileCode className="h-3.5 w-3.5 mr-1.5 text-sky-600" />
+                    <span>Engineering Library</span>
+                  </Link>
+                </Button>
+                <Button asChild size="sm" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                  <Link href="/tools">
+                    <span>Explore All 35+ Tools</span>
+                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Top 12 Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {featuredTools.map((tool) => (
+                <div
+                  key={tool.id || tool.slug}
+                  className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                        {tool.category}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          tool.licenseType === 'Open Source'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : tool.licenseType === 'Free'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : tool.licenseType === 'Student License'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {tool.licenseType}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="font-display text-base font-bold text-[#0B1528] group-hover:text-[#172D4D] transition-colors flex items-center justify-between">
+                        <span>{tool.name}</span>
+                        {tool.badge && (
+                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-sans">
+                            {tool.badge}
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                        {tool.mainApplication || tool.summary}
+                      </p>
+                    </div>
+
+                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                      {tool.summary}
+                    </p>
+                  </div>
+
+                  <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-medium">Official Link</span>
+                    <a
+                      href={tool.officialWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#172D4D] hover:text-[#0B1528] hover:underline"
+                    >
+                      <span>Visit Website</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Filter Menu Pill Strip matching user suggestion */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <span className="p-1 rounded bg-slate-200 text-slate-700">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </span>
+                <span>Browse by Discipline:</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium">
+                <Link
+                  href="/tools?category=Electronics"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  Electronics
+                </Link>
+                <Link
+                  href="/tools?category=Mechanical"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  Mechanical CAD
+                </Link>
+                <Link
+                  href="/tools?category=3D%20Printing"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  3D Printing
+                </Link>
+                <Link
+                  href="/tools?category=Programming"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  Programming &amp; CS
+                </Link>
+                <Link
+                  href="/tools?category=IT%20%26%20Networking"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  IT &amp; Networking
+                </Link>
+                <Link
+                  href="/tools?category=Simulation"
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
+                >
+                  Simulation &amp; FEA
+                </Link>
+                <Link
+                  href="/tools?category=Calculators"
+                  className="px-2.5 py-1 rounded-lg bg-[#172D4D] text-white hover:bg-[#0B1528] transition-colors font-semibold"
+                >
+                  Calculators &amp; Solvers
                 </Link>
               </div>
             </div>

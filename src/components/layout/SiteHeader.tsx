@@ -53,7 +53,7 @@ export function SiteHeader() {
         {/* Zone 2: Ecosystem Nav Links */}
         <nav
           aria-label="Primary navigation"
-          className="hidden lg:flex items-center gap-5 xl:gap-6 text-sm font-medium text-slate-600"
+          className="hidden lg:flex items-center gap-3.5 xl:gap-5 text-xs xl:text-sm font-medium text-slate-600"
         >
           <Link
             href="/learn"
@@ -75,13 +75,16 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/tools"
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D] flex items-center gap-1"
           >
-            Tools
+            <span>Engineering Tools</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-1 py-0.2 rounded">
+              New
+            </span>
           </Link>
           <Link
             href="/library"
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
           >
             Library
           </Link>
@@ -225,11 +228,13 @@ export function SiteHeader() {
             <Link href="/products" onClick={() => setMobileOpen(false)} className="py-1.5">
               Store & Components
             </Link>
-            <Link href="/tools" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D]">
-              Tools (Engineering Calculators)
+            <Link href="/tools" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
+              <span>Engineering Tools &amp; Software Directory</span>
+              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">New</span>
             </Link>
-            <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D]">
-              Library (Pinouts & Datasheets)
+            <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
+              <span>Engineering Library (Datasheets &amp; Code)</span>
+              <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-bold">New</span>
             </Link>
             <Link href="/services" onClick={() => setMobileOpen(false)} className="py-1.5">
               Engineering Services & R&D

@@ -53,6 +53,26 @@ const nextConfig: NextConfig = {
         destination: '/articles',
         permanent: true,
       },
+      {
+        source: '/engineering-tools',
+        destination: '/tools',
+        permanent: true,
+      },
+      {
+        source: '/engineering-tool',
+        destination: '/tools',
+        permanent: true,
+      },
+      {
+        source: '/engineering-tools-and-library',
+        destination: '/tools',
+        permanent: true,
+      },
+      {
+        source: '/engineering-library',
+        destination: '/library',
+        permanent: true,
+      },
     ];
   },
   webpack: (config, { dev }) => {
