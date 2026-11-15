@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   orderBy,
@@ -187,6 +188,47 @@ export async function fetchSuppliers(): Promise<TrustedSupplier[]> {
   }
 }
 
+export async function seedInitialSuppliers(
+  actor: UserProfile,
+  actorRole: UserRole
+): Promise<void> {
+  const batch = writeBatch(db);
+  for (const sup of DEFAULT_TRUSTED_SUPPLIERS) {
+    batch.set(
+      doc(db, 'suppliers', sup.id),
+      {
+        ...sup,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+  const logId = `log_${Date.now()}_seedsup`;
+  batch.set(doc(db, 'moderationLogs', logId), {
+    id: logId,
+    actorId: actor.uid,
+    actorEmail: actor.email,
+    actorRole,
+    action: 'MANAGE_SUPPLIER',
+    targetType: 'SUPPLIER',
+    targetId: 'initial-seed',
+    reason: 'Seeded default trusted suppliers in Firestore',
+    createdAt: serverTimestamp(),
+  });
+
+  try {
+    await batch.commit();
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/products' }),
+    }).catch(() => undefined);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'suppliers');
+  }
+}
+
 export async function saveSupplierAdmin(
   supplier: Omit<TrustedSupplier, 'createdAt' | 'updatedAt' | 'id'> & { id?: string },
   isNew: boolean,
@@ -213,11 +255,41 @@ export async function saveSupplierAdmin(
     updatedAt: serverTimestamp(),
   };
 
-  if (isNew) {
-    payload.createdAt = serverTimestamp();
-    batch.set(doc(db, 'suppliers', supplierId), payload);
+  // Check if Firestore suppliers collection is currently empty
+  const suppliersSnap = await getDocs(collection(db, 'suppliers'));
+
+  if (suppliersSnap.empty) {
+    // Collection in Firestore is empty: seed all defaults so they don't disappear,
+    // and include the current supplier with updated details
+    for (const def of DEFAULT_TRUSTED_SUPPLIERS) {
+      if (def.id === supplierId) {
+        batch.set(doc(db, 'suppliers', def.id), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(doc(db, 'suppliers', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+    // If it's a completely new supplier not in defaults
+    if (!DEFAULT_TRUSTED_SUPPLIERS.some((d) => d.id === supplierId)) {
+      batch.set(doc(db, 'suppliers', supplierId), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
+    }
   } else {
-    batch.update(doc(db, 'suppliers', supplierId), payload);
+    // Firestore already has suppliers collection initialized
+    const docRef = doc(db, 'suppliers', supplierId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+      payload.createdAt = serverTimestamp();
+    }
+    batch.set(docRef, payload, { merge: true });
   }
 
   batch.set(doc(db, 'moderationLogs', logId), {
@@ -234,6 +306,13 @@ export async function saveSupplierAdmin(
 
   try {
     await batch.commit();
+
+    // Trigger cache revalidation for store page
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/products' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(
       error,
@@ -254,7 +333,21 @@ export async function deleteSupplierAdmin(
   const batch = writeBatch(db);
   const logId = `log_${Date.now()}_delsup`;
 
-  batch.delete(doc(db, 'suppliers', supplierId));
+  const suppliersSnap = await getDocs(collection(db, 'suppliers'));
+  if (suppliersSnap.empty) {
+    // If Firestore was empty, seed all defaults EXCEPT the one being deleted
+    for (const def of DEFAULT_TRUSTED_SUPPLIERS) {
+      if (def.id !== supplierId) {
+        batch.set(doc(db, 'suppliers', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  } else {
+    batch.delete(doc(db, 'suppliers', supplierId));
+  }
 
   batch.set(doc(db, 'moderationLogs', logId), {
     id: logId,
@@ -270,6 +363,13 @@ export async function deleteSupplierAdmin(
 
   try {
     await batch.commit();
+
+    // Trigger cache revalidation for store page
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/products' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `suppliers/${supplierId}`);
   }

@@ -81,6 +81,7 @@ import {
   deleteSupplierAdmin,
   fetchSuppliers,
   saveSupplierAdmin,
+  seedInitialSuppliers,
 } from '@/modules/suppliers/supplier-service';
 import {
   fetchTools,
@@ -1688,26 +1689,41 @@ export default function AdminPanelPage() {
                           Store page ke &ldquo;Looking for Components Not Available in Our Store?&rdquo; section ke trusted suppliers ko yahan se Add, Edit aur Delete karein.
                         </p>
                       </div>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() =>
-                          setSupplierModal({
-                            name: '',
-                            url: '',
-                            logoUrl: '',
-                            category: 'Electronics & Sensors',
-                            badge: 'Verified Silicon',
-                            description: '',
-                            order: suppliersList.length + 1,
-                            featured: true,
-                            isNew: true,
-                          })
-                        }
-                      >
-                        <Plus className="h-4 w-4 mr-1.5" />
-                        <span>Add New Supplier</span>
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!profile) return;
+                            seedInitialSuppliers(profile, effectiveRole).then(() => {
+                              toast.success('Seeded 8 default suppliers in Firestore.');
+                              loadAllAdminData(false);
+                            });
+                          }}
+                        >
+                          Sync Default 8 Suppliers
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() =>
+                            setSupplierModal({
+                              name: '',
+                              url: '',
+                              logoUrl: '',
+                              category: 'Electronics & Sensors',
+                              badge: 'Verified Silicon',
+                              description: '',
+                              order: suppliersList.length + 1,
+                              featured: true,
+                              isNew: true,
+                            })
+                          }
+                        >
+                          <Plus className="h-4 w-4 mr-1.5" />
+                          <span>Add New Supplier</span>
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">

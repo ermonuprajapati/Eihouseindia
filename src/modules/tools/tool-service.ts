@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   orderBy,
@@ -1261,11 +1262,36 @@ export async function saveToolAdmin(
     updatedAt: serverTimestamp(),
   };
 
-  if (isNew) {
-    payload.createdAt = serverTimestamp();
-    batch.set(doc(db, 'tools', toolId), payload);
+  const toolsSnap = await getDocs(collection(db, 'tools'));
+
+  if (toolsSnap.empty) {
+    for (const def of DEFAULT_ENGINEERING_TOOLS) {
+      if (def.id === toolId) {
+        batch.set(doc(db, 'tools', def.id), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(doc(db, 'tools', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+    if (!DEFAULT_ENGINEERING_TOOLS.some((d) => d.id === toolId)) {
+      batch.set(doc(db, 'tools', toolId), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
+    }
   } else {
-    batch.update(doc(db, 'tools', toolId), payload);
+    const docRef = doc(db, 'tools', toolId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+      payload.createdAt = serverTimestamp();
+    }
+    batch.set(docRef, payload, { merge: true });
   }
 
   batch.set(doc(db, 'moderationLogs', logId), {
@@ -1282,6 +1308,12 @@ export async function saveToolAdmin(
 
   try {
     await batch.commit();
+
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/tools' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1302,7 +1334,20 @@ export async function deleteToolAdmin(
   const batch = writeBatch(db);
   const logId = `log_${Date.now()}_deltool`;
 
-  batch.delete(doc(db, 'tools', toolId));
+  const toolsSnap = await getDocs(collection(db, 'tools'));
+  if (toolsSnap.empty) {
+    for (const def of DEFAULT_ENGINEERING_TOOLS) {
+      if (def.id !== toolId) {
+        batch.set(doc(db, 'tools', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  } else {
+    batch.delete(doc(db, 'tools', toolId));
+  }
 
   batch.set(doc(db, 'moderationLogs', logId), {
     id: logId,
@@ -1318,6 +1363,12 @@ export async function deleteToolAdmin(
 
   try {
     await batch.commit();
+
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/tools' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `tools/${toolId}`);
   }

@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   orderBy,
@@ -351,11 +352,36 @@ export async function saveLibraryItemAdmin(
     updatedAt: serverTimestamp(),
   };
 
-  if (isNew) {
-    payload.createdAt = serverTimestamp();
-    batch.set(doc(db, 'library', itemId), payload);
+  const libSnap = await getDocs(collection(db, 'library'));
+
+  if (libSnap.empty) {
+    for (const def of DEFAULT_LIBRARY_ITEMS) {
+      if (def.id === itemId) {
+        batch.set(doc(db, 'library', def.id), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(doc(db, 'library', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+    if (!DEFAULT_LIBRARY_ITEMS.some((d) => d.id === itemId)) {
+      batch.set(doc(db, 'library', itemId), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
+    }
   } else {
-    batch.update(doc(db, 'library', itemId), payload);
+    const docRef = doc(db, 'library', itemId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+      payload.createdAt = serverTimestamp();
+    }
+    batch.set(docRef, payload, { merge: true });
   }
 
   batch.set(doc(db, 'moderationLogs', logId), {
@@ -372,6 +398,12 @@ export async function saveLibraryItemAdmin(
 
   try {
     await batch.commit();
+
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/library' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(
       error,
@@ -392,7 +424,20 @@ export async function deleteLibraryItemAdmin(
   const batch = writeBatch(db);
   const logId = `log_${Date.now()}_dellib`;
 
-  batch.delete(doc(db, 'library', itemId));
+  const libSnap = await getDocs(collection(db, 'library'));
+  if (libSnap.empty) {
+    for (const def of DEFAULT_LIBRARY_ITEMS) {
+      if (def.id !== itemId) {
+        batch.set(doc(db, 'library', def.id), {
+          ...def,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  } else {
+    batch.delete(doc(db, 'library', itemId));
+  }
 
   batch.set(doc(db, 'moderationLogs', logId), {
     id: logId,
@@ -408,6 +453,12 @@ export async function deleteLibraryItemAdmin(
 
   try {
     await batch.commit();
+
+    fetch('/api/revalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/library' }),
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `library/${itemId}`);
   }
