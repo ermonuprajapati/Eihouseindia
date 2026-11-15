@@ -245,6 +245,16 @@ service cloud.firestore {
       allow create, update, delete: if isEditor() && isValidId(supplierId);
     }
 
+    match /tools/{toolId} {
+      allow read: if true;
+      allow create, update, delete: if isEditor() && isValidId(toolId);
+    }
+
+    match /library/{libraryId} {
+      allow read: if true;
+      allow create, update, delete: if isEditor() && isValidId(libraryId);
+    }
+
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();

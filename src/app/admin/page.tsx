@@ -21,6 +21,8 @@ import {
   Inbox,
   ChevronDown,
   ChevronUp,
+  Wrench,
+  BookOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -80,11 +82,27 @@ import {
   fetchSuppliers,
   saveSupplierAdmin,
 } from '@/modules/suppliers/supplier-service';
+import {
+  fetchTools,
+  saveToolAdmin,
+  deleteToolAdmin,
+  ENGINEERING_DOMAINS,
+} from '@/modules/tools/tool-service';
+import {
+  fetchLibraryItems,
+  saveLibraryItemAdmin,
+  deleteLibraryItemAdmin,
+  LIBRARY_CATEGORIES,
+} from '@/modules/library/library-service';
 import { categorySchema, slugify } from '@/lib/validation';
 import type {
   Category,
   Comment,
   ContactInquiryItem,
+  EngineeringDomain,
+  EngineeringTool,
+  LibraryCategory,
+  LibraryItem,
   MediaItem,
   ModerationLog,
   Post,
@@ -101,6 +119,8 @@ type AdminSection =
   | 'dashboard'
   | 'all-articles'
   | 'products'
+  | 'tools'
+  | 'library'
   | 'suppliers'
   | 'inquiries'
   | 'pending'
@@ -213,6 +233,55 @@ export default function AdminPanelPage() {
   const [deletingSupplier, setDeletingSupplier] = useState(false);
   const [uploadingSupplierLogo, setUploadingSupplierLogo] = useState(false);
 
+  // Tools state
+  const [toolsList, setToolsList] = useState<EngineeringTool[]>([]);
+  const [toolModal, setToolModal] = useState<{
+    id?: string;
+    name: string;
+    slug: string;
+    domain: EngineeringDomain;
+    badge: string;
+    summary: string;
+    description: string;
+    toolType: 'built-in' | 'external' | 'interactive';
+    externalUrl: string;
+    calculatorKey: string;
+    featured: boolean;
+    order: number;
+    tags: string;
+    isNew: boolean;
+  } | null>(null);
+  const [deleteToolTarget, setDeleteToolTarget] = useState<EngineeringTool | null>(null);
+  const [savingTool, setSavingTool] = useState(false);
+  const [deletingTool, setDeletingTool] = useState(false);
+
+  // Library state
+  const [libraryList, setLibraryList] = useState<LibraryItem[]>([]);
+  const [libraryModal, setLibraryModal] = useState<{
+    id?: string;
+    title: string;
+    slug: string;
+    domain: EngineeringDomain;
+    category: LibraryCategory;
+    badge: string;
+    summary: string;
+    description: string;
+    imageUrl: string;
+    fileUrl: string;
+    externalUrl: string;
+    fileFormat: string;
+    fileSize: string;
+    version: string;
+    authorOrSource: string;
+    tags: string;
+    featured: boolean;
+    order: number;
+    isNew: boolean;
+  } | null>(null);
+  const [deleteLibraryTarget, setDeleteLibraryTarget] = useState<LibraryItem | null>(null);
+  const [savingLibrary, setSavingLibrary] = useState(false);
+  const [deletingLibrary, setDeletingLibrary] = useState(false);
+
   const loadAllAdminData = useCallback(async (showSpinner = true) => {
     if (!firebaseUser || !isEditor) return;
     if (showSpinner) {
@@ -233,6 +302,8 @@ export default function AdminPanelPage() {
         productsRes,
         inquiriesRes,
         suppliersRes,
+        toolsRes,
+        libraryRes,
       ] = await Promise.all([
         getAdminDashboardStats().catch(() => null),
         getPostsForAdmin().catch(() => []),
@@ -247,6 +318,8 @@ export default function AdminPanelPage() {
         fetchProducts().catch(() => []),
         getInquiriesForAdmin().catch(() => []),
         fetchSuppliers().catch(() => []),
+        fetchTools().catch(() => []),
+        fetchLibraryItems().catch(() => []),
       ]);
 
       setStats(statsRes);
@@ -262,6 +335,8 @@ export default function AdminPanelPage() {
       setProductsList(productsRes || []);
       setInquiries(inquiriesRes || []);
       setSuppliersList(suppliersRes || []);
+      setToolsList(toolsRes || []);
+      setLibraryList(libraryRes || []);
     } finally {
       setLoadingData(false);
     }
@@ -687,6 +762,121 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleToolSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!toolModal || !profile) return;
+    if (!toolModal.name.trim()) {
+      toast.error('Tool name is required.');
+      return;
+    }
+    setSavingTool(true);
+    try {
+      await saveToolAdmin(
+        {
+          id: toolModal.id,
+          name: toolModal.name.trim(),
+          slug: toolModal.slug.trim() || slugify(toolModal.name),
+          domain: toolModal.domain,
+          badge: toolModal.badge.trim(),
+          summary: toolModal.summary.trim(),
+          description: toolModal.description.trim(),
+          toolType: toolModal.toolType,
+          externalUrl: toolModal.externalUrl.trim(),
+          calculatorKey: toolModal.calculatorKey.trim(),
+          featured: toolModal.featured,
+          order: Number(toolModal.order) || 1,
+          tags: toolModal.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        },
+        toolModal.isNew,
+        profile,
+        effectiveRole
+      );
+      toast.success(toolModal.isNew ? 'New engineering tool created!' : 'Tool updated successfully!');
+      setToolModal(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save tool.');
+    } finally {
+      setSavingTool(false);
+    }
+  };
+
+  const handleConfirmDeleteTool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteToolTarget || !profile) return;
+    setDeletingTool(true);
+    try {
+      await deleteToolAdmin(deleteToolTarget.id, profile, effectiveRole);
+      toast.success('Tool deleted from catalog.');
+      setDeleteToolTarget(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete tool.');
+    } finally {
+      setDeletingTool(false);
+    }
+  };
+
+  const handleLibrarySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!libraryModal || !profile) return;
+    if (!libraryModal.title.trim()) {
+      toast.error('Resource title is required.');
+      return;
+    }
+    setSavingLibrary(true);
+    try {
+      await saveLibraryItemAdmin(
+        {
+          id: libraryModal.id,
+          title: libraryModal.title.trim(),
+          slug: libraryModal.slug.trim() || slugify(libraryModal.title),
+          domain: libraryModal.domain,
+          category: libraryModal.category,
+          badge: libraryModal.badge.trim(),
+          summary: libraryModal.summary.trim(),
+          description: libraryModal.description.trim(),
+          imageUrl: libraryModal.imageUrl.trim(),
+          fileUrl: libraryModal.fileUrl.trim(),
+          externalUrl: libraryModal.externalUrl.trim(),
+          fileFormat: libraryModal.fileFormat.trim() || 'PDF Reference',
+          fileSize: libraryModal.fileSize.trim(),
+          version: libraryModal.version.trim(),
+          authorOrSource: libraryModal.authorOrSource.trim(),
+          featured: libraryModal.featured,
+          order: Number(libraryModal.order) || 1,
+          tags: libraryModal.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        },
+        libraryModal.isNew,
+        profile,
+        effectiveRole
+      );
+      toast.success(libraryModal.isNew ? 'New library resource added!' : 'Resource updated successfully!');
+      setLibraryModal(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save library resource.');
+    } finally {
+      setSavingLibrary(false);
+    }
+  };
+
+  const handleConfirmDeleteLibrary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteLibraryTarget || !profile) return;
+    setDeletingLibrary(true);
+    try {
+      await deleteLibraryItemAdmin(deleteLibraryTarget.id, profile, effectiveRole);
+      toast.success('Resource removed from library.');
+      setDeleteLibraryTarget(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete library resource.');
+    } finally {
+      setDeletingLibrary(false);
+    }
+  };
+
   const pendingPosts = posts.filter((p) => p.status === 'PENDING');
   const publishedPosts = posts.filter((p) => p.status === 'PUBLISHED');
   const rejectedPosts = posts.filter((p) => p.status === 'REJECTED');
@@ -704,6 +894,8 @@ export default function AdminPanelPage() {
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
     { id: 'inquiries', label: `Inquiries (${pendingInquiries.length})` },
     { id: 'products', label: `Store Products (EI House) (${productsList.length})` },
+    { id: 'tools', label: `Engineering Tools (${toolsList.length})` },
+    { id: 'library', label: `Engineering Library (${libraryList.length})` },
     { id: 'suppliers', label: `Suppliers (Not in Store) (${suppliersList.length})` },
     { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
@@ -1142,6 +1334,279 @@ export default function AdminPanelPage() {
                                     variant="ghost"
                                     className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                     onClick={() => setDeleteProductTarget(prod)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span>Delete</span>
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'tools' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                          <Wrench className="h-6 w-6 text-primary" />
+                          Engineering Tools &amp; Calculators ({toolsList.length})
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Manage interactive engineering calculators across Electronics, Mechanical, Programming, Networking, and 3D Printing.
+                        </p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          setToolModal({
+                            name: '',
+                            slug: '',
+                            domain: 'Electronics & Embedded',
+                            badge: 'New',
+                            summary: '',
+                            description: '',
+                            toolType: 'interactive',
+                            externalUrl: '',
+                            calculatorKey: 'ohms-law',
+                            featured: false,
+                            order: toolsList.length + 1,
+                            tags: '',
+                            isNew: true,
+                          })
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        <span>Add New Tool</span>
+                      </Button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Tool Name</th>
+                            <th className="px-4 py-3">Domain</th>
+                            <th className="px-4 py-3">Calculator Key / Type</th>
+                            <th className="px-4 py-3 text-center">Order</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {toolsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                                No tools configured yet. Click &ldquo;Add New Tool&rdquo; above.
+                              </td>
+                            </tr>
+                          ) : (
+                            toolsList.map((tool) => (
+                              <tr key={tool.id} className="hover:bg-slate-50/70">
+                                <td className="px-4 py-3 max-w-sm">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="font-semibold text-[#0B1528]">{tool.name}</p>
+                                      {tool.badge && (
+                                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                          {tool.badge}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-slate-500 line-clamp-1">{tool.summary}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs">
+                                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
+                                    {tool.domain}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-slate-600">
+                                  {tool.calculatorKey ? (
+                                    <span className="text-emerald-700 font-semibold">{tool.calculatorKey}</span>
+                                  ) : (
+                                    <span>{tool.toolType}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                                  {tool.order ?? 1}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setToolModal({
+                                        id: tool.id,
+                                        name: tool.name,
+                                        slug: tool.slug,
+                                        domain: tool.domain,
+                                        badge: tool.badge || '',
+                                        summary: tool.summary,
+                                        description: tool.description,
+                                        toolType: tool.toolType,
+                                        externalUrl: tool.externalUrl || '',
+                                        calculatorKey: tool.calculatorKey || '',
+                                        featured: Boolean(tool.featured),
+                                        order: tool.order ?? 1,
+                                        tags: (tool.tags || []).join(', '),
+                                        isNew: false,
+                                      })
+                                    }
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => setDeleteToolTarget(tool)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span>Delete</span>
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'library' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                          <BookOpen className="h-6 w-6 text-primary" />
+                          Engineering Library &amp; Resources ({libraryList.length})
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Manage pinouts, datasheets, open-source firmware drivers, schematics, and mechanical CAD standards.
+                        </p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          setLibraryModal({
+                            title: '',
+                            slug: '',
+                            domain: 'Electronics & Embedded',
+                            category: 'Datasheet & Pinout',
+                            badge: 'New',
+                            summary: '',
+                            description: '',
+                            imageUrl: '',
+                            fileUrl: '',
+                            externalUrl: '',
+                            fileFormat: 'PDF Reference',
+                            fileSize: '1.2 MB',
+                            version: 'v1.0',
+                            authorOrSource: 'EI House Hardware Lab',
+                            tags: '',
+                            featured: false,
+                            order: libraryList.length + 1,
+                            isNew: true,
+                          })
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        <span>Add New Resource</span>
+                      </Button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Resource Title</th>
+                            <th className="px-4 py-3">Domain</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Format / Size</th>
+                            <th className="px-4 py-3 text-center">Order</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {libraryList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                                No library items configured yet. Click &ldquo;Add New Resource&rdquo; above.
+                              </td>
+                            </tr>
+                          ) : (
+                            libraryList.map((item) => (
+                              <tr key={item.id} className="hover:bg-slate-50/70">
+                                <td className="px-4 py-3 max-w-sm">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="font-semibold text-[#0B1528]">{item.title}</p>
+                                      {item.badge && (
+                                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                          {item.badge}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-slate-500 line-clamp-1">{item.summary}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs">
+                                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
+                                    {item.domain}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs font-semibold text-primary">
+                                  {item.category}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600">
+                                  <span className="font-mono">{item.fileFormat}</span>
+                                  {item.fileSize && <span className="text-slate-400 ml-1">({item.fileSize})</span>}
+                                </td>
+                                <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                                  {item.order ?? 1}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setLibraryModal({
+                                        id: item.id,
+                                        title: item.title,
+                                        slug: item.slug,
+                                        domain: item.domain,
+                                        category: item.category,
+                                        badge: item.badge || '',
+                                        summary: item.summary,
+                                        description: item.description || '',
+                                        imageUrl: item.imageUrl || '',
+                                        fileUrl: item.fileUrl || '',
+                                        externalUrl: item.externalUrl || '',
+                                        fileFormat: item.fileFormat || 'PDF Reference',
+                                        fileSize: item.fileSize || '',
+                                        version: item.version || '',
+                                        authorOrSource: item.authorOrSource || '',
+                                        tags: (item.tags || []).join(', '),
+                                        featured: Boolean(item.featured),
+                                        order: item.order ?? 1,
+                                        isNew: false,
+                                      })
+                                    }
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => setDeleteLibraryTarget(item)}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                     <span>Delete</span>
@@ -2731,6 +3196,380 @@ export default function AdminPanelPage() {
               </Button>
               <Button type="submit" variant="destructive" disabled={deletingSupplier}>
                 {deletingSupplier ? 'Removing...' : 'Delete Supplier'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tool Add/Edit Dialog */}
+      <Dialog open={Boolean(toolModal)} onOpenChange={(o) => !o && setToolModal(null)}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
+              <Wrench className="h-5 w-5 text-primary" />
+              {toolModal?.isNew ? 'Add New Engineering Tool' : 'Edit Tool Details'}
+            </DialogTitle>
+            <DialogDescription>
+              Configure calculator parameters, domain taxonomy, and summary for the public Tools suite.
+            </DialogDescription>
+          </DialogHeader>
+
+          {toolModal && (
+            <form onSubmit={handleToolSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toolName">Tool Name *</Label>
+                  <Input
+                    id="toolName"
+                    value={toolModal.name}
+                    onChange={(e) => setToolModal({ ...toolModal, name: e.target.value })}
+                    placeholder="e.g. Resistor Color Code Decoder"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="toolSlug">URL Slug</Label>
+                  <Input
+                    id="toolSlug"
+                    value={toolModal.slug}
+                    onChange={(e) => setToolModal({ ...toolModal, slug: e.target.value })}
+                    placeholder="e.g. resistor-color-code"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toolDomain">Engineering Domain *</Label>
+                  <select
+                    id="toolDomain"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                    value={toolModal.domain}
+                    onChange={(e) =>
+                      setToolModal({ ...toolModal, domain: e.target.value as EngineeringDomain })
+                    }
+                  >
+                    {ENGINEERING_DOMAINS.map((dom) => (
+                      <option key={dom} value={dom}>{dom}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="toolBadge">Trust / Type Badge</Label>
+                  <Input
+                    id="toolBadge"
+                    value={toolModal.badge}
+                    onChange={(e) => setToolModal({ ...toolModal, badge: e.target.value })}
+                    placeholder="e.g. Interactive, IPC-2221, Essential"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="toolSummary">Short Summary *</Label>
+                <Textarea
+                  id="toolSummary"
+                  rows={2}
+                  value={toolModal.summary}
+                  onChange={(e) => setToolModal({ ...toolModal, summary: e.target.value })}
+                  placeholder="One sentence summary shown on card..."
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="toolDescription">Extended Details &amp; Formula Instructions</Label>
+                <Textarea
+                  id="toolDescription"
+                  rows={3}
+                  value={toolModal.description}
+                  onChange={(e) => setToolModal({ ...toolModal, description: e.target.value })}
+                  placeholder="Full engineering description and underlying mathematical equations..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toolCalcKey">Interactive Calculator Key</Label>
+                  <select
+                    id="toolCalcKey"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-xs font-mono"
+                    value={toolModal.calculatorKey}
+                    onChange={(e) => setToolModal({ ...toolModal, calculatorKey: e.target.value })}
+                  >
+                    <option value="">None / Custom</option>
+                    <option value="ohms-law">ohms-law (V, I, R, P)</option>
+                    <option value="resistor-color-code">resistor-color-code (4/5 Band)</option>
+                    <option value="voltage-divider">voltage-divider (Vin, R1, R2)</option>
+                    <option value="led-resistor">led-resistor (Vs, Vf, If)</option>
+                    <option value="555-timer">555-timer (R1, R2, C)</option>
+                    <option value="pcb-trace">pcb-trace (IPC-2221 Track Width)</option>
+                    <option value="torque-power">torque-power (RPM, Torque, Watts)</option>
+                    <option value="gear-ratio">gear-ratio (Teeth T1, T2, Speed)</option>
+                    <option value="cylinder-force">cylinder-force (Pneumatic/Hydraulic)</option>
+                    <option value="base64-encoder">base64-encoder (Base64/URL)</option>
+                    <option value="number-converter">number-converter (Dec, Hex, Bin, ASCII)</option>
+                    <option value="subnet-calculator">subnet-calculator (IPv4 CIDR)</option>
+                    <option value="3d-print-cost">3d-print-cost (Grams, Electricity)</option>
+                    <option value="stepper-steps">stepper-steps (Steps/mm Calibration)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="toolOrder">Display Order</Label>
+                  <Input
+                    id="toolOrder"
+                    type="number"
+                    value={toolModal.order}
+                    onChange={(e) => setToolModal({ ...toolModal, order: Number(e.target.value) })}
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="toolTags">Tags (Comma-separated)</Label>
+                <Input
+                  id="toolTags"
+                  value={toolModal.tags}
+                  onChange={(e) => setToolModal({ ...toolModal, tags: e.target.value })}
+                  placeholder="e.g. Resistor, Ohm, Voltage, LED"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setToolModal(null)} disabled={savingTool}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingTool}>
+                  {savingTool ? 'Saving Tool...' : toolModal.isNew ? 'Create Tool' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Tool Confirmation Dialog */}
+      <Dialog open={Boolean(deleteToolTarget)} onOpenChange={(o) => !o && setDeleteToolTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Engineering Tool
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deleteToolTarget?.name}&rdquo; from the tools suite?
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeleteTool} className="space-y-4">
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setDeleteToolTarget(null)} disabled={deletingTool}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingTool}>
+                {deletingTool ? 'Deleting...' : 'Delete Tool'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Library Add/Edit Dialog */}
+      <Dialog open={Boolean(libraryModal)} onOpenChange={(o) => !o && setLibraryModal(null)}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
+              <BookOpen className="h-5 w-5 text-primary" />
+              {libraryModal?.isNew ? 'Add Engineering Resource' : 'Edit Library Item'}
+            </DialogTitle>
+            <DialogDescription>
+              Add datasheets, pinout charts, open-source firmware drivers, or mechanical CAD standards.
+            </DialogDescription>
+          </DialogHeader>
+
+          {libraryModal && (
+            <form onSubmit={handleLibrarySubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="libTitle">Resource Title *</Label>
+                  <Input
+                    id="libTitle"
+                    value={libraryModal.title}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, title: e.target.value })}
+                    placeholder="e.g. ESP32-S3 Complete Pinout Matrix"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libSlug">URL Slug</Label>
+                  <Input
+                    id="libSlug"
+                    value={libraryModal.slug}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, slug: e.target.value })}
+                    placeholder="e.g. esp32-s3-pinout"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="libDomain">Engineering Domain *</Label>
+                  <select
+                    id="libDomain"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                    value={libraryModal.domain}
+                    onChange={(e) =>
+                      setLibraryModal({ ...libraryModal, domain: e.target.value as EngineeringDomain })
+                    }
+                  >
+                    {ENGINEERING_DOMAINS.map((dom) => (
+                      <option key={dom} value={dom}>{dom}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libCategory">Resource Category *</Label>
+                  <select
+                    id="libCategory"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                    value={libraryModal.category}
+                    onChange={(e) =>
+                      setLibraryModal({ ...libraryModal, category: e.target.value as LibraryCategory })
+                    }
+                  >
+                    {LIBRARY_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="libSummary">Summary Description *</Label>
+                <Textarea
+                  id="libSummary"
+                  rows={2}
+                  value={libraryModal.summary}
+                  onChange={(e) => setLibraryModal({ ...libraryModal, summary: e.target.value })}
+                  placeholder="Summary shown on resource card..."
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="libFormat">File Format</Label>
+                  <Input
+                    id="libFormat"
+                    value={libraryModal.fileFormat}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, fileFormat: e.target.value })}
+                    placeholder="e.g. PDF, KiCad, STEP"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libSize">File Size</Label>
+                  <Input
+                    id="libSize"
+                    value={libraryModal.fileSize}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, fileSize: e.target.value })}
+                    placeholder="e.g. 2.4 MB"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libVersion">Version / Standard</Label>
+                  <Input
+                    id="libVersion"
+                    value={libraryModal.version}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, version: e.target.value })}
+                    placeholder="e.g. v2.1, ISO 261"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="libFileUrl">Direct File Download URL</Label>
+                  <Input
+                    id="libFileUrl"
+                    value={libraryModal.fileUrl}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, fileUrl: e.target.value })}
+                    placeholder="https://.../resource.pdf"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libExtUrl">External Specs / Docs URL</Label>
+                  <Input
+                    id="libExtUrl"
+                    value={libraryModal.externalUrl}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, externalUrl: e.target.value })}
+                    placeholder="https://espressif.com/..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="libAuthor">Author / Source Organization</Label>
+                  <Input
+                    id="libAuthor"
+                    value={libraryModal.authorOrSource}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, authorOrSource: e.target.value })}
+                    placeholder="e.g. EI House Hardware Lab, STMicroelectronics"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="libOrder">Display Order</Label>
+                  <Input
+                    id="libOrder"
+                    type="number"
+                    value={libraryModal.order}
+                    onChange={(e) => setLibraryModal({ ...libraryModal, order: Number(e.target.value) })}
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="libTags">Tags (Comma-separated)</Label>
+                <Input
+                  id="libTags"
+                  value={libraryModal.tags}
+                  onChange={(e) => setLibraryModal({ ...libraryModal, tags: e.target.value })}
+                  placeholder="e.g. ESP32, Pinout, GPIO, IoT"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setLibraryModal(null)} disabled={savingLibrary}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingLibrary}>
+                  {savingLibrary ? 'Saving Resource...' : libraryModal.isNew ? 'Create Resource' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Library Confirmation Dialog */}
+      <Dialog open={Boolean(deleteLibraryTarget)} onOpenChange={(o) => !o && setDeleteLibraryTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Library Resource
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove &ldquo;{deleteLibraryTarget?.title}&rdquo; from the engineering library?
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeleteLibrary} className="space-y-4">
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setDeleteLibraryTarget(null)} disabled={deletingLibrary}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingLibrary}>
+                {deletingLibrary ? 'Deleting...' : 'Delete Resource'}
               </Button>
             </DialogFooter>
           </form>

@@ -259,3 +259,63 @@ export interface TrustedSupplier {
   updatedAt: string;
 }
 
+export type EngineeringDomain =
+  | 'Electronics & Embedded'
+  | 'Mechanical & Robotics'
+  | 'Computer Science & IT'
+  | 'Networking & IoT'
+  | '3D Printing & CAD'
+  | 'General Engineering';
+
+export interface EngineeringTool {
+  id: string;
+  name: string;
+  slug: string;
+  domain: EngineeringDomain;
+  badge?: string;
+  summary: string;
+  description: string;
+  icon?: string;
+  imageUrl?: string;
+  toolType: 'built-in' | 'external' | 'interactive';
+  externalUrl?: string;
+  calculatorKey?: string;
+  featured?: boolean;
+  order?: number;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type LibraryCategory =
+  | 'Datasheet & Pinout'
+  | 'Firmware Library & Driver'
+  | 'Schematic & Reference Circuit'
+  | 'Mechanical & 3D CAD Standard'
+  | 'Programming Cheat Sheet'
+  | 'Networking Protocol & Spec';
+
+export interface LibraryItem {
+  id: string;
+  title: string;
+  slug: string;
+  domain: EngineeringDomain;
+  category: LibraryCategory;
+  badge?: string;
+  summary: string;
+  description?: string;
+  imageUrl?: string;
+  fileUrl?: string;
+  externalUrl?: string;
+  fileFormat?: string;
+  fileSize?: string;
+  version?: string;
+  authorOrSource?: string;
+  tags?: string[];
+  featured?: boolean;
+  downloadCount?: number;
+  order?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+

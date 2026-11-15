@@ -73,6 +73,16 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/tools" className="text-slate-400 hover:text-white transition-colors">
+                  Engineering Tools & Calculators
+                </Link>
+              </li>
+              <li>
+                <Link href="/library" className="text-slate-400 hover:text-white transition-colors">
+                  Engineering Library & Specs
+                </Link>
+              </li>
+              <li>
                 <Link href="/services" className="text-slate-400 hover:text-white transition-colors">
                   R&D & Engineering Services
                 </Link>

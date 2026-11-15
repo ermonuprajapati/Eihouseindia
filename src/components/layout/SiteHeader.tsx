@@ -74,6 +74,18 @@ export function SiteHeader() {
             Store
           </Link>
           <Link
+            href="/tools"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Tools
+          </Link>
+          <Link
+            href="/library"
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+          >
+            Library
+          </Link>
+          <Link
             href="/services"
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
@@ -212,6 +224,12 @@ export function SiteHeader() {
             </Link>
             <Link href="/products" onClick={() => setMobileOpen(false)} className="py-1.5">
               Store & Components
+            </Link>
+            <Link href="/tools" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D]">
+              Tools (Engineering Calculators)
+            </Link>
+            <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D]">
+              Library (Pinouts & Datasheets)
             </Link>
             <Link href="/services" onClick={() => setMobileOpen(false)} className="py-1.5">
               Engineering Services & R&D
