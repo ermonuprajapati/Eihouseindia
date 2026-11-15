@@ -12,11 +12,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
 import { fetchProducts, DEFAULT_HARDWARE_PRODUCTS } from '@/modules/products/product-service';
+import { fetchSuppliers, DEFAULT_TRUSTED_SUPPLIERS } from '@/modules/suppliers/supplier-service';
 import { ProductOrderModal } from '@/components/store/ProductOrderModal';
-import type { Product } from '@/types';
+import type { Product, TrustedSupplier } from '@/types';
 
 export function ProductsCatalogClient() {
   const [products, setProducts] = useState<Product[]>(DEFAULT_HARDWARE_PRODUCTS);
+  const [suppliers, setSuppliers] = useState<TrustedSupplier[]>(DEFAULT_TRUSTED_SUPPLIERS);
   const [selectedCategory, setSelectedCategory] = useState<string>('All Hardware');
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
 
@@ -29,6 +31,14 @@ export function ProductsCatalogClient() {
         }
       })
       .catch((err) => console.warn('Could not load products:', err));
+
+    fetchSuppliers()
+      .then((data) => {
+        if (isMounted && data.length > 0) {
+          setSuppliers(data);
+        }
+      })
+      .catch((err) => console.warn('Could not load suppliers:', err));
 
     return () => {
       isMounted = false;
@@ -162,122 +172,144 @@ export function ProductsCatalogClient() {
                   )}
                 </div>
 
-                <div className="space-y-4 pt-4 border-t border-slate-200">
-                  {/* Direct Buy from EI House Buttons */}
+                <div className="pt-4 border-t border-slate-200">
+                  {/* Direct Buy / Order from EI House */}
                   {item.inStock ? (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        {/* WhatsApp Buy */}
-                        <Button
-                          asChild
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm w-full text-xs"
-                        >
-                          <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                            <MessageCircle className="h-3.5 w-3.5 mr-1 text-white" />
-                            <span>WhatsApp</span>
-                          </a>
-                        </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* WhatsApp Buy */}
+                      <Button
+                        asChild
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs w-full text-xs"
+                      >
+                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                          <MessageCircle className="h-3.5 w-3.5 mr-1 text-white" />
+                          <span>WhatsApp</span>
+                        </a>
+                      </Button>
 
-                        {/* Order Inquiry Form */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setOrderModalProduct(item)}
-                          className="border-[#172D4D] text-[#172D4D] hover:bg-[#172D4D]/5 font-semibold w-full text-xs"
-                        >
-                          <ShoppingBag className="h-3.5 w-3.5 mr-1" />
-                          <span>Order Form</span>
-                        </Button>
-                      </div>
+                      {/* Order Inquiry Form */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setOrderModalProduct(item)}
+                        className="border-[#172D4D] text-[#172D4D] hover:bg-[#172D4D]/5 font-semibold w-full text-xs"
+                      >
+                        <ShoppingBag className="h-3.5 w-3.5 mr-1" />
+                        <span>Order Form</span>
+                      </Button>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 text-center">
-                      <p className="text-xs font-semibold text-rose-800">
-                        Temporarily out of stock in EI House lab.
-                      </p>
-                      <p className="text-[11px] text-rose-600">
-                        You can purchase directly from verified suppliers below:
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Trusted Suppliers Section */}
-                  {item.suppliers && item.suppliers.length > 0 && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Verified Suppliers:</span>
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Official Links</span>
+                    <div className="space-y-2">
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-2.5 text-center">
+                        <p className="text-xs font-semibold text-rose-800">
+                          Temporarily Out of Stock in EI House Lab
+                        </p>
+                        <p className="text-[11px] text-rose-600">
+                          Pre-orders open for next batch dispatch.
+                        </p>
                       </div>
-
-                      <div className="space-y-1.5">
-                        {item.suppliers.map((sup) => (
-                          <div
-                            key={sup.id}
-                            className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-white border border-slate-200/80 hover:border-slate-300 transition-colors"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {sup.logoUrl ? (
-                                <div className="h-5 w-5 relative shrink-0 rounded bg-white p-0.5 border border-slate-100 flex items-center justify-center">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={sup.logoUrl}
-                                    alt={sup.name}
-                                    className="max-h-full max-w-full object-contain"
-                                  />
-                                </div>
-                              ) : (
-                                <span className="h-5 w-5 rounded bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
-                                  {sup.name.slice(0, 1)}
-                                </span>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-slate-800 truncate">
-                                  {sup.name}
-                                </p>
-                                {sup.badge && (
-                                  <p className="text-[9px] text-emerald-600 font-medium truncate">
-                                    {sup.badge}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              {sup.price && (
-                                <span className="text-xs font-mono font-bold text-slate-700">
-                                  {sup.price}
-                                </span>
-                              )}
-                              <Button
-                                asChild
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 text-[11px] font-semibold text-[#1D4ED8] hover:text-[#1E40AF] hover:bg-blue-50"
-                              >
-                                <a
-                                  href={sup.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={`Open ${sup.name}`}
-                                >
-                                  <span>Buy</span>
-                                  <ExternalLink className="h-3 w-3 ml-1" />
-                                </a>
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setOrderModalProduct(item)}
+                        className="w-full text-xs border-slate-300 font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
+                        <span>Pre-Order / Inquire Stock</span>
+                      </Button>
                     </div>
                   )}
                 </div>
               </div>
             );
           })}
+        </div>
+
+        {/* Dedicated Full-Width Trusted Suppliers Directory */}
+        <div id="trusted-suppliers" className="pt-16 mt-16 border-t-2 border-slate-200/80 space-y-8">
+          <div className="bg-gradient-to-r from-[#0B1528] via-[#172D4D] to-[#0B1528] text-white rounded-3xl p-8 sm:p-12 shadow-lg relative overflow-hidden">
+            <div className="max-w-3xl space-y-3 relative z-10">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/30">
+                <ShieldCheck className="h-4 w-4" />
+                Verified Component Ecosystem &amp; Suppliers Network
+              </span>
+              <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+                Looking for Components Not Available in Our Store?
+              </h2>
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+                Is website par jo product ya specialized component currently available nahi hai, use aap hamare verified &amp; trusted supplier partners se directly khareed sakte hain. All suppliers below are genuine, verified, and trusted by makers and engineers across India and globally.
+              </p>
+            </div>
+            {/* Background subtle glow */}
+            <div className="absolute -right-12 -bottom-12 w-80 h-80 bg-[#F59E0B]/10 rounded-full blur-3xl pointer-events-none" />
+          </div>
+
+          {/* Suppliers Grid (Prominent & Big Screen Layout) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {suppliers.map((sup) => (
+              <div
+                key={sup.id}
+                className="rounded-2xl border border-slate-200 bg-white p-5 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md hover:border-slate-300 transition-all group"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    {/* Logo container */}
+                    <div className="h-12 w-28 relative rounded-lg bg-slate-50 p-2 border border-slate-100 flex items-center justify-center shrink-0">
+                      {sup.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={sup.logoUrl}
+                          alt={sup.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-700">
+                          {sup.name}
+                        </span>
+                      )}
+                    </div>
+
+                    {sup.badge && (
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-right">
+                        {sup.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-display text-base font-bold text-[#0B1528] group-hover:text-primary transition-colors">
+                      {sup.name}
+                    </h4>
+                    {sup.category && (
+                      <p className="text-xs font-medium text-slate-500 mt-0.5">
+                        {sup.category}
+                      </p>
+                    )}
+                  </div>
+
+                  {sup.description && (
+                    <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                      {sup.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="w-full bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-xs shadow-xs"
+                  >
+                    <a href={sup.url} target="_blank" rel="noopener noreferrer">
+                      <span>Visit {sup.name}</span>
+                      <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

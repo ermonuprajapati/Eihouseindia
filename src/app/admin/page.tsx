@@ -76,6 +76,11 @@ import {
   saveProductAdmin,
   toggleProductStockAdmin,
 } from '@/modules/products/product-service';
+import {
+  deleteSupplierAdmin,
+  fetchSuppliers,
+  saveSupplierAdmin,
+} from '@/modules/suppliers/supplier-service';
 import { categorySchema, slugify } from '@/lib/validation';
 import type {
   Category,
@@ -88,6 +93,7 @@ import type {
   ReportItem,
   SiteSettings,
   Tag,
+  TrustedSupplier,
   UserProfile,
   UserRole,
 } from '@/types';
@@ -96,6 +102,7 @@ type AdminSection =
   | 'dashboard'
   | 'all-articles'
   | 'products'
+  | 'suppliers'
   | 'inquiries'
   | 'pending'
   | 'published'
@@ -188,6 +195,25 @@ export default function AdminPanelPage() {
   const [inquiryFilter, setInquiryFilter] = useState<'ALL' | 'PENDING' | 'REPLIED'>('ALL');
   const [expandedInquiryId, setExpandedInquiryId] = useState<string | null>(null);
 
+  // Verified Suppliers state
+  const [suppliersList, setSuppliersList] = useState<TrustedSupplier[]>([]);
+  const [supplierModal, setSupplierModal] = useState<{
+    id?: string;
+    name: string;
+    url: string;
+    logoUrl: string;
+    category: string;
+    badge: string;
+    description: string;
+    order: number;
+    featured: boolean;
+    isNew: boolean;
+  } | null>(null);
+  const [deleteSupplierTarget, setDeleteSupplierTarget] = useState<TrustedSupplier | null>(null);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const [deletingSupplier, setDeletingSupplier] = useState(false);
+  const [uploadingSupplierLogo, setUploadingSupplierLogo] = useState(false);
+
   const loadAllAdminData = useCallback(async (showSpinner = true) => {
     if (!firebaseUser || !isEditor) return;
     if (showSpinner) {
@@ -207,6 +233,7 @@ export default function AdminPanelPage() {
         usersRes,
         productsRes,
         inquiriesRes,
+        suppliersRes,
       ] = await Promise.all([
         getAdminDashboardStats().catch(() => null),
         getPostsForAdmin().catch(() => []),
@@ -220,6 +247,7 @@ export default function AdminPanelPage() {
         isAdmin ? getAllUsersForAdmin().catch(() => []) : Promise.resolve([]),
         fetchProducts().catch(() => []),
         getInquiriesForAdmin().catch(() => []),
+        fetchSuppliers().catch(() => []),
       ]);
 
       setStats(statsRes);
@@ -234,6 +262,7 @@ export default function AdminPanelPage() {
       setUsers(usersRes);
       setProductsList(productsRes || []);
       setInquiries(inquiriesRes || []);
+      setSuppliersList(suppliersRes || []);
     } finally {
       setLoadingData(false);
     }
@@ -626,6 +655,76 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleSupplierLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile || !supplierModal) return;
+    setUploadingSupplierLogo(true);
+    try {
+      const mediaItem = await uploadEditorialImage(file, profile.uid);
+      setSupplierModal((prev) => (prev ? { ...prev, logoUrl: mediaItem.url } : null));
+      toast.success('Supplier logo uploaded to Cloudinary.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Upload failed.');
+    } finally {
+      setUploadingSupplierLogo(false);
+    }
+  };
+
+  const handleSupplierSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supplierModal || !profile) return;
+    if (!supplierModal.name.trim()) {
+      toast.error('Supplier name is required.');
+      return;
+    }
+    if (!supplierModal.url.trim()) {
+      toast.error('Supplier website URL is required.');
+      return;
+    }
+    setSavingSupplier(true);
+    try {
+      await saveSupplierAdmin(
+        {
+          id: supplierModal.id,
+          name: supplierModal.name.trim(),
+          url: supplierModal.url.trim(),
+          logoUrl: supplierModal.logoUrl.trim(),
+          category: supplierModal.category.trim() || 'General Hardware',
+          badge: supplierModal.badge.trim(),
+          description: supplierModal.description.trim(),
+          order: Number(supplierModal.order) || 1,
+          featured: supplierModal.featured,
+        },
+        supplierModal.isNew,
+        profile,
+        effectiveRole
+      );
+      toast.success(supplierModal.isNew ? 'New verified supplier added!' : 'Supplier details updated!');
+      setSupplierModal(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save supplier.');
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  const handleConfirmDeleteSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteSupplierTarget || !profile) return;
+    setDeletingSupplier(true);
+    try {
+      await deleteSupplierAdmin(deleteSupplierTarget.id, profile, effectiveRole);
+      toast.success('Supplier removed from directory.');
+      setDeleteSupplierTarget(null);
+      loadAllAdminData(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete supplier.');
+    } finally {
+      setDeletingSupplier(false);
+    }
+  };
+
   const pendingPosts = posts.filter((p) => p.status === 'PENDING');
   const publishedPosts = posts.filter((p) => p.status === 'PUBLISHED');
   const rejectedPosts = posts.filter((p) => p.status === 'REJECTED');
@@ -643,6 +742,7 @@ export default function AdminPanelPage() {
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
     { id: 'inquiries', label: `Inquiries (${pendingInquiries.length})` },
     { id: 'products', label: `Store Products (${productsList.length})` },
+    { id: 'suppliers', label: `Verified Suppliers (${suppliersList.length})` },
     { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
     { id: 'rejected', label: 'Rejected Articles' },
@@ -1084,6 +1184,156 @@ export default function AdminPanelPage() {
                                     <Trash2 className="h-3.5 w-3.5" />
                                     <span>Delete</span>
                                   </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'suppliers' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                          <ShoppingBag className="h-6 w-6 text-primary" />
+                          Verified Suppliers Directory ({suppliersList.length})
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Manage trusted external component vendors displayed on the store page for products not stocked in our lab.
+                        </p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          setSupplierModal({
+                            name: '',
+                            url: '',
+                            logoUrl: '',
+                            category: 'Electronics & Sensors',
+                            badge: 'Verified Silicon',
+                            description: '',
+                            order: suppliersList.length + 1,
+                            featured: true,
+                            isNew: true,
+                          })
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        <span>Add New Supplier</span>
+                      </Button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Supplier Logo &amp; Name</th>
+                            <th className="px-4 py-3">Website URL</th>
+                            <th className="px-4 py-3">Category &amp; Trust Badge</th>
+                            <th className="px-4 py-3">Description</th>
+                            <th className="px-4 py-3 text-center">Order</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {suppliersList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                                No suppliers configured yet. Click &ldquo;Add New Supplier&rdquo; above.
+                              </td>
+                            </tr>
+                          ) : (
+                            suppliersList.map((sup) => (
+                              <tr key={sup.id} className="hover:bg-slate-50/70 transition">
+                                <td className="px-4 py-3 align-top min-w-[180px]">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="h-9 w-16 relative rounded bg-slate-50 p-1 border border-slate-200 flex items-center justify-center shrink-0">
+                                      {sup.logoUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={sup.logoUrl}
+                                          alt={sup.name}
+                                          className="max-h-full max-w-full object-contain"
+                                        />
+                                      ) : (
+                                        <span className="text-xs font-bold text-slate-500">
+                                          {sup.name.slice(0, 3)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="font-semibold text-[#0B1528]">{sup.name}</span>
+                                  </div>
+                                </td>
+
+                                <td className="px-4 py-3 align-top max-w-xs">
+                                  <a
+                                    href={sup.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline flex items-center gap-1 truncate"
+                                  >
+                                    <span className="truncate">{sup.url}</span>
+                                    <ArrowRight className="h-3 w-3 shrink-0" />
+                                  </a>
+                                </td>
+
+                                <td className="px-4 py-3 align-top whitespace-nowrap">
+                                  <span className="text-xs font-medium text-slate-700 block">
+                                    {sup.category || 'General'}
+                                  </span>
+                                  {sup.badge && (
+                                    <span className="inline-block mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                      {sup.badge}
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-3 align-top max-w-xs text-xs text-slate-600">
+                                  <p className="line-clamp-2">{sup.description || '—'}</p>
+                                </td>
+
+                                <td className="px-4 py-3 align-top text-center font-mono text-xs text-slate-500">
+                                  {sup.order ?? 1}
+                                </td>
+
+                                <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-xs"
+                                      onClick={() =>
+                                        setSupplierModal({
+                                          id: sup.id,
+                                          name: sup.name,
+                                          url: sup.url,
+                                          logoUrl: sup.logoUrl || '',
+                                          category: sup.category || 'Electronics & Sensors',
+                                          badge: sup.badge || '',
+                                          description: sup.description || '',
+                                          order: sup.order ?? 1,
+                                          featured: sup.featured ?? true,
+                                          isNew: false,
+                                        })
+                                      }
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => setDeleteSupplierTarget(sup)}
+                                      title="Delete supplier"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             ))
@@ -2433,6 +2683,184 @@ export default function AdminPanelPage() {
               </Button>
               <Button type="submit" variant="destructive" disabled={deletingInquiry}>
                 {deletingInquiry ? 'Deleting...' : 'Delete Inquiry'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Supplier Add/Edit Dialog */}
+      <Dialog open={Boolean(supplierModal)} onOpenChange={(o) => !o && setSupplierModal(null)}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
+              <ShoppingBag className="h-5 w-5 text-primary" />
+              {supplierModal?.isNew ? 'Add Verified Component Supplier' : 'Edit Supplier Details'}
+            </DialogTitle>
+            <DialogDescription>
+              This supplier will be shown in the dedicated &ldquo;Trusted Suppliers&rdquo; section on the Store page so customers can procure components not in stock.
+            </DialogDescription>
+          </DialogHeader>
+
+          {supplierModal && (
+            <form onSubmit={handleSupplierSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="supName">Supplier Name *</Label>
+                  <Input
+                    id="supName"
+                    value={supplierModal.name}
+                    onChange={(e) => setSupplierModal({ ...supplierModal, name: e.target.value })}
+                    placeholder="e.g. Robu.in, Quartz, DigiKey"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="supUrl">Website URL *</Label>
+                  <Input
+                    id="supUrl"
+                    type="url"
+                    value={supplierModal.url}
+                    onChange={(e) => setSupplierModal({ ...supplierModal, url: e.target.value })}
+                    placeholder="https://robu.in"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Logo Upload & URL */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <Label className="text-xs font-semibold text-slate-700">Supplier Logo</Label>
+                <div className="flex items-center gap-3">
+                  {supplierModal.logoUrl ? (
+                    <div className="h-10 w-24 relative rounded bg-white p-1 border border-slate-200 flex items-center justify-center shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={supplierModal.logoUrl}
+                        alt="Logo Preview"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-10 w-24 rounded bg-slate-200 text-slate-400 text-xs flex items-center justify-center shrink-0">
+                      No Logo
+                    </div>
+                  )}
+
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSupplierLogoUpload}
+                      disabled={uploadingSupplierLogo}
+                      className="text-xs"
+                    />
+                    <Input
+                      value={supplierModal.logoUrl}
+                      onChange={(e) => setSupplierModal({ ...supplierModal, logoUrl: e.target.value })}
+                      placeholder="Or paste Direct Image URL"
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+                {uploadingSupplierLogo && (
+                  <p className="text-[11px] text-blue-600">Uploading logo to Cloudinary...</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="supCategory">Specialty / Category</Label>
+                  <Input
+                    id="supCategory"
+                    value={supplierModal.category}
+                    onChange={(e) => setSupplierModal({ ...supplierModal, category: e.target.value })}
+                    placeholder="e.g. Sensors & Discrete ICs, Robotics"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="supBadge">Trust Badge</Label>
+                  <Input
+                    id="supBadge"
+                    value={supplierModal.badge}
+                    onChange={(e) => setSupplierModal({ ...supplierModal, badge: e.target.value })}
+                    placeholder="e.g. Fast Shipping in India, Prime Delivery"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="supDesc">Brief Description / What they sell</Label>
+                <Textarea
+                  id="supDesc"
+                  rows={2}
+                  value={supplierModal.description}
+                  onChange={(e) => setSupplierModal({ ...supplierModal, description: e.target.value })}
+                  placeholder="e.g. Best store for Arduino, Raspberry Pi, sensors, and LiPo batteries with pan-India dispatch."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="supOrder">Display Order</Label>
+                  <Input
+                    id="supOrder"
+                    type="number"
+                    value={supplierModal.order}
+                    onChange={(e) => setSupplierModal({ ...supplierModal, order: Number(e.target.value) })}
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSupplierModal(null)}
+                  disabled={savingSupplier}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingSupplier}>
+                  {savingSupplier
+                    ? 'Saving Supplier...'
+                    : supplierModal.isNew
+                    ? 'Add Supplier'
+                    : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Supplier Confirmation Dialog */}
+      <Dialog open={Boolean(deleteSupplierTarget)} onOpenChange={(o) => !o && setDeleteSupplierTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Supplier from Directory
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove &ldquo;{deleteSupplierTarget?.name}&rdquo; from the verified suppliers list?
+              Visitors will no longer see this partner link on the store page.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDeleteSupplier} className="space-y-4">
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteSupplierTarget(null)}
+                disabled={deletingSupplier}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deletingSupplier}>
+                {deletingSupplier ? 'Removing...' : 'Delete Supplier'}
               </Button>
             </DialogFooter>
           </form>

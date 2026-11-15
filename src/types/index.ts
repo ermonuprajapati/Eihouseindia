@@ -174,10 +174,12 @@ export interface ModerationLog {
     | 'MODERATE_COMMENT'
     | 'RESOLVE_REPORT'
     | 'MANAGE_PRODUCT'
+    | 'MANAGE_SUPPLIER'
+    | 'DELETE_SUPPLIER'
     | 'REPLY_INQUIRY'
     | 'DELETE_INQUIRY'
     | 'UPDATE_SETTINGS';
-  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT' | 'INQUIRY';
+  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT' | 'SUPPLIER' | 'INQUIRY';
   targetId: string;
   reason?: string;
   createdAt: string;
@@ -241,5 +243,19 @@ export interface ContactInquiryItem {
   repliedAt?: string;
   repliedBy?: string;
   createdAt: string;
+}
+
+export interface TrustedSupplier {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  url: string;
+  category?: string;
+  badge?: string;
+  description?: string;
+  order?: number;
+  featured?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
