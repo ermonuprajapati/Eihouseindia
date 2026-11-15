@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAboutPageJsonLd, buildFounderJsonLd } from '@/lib/seo';
 import { SITE_CONFIG } from '@/config/site';
+import { AboutOrbitAnimation } from '@/components/animations/AboutOrbitAnimation';
 
 export const metadata: Metadata = {
   title: `About EI House | Founded by Monu Prajapati — Engineering Innovation House`,
@@ -105,8 +106,9 @@ export default function AboutPage() {
 
       <main className="flex-1">
         {/* 01. Hero Section with Hero Image */}
-        <section className="border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/50 to-white py-16 sm:py-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/50 to-white py-16 sm:py-20">
+          <AboutOrbitAnimation />
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
               <div className="lg:col-span-7 space-y-5">
                 <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">

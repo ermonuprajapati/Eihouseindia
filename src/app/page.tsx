@@ -32,6 +32,7 @@ import {
   getToolLogoUrl,
   getToolHeroImageUrl,
 } from '@/modules/tools/tool-service';
+import { CosmicSpaceHeroAnimation } from '@/components/animations/CosmicSpaceHeroAnimation';
 
 export const revalidate = 60;
 
@@ -50,16 +51,21 @@ export default async function HomePage() {
       <SiteHeader />
 
       <main className="flex-1">
-        {/* 01. Hero Section */}
+        {/* 01. Hero Section with Logo-Themed Space Animation */}
         <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/70 to-white py-16 sm:py-24">
-          {/* Ambient Glowing Tech Aura */}
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[650px] h-[320px] bg-gradient-to-r from-amber-400/15 via-sky-400/15 to-amber-400/15 rounded-full blur-3xl pointer-events-none animate-pulse-glow" />
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Cosmic Space & Logo-Themed (Cyber Blue & Solar Amber) Background Animation */}
+          <CosmicSpaceHeroAnimation />
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               <div className="lg:col-span-7 space-y-6">
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
-                  <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D] border border-blue-500/20 backdrop-blur-xs">
+                  {/* Glowing Logo Icon Aura */}
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#0090FF] to-[#FF8C00] opacity-80 blur-xs animate-ping" style={{ animationDuration: '3s' }} />
+                    <Sparkles className="relative h-3.5 w-3.5 text-[#F59E0B]" />
+                  </div>
                   <span>Engineering Innovation House · India</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0090FF] animate-pulse" />
                 </div>
 
                 <div className="space-y-2">

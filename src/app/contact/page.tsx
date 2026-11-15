@@ -17,6 +17,7 @@ import { ContactForm } from '@/components/contact/ContactForm';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildContactPageJsonLd, buildOrganizationJsonLd } from '@/lib/seo';
 import { SITE_CONFIG } from '@/config/site';
+import { ContactRadarAnimation } from '@/components/animations/ContactRadarAnimation';
 
 export const metadata: Metadata = {
   title: `Contact EI House | Founder Monu Prajapati — Engineering Innovation House`,
@@ -45,20 +46,23 @@ export default function ContactPage() {
 
       <main className="flex-1 py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
-          {/* Header Banner */}
-          <div className="border-b border-slate-200 pb-8 space-y-4 max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
-              <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
-              <span>Executive &amp; Technical Directory</span>
+          {/* Header Banner with Radar Telemetry Animation */}
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 sm:p-10 shadow-xs space-y-4">
+            <ContactRadarAnimation />
+            <div className="relative z-10 max-w-3xl space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D]">
+                <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
+                <span>Executive &amp; Technical Directory</span>
+              </div>
+              <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0B1528] tracking-tight">
+                Contact EI House
+              </h1>
+              <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+                Connect with <strong>Engineering Innovation House (EI House)</strong> and Founder &amp; Proprietor{' '}
+                <strong>{SITE_CONFIG.founder.fullNameWithPrefix}</strong> for educational programs, hardware prototyping,
+                industrial R&amp;D services, and institutional collaborations.
+              </p>
             </div>
-            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0B1528] tracking-tight">
-              Contact EI House
-            </h1>
-            <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-              Connect with <strong>Engineering Innovation House (EI House)</strong> and Founder &amp; Proprietor{' '}
-              <strong>{SITE_CONFIG.founder.fullNameWithPrefix}</strong> for educational programs, hardware prototyping,
-              industrial R&amp;D services, and institutional collaborations.
-            </p>
           </div>
 
           {/* 2-Column Content Layout */}

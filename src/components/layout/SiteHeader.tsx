@@ -32,18 +32,22 @@ export function SiteHeader() {
         {/* Zone 1: Brand wordmark with logo */}
         <Link
           href="/"
-          className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5"
+          className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5 group"
         >
-          <Image
-            src="/images/logo.png"
-            alt="EI HOUSE INDIA Logo"
-            width={34}
-            height={34}
-            className="h-8 w-8 object-contain rounded"
-            priority
-          />
+          <div className="relative flex items-center justify-center">
+            {/* Logo Brand Color Space Aura: Dual Cyber Blue & Solar Amber Glow */}
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#0090FF] via-[#FF8C00] to-[#0090FF] opacity-35 blur-xs group-hover:opacity-75 transition-opacity duration-500 animate-pulse-glow" />
+            <Image
+              src="/images/logo.png"
+              alt="EI HOUSE INDIA Logo"
+              width={34}
+              height={34}
+              className="relative h-8 w-8 object-contain rounded drop-shadow-sm group-hover:scale-105 transition-transform"
+              priority
+            />
+          </div>
           <div className="flex flex-col">
-            <span className="leading-tight font-extrabold text-[#0B1528]">EI HOUSE</span>
+            <span className="leading-tight font-extrabold text-[#0B1528] group-hover:text-blue-700 transition-colors">EI HOUSE</span>
             <span className="text-[10px] tracking-wider font-semibold text-[#F59E0B] uppercase leading-none hidden sm:inline">
               Innovation House
             </span>

@@ -10,6 +10,7 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
+import { CommunityNetworkAnimation } from '@/components/animations/CommunityNetworkAnimation';
 
 export const metadata: Metadata = {
   title: 'Engineering Community & Network — EI House India',
@@ -65,8 +66,9 @@ export default function CommunityPage() {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="border-b border-slate-200 bg-white py-14 sm:py-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden border-b border-slate-200 bg-white py-14 sm:py-20">
+          <CommunityNetworkAnimation />
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="max-w-3xl space-y-5">
               <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
                 EI House Collaborative Network

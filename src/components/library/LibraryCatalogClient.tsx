@@ -21,6 +21,7 @@ import {
   getLibraryHeroImageUrl,
 } from '@/modules/library/library-service';
 import { ENGINEERING_DOMAINS } from '@/modules/tools/tool-service';
+import { LibrarySiliconAnimation } from '@/components/animations/LibrarySiliconAnimation';
 import type { LibraryItem } from '@/types';
 
 interface LibraryCatalogClientProps {
@@ -72,6 +73,7 @@ export function LibraryCatalogClient({ initialItems }: LibraryCatalogClientProps
       <main className="flex-1">
         {/* 01. Hero Section */}
         <section className="relative overflow-hidden bg-gradient-to-b from-[#0B1528] via-[#172D4D] to-[#0B1528] text-white py-16 sm:py-24">
+          <LibrarySiliconAnimation />
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               <div className="lg:col-span-7 space-y-5">

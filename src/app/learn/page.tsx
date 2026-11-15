@@ -16,6 +16,7 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
+import { LearnKnowledgeAnimation } from '@/components/animations/LearnKnowledgeAnimation';
 
 export const metadata: Metadata = {
   title: 'Engineering & STEM Education — Learn with EI House',
@@ -103,8 +104,9 @@ export default function LearnPage() {
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="border-b border-slate-200 bg-white py-14 sm:py-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden border-b border-slate-200 bg-white py-14 sm:py-20">
+          <LearnKnowledgeAnimation />
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
               <div className="lg:col-span-7 space-y-5">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">

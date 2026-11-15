@@ -35,6 +35,7 @@ import {
   getToolLogoUrl,
   getToolHeroImageUrl,
 } from '@/modules/tools/tool-service';
+import { ToolsBlueprintAnimation } from '@/components/animations/ToolsBlueprintAnimation';
 import type { EngineeringTool } from '@/types';
 
 interface ToolsCatalogClientProps {
@@ -168,6 +169,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
         {/* 01. HERO SECTION */}
         {/* ========================================================= */}
         <section className="relative overflow-hidden bg-gradient-to-b from-[#0B1528] via-[#12233D] to-[#0B1528] text-white py-14 sm:py-20 border-b border-white/10">
+          <ToolsBlueprintAnimation />
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               <div className="lg:col-span-7 space-y-4">
