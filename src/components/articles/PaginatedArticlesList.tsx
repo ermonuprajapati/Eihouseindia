@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { getPublishedPostsPaginated } from '@/modules/posts/post-service';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { Button } from '@/components/ui/button';
@@ -12,33 +11,76 @@ export function PaginatedArticlesList({
   initialPosts,
   categories,
   activeCategorySlug,
+  totalCount,
 }: {
   initialPosts: Post[];
   categories: Category[];
   activeCategorySlug?: string;
+  totalCount?: number;
 }) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
-  const [cursor, setCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(initialPosts.length >= 9);
+  const [hasMore, setHasMore] = useState(
+    typeof totalCount === 'number' ? initialPosts.length < totalCount : initialPosts.length >= 9
+  );
   const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    setPosts(initialPosts);
+    setHasMore(
+      typeof totalCount === 'number' ? initialPosts.length < totalCount : initialPosts.length >= 9
+    );
+  }, [initialPosts, totalCount]);
 
   const activeCategory = categories.find((c) => c.slug === activeCategorySlug);
 
   const handleLoadMore = async () => {
+    if (loadingMore) return;
     setLoadingMore(true);
+
     try {
-      const res = await getPublishedPostsPaginated({
+      // 1. First attempt: fetch from server-side /api/articles endpoint
+      const params = new URLSearchParams({
+        offset: String(posts.length),
+        limit: '9',
+      });
+      if (activeCategory?.id) {
+        params.set('categoryId', activeCategory.id);
+      }
+
+      const res = await fetch(`/api/articles?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const incoming: Post[] = Array.isArray(data.posts) ? data.posts : [];
+
+        if (incoming.length > 0) {
+          setPosts((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const next = incoming.filter((p) => !existingIds.has(p.id));
+            return [...prev, ...next];
+          });
+          setHasMore(Boolean(data.hasMore));
+          return;
+        } else {
+          setHasMore(false);
+          return;
+        }
+      }
+
+      // 2. Fallback attempt: client-side Firestore query with offset
+      const fallbackRes = await getPublishedPostsPaginated({
         categoryId: activeCategory?.id,
         pageSize: 9,
-        cursor,
+        offset: posts.length,
       });
+
       setPosts((prev) => {
         const existingIds = new Set(prev.map((p) => p.id));
-        const next = res.posts.filter((p) => !existingIds.has(p.id));
+        const next = fallbackRes.posts.filter((p) => !existingIds.has(p.id));
         return [...prev, ...next];
       });
-      setCursor(res.lastDoc);
-      setHasMore(res.hasMore);
+      setHasMore(fallbackRes.hasMore);
+    } catch (err) {
+      console.error('Failed to load more articles:', err);
     } finally {
       setLoadingMore(false);
     }

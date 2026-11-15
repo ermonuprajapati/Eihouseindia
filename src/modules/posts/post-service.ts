@@ -336,13 +336,21 @@ export async function getPublishedPostsPaginated(params: {
   categoryId?: string;
   pageSize?: number;
   cursor?: QueryDocumentSnapshot<DocumentData> | null;
+  offset?: number;
 }): Promise<{
   posts: Post[];
   lastDoc: QueryDocumentSnapshot<DocumentData> | null;
   hasMore: boolean;
 }> {
   const pageSize = params.pageSize ?? 9;
+  const offset = Math.max(0, params.offset ?? 0);
   try {
+    // If an offset is requested without a Firestore document snapshot cursor,
+    // jump straight to the in-memory fetch so client-side pagination works seamlessly.
+    if (offset > 0 && !params.cursor) {
+      throw new Error('Using offset-based pagination');
+    }
+
     const constraints = [where('status', '==', 'PUBLISHED')];
     if (params.categoryId) {
       constraints.push(where('categoryId', '==', params.categoryId));
@@ -370,8 +378,7 @@ export async function getPublishedPostsPaginated(params: {
       lastDoc: sliced.length > 0 ? sliced[sliced.length - 1] : null,
       hasMore,
     };
-  } catch (error) {
-    console.warn('Falling back to in-memory sort in getPublishedPostsPaginated:', error);
+  } catch {
     try {
       const fallbackSnap = await getDocs(
         query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
@@ -385,8 +392,8 @@ export async function getPublishedPostsPaginated(params: {
         const timeB = new Date(b.publishedAt || b.createdAt).getTime();
         return timeB - timeA;
       });
-      const hasMore = list.length > pageSize;
-      const sliced = hasMore ? list.slice(0, pageSize) : list;
+      const hasMore = list.length > offset + pageSize;
+      const sliced = list.slice(offset, offset + pageSize);
       return {
         posts: sliced,
         lastDoc: null,

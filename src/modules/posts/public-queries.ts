@@ -155,11 +155,13 @@ function sortPostsDescending(posts: Post[]): Post[] {
 
 export async function getPublishedPosts(options?: {
   limitCount?: number;
+  offset?: number;
   categoryId?: string;
   featuredOnly?: boolean;
 }): Promise<Post[]> {
   const limitCount = options?.limitCount ?? 12;
-  const cacheKey = `posts_${limitCount}_${options?.categoryId || 'all'}_${options?.featuredOnly ? 'feat' : 'all'}`;
+  const offset = options?.offset ?? 0;
+  const cacheKey = `posts_${offset}_${limitCount}_${options?.categoryId || 'all'}_${options?.featuredOnly ? 'feat' : 'all'}`;
   const cached = getFromQueryCache<Post[]>(cacheKey);
   if (cached) return cached;
 
@@ -177,7 +179,7 @@ export async function getPublishedPosts(options?: {
       }
       const snap = await ref.get();
       const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
-      const sorted = sortPostsDescending(posts).slice(0, limitCount);
+      const sorted = sortPostsDescending(posts).slice(offset, offset + limitCount);
       setInQueryCache(cacheKey, sorted, 60_000);
       return sorted;
     }
@@ -193,13 +195,64 @@ export async function getPublishedPosts(options?: {
     if (options?.featuredOnly) {
       posts = posts.filter((p) => p.featured);
     }
-    const sorted = sortPostsDescending(posts).slice(0, limitCount);
+    const sorted = sortPostsDescending(posts).slice(offset, offset + limitCount);
     setInQueryCache(cacheKey, sorted, 60_000);
     return sorted;
   } catch (err) {
     console.error('getPublishedPosts failed completely:', err);
     return [];
   }
+}
+
+export async function getPublishedPostsFeed(options?: {
+  offset?: number;
+  limit?: number;
+  categoryId?: string;
+}): Promise<{ posts: Post[]; hasMore: boolean; total: number }> {
+  const offset = Math.max(0, options?.offset ?? 0);
+  const limitCount = Math.max(1, options?.limit ?? 9);
+  const cacheKey = `posts_feed_${options?.categoryId || 'all'}`;
+  let allPosts = getFromQueryCache<Post[]>(cacheKey);
+
+  if (!allPosts) {
+    try {
+      const adminDb = getAdminDb();
+      if (adminDb) {
+        let ref: AdminQuery = adminDb
+          .collection('posts')
+          .where('status', '==', 'PUBLISHED');
+        if (options?.categoryId) {
+          ref = ref.where('categoryId', '==', options.categoryId);
+        }
+        const snap = await ref.get();
+        const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+        allPosts = sortPostsDescending(posts);
+      } else {
+        const fallbackSnap = await getDocs(
+          query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
+        );
+        let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
+        if (options?.categoryId) {
+          posts = posts.filter((p) => p.categoryId === options.categoryId);
+        }
+        allPosts = sortPostsDescending(posts);
+      }
+      setInQueryCache(cacheKey, allPosts, 60_000);
+    } catch (err) {
+      console.error('getPublishedPostsFeed failed:', err);
+      allPosts = [];
+    }
+  }
+
+  const total = allPosts.length;
+  const sliced = allPosts.slice(offset, offset + limitCount);
+  const hasMore = total > offset + limitCount;
+
+  return {
+    posts: sliced,
+    hasMore,
+    total,
+  };
 }
 
 export const getPublishedPostBySlug = cache(async (slug: string): Promise<Post | null> => {

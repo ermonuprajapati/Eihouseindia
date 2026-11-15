@@ -3,7 +3,7 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { PaginatedArticlesList } from '@/components/articles/PaginatedArticlesList';
 import { SITE_CONFIG } from '@/config/site';
-import { getPublicCategories, getPublishedPosts } from '@/modules/posts/public-queries';
+import { getPublicCategories, getPublishedPostsFeed } from '@/modules/posts/public-queries';
 
 export const revalidate = 60;
 
@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 };
 
 export default async function ArticlesPage() {
-  const [posts, categories] = await Promise.all([
-    getPublishedPosts({ limitCount: 9 }),
+  const [feed, categories] = await Promise.all([
+    getPublishedPostsFeed({ limit: 9, offset: 0 }),
     getPublicCategories(),
   ]);
 
@@ -35,7 +35,11 @@ export default async function ArticlesPage() {
           </p>
         </div>
 
-        <PaginatedArticlesList initialPosts={posts} categories={categories} />
+        <PaginatedArticlesList
+          initialPosts={feed.posts}
+          categories={categories}
+          totalCount={feed.total}
+        />
       </main>
       <SiteFooter />
     </div>

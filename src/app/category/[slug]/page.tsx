@@ -6,7 +6,7 @@ import { PaginatedArticlesList } from '@/components/articles/PaginatedArticlesLi
 import { JsonLd } from '@/components/seo/JsonLd';
 import { SITE_CONFIG } from '@/config/site';
 import { buildBreadcrumbJsonLd } from '@/lib/seo';
-import { getPublicCategories, getPublishedPosts } from '@/modules/posts/public-queries';
+import { getPublicCategories, getPublishedPostsFeed } from '@/modules/posts/public-queries';
 
 export const revalidate = 60;
 
@@ -46,7 +46,11 @@ export default async function CategoryPage({
     notFound();
   }
 
-  const posts = await getPublishedPosts({ categoryId: category.id, limitCount: 9 });
+  const feed = await getPublishedPostsFeed({
+    categoryId: category.id,
+    limit: 9,
+    offset: 0,
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFBFD]">
@@ -70,9 +74,10 @@ export default async function CategoryPage({
         </div>
 
         <PaginatedArticlesList
-          initialPosts={posts}
+          initialPosts={feed.posts}
           categories={categories}
           activeCategorySlug={category.slug}
+          totalCount={feed.total}
         />
       </main>
 

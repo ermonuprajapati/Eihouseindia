@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/modules/auth/auth-context';
@@ -121,7 +122,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${fraunces.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}
     >
+      <head>
+        <Script
+          src="https://www.googletagmanager.com/gtm.js?id=GTM-NGT8B6V8"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics-gtm" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+          `}
+        </Script>
+      </head>
       <body suppressHydrationWarning className="min-h-screen bg-[#FAFBFD] text-[#0B1528] antialiased">
+        <noscript>
+          <iframe
+            src="https://www.googletagmanager.com/ns.html?id=GTM-NGT8B6V8"
+            height="0"
+            width="0"
+            style={{ display: 'none', visibility: 'hidden' }}
+          />
+        </noscript>
         <JsonLd data={buildOrganizationJsonLd()} />
         <JsonLd data={buildWebsiteJsonLd()} />
         <AuthProvider>
