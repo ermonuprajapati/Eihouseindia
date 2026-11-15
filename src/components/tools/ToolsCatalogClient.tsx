@@ -30,7 +30,13 @@ import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InteractiveToolModal } from '@/components/tools/InteractiveToolModal';
-import { fetchTools, TOOL_CATEGORIES, TOOL_LICENSES } from '@/modules/tools/tool-service';
+import {
+  fetchTools,
+  TOOL_CATEGORIES,
+  TOOL_LICENSES,
+  getToolLogoUrl,
+  getToolHeroImageUrl,
+} from '@/modules/tools/tool-service';
 import type { EngineeringTool, ToolCategory, ToolLicenseType } from '@/types';
 
 interface ToolsCatalogClientProps {
@@ -483,12 +489,22 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                     {filteredTools.map((tool) => (
                       <tr key={tool.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-4 font-semibold text-[#0B1528]">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">{getCategoryIcon(tool.category)}</span>
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-7 w-7 rounded-md bg-white border border-slate-200 p-0.5 shrink-0 flex items-center justify-center overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={getToolLogoUrl(tool)}
+                                alt={tool.name}
+                                className="h-full w-full object-contain"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
                             <span>{tool.name}</span>
-                            {tool.featured && (
-                              <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-1.5 py-0.2 rounded border border-amber-300">
-                                Featured
+                            {tool.badge && (
+                              <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-semibold px-1.5 py-0.2 rounded">
+                                {tool.badge}
                               </span>
                             )}
                           </div>
@@ -545,102 +561,135 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
             {/* VIEW B: GRID CARD VIEW */}
             {/* ========================================================= */}
             {filteredTools.length > 0 && viewMode === 'grid' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredTools.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className="group rounded-xl border border-slate-200 bg-white p-5 hover:border-[#0B1528] hover:shadow-md transition-all flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      {/* Top Header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-[#0B1528] group-hover:bg-[#0B1528] group-hover:text-white transition-colors">
-                            {getCategoryIcon(tool.category)}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredTools.map((tool) => {
+                  const logoUrl = getToolLogoUrl(tool);
+                  const heroImg = getToolHeroImageUrl(tool);
+                  return (
+                    <div
+                      key={tool.id}
+                      className="group rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
+                    >
+                      {/* Hero Image Header with Tool Name and Real Logo ON TOP */}
+                      <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-gradient-to-br from-[#0B1528] via-[#12233D] to-[#172D4D]">
+                        {/* Background Hero Banner */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={heroImg}
+                          alt={tool.name}
+                          loading="lazy"
+                          className="absolute inset-0 h-full w-full object-cover opacity-40 group-hover:scale-105 group-hover:opacity-50 transition-all duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1528] via-[#0B1528]/60 to-transparent" />
+
+                        {/* Top Badges */}
+                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-10">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-amber-300 border border-amber-400/30">
+                            {tool.category || tool.domain}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border backdrop-blur-md ${getLicenseBadgeStyle(
+                              tool.licenseType
+                            )}`}
+                          >
+                            {tool.licenseType || 'Software'}
+                          </span>
+                        </div>
+
+                        {/* Real Logo & Tool Name directly on Hero Image */}
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-3 z-10">
+                          <div className="h-12 w-12 rounded-xl bg-white p-1.5 shadow-lg border border-white/90 shrink-0 flex items-center justify-center overflow-hidden">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={logoUrl}
+                              alt={`${tool.name} logo`}
+                              loading="lazy"
+                              className="h-full w-full object-contain"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
+                            />
                           </div>
-                          <div>
-                            <h3 className="text-base font-bold text-[#0B1528] group-hover:text-[#F59E0B] transition-colors leading-snug">
+                          <div className="min-w-0">
+                            <h3 className="text-base sm:text-lg font-bold text-white drop-shadow-md truncate group-hover:text-amber-300 transition-colors">
                               {tool.name}
                             </h3>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              {tool.category || tool.domain}
-                            </span>
+                            {tool.badge && (
+                              <span className="text-[10px] font-semibold text-amber-200 bg-amber-400/20 border border-amber-300/30 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                                {tool.badge}
+                              </span>
+                            )}
                           </div>
                         </div>
-
-                        <span
-                          className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0 ${getLicenseBadgeStyle(
-                            tool.licenseType
-                          )}`}
-                        >
-                          {tool.licenseType || 'Software'}
-                        </span>
                       </div>
 
-                      {/* Main Application */}
-                      {tool.mainApplication && (
-                        <div className="text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">
-                          {tool.mainApplication}
-                        </div>
-                      )}
+                      {/* Card Content Body */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                        <div className="space-y-2.5">
+                          {/* Main Application */}
+                          {tool.mainApplication && (
+                            <div className="text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5">
+                              {tool.mainApplication}
+                            </div>
+                          )}
 
-                      {/* Summary */}
-                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                        {tool.summary || tool.description}
-                      </p>
+                          {/* Summary */}
+                          <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                            {tool.summary || tool.description}
+                          </p>
 
-                      {/* Platform & Requirements */}
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
-                        <span className="flex items-center gap-1">
-                          <Laptop className="h-3 w-3 text-slate-400" />
-                          <span>{tool.platform || 'Cross-Platform'}</span>
-                        </span>
-                      </div>
-
-                      {/* Tags */}
-                      {tool.tags && tool.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {tool.tags.slice(0, 4).map((t, idx) => (
-                            <span
-                              key={idx}
-                              className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
-                            >
-                              #{t}
+                          {/* Platform */}
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
+                            <span className="flex items-center gap-1">
+                              <Laptop className="h-3 w-3 text-slate-400" />
+                              <span>{tool.platform || 'Cross-Platform'}</span>
                             </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                          </div>
 
-                    {/* Footer Actions */}
-                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                      {tool.officialWebsite ? (
-                        <a
-                          href={tool.officialWebsite}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0B1528] text-white text-xs font-semibold py-2 px-3 hover:bg-[#1E3A5F] transition-colors shadow-sm"
-                        >
-                          <span>Visit Official Website</span>
-                          <ExternalLink className="h-3.5 w-3.5 text-amber-400" />
-                        </a>
-                      ) : tool.toolType === 'interactive' ? (
-                        <Button
-                          size="sm"
-                          onClick={() => setActiveCalculatorTool(tool)}
-                          className="w-full bg-[#F59E0B] hover:bg-[#D97706] text-[#0B1528] font-bold text-xs"
-                        >
-                          <span>Launch Interactive Solver</span>
-                          <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                        </Button>
-                      ) : (
-                        <Button variant="outline" size="sm" className="w-full text-xs" disabled>
-                          Built-in Reference
-                        </Button>
-                      )}
+                          {/* Tags */}
+                          {tool.tags && tool.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {tool.tags.slice(0, 4).map((t, idx) => (
+                                <span
+                                  key={idx}
+                                  className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                                >
+                                  #{t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Footer Action */}
+                        <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400 font-medium">Official Link</span>
+                          {tool.officialWebsite ? (
+                            <a
+                              href={tool.officialWebsite}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#172D4D] hover:text-[#0B1528] bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              <span>Official Website</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : tool.toolType === 'interactive' ? (
+                            <button
+                              onClick={() => setActiveCalculatorTool(tool)}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              <span>Open Solver</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">Built-in Solver</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

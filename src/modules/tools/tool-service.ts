@@ -56,6 +56,107 @@ export const TOOL_LICENSES: ToolLicenseType[] = [
   'Student License',
 ];
 
+export const TOOL_OFFICIAL_LOGOS: Record<string, string> = {
+  kicad: 'https://upload.wikimedia.org/wikipedia/commons/4/42/KiCad_logo_v6.svg',
+  'autodesk-fusion': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Autodesk_Fusion_360_app_icon.png',
+  fusion360: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Autodesk_Fusion_360_app_icon.png',
+  wokwi: 'https://avatars.githubusercontent.com/u/74620063?s=200&v=4',
+  freecad: 'https://upload.wikimedia.org/wikipedia/commons/e/eb/FreeCAD_0.19_icon.svg',
+  ansys: 'https://upload.wikimedia.org/wikipedia/commons/8/87/Ansys_Inc_logo.svg',
+  vscode: 'https://upload.wikimedia.org/wikipedia/commons/9/9a/Visual_Studio_Code_1.35_icon.svg',
+  'visual-studio-code': 'https://upload.wikimedia.org/wikipedia/commons/9/9a/Visual_Studio_Code_1.35_icon.svg',
+  ltspice: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Analog_Devices_Logo.svg',
+  solidworks: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/SolidWorks_Logo.svg',
+  matlab: 'https://upload.wikimedia.org/wikipedia/commons/2/21/Matlab_Logo.png',
+  'matlab-simulink': 'https://upload.wikimedia.org/wikipedia/commons/2/21/Matlab_Logo.png',
+  simulink: 'https://upload.wikimedia.org/wikipedia/commons/2/21/Matlab_Logo.png',
+  cisco: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg',
+  'cisco-packet-tracer': 'https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg',
+  packettracer: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg',
+  blender: 'https://upload.wikimedia.org/wikipedia/commons/0/0c/Blender_logo_no_text.svg',
+  docker: 'https://upload.wikimedia.org/wikipedia/commons/4/4e/Docker_%28container_engine%29_logo.svg',
+  tinkercad: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/Tinkercad_Logo.png',
+  easyeda: 'https://easyeda.com/images/logo.png',
+  proteus: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Labcenter_Electronics_Logo.png',
+  altium: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Altium_Logo.svg',
+  'altium-designer': 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Altium_Logo.svg',
+  qelectrotech: 'https://upload.wikimedia.org/wikipedia/commons/9/99/QElectroTech_logo.svg',
+  'factory-io': 'https://factoryio.com/wp-content/themes/factoryio/img/logo-factoryio.svg',
+  arduino: 'https://upload.wikimedia.org/wikipedia/commons/8/87/Arduino_Logo.svg',
+  'arduino-ide': 'https://upload.wikimedia.org/wikipedia/commons/8/87/Arduino_Logo.svg',
+  stm32: 'https://upload.wikimedia.org/wikipedia/commons/4/47/STMicroelectronics_logo.svg',
+  'stm32cubeide': 'https://upload.wikimedia.org/wikipedia/commons/4/47/STMicroelectronics_logo.svg',
+  onshape: 'https://upload.wikimedia.org/wikipedia/commons/5/53/PTC_Inc._logo.svg',
+  autocad: 'https://upload.wikimedia.org/wikipedia/commons/d/d7/AutoCAD_logo.svg',
+  openscad: 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OpenSCAD_logo.svg',
+  simscale: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/SimScale_Logo_rgb.svg/320px-SimScale_Logo_rgb.svg.png',
+  openfoam: 'https://upload.wikimedia.org/wikipedia/commons/3/38/OpenFOAM_Logo.svg',
+  cura: 'https://upload.wikimedia.org/wikipedia/commons/b/bc/Cura_Logo.svg',
+  'ultimaker-cura': 'https://upload.wikimedia.org/wikipedia/commons/b/bc/Cura_Logo.svg',
+  prusaslicer: 'https://upload.wikimedia.org/wikipedia/commons/4/49/PrusaSlicer_logo.svg',
+  'bambu-studio': 'https://upload.wikimedia.org/wikipedia/commons/b/ba/Bambu_Lab_logo.svg',
+  github: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg',
+  python: 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg',
+  jupyter: 'https://upload.wikimedia.org/wikipedia/commons/3/38/Jupyter_logo.svg',
+  colab: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Colaboratory_SVG_Logo.svg',
+  'google-colab': 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Colaboratory_SVG_Logo.svg',
+  git: 'https://upload.wikimedia.org/wikipedia/commons/e/e0/Git-logo.svg',
+  wireshark: 'https://upload.wikimedia.org/wikipedia/commons/a/aa/Wireshark_icon_and_wordmark.svg',
+  virtualbox: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Virtualbox_logo.png',
+  'oracle-virtualbox': 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Virtualbox_logo.png',
+  ubuntu: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo-ubuntu_cof-orange-hex.svg',
+  nmap: 'https://upload.wikimedia.org/wikipedia/commons/4/49/Nmap-logo-64.png',
+  postman: 'https://upload.wikimedia.org/wikipedia/commons/c/c2/Postman_%28software%29.png',
+  digikey: 'https://upload.wikimedia.org/wikipedia/commons/3/30/DigiKey_logo.svg',
+  'digikey-calculators': 'https://upload.wikimedia.org/wikipedia/commons/3/30/DigiKey_logo.svg',
+  wolframalpha: 'https://upload.wikimedia.org/wikipedia/commons/e/eb/Wolfram_Alpha_logo.svg',
+  'wolfram-alpha': 'https://upload.wikimedia.org/wikipedia/commons/e/eb/Wolfram_Alpha_logo.svg',
+};
+
+export const TOOL_HERO_IMAGES: Record<string, string> = {
+  kicad: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
+  'autodesk-fusion': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+  wokwi: 'https://images.unsplash.com/photo-1608555855762-2b657eb1c348?auto=format&fit=crop&w=800&q=80',
+  freecad: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=800&q=80',
+  ansys: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80',
+  vscode: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+  ltspice: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80',
+  solidworks: 'https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=800&q=80',
+  matlab: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=800&q=80',
+  'cisco-packet-tracer': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80',
+  blender: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+  docker: 'https://images.unsplash.com/photo-1605745341112-85968b19335b?auto=format&fit=crop&w=800&q=80',
+};
+
+export const CATEGORY_HERO_FALLBACKS: Record<string, string> = {
+  Electronics: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
+  Mechanical: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+  '3D Printing': 'https://images.unsplash.com/photo-1631556097152-c39479bcffec?auto=format&fit=crop&w=800&q=80',
+  Programming: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+  'IT & Networking': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80',
+  Simulation: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80',
+  Calculators: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=800&q=80',
+};
+
+export function getToolLogoUrl(tool: Partial<EngineeringTool>): string {
+  if (tool.icon?.trim()) return tool.icon.trim();
+  const slug = (tool.slug || '').toLowerCase().trim();
+  const name = (tool.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  if (TOOL_OFFICIAL_LOGOS[slug]) return TOOL_OFFICIAL_LOGOS[slug];
+  for (const [key, url] of Object.entries(TOOL_OFFICIAL_LOGOS)) {
+    if (slug.includes(key) || name.includes(key)) return url;
+  }
+  return 'https://upload.wikimedia.org/wikipedia/commons/4/42/KiCad_logo_v6.svg';
+}
+
+export function getToolHeroImageUrl(tool: Partial<EngineeringTool>): string {
+  if (tool.imageUrl?.trim()) return tool.imageUrl.trim();
+  const slug = (tool.slug || '').toLowerCase().trim();
+  if (TOOL_HERO_IMAGES[slug]) return TOOL_HERO_IMAGES[slug];
+  const cat = tool.category || 'Electronics';
+  return CATEGORY_HERO_FALLBACKS[cat] || CATEGORY_HERO_FALLBACKS.Electronics;
+}
+
 export const DEFAULT_ENGINEERING_TOOLS: EngineeringTool[] = [
   // ==========================================
   // TOP 12 FEATURED TOOLS

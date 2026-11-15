@@ -26,7 +26,12 @@ import { NewsletterForm } from '@/components/articles/NewsletterForm';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
 import { getPublishedPosts } from '@/modules/posts/public-queries';
-import { fetchTools, DEFAULT_ENGINEERING_TOOLS } from '@/modules/tools/tool-service';
+import {
+  fetchTools,
+  DEFAULT_ENGINEERING_TOOLS,
+  getToolLogoUrl,
+  getToolHeroImageUrl,
+} from '@/modules/tools/tool-service';
 
 export const revalidate = 60;
 
@@ -46,7 +51,9 @@ export default async function HomePage() {
 
       <main className="flex-1">
         {/* 01. Hero Section */}
-        <section className="border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/50 to-white py-16 sm:py-24">
+        <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/70 to-white py-16 sm:py-24">
+          {/* Ambient Glowing Tech Aura */}
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[650px] h-[320px] bg-gradient-to-r from-amber-400/15 via-sky-400/15 to-amber-400/15 rounded-full blur-3xl pointer-events-none animate-pulse-glow" />
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               <div className="lg:col-span-7 space-y-6">
@@ -178,7 +185,46 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* 02. Explore EI House — The Six Pillars Grid */}
+        {/* Animated Engineering Technologies Ticker */}
+        <section className="bg-[#0B1528] border-y border-white/10 text-white py-3 overflow-hidden select-none">
+          <div className="flex animate-marquee-slow whitespace-nowrap gap-8 text-xs font-mono font-medium tracking-wide text-slate-300">
+            <span className="flex items-center gap-2"><span className="text-amber-400">⚡</span> STM32 ARM Cortex</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-emerald-400">🚀</span> ESP32-S3 Dual-Core</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-blue-400">📐</span> KiCad 8 EDA Suite</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-orange-400">⚙️</span> Autodesk Fusion 360</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-cyan-400">🔬</span> Wokwi Web Simulator</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-red-400">🧊</span> FreeCAD Parametric</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-indigo-400">💻</span> Visual Studio Code</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-amber-400">🌐</span> Cisco Packet Tracer</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-sky-400">📦</span> Docker &amp; DevOps</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-purple-400">🖨️</span> Bambu Studio 3D</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-emerald-400">🐍</span> Python Automation</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-rose-400">📈</span> Ansys Simulation</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-amber-400">⚡</span> STM32 ARM Cortex</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-emerald-400">🚀</span> ESP32-S3 Dual-Core</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-blue-400">📐</span> KiCad 8 EDA Suite</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-orange-400">⚙️</span> Autodesk Fusion 360</span>
+            <span className="text-slate-600">/</span>
+            <span className="flex items-center gap-2"><span className="text-cyan-400">🔬</span> Wokwi Web Simulator</span>
+          </div>
+        </section>
+
+        {/* 02. Explore EI House — The Eight Pillars Grid */}
         <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
             <div className="text-center max-w-2xl mx-auto space-y-3">
@@ -205,7 +251,7 @@ export default async function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Education</span>
@@ -225,7 +271,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Hardware</span>
@@ -245,7 +291,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Commerce</span>
@@ -265,7 +311,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Software</span>
@@ -285,7 +331,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Resources</span>
@@ -305,7 +351,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Solutions</span>
@@ -325,7 +371,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Community</span>
@@ -345,7 +391,7 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-lg transition-all flex flex-col justify-between">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Institutions</span>
@@ -401,66 +447,101 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Top 12 Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {featuredTools.map((tool) => (
-                <div
-                  key={tool.id || tool.slug}
-                  className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                        {tool.category}
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                          tool.licenseType === 'Open Source'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : tool.licenseType === 'Free'
-                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : tool.licenseType === 'Student License'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        {tool.licenseType}
-                      </span>
+            {/* Top 12 Grid with Hero Banners & Real Logos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {featuredTools.map((tool) => {
+                const logoUrl = getToolLogoUrl(tool);
+                const heroImg = getToolHeroImageUrl(tool);
+                return (
+                  <div
+                    key={tool.id || tool.slug}
+                    className="rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden group hover:-translate-y-1 duration-300"
+                  >
+                    {/* Hero Image Header with Tool Name and Real Logo ON TOP */}
+                    <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-[#0B1528] via-[#12233D] to-[#172D4D]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={heroImg}
+                        alt={tool.name}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover opacity-35 group-hover:scale-105 group-hover:opacity-45 transition-all duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0B1528] via-[#0B1528]/60 to-transparent" />
+
+                      {/* Top Badges */}
+                      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 z-10">
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-amber-300 border border-amber-400/30">
+                          {tool.category}
+                        </span>
+                        <span
+                          className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border backdrop-blur-md ${
+                            tool.licenseType === 'Open Source'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                              : tool.licenseType === 'Free'
+                              ? 'bg-blue-500/20 text-blue-300 border-blue-400/30'
+                              : tool.licenseType === 'Student License'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-400/30'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+                          }`}
+                        >
+                          {tool.licenseType}
+                        </span>
+                      </div>
+
+                      {/* Real Logo & Tool Name directly on Hero Image */}
+                      <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center gap-2.5 z-10">
+                        <div className="h-10 w-10 rounded-lg bg-white p-1 shadow-md border border-white/90 shrink-0 flex items-center justify-center overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={logoUrl}
+                            alt={`${tool.name} logo`}
+                            loading="lazy"
+                            className="h-full w-full object-contain"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-base font-bold text-white drop-shadow-md truncate group-hover:text-amber-300 transition-colors">
+                            {tool.name}
+                          </h3>
+                          {tool.badge && (
+                            <span className="text-[9px] font-semibold text-amber-200 bg-amber-400/20 border border-amber-300/30 px-1.5 py-0.2 rounded inline-block">
+                              {tool.badge}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <h3 className="font-display text-base font-bold text-[#0B1528] group-hover:text-[#172D4D] transition-colors flex items-center justify-between">
-                        <span>{tool.name}</span>
-                        {tool.badge && (
-                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-sans">
-                            {tool.badge}
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs font-semibold text-slate-700 mt-0.5">
-                        {tool.mainApplication || tool.summary}
-                      </p>
+                    {/* Card Body */}
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-semibold text-slate-800 line-clamp-1">
+                          {tool.mainApplication || tool.summary}
+                        </p>
+                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                          {tool.summary}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-medium">Official Portal</span>
+                        <a
+                          href={tool.officialWebsite}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#172D4D] hover:text-[#0B1528] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition-colors"
+                        >
+                          <span>Visit Website</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     </div>
-
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {tool.summary}
-                    </p>
                   </div>
-
-                  <div className="pt-4 mt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-medium">Official Link</span>
-                    <a
-                      href={tool.officialWebsite}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-[#172D4D] hover:text-[#0B1528] hover:underline"
-                    >
-                      <span>Visit Website</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Quick Filter Menu Pill Strip matching user suggestion */}

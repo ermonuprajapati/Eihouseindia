@@ -25,6 +25,8 @@ import { Input } from '@/components/ui/input';
 import {
   fetchLibraryItems,
   LIBRARY_CATEGORIES,
+  getLibraryLogoUrl,
+  getLibraryHeroImageUrl,
 } from '@/modules/library/library-service';
 import { ENGINEERING_DOMAINS } from '@/modules/tools/tool-service';
 import type { LibraryCategory, LibraryItem } from '@/types';
@@ -237,93 +239,131 @@ export function LibraryCatalogClient({ initialItems }: LibraryCatalogClientProps
                 <p className="text-xs text-slate-500 mt-1">Try resetting the domain or category filter.</p>
               </div>
             ) : (
-              filteredItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-col justify-between space-y-5 shadow-xs hover:shadow-md hover:border-slate-300 transition-all group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
-                        {item.category}
-                      </span>
-                      {item.badge && (
-                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded">
-                          {item.badge}
+              filteredItems.map((item) => {
+                const logoUrl = getLibraryLogoUrl(item);
+                const heroImg = getLibraryHeroImageUrl(item);
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden group"
+                  >
+                    {/* Hero Image Header with Title and Real Logo ON TOP */}
+                    <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-gradient-to-br from-[#0B1528] via-[#12233D] to-[#172D4D]">
+                      {/* Background Hero Banner */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={heroImg}
+                        alt={item.title}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover opacity-35 group-hover:scale-105 group-hover:opacity-45 transition-all duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0B1528] via-[#0B1528]/60 to-transparent" />
+
+                      {/* Top Badges */}
+                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-sky-300 border border-sky-400/30">
+                          {item.category}
                         </span>
-                      )}
-                    </div>
-
-                    <h3 className="font-display text-lg font-bold text-[#0B1528] group-hover:text-primary transition-colors leading-snug">
-                      {item.title}
-                    </h3>
-
-                    <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                      {item.summary}
-                    </p>
-
-                    <div className="flex items-center gap-2 text-xs text-slate-500 pt-2 border-t border-slate-100 flex-wrap">
-                      {item.fileFormat && (
-                        <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
-                          <FileText className="h-3 w-3 text-slate-500" />
-                          <span>{item.fileFormat}</span>
-                        </span>
-                      )}
-                      {item.fileSize && (
-                        <span className="text-[11px] font-mono text-slate-400">
-                          {item.fileSize}
-                        </span>
-                      )}
-                      {item.version && (
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          {item.version}
-                        </span>
-                      )}
-                    </div>
-
-                    {item.authorOrSource && (
-                      <p className="text-[11px] text-slate-400 italic">
-                        Source: {item.authorOrSource}
-                      </p>
-                    )}
-
-                    {item.tags && item.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {item.tags.map((tag, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200"
-                          >
-                            #{tag}
+                        {item.badge && (
+                          <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30 px-2 py-0.5 rounded-full backdrop-blur-md">
+                            {item.badge}
                           </span>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center gap-2">
-                    {item.fileUrl ? (
-                      <Button asChild size="sm" className="w-full bg-[#172D4D] text-white text-xs font-semibold">
-                        <a href={item.fileUrl} target="_blank" rel="noopener noreferrer" download>
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
-                          <span>Download Resource</span>
-                        </a>
-                      </Button>
-                    ) : item.externalUrl ? (
-                      <Button asChild size="sm" variant="outline" className="w-full text-xs font-semibold">
-                        <a href={item.externalUrl} target="_blank" rel="noopener noreferrer">
-                          <span>View Official Specs</span>
-                          <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="outline" className="w-full text-xs font-semibold" disabled>
-                        <span>Available in Lab Library</span>
-                      </Button>
-                    )}
+                      {/* Real Logo & Title directly on Hero Image */}
+                      <div className="absolute bottom-3 left-3 right-3 flex items-center gap-3 z-10">
+                        <div className="h-11 w-11 rounded-xl bg-white p-1.5 shadow-lg border border-white/90 shrink-0 flex items-center justify-center overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={logoUrl}
+                            alt={`${item.title} logo`}
+                            loading="lazy"
+                            className="h-full w-full object-contain"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-sm sm:text-base font-bold text-white drop-shadow-md line-clamp-2 group-hover:text-sky-300 transition-colors leading-snug">
+                            {item.title}
+                          </h3>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Body */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div className="space-y-3">
+                        <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                          {item.summary}
+                        </p>
+
+                        <div className="flex items-center gap-2 text-xs text-slate-500 pt-2 border-t border-slate-100 flex-wrap">
+                          {item.fileFormat && (
+                            <span className="inline-flex items-center gap-1 font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                              <FileText className="h-3 w-3 text-slate-500" />
+                              <span>{item.fileFormat}</span>
+                            </span>
+                          )}
+                          {item.fileSize && (
+                            <span className="text-[11px] font-mono text-slate-400">
+                              {item.fileSize}
+                            </span>
+                          )}
+                          {item.version && (
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {item.version}
+                            </span>
+                          )}
+                        </div>
+
+                        {item.authorOrSource && (
+                          <p className="text-[11px] text-slate-400 italic">
+                            Source: {item.authorOrSource}
+                          </p>
+                        )}
+
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {item.tags.map((tag, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200"
+                              >
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+                        {item.fileUrl ? (
+                          <Button asChild size="sm" className="w-full bg-[#172D4D] text-white text-xs font-semibold">
+                            <a href={item.fileUrl} target="_blank" rel="noopener noreferrer" download>
+                              <Download className="h-3.5 w-3.5 mr-1.5" />
+                              <span>Download Resource</span>
+                            </a>
+                          </Button>
+                        ) : item.externalUrl ? (
+                          <Button asChild size="sm" variant="outline" className="w-full text-xs font-semibold border-slate-300">
+                            <a href={item.externalUrl} target="_blank" rel="noopener noreferrer">
+                              <span>View Official Specs</span>
+                              <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="w-full text-xs font-semibold" disabled>
+                            <span>Available in Lab Library</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

@@ -37,6 +37,41 @@ export const LIBRARY_CATEGORIES: LibraryCategory[] = [
   'Networking Protocol & Spec',
 ];
 
+export const LIBRARY_OFFICIAL_LOGOS: Record<string, string> = {
+  esp32: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Espressif_logo.svg/320px-Espressif_logo.svg.png',
+  stm32: 'https://upload.wikimedia.org/wikipedia/commons/4/47/STMicroelectronics_logo.svg',
+  arduino: 'https://upload.wikimedia.org/wikipedia/commons/8/87/Arduino_Logo.svg',
+  pico: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/cb/Raspberry_Pi_Logo.svg/300px-Raspberry_Pi_Logo.svg.png',
+  resistor: 'https://upload.wikimedia.org/wikipedia/commons/3/30/DigiKey_logo.svg',
+  lora: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/LoRa_Alliance_logo.svg/320px-LoRa_Alliance_logo.svg.png',
+  fastener: 'https://upload.wikimedia.org/wikipedia/commons/e/eb/FreeCAD_0.19_icon.svg',
+  i2c: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg',
+};
+
+export const LIBRARY_CATEGORY_HEROES: Record<string, string> = {
+  'Datasheet & Pinout': 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
+  'Firmware Library & Driver': 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+  'Schematic & Reference Circuit': 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80',
+  'Mechanical & 3D CAD Standard': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+  'Programming Cheat Sheet': 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
+  'Networking Protocol & Spec': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80',
+};
+
+export function getLibraryLogoUrl(item: Partial<LibraryItem>): string {
+  if (item.imageUrl?.trim()) return item.imageUrl.trim();
+  const slug = (item.slug || '').toLowerCase();
+  const title = (item.title || '').toLowerCase();
+  for (const [key, url] of Object.entries(LIBRARY_OFFICIAL_LOGOS)) {
+    if (slug.includes(key) || title.includes(key)) return url;
+  }
+  return 'https://upload.wikimedia.org/wikipedia/commons/4/47/STMicroelectronics_logo.svg';
+}
+
+export function getLibraryHeroImageUrl(item: Partial<LibraryItem>): string {
+  const cat = item.category || 'Datasheet & Pinout';
+  return LIBRARY_CATEGORY_HEROES[cat] || LIBRARY_CATEGORY_HEROES['Datasheet & Pinout'];
+}
+
 export const DEFAULT_LIBRARY_ITEMS: LibraryItem[] = [
   // --- Electronics & Embedded ---
   {

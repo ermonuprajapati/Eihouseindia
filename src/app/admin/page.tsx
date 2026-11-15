@@ -294,7 +294,7 @@ export default function AdminPanelPage() {
   const [savingLibrary, setSavingLibrary] = useState(false);
   const [deletingLibrary, setDeletingLibrary] = useState(false);
 
-  const loadAllAdminData = useCallback(async (showSpinner = true) => {
+  const loadAllAdminData = useCallback(async (showSpinner = false) => {
     if (!firebaseUser || !isEditor) return;
     if (showSpinner) {
       setLoadingData(true);
@@ -1094,8 +1094,11 @@ export default function AdminPanelPage() {
 
           {/* Main Admin Viewport */}
           <div className="lg:col-span-9 space-y-6">
-            {loadingData ? (
-              <Skeleton className="h-96 w-full" />
+            {loadingData && !stats && posts.length === 0 ? (
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-48" />
+                <Skeleton className="h-96 w-full rounded-2xl" />
+              </div>
             ) : (
               <>
                 {section === 'dashboard' && (
