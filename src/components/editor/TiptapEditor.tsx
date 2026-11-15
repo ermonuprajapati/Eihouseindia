@@ -77,12 +77,17 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
   const [currentDoc, setCurrentDoc] = useState<TiptapDocument>(initialPost?.content || DEFAULT_DOC);
   const [showMathMenu, setShowMathMenu] = useState(false);
   const [customFormula, setCustomFormula] = useState('');
+  const [cursorY, setCursorY] = useState<number>(36);
+  const [showLineMathMenu, setShowLineMathMenu] = useState(false);
+  const [showLineImageMenu, setShowLineImageMenu] = useState(false);
+  const [customLineFormula, setCustomLineFormula] = useState('');
+  const [selectionCoords, setSelectionCoords] = useState<{ top: number; left: number; visible: boolean }>({
+    top: 0,
+    left: 0,
+    visible: false,
+  });
 
-  const insertFormula = (formulaText: string) => {
-    if (!editor) return;
-    editor.chain().focus().insertContent(` ${formulaText} `).run();
-  };
-
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +136,83 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
       setCurrentDoc(json);
     },
   });
+
+  const insertFormula = (formulaText: string) => {
+    if (!editor) return;
+    editor.chain().focus().insertContent(` ${formulaText} `).run();
+  };
+
+  const updateCursorCoords = useCallback(() => {
+    if (!editor || !editor.view) return;
+    try {
+      const { from, to, empty } = editor.state.selection;
+      const wrapper = editorWrapperRef.current;
+      if (!wrapper) return;
+      const rect = wrapper.getBoundingClientRect();
+
+      // Line cursor position
+      const coords = editor.view.coordsAtPos(from);
+      if (coords) {
+        const relativeTop = Math.max(16, coords.top - rect.top);
+        setCursorY(relativeTop);
+      }
+
+      // Text selection position for floating bubble menu
+      if (!empty && to > from) {
+        const startCoords = editor.view.coordsAtPos(from);
+        const endCoords = editor.view.coordsAtPos(to);
+        if (startCoords && endCoords) {
+          const bubbleLeft = Math.max(
+            80,
+            Math.min(rect.width - 80, (startCoords.left + endCoords.left) / 2 - rect.left)
+          );
+          const bubbleTop = Math.max(0, startCoords.top - rect.top - 46);
+          setSelectionCoords({
+            top: bubbleTop,
+            left: bubbleLeft,
+            visible: true,
+          });
+          return;
+        }
+      }
+      setSelectionCoords((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    } catch {
+      // ignore
+    }
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const update = () => updateCursorCoords();
+
+    editor.on('selectionUpdate', update);
+    editor.on('transaction', update);
+    editor.on('focus', update);
+
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update, { passive: true });
+
+    return () => {
+      editor.off('selectionUpdate', update);
+      editor.off('transaction', update);
+      editor.off('focus', update);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [editor, updateCursorCoords]);
+
+  // Click outside to close line floating popovers
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && !target.closest('.line-menu-popover')) {
+        setShowLineMathMenu(false);
+        setShowLineImageMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Local autosave backup
   const draftStorageKey = `eihouse_draft_${postId || 'new'}`;
@@ -535,8 +617,9 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
             </div>
 
             {/* Tiptap Toolbar & Surface */}
-            <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-              <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 p-2">
+            <div className="rounded-lg border border-slate-200 bg-white shadow-xs">
+              {/* Sticky Top Toolbar - always docked when scrolling */}
+              <div className="sticky top-16 z-20 flex flex-wrap items-center gap-1 rounded-t-lg border-b border-slate-200 bg-slate-50/95 backdrop-blur-md p-2 shadow-xs transition-shadow">
                 {(['1', '2', '3', '4'] as const).map((lvl) => {
                   const level = Number(lvl) as 1 | 2 | 3 | 4;
                   const active = editor?.isActive('heading', { level });
@@ -715,7 +798,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                         <button
                           type="button"
                           onClick={() => setShowMathMenu(false)}
-                          className="text-slate-400 hover:text-slate-600"
+                          className="text-slate-400 hover:text-slate-600 cursor-pointer"
                         >
                           ✕
                         </button>
@@ -727,7 +810,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                             insertFormula('$$ \\sum_{i=1}^{n} x_i $$');
                             setShowMathMenu(false);
                           }}
-                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
                         >
                           <span className="font-medium">∑ Summation (Sigma)</span>
                           <code className="text-[10px] text-slate-400 font-mono">$$\sum x_i$$</code>
@@ -738,7 +821,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                             insertFormula('$$ \\sigma = \\sqrt{\\frac{1}{N} \\sum_{i=1}^{N} (x_i - \\mu)^2} $$');
                             setShowMathMenu(false);
                           }}
-                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
                         >
                           <span className="font-medium">σ Std Dev / Variance</span>
                           <code className="text-[10px] text-slate-400 font-mono">$$\sigma = ...$$</code>
@@ -747,9 +830,9 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                           type="button"
                           onClick={() => {
                             insertFormula('$$ V = I \\cdot R $$');
-                            setShowMathMenu(false);
+                            setShowLineMathMenu(false);
                           }}
-                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
                         >
                           <span className="font-medium">⚡ Ohm&#39;s Law</span>
                           <code className="text-[10px] text-slate-400 font-mono">$$V = I \cdot R$$</code>
@@ -760,7 +843,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                             insertFormula('$ \\sigma $');
                             setShowMathMenu(false);
                           }}
-                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700"
+                          className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
                         >
                           <span className="font-medium">Inline Symbol (σ)</span>
                           <code className="text-[10px] text-slate-400 font-mono">$\sigma$</code>
@@ -793,7 +876,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                               setShowMathMenu(false);
                             }
                           }}
-                          className="h-7 px-2.5 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 whitespace-nowrap"
+                          className="h-7 px-2.5 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 whitespace-nowrap cursor-pointer"
                         >
                           Insert
                         </button>
@@ -814,7 +897,407 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
                 onChange={handleInlineImageUpload}
               />
 
-              <div className="p-5 sm:p-6">
+              {/* Editor Surface with Line-side Companion and Floating Selection Bar */}
+              <div ref={editorWrapperRef} className="relative pl-12 sm:pl-16 pr-5 sm:pr-8 py-5 min-h-[440px]">
+                {/* Floating Line-Side Companion: Glides right next to the active cursor line! */}
+                {editor && (
+                  <div
+                    style={{
+                      top: `${cursorY}px`,
+                      transform: 'translateY(-50%)',
+                    }}
+                    className="line-menu-popover absolute left-2 sm:left-3 z-20 transition-all duration-150 ease-out select-none"
+                  >
+                    <div className="flex items-center gap-1 rounded-full border border-slate-200/90 bg-white/95 backdrop-blur-md px-1.5 py-1 shadow-md hover:shadow-lg transition-all">
+                      {/* Text Size (P, H1, H2, H3) */}
+                      <div className="flex items-center gap-0.5 border-r border-slate-200 pr-1">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().setParagraph().run();
+                          }}
+                          title="Normal Paragraph text"
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                            editor.isActive('paragraph') && !editor.isActive('heading')
+                              ? 'bg-[#0B1528] text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          P
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().toggleHeading({ level: 1 }).run();
+                          }}
+                          title="Heading 1 (Main Title)"
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
+                            editor.isActive('heading', { level: 1 })
+                              ? 'bg-[#0B1528] text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          H1
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().toggleHeading({ level: 2 }).run();
+                          }}
+                          title="Heading 2 (Section)"
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
+                            editor.isActive('heading', { level: 2 })
+                              ? 'bg-[#0B1528] text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          H2
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().toggleHeading({ level: 3 }).run();
+                          }}
+                          title="Heading 3 (Sub-section)"
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
+                            editor.isActive('heading', { level: 3 })
+                              ? 'bg-[#0B1528] text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          H3
+                        </button>
+                      </div>
+
+                      {/* Image Button beside line */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowLineImageMenu((prev) => !prev);
+                            setShowLineMathMenu(false);
+                          }}
+                          title="Insert Image (Upload or URL)"
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                          <ImagePlus className="h-3.5 w-3.5 text-blue-600" />
+                          <span className="hidden sm:inline">Image</span>
+                        </button>
+
+                        {showLineImageMenu && (
+                          <div className="absolute left-0 top-full mt-2 z-30 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl space-y-1 text-xs animate-in fade-in zoom-in-95 duration-100">
+                            <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                              Insert Image at Line
+                            </div>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setShowLineImageMenu(false);
+                                inlineImageInputRef.current?.click();
+                              }}
+                              className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
+                            >
+                              <Upload className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Upload from device</span>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setShowLineImageMenu(false);
+                                handleInsertImageUrl();
+                              }}
+                              className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-blue-50 text-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
+                            >
+                              <Link2 className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Paste Image URL</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Math / Formula Button beside line */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowLineMathMenu((prev) => !prev);
+                            setShowLineImageMenu(false);
+                          }}
+                          title="Insert Math / Sigma Formula"
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition-colors cursor-pointer"
+                        >
+                          <span className="font-serif font-bold text-xs leading-none">∑</span>
+                          <span className="hidden sm:inline">Formula</span>
+                        </button>
+
+                        {showLineMathMenu && (
+                          <div className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl space-y-2 text-xs animate-in fade-in zoom-in-95 duration-100">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                              <span className="font-semibold text-slate-800 flex items-center gap-1">
+                                <span className="font-serif font-bold text-indigo-600">∑</span>
+                                <span>Insert Formula at Line</span>
+                              </span>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setShowLineMathMenu(false);
+                                }}
+                                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  insertFormula('$$ \\sum_{i=1}^{n} x_i $$');
+                                  setShowLineMathMenu(false);
+                                }}
+                                className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
+                              >
+                                <span className="font-medium">∑ Summation (Sigma)</span>
+                                <code className="text-[10px] text-slate-400 font-mono">$$\sum x_i$$</code>
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  insertFormula('$$ \\sigma = \\sqrt{\\frac{1}{N} \\sum_{i=1}^{N} (x_i - \\mu)^2} $$');
+                                  setShowLineMathMenu(false);
+                                }}
+                                className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
+                              >
+                                <span className="font-medium">σ Std Dev / Variance</span>
+                                <code className="text-[10px] text-slate-400 font-mono">$$\sigma = ...$$</code>
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  insertFormula('$$ V = I \\cdot R $$');
+                                  setShowLineMathMenu(false);
+                                }}
+                                className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
+                              >
+                                <span className="font-medium">⚡ Ohm&#39;s Law</span>
+                                <code className="text-[10px] text-slate-400 font-mono">$$V = I \cdot R$$</code>
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  insertFormula('$ \\sigma $');
+                                  setShowLineMathMenu(false);
+                                }}
+                                className="w-full text-left p-1.5 rounded hover:bg-indigo-50 flex items-center justify-between text-slate-700 cursor-pointer"
+                              >
+                                <span className="font-medium">Inline Symbol (σ)</span>
+                                <code className="text-[10px] text-slate-400 font-mono">$\sigma$</code>
+                              </button>
+                            </div>
+                            <div className="pt-1.5 border-t border-slate-100 flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="LaTeX: e.g. E = mc^2"
+                                value={customLineFormula}
+                                onChange={(e) => setCustomLineFormula(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (customLineFormula.trim()) {
+                                      insertFormula(`$$ ${customLineFormula.trim()} $$`);
+                                      setCustomLineFormula('');
+                                      setShowLineMathMenu(false);
+                                    }
+                                  }
+                                }}
+                                className="h-7 w-full px-2 rounded border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  if (customLineFormula.trim()) {
+                                    insertFormula(`$$ ${customLineFormula.trim()} $$`);
+                                    setCustomLineFormula('');
+                                    setShowLineMathMenu(false);
+                                  }
+                                }}
+                                className="h-7 px-2.5 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 whitespace-nowrap cursor-pointer"
+                              >
+                                Insert
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Code Block & List shortcuts */}
+                      <div className="hidden md:flex items-center gap-0.5 border-l border-slate-200 pl-1">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().toggleCodeBlock().run();
+                          }}
+                          title="Code Block"
+                          className={`p-1 rounded transition-colors cursor-pointer ${
+                            editor.isActive('codeBlock') ? 'bg-[#0B1528] text-white' : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Code className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            editor.chain().focus().toggleBulletList().run();
+                          }}
+                          title="Bullet List"
+                          className={`p-1 rounded transition-colors cursor-pointer ${
+                            editor.isActive('bulletList') ? 'bg-[#0B1528] text-white' : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <List className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Floating Selection Bubble Toolbar (Appears when text is highlighted) */}
+                {selectionCoords.visible && (
+                  <div
+                    style={{
+                      top: `${selectionCoords.top}px`,
+                      left: `${selectionCoords.left}px`,
+                      transform: 'translateX(-50%)',
+                    }}
+                    className="absolute z-30 flex items-center gap-1 rounded-lg border border-slate-800 bg-[#0B1528] text-white px-2 py-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100 select-none"
+                  >
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().setParagraph().run();
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-xs font-semibold hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('paragraph') && !editor?.isActive('heading') ? 'text-blue-400 font-bold' : 'text-slate-200'
+                      }`}
+                    >
+                      P
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleHeading({ level: 1 }).run();
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-xs font-mono font-bold hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('heading', { level: 1 }) ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      H1
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleHeading({ level: 2 }).run();
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-xs font-mono font-bold hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('heading', { level: 2 }) ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      H2
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleHeading({ level: 3 }).run();
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-xs font-mono font-bold hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('heading', { level: 3 }) ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      H3
+                    </button>
+                    <span className="mx-1 h-3.5 w-px bg-slate-700" />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleBold().run();
+                      }}
+                      className={`p-1 rounded hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('bold') ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      <Bold className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleItalic().run();
+                      }}
+                      className={`p-1 rounded hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('italic') ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      <Italic className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleUnderline().run();
+                      }}
+                      className={`p-1 rounded hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('underline') ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      <UnderlineIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleInsertLink();
+                      }}
+                      className={`p-1 rounded hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('link') ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().toggleCode().run();
+                      }}
+                      className={`p-1 rounded hover:bg-slate-700 cursor-pointer ${
+                        editor?.isActive('code') ? 'text-blue-400' : 'text-slate-200'
+                      }`}
+                    >
+                      <Code className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <EditorContent editor={editor} />
               </div>
             </div>
