@@ -9,14 +9,6 @@ import {
   Download,
   ExternalLink,
   FileText,
-  FileCode,
-  Box,
-  Layers,
-  Cpu,
-  Bot,
-  Terminal,
-  Network,
-  CheckCircle2,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -29,7 +21,7 @@ import {
   getLibraryHeroImageUrl,
 } from '@/modules/library/library-service';
 import { ENGINEERING_DOMAINS } from '@/modules/tools/tool-service';
-import type { LibraryCategory, LibraryItem } from '@/types';
+import type { LibraryItem } from '@/types';
 
 interface LibraryCatalogClientProps {
   initialItems: LibraryItem[];

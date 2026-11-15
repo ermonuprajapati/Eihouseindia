@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   CheckCircle2,
   Laptop,
-  Globe,
   SlidersHorizontal,
   Table,
   LayoutGrid,
@@ -32,12 +31,11 @@ import { Input } from '@/components/ui/input';
 import { InteractiveToolModal } from '@/components/tools/InteractiveToolModal';
 import {
   fetchTools,
-  TOOL_CATEGORIES,
   TOOL_LICENSES,
   getToolLogoUrl,
   getToolHeroImageUrl,
 } from '@/modules/tools/tool-service';
-import type { EngineeringTool, ToolCategory, ToolLicenseType } from '@/types';
+import type { EngineeringTool } from '@/types';
 
 interface ToolsCatalogClientProps {
   initialTools: EngineeringTool[];

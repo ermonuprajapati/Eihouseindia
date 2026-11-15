@@ -497,9 +497,6 @@ export default async function HomePage() {
                             alt={`${tool.name} logo`}
                             loading="lazy"
                             className="h-full w-full object-contain"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLElement).style.display = 'none';
-                            }}
                           />
                         </div>
                         <div className="min-w-0">

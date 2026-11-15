@@ -15,8 +15,6 @@ import {
   Calculator,
   Copy,
   Check,
-  RotateCcw,
-  Sparkles,
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,9 +28,7 @@ interface InteractiveToolModalProps {
 export function InteractiveToolModal({ tool, onClose }: InteractiveToolModalProps) {
   // --- Ohm's Law State ---
   const [ohmsV, setOhmsV] = useState('12');
-  const [ohmsI, setOhmsI] = useState('');
   const [ohmsR, setOhmsR] = useState('10');
-  const [ohmsP, setOhmsP] = useState('');
 
   // --- Resistor Color Code State ---
   const [band1, setBand1] = useState(1); // Brown (1)
