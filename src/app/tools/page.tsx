@@ -6,9 +6,9 @@ import { ToolsCatalogClient } from '@/components/tools/ToolsCatalogClient';
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: 'Engineering Tools & Calculators — EI House India',
+  title: 'Engineering Software & Tools Directory — EI House India',
   description:
-    'Free interactive engineering calculators and tools for Electronics, Embedded Systems, Mechanical Engineering, Computer Science, Networking, and 3D Printing.',
+    'Directory of recommended engineering software and tools across Electronics, Mechanical CAD, 3D Printing, Programming, IT Networking, Simulation, and Interactive Calculators.',
   alternates: { canonical: `${SITE_CONFIG.url}/tools` },
 };
 

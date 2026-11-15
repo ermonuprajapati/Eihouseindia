@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
 import {
-  Wrench,
   Search,
   Sparkles,
   Cpu,
@@ -11,16 +10,28 @@ import {
   Terminal,
   Network,
   Layers,
-  ArrowRight,
+  Activity,
+  Calculator,
   ExternalLink,
+  ShieldCheck,
+  CheckCircle2,
+  Laptop,
+  Globe,
+  SlidersHorizontal,
+  Table,
+  LayoutGrid,
+  Info,
+  ArrowUpRight,
+  ChevronRight,
+  Code2,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InteractiveToolModal } from '@/components/tools/InteractiveToolModal';
-import { fetchTools, ENGINEERING_DOMAINS } from '@/modules/tools/tool-service';
-import type { EngineeringDomain, EngineeringTool } from '@/types';
+import { fetchTools, TOOL_CATEGORIES, TOOL_LICENSES } from '@/modules/tools/tool-service';
+import type { EngineeringTool, ToolCategory, ToolLicenseType } from '@/types';
 
 interface ToolsCatalogClientProps {
   initialTools: EngineeringTool[];
@@ -28,9 +39,11 @@ interface ToolsCatalogClientProps {
 
 export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
   const [tools, setTools] = useState<EngineeringTool[]>(initialTools);
-  const [selectedDomain, setSelectedDomain] = useState<string>('All Domains');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedLicense, setSelectedLicense] = useState<string>('All Licenses');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTool, setActiveTool] = useState<EngineeringTool | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [activeCalculatorTool, setActiveCalculatorTool] = useState<EngineeringTool | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,50 +60,125 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
     };
   }, []);
 
+  // Filtered tools
   const filteredTools = useMemo(() => {
     return tools.filter((tool) => {
-      const matchesDomain =
-        selectedDomain === 'All Domains' || tool.domain === selectedDomain;
+      // Category match
+      let matchesCategory = true;
+      if (selectedCategory !== 'All') {
+        if (selectedCategory === 'Simulation') {
+          // Simulation matches either category === 'Simulation' or tags/domain
+          matchesCategory =
+            tool.category === 'Simulation' ||
+            Boolean(tool.tags?.some((t) => t.toLowerCase().includes('simulat') || t.toLowerCase() === 'spice' || t.toLowerCase() === 'fea' || t.toLowerCase() === 'cfd'));
+        } else if (selectedCategory === 'Calculators') {
+          matchesCategory =
+            tool.category === 'Calculators' ||
+            tool.toolType === 'interactive' ||
+            tool.toolType === 'built-in';
+        } else {
+          matchesCategory = tool.category === selectedCategory;
+        }
+      }
+
+      // License match
+      const matchesLicense =
+        selectedLicense === 'All Licenses' || tool.licenseType === selectedLicense;
+
+      // Search match
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
         tool.name.toLowerCase().includes(q) ||
+        (tool.mainApplication && tool.mainApplication.toLowerCase().includes(q)) ||
         tool.summary.toLowerCase().includes(q) ||
-        (tool.tags && tool.tags.some((t) => t.toLowerCase().includes(q)));
-      return matchesDomain && matchesSearch;
-    });
-  }, [tools, selectedDomain, searchQuery]);
+        (tool.tags && tool.tags.some((t) => t.toLowerCase().includes(q))) ||
+        (tool.licenseType && tool.licenseType.toLowerCase().includes(q));
 
-  const domainIcons: Record<string, React.ReactNode> = {
-    'Electronics & Embedded': <Cpu className="h-4 w-4" />,
-    'Mechanical & Robotics': <Bot className="h-4 w-4" />,
-    'Computer Science & IT': <Terminal className="h-4 w-4" />,
-    'Networking & IoT': <Network className="h-4 w-4" />,
-    '3D Printing & CAD': <Layers className="h-4 w-4" />,
+      return matchesCategory && matchesLicense && matchesSearch;
+    });
+  }, [tools, selectedCategory, selectedLicense, searchQuery]);
+
+  // Top 12 Featured Tools
+  const featuredTools = useMemo(() => {
+    return tools.filter((t) => t.featured).slice(0, 12);
+  }, [tools]);
+
+  // Category Icon Resolver
+  const getCategoryIcon = (cat?: string) => {
+    switch (cat) {
+      case 'Electronics':
+        return <Cpu className="h-4 w-4" />;
+      case 'Mechanical':
+        return <Bot className="h-4 w-4" />;
+      case '3D Printing':
+        return <Layers className="h-4 w-4" />;
+      case 'Programming':
+        return <Terminal className="h-4 w-4" />;
+      case 'IT & Networking':
+        return <Network className="h-4 w-4" />;
+      case 'Simulation':
+        return <Activity className="h-4 w-4" />;
+      case 'Calculators':
+        return <Calculator className="h-4 w-4" />;
+      default:
+        return <Code2 className="h-4 w-4" />;
+    }
   };
+
+  // License Pill Style
+  const getLicenseBadgeStyle = (lic?: string) => {
+    switch (lic) {
+      case 'Open Source':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300';
+      case 'Free':
+        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300';
+      case 'Freemium':
+        return 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300';
+      case 'Commercial / Paid':
+        return 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300';
+      case 'Student License':
+        return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300';
+      default:
+        return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/50 dark:text-slate-300';
+    }
+  };
+
+  const navCategories = [
+    { key: 'All', label: 'All Tools & Software' },
+    { key: 'Electronics', label: 'Electronics & Embedded', icon: <Cpu className="h-3.5 w-3.5" /> },
+    { key: 'Mechanical', label: 'Mechanical & CAD', icon: <Bot className="h-3.5 w-3.5" /> },
+    { key: '3D Printing', label: '3D Printing', icon: <Layers className="h-3.5 w-3.5" /> },
+    { key: 'Programming', label: 'Programming & CS', icon: <Terminal className="h-3.5 w-3.5" /> },
+    { key: 'IT & Networking', label: 'IT & Networking', icon: <Network className="h-3.5 w-3.5" /> },
+    { key: 'Simulation', label: 'Simulation & Analysis', icon: <Activity className="h-3.5 w-3.5" /> },
+    { key: 'Calculators', label: 'Calculators & Solvers', icon: <Calculator className="h-3.5 w-3.5" /> },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFBFD]">
       <SiteHeader />
 
       <main className="flex-1">
-        {/* 01. Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#0B1528] via-[#172D4D] to-[#0B1528] text-white py-16 sm:py-24">
+        {/* ========================================================= */}
+        {/* 01. HERO SECTION */}
+        {/* ========================================================= */}
+        <section className="relative overflow-hidden bg-gradient-to-b from-[#0B1528] via-[#12233D] to-[#0B1528] text-white py-14 sm:py-20 border-b border-white/10">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              <div className="lg:col-span-7 space-y-5">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1 text-xs font-semibold text-[#F59E0B] border border-[#F59E0B]/30">
+              <div className="lg:col-span-7 space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#F59E0B]/15 px-3.5 py-1 text-xs font-semibold text-[#F59E0B] border border-[#F59E0B]/30">
                   <Sparkles className="h-3.5 w-3.5" />
-                  <span>Precision Engineering Utilities &amp; Calculators</span>
+                  <span>EI House Recommended Engineering Directory</span>
                 </div>
 
                 <h1 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-                  Engineering Tools Suite
+                  Engineering Software &amp; Tools Directory
                 </h1>
 
                 <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl">
-                  Essential interactive calculators and automated design utilities engineered for
-                  Electronics, Embedded Firmware, Mechanical Systems, Programming, Networking, and 3D Printing.
+                  Curated ecosystem of professional CAD suites, circuit simulators, embedded IDEs,
+                  programming utilities, and interactive engineering calculators with direct official website links.
                 </p>
 
                 {/* Instant Search Bar */}
@@ -98,163 +186,472 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
                     type="search"
-                    placeholder="Search tools (e.g. Ohm, 555 Timer, Torque, Subnet, 3D Print)..."
+                    placeholder="Search software (e.g. KiCad, Fusion, FreeCAD, Wokwi, Ansys, Docker)..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-11 bg-white/10 border-white/20 text-white placeholder:text-slate-400 pl-10 pr-4 text-sm focus:bg-white focus:text-[#0B1528] transition-colors"
                   />
                 </div>
+
+                {/* Quick Directory Metrics */}
+                <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-medium text-slate-300">
+                  <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-md">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <strong>{tools.length}+</strong> Verified Engineering Tools
+                  </span>
+                  <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-md">
+                    <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
+                    Open Source &amp; Free Tiers Identified
+                  </span>
+                  <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-md">
+                    <ExternalLink className="h-3.5 w-3.5 text-amber-400" />
+                    Official Vendor Links
+                  </span>
+                </div>
               </div>
 
-              {/* Hero Visual Blueprint Card */}
+              {/* Hero Blueprint Visual Card */}
               <div className="lg:col-span-5">
-                <div className="relative rounded-2xl overflow-hidden border border-white/15 bg-white/5 backdrop-blur-md p-6 space-y-4 shadow-2xl">
-                  <div className="relative h-48 w-full rounded-xl overflow-hidden bg-[#070D18] border border-white/10">
+                <div className="relative rounded-2xl overflow-hidden border border-white/15 bg-white/5 backdrop-blur-md p-5 space-y-4 shadow-2xl">
+                  <div className="relative h-44 w-full rounded-xl overflow-hidden bg-[#070D18] border border-white/10">
                     <Image
                       src="/images/about/about-hero.jpg"
-                      alt="Engineering Tools Suite"
+                      alt="EI House Engineering Directory"
                       fill
                       className="object-cover opacity-85 hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0B1528] via-transparent to-transparent" />
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs font-mono text-[#F59E0B]">
-                      <span className="flex items-center gap-1.5">
-                        <Wrench className="h-3.5 w-3.5" />
-                        <span>Interactive Formula Solvers</span>
-                      </span>
-                      <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
-                        {tools.length} Tools Online
+                      <span>EI-HOUSE // DIRECTORY</span>
+                      <span className="bg-[#F59E0B]/20 px-2 py-0.5 rounded border border-[#F59E0B]/40 text-amber-200">
+                        Top 12 Featured
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                    <div className="rounded-lg bg-white/5 p-2 border border-white/10">
-                      <p className="font-bold text-white text-base">6+</p>
-                      <p className="text-slate-400 text-[10px]">Domains</p>
-                    </div>
-                    <div className="rounded-lg bg-white/5 p-2 border border-white/10">
-                      <p className="font-bold text-emerald-400 text-base">100%</p>
-                      <p className="text-slate-400 text-[10px]">Free &amp; Open</p>
-                    </div>
-                    <div className="rounded-lg bg-white/5 p-2 border border-white/10">
-                      <p className="font-bold text-[#F59E0B] text-base">Instant</p>
-                      <p className="text-slate-400 text-[10px]">Client-Side</p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      Directory Disciplines
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-200">
+                      <span className="px-2 py-0.5 rounded bg-white/10">Electronics &amp; PCB</span>
+                      <span className="px-2 py-0.5 rounded bg-white/10">Mechanical &amp; CAD</span>
+                      <span className="px-2 py-0.5 rounded bg-white/10">3D Printing Slicers</span>
+                      <span className="px-2 py-0.5 rounded bg-white/10">Simulation &amp; FEA/CFD</span>
+                      <span className="px-2 py-0.5 rounded bg-white/10">Networking &amp; DevOps</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Background subtle glowing radial lights */}
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#F59E0B]/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         </section>
 
-        {/* 02. Domain Tabs & Catalog Grid */}
-        <section className="py-12 sm:py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-          {/* Domain tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-            <button
-              type="button"
-              onClick={() => setSelectedDomain('All Domains')}
-              className={`text-xs font-semibold px-4 py-2 rounded-full border whitespace-nowrap transition-colors ${
-                selectedDomain === 'All Domains'
-                  ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-xs'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              All Domains ({tools.length})
-            </button>
-            {ENGINEERING_DOMAINS.map((domain) => {
-              const count = tools.filter((t) => t.domain === domain).length;
-              return (
-                <button
-                  key={domain}
-                  type="button"
-                  onClick={() => setSelectedDomain(domain)}
-                  className={`text-xs font-semibold px-4 py-2 rounded-full border whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                    selectedDomain === domain
-                      ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {domainIcons[domain]}
-                  <span>{domain} ({count})</span>
-                </button>
-              );
-            })}
+        {/* ========================================================= */}
+        {/* 02. IMPORTANT WEBSITE PUBLISHING NOTICE BANNER */}
+        {/* ========================================================= */}
+        <section className="bg-amber-50/80 border-b border-amber-200/80 text-amber-950 py-4 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-start md:items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+              <Info className="h-5 w-5" />
+            </div>
+            <div className="text-xs sm:text-sm text-amber-900 leading-relaxed">
+              <strong className="font-semibold text-amber-950">
+                Important for website publishing &amp; software usage:
+              </strong>{' '}
+              Not every tool is free or browser-based. Some require local installation, paid licences,
+              student eligibility, or account registration. For example, <strong>FreeCAD</strong> and{' '}
+              <strong>KiCad</strong> are completely open-source, whereas commercial CAD &amp; simulation
+              platforms (like SOLIDWORKS, Ansys, or MATLAB) have their own licensing terms and student editions.
+            </div>
           </div>
+        </section>
 
-          {/* Tools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTools.length === 0 ? (
-              <div className="col-span-full py-16 text-center rounded-2xl border border-dashed border-slate-300 bg-white p-8">
-                <Wrench className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-base font-semibold text-[#0B1528]">No tools found matching your filter</p>
-                <p className="text-xs text-slate-500 mt-1">Try searching with a different keyword or select All Domains.</p>
+        {/* ========================================================= */}
+        {/* 03. TOP 12 FEATURED TOOLS HIGHLIGHT */}
+        {/* ========================================================= */}
+        {selectedCategory === 'All' && !searchQuery && selectedLicense === 'All Licenses' && (
+          <section className="py-12 bg-white border-b border-slate-200">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F59E0B] tracking-wide uppercase">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Recommended Homepage Selection
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-[#0B1528] tracking-tight mt-1">
+                    Top 12 Featured Engineering Tools
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    The core engineering software and simulation platforms highlighted for every engineer and student.
+                  </p>
+                </div>
               </div>
-            ) : (
-              filteredTools.map((tool) => (
-                <div
-                  key={tool.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-col justify-between space-y-5 shadow-xs hover:shadow-md hover:border-slate-300 transition-all group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
-                        {tool.domain}
-                      </span>
-                      {tool.badge && (
-                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded">
-                          {tool.badge}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {featuredTools.map((tool) => (
+                  <div
+                    key={tool.id}
+                    className="group relative rounded-xl border border-slate-200 bg-white p-4 hover:border-[#F59E0B] hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-[#0B1528] group-hover:bg-[#0B1528] group-hover:text-white transition-colors">
+                            {getCategoryIcon(tool.category)}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-[#0B1528] group-hover:text-[#F59E0B] transition-colors leading-tight">
+                              {tool.name}
+                            </h3>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              {tool.category || tool.domain}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getLicenseBadgeStyle(
+                            tool.licenseType
+                          )}`}
+                        >
+                          {tool.licenseType || 'Tool'}
                         </span>
+                      </div>
+
+                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                        {tool.mainApplication || tool.summary}
+                      </p>
+                    </div>
+
+                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1 truncate max-w-[120px]">
+                        <Laptop className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{tool.platform || 'Cross-Platform'}</span>
+                      </span>
+
+                      {tool.officialWebsite ? (
+                        <a
+                          href={tool.officialWebsite}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B] transition-colors"
+                        >
+                          <span>Official website</span>
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </a>
+                      ) : tool.toolType === 'interactive' ? (
+                        <button
+                          onClick={() => setActiveCalculatorTool(tool)}
+                          className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B]"
+                        >
+                          <span>Launch Solver</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================= */}
+        {/* 04. DIRECTORY BROWSE & FILTER BAR */}
+        {/* ========================================================= */}
+        <section className="py-8 bg-[#FAFBFD]" id="directory">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            {/* Suggested Menu / Category Tabs */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+              {navCategories.map((cat) => {
+                const isActive = selectedCategory === cat.key;
+                return (
+                  <button
+                    key={cat.key}
+                    onClick={() => setSelectedCategory(cat.key)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      isActive
+                        ? 'bg-[#0B1528] text-white shadow-sm'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {cat.icon}
+                    <span>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* License Pills & View Toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-slate-500 font-medium mr-1 flex items-center gap-1">
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> License:
+                </span>
+                {['All Licenses', ...TOOL_LICENSES].map((lic) => {
+                  const isActive = selectedLicense === lic;
+                  return (
+                    <button
+                      key={lic}
+                      onClick={() => setSelectedLicense(lic)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                        isActive
+                          ? 'bg-amber-100 border-amber-300 text-amber-900 font-semibold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {lic}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* View Switcher: Grid vs Table */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing <strong>{filteredTools.length}</strong> items
+                </span>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    title="Grid Card View"
+                    className={`p-1.5 rounded-md text-xs font-medium ${
+                      viewMode === 'grid'
+                        ? 'bg-[#0B1528] text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('table')}
+                    title="Directory Table View"
+                    className={`p-1.5 rounded-md text-xs font-medium ${
+                      viewMode === 'table'
+                        ? 'bg-[#0B1528] text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Table className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Empty State */}
+            {filteredTools.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <Search className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-bold text-[#0B1528]">No tools or software match</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Try clearing search keywords or switching filters to view the complete catalog.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedCategory('All');
+                    setSelectedLicense('All Licenses');
+                    setSearchQuery('');
+                  }}
+                >
+                  Reset All Filters
+                </Button>
+              </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* VIEW A: DIRECTORY TABLE VIEW */}
+            {/* ========================================================= */}
+            {filteredTools.length > 0 && viewMode === 'table' && (
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full text-left text-xs text-slate-600 border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold text-[11px] uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Software / Tool</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4">Main Application</th>
+                      <th className="py-3 px-4">License Type</th>
+                      <th className="py-3 px-4">Platform</th>
+                      <th className="py-3 px-4 text-right">Official Website</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-normal">
+                    {filteredTools.map((tool) => (
+                      <tr key={tool.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4 font-semibold text-[#0B1528]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">{getCategoryIcon(tool.category)}</span>
+                            <span>{tool.name}</span>
+                            {tool.featured && (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-1.5 py-0.2 rounded border border-amber-300">
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500 font-medium">
+                          {tool.category || tool.domain}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-700 max-w-xs truncate">
+                          {tool.mainApplication || tool.summary}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getLicenseBadgeStyle(
+                              tool.licenseType
+                            )}`}
+                          >
+                            {tool.licenseType || 'Free'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500 text-[11px]">
+                          {tool.platform || 'Cross-Platform'}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          {tool.officialWebsite ? (
+                            <a
+                              href={tool.officialWebsite}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              <span>Visit</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : tool.toolType === 'interactive' ? (
+                            <button
+                              onClick={() => setActiveCalculatorTool(tool)}
+                              className="inline-flex items-center gap-1 font-semibold text-amber-700 hover:text-amber-900 hover:underline"
+                            >
+                              <span>Open Solver</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 italic">Built-in</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* VIEW B: GRID CARD VIEW */}
+            {/* ========================================================= */}
+            {filteredTools.length > 0 && viewMode === 'grid' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredTools.map((tool) => (
+                  <div
+                    key={tool.id}
+                    className="group rounded-xl border border-slate-200 bg-white p-5 hover:border-[#0B1528] hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div className="space-y-3">
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-[#0B1528] group-hover:bg-[#0B1528] group-hover:text-white transition-colors">
+                            {getCategoryIcon(tool.category)}
+                          </div>
+                          <div>
+                            <h3 className="text-base font-bold text-[#0B1528] group-hover:text-[#F59E0B] transition-colors leading-snug">
+                              {tool.name}
+                            </h3>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              {tool.category || tool.domain}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0 ${getLicenseBadgeStyle(
+                            tool.licenseType
+                          )}`}
+                        >
+                          {tool.licenseType || 'Software'}
+                        </span>
+                      </div>
+
+                      {/* Main Application */}
+                      {tool.mainApplication && (
+                        <div className="text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">
+                          {tool.mainApplication}
+                        </div>
+                      )}
+
+                      {/* Summary */}
+                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                        {tool.summary || tool.description}
+                      </p>
+
+                      {/* Platform & Requirements */}
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
+                        <span className="flex items-center gap-1">
+                          <Laptop className="h-3 w-3 text-slate-400" />
+                          <span>{tool.platform || 'Cross-Platform'}</span>
+                        </span>
+                      </div>
+
+                      {/* Tags */}
+                      {tool.tags && tool.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {tool.tags.slice(0, 4).map((t, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                            >
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
 
-                    <h3 className="font-display text-lg font-bold text-[#0B1528] group-hover:text-primary transition-colors">
-                      {tool.name}
-                    </h3>
-
-                    <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                      {tool.summary}
-                    </p>
-
-                    {tool.tags && tool.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {tool.tags.map((tag, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {/* Footer Actions */}
+                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                      {tool.officialWebsite ? (
+                        <a
+                          href={tool.officialWebsite}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0B1528] text-white text-xs font-semibold py-2 px-3 hover:bg-[#1E3A5F] transition-colors shadow-sm"
+                        >
+                          <span>Visit Official Website</span>
+                          <ExternalLink className="h-3.5 w-3.5 text-amber-400" />
+                        </a>
+                      ) : tool.toolType === 'interactive' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => setActiveCalculatorTool(tool)}
+                          className="w-full bg-[#F59E0B] hover:bg-[#D97706] text-[#0B1528] font-bold text-xs"
+                        >
+                          <span>Launch Interactive Solver</span>
+                          <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" className="w-full text-xs" disabled>
+                          Built-in Reference
+                        </Button>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="pt-4 border-t border-slate-100">
-                    <Button
-                      size="sm"
-                      onClick={() => setActiveTool(tool)}
-                      className="w-full bg-[#172D4D] hover:bg-[#0B1528] text-white text-xs font-semibold flex items-center justify-center gap-1.5 py-2.5"
-                    >
-                      <Wrench className="h-3.5 w-3.5" />
-                      <span>Launch Interactive Calculator</span>
-                      <ArrowRight className="h-3 w-3 ml-auto opacity-70 group-hover:translate-x-0.5 transition-transform" />
-                    </Button>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </section>
       </main>
 
-      {/* Interactive Tool Modal */}
-      <InteractiveToolModal tool={activeTool} onClose={() => setActiveTool(null)} />
+      {/* Interactive Solver Dialog */}
+      <InteractiveToolModal
+        tool={activeCalculatorTool}
+        onClose={() => setActiveCalculatorTool(null)}
+      />
 
       <SiteFooter />
     </div>

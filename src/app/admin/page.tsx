@@ -87,6 +87,8 @@ import {
   saveToolAdmin,
   deleteToolAdmin,
   ENGINEERING_DOMAINS,
+  TOOL_CATEGORIES,
+  TOOL_LICENSES,
 } from '@/modules/tools/tool-service';
 import {
   fetchLibraryItems,
@@ -110,6 +112,8 @@ import type {
   ReportItem,
   SiteSettings,
   Tag,
+  ToolCategory,
+  ToolLicenseType,
   TrustedSupplier,
   UserProfile,
   UserRole,
@@ -233,17 +237,22 @@ export default function AdminPanelPage() {
   const [deletingSupplier, setDeletingSupplier] = useState(false);
   const [uploadingSupplierLogo, setUploadingSupplierLogo] = useState(false);
 
-  // Tools state
+  // Tools & Software Directory state
   const [toolsList, setToolsList] = useState<EngineeringTool[]>([]);
   const [toolModal, setToolModal] = useState<{
     id?: string;
     name: string;
     slug: string;
     domain: EngineeringDomain;
+    category: ToolCategory | string;
+    mainApplication: string;
+    officialWebsite: string;
+    licenseType: ToolLicenseType | string;
+    platform: string;
     badge: string;
     summary: string;
     description: string;
-    toolType: 'built-in' | 'external' | 'interactive';
+    toolType: 'built-in' | 'external' | 'interactive' | 'software';
     externalUrl: string;
     calculatorKey: string;
     featured: boolean;
@@ -777,11 +786,16 @@ export default function AdminPanelPage() {
           name: toolModal.name.trim(),
           slug: toolModal.slug.trim() || slugify(toolModal.name),
           domain: toolModal.domain,
+          category: toolModal.category as ToolCategory,
+          mainApplication: toolModal.mainApplication.trim(),
+          officialWebsite: toolModal.officialWebsite.trim(),
+          licenseType: toolModal.licenseType as ToolLicenseType,
+          platform: toolModal.platform.trim(),
           badge: toolModal.badge.trim(),
           summary: toolModal.summary.trim(),
           description: toolModal.description.trim(),
           toolType: toolModal.toolType,
-          externalUrl: toolModal.externalUrl.trim(),
+          externalUrl: toolModal.officialWebsite.trim() || toolModal.externalUrl.trim(),
           calculatorKey: toolModal.calculatorKey.trim(),
           featured: toolModal.featured,
           order: Number(toolModal.order) || 1,
@@ -1354,10 +1368,10 @@ export default function AdminPanelPage() {
                       <div>
                         <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
                           <Wrench className="h-6 w-6 text-primary" />
-                          Engineering Tools &amp; Calculators ({toolsList.length})
+                          Engineering Software &amp; Tools Directory ({toolsList.length})
                         </h2>
                         <p className="text-xs text-slate-500">
-                          Manage interactive engineering calculators across Electronics, Mechanical, Programming, Networking, and 3D Printing.
+                          Manage recommended engineering software, simulators, CAD suites, and interactive solvers. Control official website links and license models.
                         </p>
                       </div>
                       <Button
@@ -1368,12 +1382,17 @@ export default function AdminPanelPage() {
                             name: '',
                             slug: '',
                             domain: 'Electronics & Embedded',
-                            badge: 'New',
+                            category: 'Electronics',
+                            mainApplication: '',
+                            officialWebsite: '',
+                            licenseType: 'Free',
+                            platform: 'Desktop (Windows / Mac / Linux)',
+                            badge: 'Recommended',
                             summary: '',
                             description: '',
-                            toolType: 'interactive',
+                            toolType: 'software',
                             externalUrl: '',
-                            calculatorKey: 'ohms-law',
+                            calculatorKey: '',
                             featured: false,
                             order: toolsList.length + 1,
                             tags: '',
@@ -1382,7 +1401,7 @@ export default function AdminPanelPage() {
                         }
                       >
                         <Plus className="h-4 w-4 mr-1.5" />
-                        <span>Add New Tool</span>
+                        <span>Add New Software / Tool</span>
                       </Button>
                     </div>
 
@@ -1390,9 +1409,11 @@ export default function AdminPanelPage() {
                       <table className="w-full text-left text-sm">
                         <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
                           <tr>
-                            <th className="px-4 py-3">Tool Name</th>
-                            <th className="px-4 py-3">Domain</th>
-                            <th className="px-4 py-3">Calculator Key / Type</th>
+                            <th className="px-4 py-3">Tool / Software Name</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Main Application</th>
+                            <th className="px-4 py-3">License &amp; Platform</th>
+                            <th className="px-4 py-3">Official Website</th>
                             <th className="px-4 py-3 text-center">Order</th>
                             <th className="px-4 py-3 text-right">Actions</th>
                           </tr>
@@ -1400,20 +1421,20 @@ export default function AdminPanelPage() {
                         <tbody className="divide-y divide-slate-200">
                           {toolsList.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                                No tools configured yet. Click &ldquo;Add New Tool&rdquo; above.
+                              <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                                No software or tools configured yet. Click &ldquo;Add New Software / Tool&rdquo; above.
                               </td>
                             </tr>
                           ) : (
                             toolsList.map((tool) => (
                               <tr key={tool.id} className="hover:bg-slate-50/70">
-                                <td className="px-4 py-3 max-w-sm">
+                                <td className="px-4 py-3 max-w-xs">
                                   <div className="space-y-0.5">
                                     <div className="flex items-center gap-1.5">
                                       <p className="font-semibold text-[#0B1528]">{tool.name}</p>
-                                      {tool.badge && (
-                                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
-                                          {tool.badge}
+                                      {tool.featured && (
+                                        <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded font-semibold">
+                                          Top 12 Featured
                                         </span>
                                       )}
                                     </div>
@@ -1422,14 +1443,38 @@ export default function AdminPanelPage() {
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-xs">
                                   <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
-                                    {tool.domain}
+                                    {tool.category || tool.domain}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-slate-600">
-                                  {tool.calculatorKey ? (
-                                    <span className="text-emerald-700 font-semibold">{tool.calculatorKey}</span>
+                                <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate">
+                                  {tool.mainApplication || '—'}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-xs">
+                                  <div className="space-y-1">
+                                    <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200">
+                                      {tool.licenseType || 'Free'}
+                                    </span>
+                                    <p className="text-[11px] text-slate-400 truncate max-w-[140px]">
+                                      {tool.platform || 'Cross-Platform'}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-xs max-w-xs">
+                                  {tool.officialWebsite ? (
+                                    <a
+                                      href={tool.officialWebsite}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline truncate block max-w-[150px]"
+                                    >
+                                      {tool.officialWebsite}
+                                    </a>
+                                  ) : tool.calculatorKey ? (
+                                    <span className="font-mono text-emerald-700 font-medium">
+                                      Solver: {tool.calculatorKey}
+                                    </span>
                                   ) : (
-                                    <span>{tool.toolType}</span>
+                                    <span className="text-slate-400 italic">Built-in</span>
                                   )}
                                 </td>
                                 <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
@@ -1445,10 +1490,15 @@ export default function AdminPanelPage() {
                                         name: tool.name,
                                         slug: tool.slug,
                                         domain: tool.domain,
+                                        category: tool.category || 'Electronics',
+                                        mainApplication: tool.mainApplication || '',
+                                        officialWebsite: tool.officialWebsite || tool.externalUrl || '',
+                                        licenseType: tool.licenseType || 'Free',
+                                        platform: tool.platform || 'Desktop (Windows / Mac / Linux)',
                                         badge: tool.badge || '',
                                         summary: tool.summary,
                                         description: tool.description,
-                                        toolType: tool.toolType,
+                                        toolType: tool.toolType || 'software',
                                         externalUrl: tool.externalUrl || '',
                                         calculatorKey: tool.calculatorKey || '',
                                         featured: Boolean(tool.featured),
@@ -3208,10 +3258,10 @@ export default function AdminPanelPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
               <Wrench className="h-5 w-5 text-primary" />
-              {toolModal?.isNew ? 'Add New Engineering Tool' : 'Edit Tool Details'}
+              {toolModal?.isNew ? 'Add Engineering Software / Tool' : 'Edit Software & Tool Details'}
             </DialogTitle>
             <DialogDescription>
-              Configure calculator parameters, domain taxonomy, and summary for the public Tools suite.
+              Configure software directory details, official vendor URLs, license models, and calculation parameters.
             </DialogDescription>
           </DialogHeader>
 
@@ -3219,12 +3269,12 @@ export default function AdminPanelPage() {
             <form onSubmit={handleToolSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="toolName">Tool Name *</Label>
+                  <Label htmlFor="toolName">Software / Tool Name *</Label>
                   <Input
                     id="toolName"
                     value={toolModal.name}
                     onChange={(e) => setToolModal({ ...toolModal, name: e.target.value })}
-                    placeholder="e.g. Resistor Color Code Decoder"
+                    placeholder="e.g. KiCad, Autodesk Fusion, Wokwi"
                     required
                   />
                 </div>
@@ -3234,12 +3284,27 @@ export default function AdminPanelPage() {
                     id="toolSlug"
                     value={toolModal.slug}
                     onChange={(e) => setToolModal({ ...toolModal, slug: e.target.value })}
-                    placeholder="e.g. resistor-color-code"
+                    placeholder="e.g. kicad, autodesk-fusion"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toolCategory">Category *</Label>
+                  <select
+                    id="toolCategory"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                    value={toolModal.category}
+                    onChange={(e) =>
+                      setToolModal({ ...toolModal, category: e.target.value as ToolCategory })
+                    }
+                  >
+                    {TOOL_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="space-y-1">
                   <Label htmlFor="toolDomain">Engineering Domain *</Label>
                   <select
@@ -3255,13 +3320,63 @@ export default function AdminPanelPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="toolMainApp">Main Application *</Label>
+                <Input
+                  id="toolMainApp"
+                  value={toolModal.mainApplication}
+                  onChange={(e) => setToolModal({ ...toolModal, mainApplication: e.target.value })}
+                  placeholder="e.g. Professional schematic capture & PCB layout design"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="toolBadge">Trust / Type Badge</Label>
+                  <Label htmlFor="toolWebsite">Official Website URL</Label>
+                  <Input
+                    id="toolWebsite"
+                    value={toolModal.officialWebsite}
+                    onChange={(e) => setToolModal({ ...toolModal, officialWebsite: e.target.value })}
+                    placeholder="https://www.kicad.org/"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="toolLicense">License / Pricing Model *</Label>
+                  <select
+                    id="toolLicense"
+                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                    value={toolModal.licenseType}
+                    onChange={(e) =>
+                      setToolModal({ ...toolModal, licenseType: e.target.value as ToolLicenseType })
+                    }
+                  >
+                    {TOOL_LICENSES.map((lic) => (
+                      <option key={lic} value={lic}>{lic}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toolPlatform">Platform / Installation</Label>
+                  <Input
+                    id="toolPlatform"
+                    value={toolModal.platform}
+                    onChange={(e) => setToolModal({ ...toolModal, platform: e.target.value })}
+                    placeholder="e.g. Desktop (Windows / Mac / Linux) or Web Browser"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="toolBadge">Trust / Highlight Badge</Label>
                   <Input
                     id="toolBadge"
                     value={toolModal.badge}
                     onChange={(e) => setToolModal({ ...toolModal, badge: e.target.value })}
-                    placeholder="e.g. Interactive, IPC-2221, Essential"
+                    placeholder="e.g. Open Source, Top Pick, Interactive"
                   />
                 </div>
               </div>
@@ -3273,46 +3388,46 @@ export default function AdminPanelPage() {
                   rows={2}
                   value={toolModal.summary}
                   onChange={(e) => setToolModal({ ...toolModal, summary: e.target.value })}
-                  placeholder="One sentence summary shown on card..."
+                  placeholder="One or two sentences describing what the software is best for..."
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="toolDescription">Extended Details &amp; Formula Instructions</Label>
+                <Label htmlFor="toolDescription">Extended Details / Usage Notes</Label>
                 <Textarea
                   id="toolDescription"
                   rows={3}
                   value={toolModal.description}
                   onChange={(e) => setToolModal({ ...toolModal, description: e.target.value })}
-                  placeholder="Full engineering description and underlying mathematical equations..."
+                  placeholder="Full technical details, system requirements, licensing specifics..."
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="toolCalcKey">Interactive Calculator Key</Label>
+                  <Label htmlFor="toolCalcKey">Interactive Calculator Key (Optional)</Label>
                   <select
                     id="toolCalcKey"
                     className="w-full rounded-md border border-slate-200 bg-white p-2 text-xs font-mono"
                     value={toolModal.calculatorKey}
                     onChange={(e) => setToolModal({ ...toolModal, calculatorKey: e.target.value })}
                   >
-                    <option value="">None / Custom</option>
+                    <option value="">None / External Software</option>
                     <option value="ohms-law">ohms-law (V, I, R, P)</option>
                     <option value="resistor-color-code">resistor-color-code (4/5 Band)</option>
                     <option value="voltage-divider">voltage-divider (Vin, R1, R2)</option>
                     <option value="led-resistor">led-resistor (Vs, Vf, If)</option>
                     <option value="555-timer">555-timer (R1, R2, C)</option>
                     <option value="pcb-trace">pcb-trace (IPC-2221 Track Width)</option>
-                    <option value="torque-power">torque-power (RPM, Torque, Watts)</option>
+                    <option value="motor-torque">motor-torque (RPM, Torque, Watts)</option>
                     <option value="gear-ratio">gear-ratio (Teeth T1, T2, Speed)</option>
                     <option value="cylinder-force">cylinder-force (Pneumatic/Hydraulic)</option>
                     <option value="base64-encoder">base64-encoder (Base64/URL)</option>
                     <option value="number-converter">number-converter (Dec, Hex, Bin, ASCII)</option>
                     <option value="subnet-calculator">subnet-calculator (IPv4 CIDR)</option>
                     <option value="3d-print-cost">3d-print-cost (Grams, Electricity)</option>
-                    <option value="stepper-steps">stepper-steps (Steps/mm Calibration)</option>
+                    <option value="stepper-calibration">stepper-calibration (Steps/mm)</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -3333,8 +3448,19 @@ export default function AdminPanelPage() {
                   id="toolTags"
                   value={toolModal.tags}
                   onChange={(e) => setToolModal({ ...toolModal, tags: e.target.value })}
-                  placeholder="e.g. Resistor, Ohm, Voltage, LED"
+                  placeholder="e.g. PCB Design, Open Source, CAD, Simulation"
                 />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                <Switch
+                  id="toolFeatured"
+                  checked={toolModal.featured}
+                  onCheckedChange={(v) => setToolModal({ ...toolModal, featured: v })}
+                />
+                <Label htmlFor="toolFeatured" className="text-xs font-semibold text-slate-800">
+                  Feature in &ldquo;Top 12 Featured Tools&rdquo; Showcase on Directory
+                </Label>
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0">

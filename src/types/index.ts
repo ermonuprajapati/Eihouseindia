@@ -259,6 +259,28 @@ export interface TrustedSupplier {
   updatedAt: string;
 }
 
+export type ToolCategory =
+  | 'Electronics'
+  | 'Mechanical'
+  | '3D Printing'
+  | 'Programming'
+  | 'IT & Networking'
+  | 'Simulation'
+  | 'Calculators';
+
+export type ToolLicenseType =
+  | 'Open Source'
+  | 'Free'
+  | 'Freemium'
+  | 'Commercial / Paid'
+  | 'Student License';
+
+export type ToolPlatformType =
+  | 'Web Browser'
+  | 'Desktop (Windows / Mac / Linux)'
+  | 'Cloud / SaaS'
+  | 'Cross-Platform';
+
 export type EngineeringDomain =
   | 'Electronics & Embedded'
   | 'Mechanical & Robotics'
@@ -272,12 +294,19 @@ export interface EngineeringTool {
   name: string;
   slug: string;
   domain: EngineeringDomain;
+  category?: ToolCategory | string;
+  mainApplication?: string;
+  officialWebsite?: string;
+  licenseType?: ToolLicenseType | string;
+  platform?: ToolPlatformType | string;
+  requiresInstall?: boolean;
+  requiresAccount?: boolean;
   badge?: string;
   summary: string;
   description: string;
   icon?: string;
   imageUrl?: string;
-  toolType: 'built-in' | 'external' | 'interactive';
+  toolType: 'built-in' | 'external' | 'interactive' | 'software';
   externalUrl?: string;
   calculatorKey?: string;
   featured?: boolean;
