@@ -150,14 +150,15 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
       if (!wrapper) return;
       const rect = wrapper.getBoundingClientRect();
 
-      // Line cursor position
+      // Line cursor position: positioned 1 line above the current writing line for clear visibility
       const coords = editor.view.coordsAtPos(from);
       if (coords) {
-        const relativeTop = Math.max(16, coords.top - rect.top);
+        const lineTop = coords.top - rect.top;
+        const relativeTop = Math.max(8, lineTop - 36);
         setCursorY(relativeTop);
       }
 
-      // Text selection position for floating bubble menu
+      // Text selection position for floating bubble menu (positioned 1 line above selection)
       if (!empty && to > from) {
         const startCoords = editor.view.coordsAtPos(from);
         const endCoords = editor.view.coordsAtPos(to);
@@ -166,7 +167,7 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
             80,
             Math.min(rect.width - 80, (startCoords.left + endCoords.left) / 2 - rect.left)
           );
-          const bubbleTop = Math.max(0, startCoords.top - rect.top - 46);
+          const bubbleTop = Math.max(8, startCoords.top - rect.top - 52);
           setSelectionCoords({
             top: bubbleTop,
             left: bubbleLeft,
@@ -898,13 +899,12 @@ export function TiptapEditor({ initialPost }: { initialPost?: Post | null }) {
               />
 
               {/* Editor Surface with Line-side Companion and Floating Selection Bar */}
-              <div ref={editorWrapperRef} className="relative pl-12 sm:pl-16 pr-5 sm:pr-8 py-5 min-h-[440px]">
-                {/* Floating Line-Side Companion: Glides right next to the active cursor line! */}
+              <div ref={editorWrapperRef} className="relative pl-12 sm:pl-16 pr-5 sm:pr-8 pt-10 pb-6 min-h-[440px]">
+                {/* Floating Line-Side Companion: Glides 1 line above the active writing line so text is 100% visible */}
                 {editor && (
                   <div
                     style={{
                       top: `${cursorY}px`,
-                      transform: 'translateY(-50%)',
                     }}
                     className="line-menu-popover absolute left-2 sm:left-3 z-20 transition-all duration-150 ease-out select-none"
                   >
