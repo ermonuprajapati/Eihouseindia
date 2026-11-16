@@ -1,5 +1,6 @@
 import React from 'react';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import type { TiptapDocument, TiptapMark, TiptapNode } from '@/types';
 import { sanitizeTiptapDocument, sanitizeUrl } from '@/lib/validation';
 

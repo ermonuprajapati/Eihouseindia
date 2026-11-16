@@ -42,6 +42,9 @@ export function ArticleCoverMedia({
       <img
         src={resolvedSrc}
         alt={alt}
+        width={600}
+        height={450}
+        decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"

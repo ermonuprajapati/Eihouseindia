@@ -84,19 +84,19 @@ export default async function HomePage() {
 
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
-                    <Link href="/learn">
+                    <Link href="/learn" prefetch={false}>
                       <span>Explore Courses</span>
                       <ArrowRight className="h-4 w-4 ml-1.5" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="lg">
-                    <Link href="/projects">Discover Projects</Link>
+                    <Link href="/projects" prefetch={false}>Discover Projects</Link>
                   </Button>
                   <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
-                    <Link href="/tools">Engineering Tools →</Link>
+                    <Link href="/tools" prefetch={false}>Engineering Tools →</Link>
                   </Button>
                   <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
-                    <Link href="/products">Store →</Link>
+                    <Link href="/products" prefetch={false}>Store →</Link>
                   </Button>
                 </div>
 
@@ -130,6 +130,7 @@ export default async function HomePage() {
                     width={1200}
                     height={675}
                     priority
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px"
                     className="aspect-[16/9] w-full object-cover"
                   />
                   <div className="p-7 space-y-5 bg-gradient-to-br from-[#172D4D] to-[#0B1528]">
@@ -252,6 +253,8 @@ export default async function HomePage() {
                 alt="Integrated Engineering Education, Innovation, Products, Services and Technology Community Ecosystem"
                 width={1024}
                 height={1024}
+                sizes="(max-width: 768px) 100vw, 896px"
+                loading="lazy"
                 className="w-full h-auto max-h-[460px] object-contain rounded-xl"
               />
             </div>
@@ -271,7 +274,7 @@ export default async function HomePage() {
                     Structured 45-day practical training programs, hands-on offline laboratory sessions, and verified certifications in Embedded Systems, IoT, Robotics, and PCB Design.
                   </p>
                 </div>
-                <Link href="/learn" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Browse Programs</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -291,7 +294,7 @@ export default async function HomePage() {
                     Verified schematics, source code repositories, and complete documentation for academic final-year major projects and DIY open-source builds.
                   </p>
                 </div>
-                <Link href="/projects" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/projects" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Explore Projects</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -311,7 +314,7 @@ export default async function HomePage() {
                     Authentic development boards, microcontroller modules, sensors, robotics kits, and high-strength 3D printing filaments bench-tested for reliability.
                   </p>
                 </div>
-                <Link href="/products" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/products" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Shop Hardware</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -331,7 +334,7 @@ export default async function HomePage() {
                     Curated directory of 35+ essential tools across Electronics, Mechanical CAD, 3D Printing, Programming, Simulation &amp; Solvers.
                   </p>
                 </div>
-                <Link href="/tools" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/tools" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Explore Tools Directory</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -351,7 +354,7 @@ export default async function HomePage() {
                     Engineering reference repository featuring microcontroller pinouts, component datasheets, and ready-to-flash code libraries.
                   </p>
                 </div>
-                <Link href="/library" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/library" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Open Engineering Library</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -371,7 +374,7 @@ export default async function HomePage() {
                     Turnkey multi-layer PCB design, embedded firmware development, functional 3D enclosures, and custom IoT hardware prototyping for businesses and innovators.
                   </p>
                 </div>
-                <Link href="/services" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/services" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Request Service Quote</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -391,7 +394,7 @@ export default async function HomePage() {
                     A collaborative platform to discuss bench problems, ask technical questions, review code, share project builds, and network with fellow engineers.
                   </p>
                 </div>
-                <Link href="/community" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/community" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Join Community</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -411,7 +414,7 @@ export default async function HomePage() {
                     Partnering with universities, polytechnics, and schools to establish cutting-edge Robotics &amp; STEM Innovation Centers with equipment and curriculum.
                   </p>
                 </div>
-                <Link href="/partnerships" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/partnerships" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
                   <span>Partner With Us</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -469,6 +472,9 @@ export default async function HomePage() {
                       <img
                         src={heroImg}
                         alt={tool.name}
+                        width={400}
+                        height={128}
+                        decoding="async"
                         loading="lazy"
                         className="absolute inset-0 h-full w-full object-cover opacity-35 group-hover:scale-105 group-hover:opacity-45 transition-all duration-500"
                       />
@@ -501,6 +507,9 @@ export default async function HomePage() {
                           <img
                             src={logoUrl}
                             alt={`${tool.name} logo`}
+                            width={40}
+                            height={40}
+                            decoding="async"
                             loading="lazy"
                             className="h-full w-full object-contain"
                           />

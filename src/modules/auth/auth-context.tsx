@@ -246,7 +246,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Process redirect sign-in results (e.g. on mobile or after popup blocked fallback)
+    // Only query redirect result if a redirect sign-in was actually initiated,
+    // avoiding the expensive apis.google.com iframe overhead on standard page views.
+    if (typeof window === 'undefined') return;
+    const isRedirectPending = sessionStorage.getItem('firebase_auth_redirect');
+    if (!isRedirectPending) return;
+
+    sessionStorage.removeItem('firebase_auth_redirect');
     getRedirectResult(auth)
       .then((credential) => {
         if (credential?.user) {
@@ -390,6 +396,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const code = (popupError as { code?: string })?.code;
       if (code === 'auth/popup-blocked') {
         console.info('Google sign-in popup blocked; falling back to signInWithRedirect');
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('firebase_auth_redirect', '1');
+        }
         await signInWithRedirect(auth, provider);
         return;
       }

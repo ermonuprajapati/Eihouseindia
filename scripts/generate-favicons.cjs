@@ -2,32 +2,87 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-function createIco(pngBuffers) {
-  // pngBuffers: array of { width, height, buffer }
-  const count = pngBuffers.length;
+/**
+ * Creates a standard Windows ICO file containing uncompressed 32-bit DIB bitmaps
+ * for maximum compatibility with all browsers (Chrome, Edge, Firefox, Safari)
+ * and Windows desktop shells without relying on PNG-in-ICO decompression.
+ */
+function createDibIco(frames) {
+  const count = frames.length;
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0); // Reserved
-  header.writeUInt16LE(1, 2); // Type 1 = ICO
-  header.writeUInt16LE(count, 4); // Number of images
+  header.writeUInt16LE(1, 2); // Resource type: 1 = ICO
+  header.writeUInt16LE(count, 4); // Number of icon frames
 
   let offset = 6 + count * 16;
-  const entries = [];
+  const dirEntries = [];
+  const imageBuffers = [];
 
-  for (const item of pngBuffers) {
+  for (const f of frames) {
+    const { width, height, rawRgba } = f;
+
+    // BITMAPINFOHEADER (40 bytes)
+    const bih = Buffer.alloc(40);
+    bih.writeUInt32LE(40, 0); // Header size
+    bih.writeInt32LE(width, 4); // Width
+    bih.writeInt32LE(height * 2, 8); // Height is DOUBLED in ICO to account for XOR + AND masks
+    bih.writeUInt16LE(1, 12); // Color planes
+    bih.writeUInt16LE(32, 14); // 32 bits per pixel (BGRA)
+    bih.writeUInt32LE(0, 16); // Compression: BI_RGB (uncompressed)
+    bih.writeUInt32LE(width * height * 4, 20); // Image data size
+    bih.writeInt32LE(0, 24); // Horizontal resolution
+    bih.writeInt32LE(0, 28); // Vertical resolution
+    bih.writeUInt32LE(0, 32); // Palette colors
+    bih.writeUInt32LE(0, 36); // Important colors
+
+    // XOR bitmap data: bottom-up BGRA
+    const xorData = Buffer.alloc(width * height * 4);
+    // 1-bit AND mask: bottom-up 1 bit per pixel, padded to 32-bit DWORD boundary
+    const andRowBytes = Math.ceil(width / 32) * 4;
+    const andMask = Buffer.alloc(andRowBytes * height, 0);
+
+    for (let y = 0; y < height; y++) {
+      const srcRow = height - 1 - y; // Bottom-up row
+      for (let x = 0; x < width; x++) {
+        const srcIdx = (srcRow * width + x) * 4;
+        const dstIdx = (y * width + x) * 4;
+        const r = rawRgba[srcIdx + 0];
+        const g = rawRgba[srcIdx + 1];
+        const b = rawRgba[srcIdx + 2];
+        const a = rawRgba[srcIdx + 3];
+
+        xorData[dstIdx + 0] = b; // Blue
+        xorData[dstIdx + 1] = g; // Green
+        xorData[dstIdx + 2] = r; // Red
+        xorData[dstIdx + 3] = a; // Alpha
+
+        if (a === 0) {
+          const byteIdx = y * andRowBytes + Math.floor(x / 8);
+          const bitIdx = 7 - (x % 8);
+          andMask[byteIdx] |= (1 << bitIdx);
+        }
+      }
+    }
+
+    const imageData = Buffer.concat([bih, xorData, andMask]);
+    imageBuffers.push(imageData);
+
+    // Directory entry (16 bytes)
     const entry = Buffer.alloc(16);
-    entry.writeUInt8(item.width >= 256 ? 0 : item.width, 0); // Width
-    entry.writeUInt8(item.height >= 256 ? 0 : item.height, 1); // Height
+    entry.writeUInt8(width >= 256 ? 0 : width, 0); // Width
+    entry.writeUInt8(height >= 256 ? 0 : height, 1); // Height
     entry.writeUInt8(0, 2); // Color palette
     entry.writeUInt8(0, 3); // Reserved
     entry.writeUInt16LE(1, 4); // Color planes
     entry.writeUInt16LE(32, 6); // Bits per pixel
-    entry.writeUInt32LE(item.buffer.length, 8); // Image size in bytes
-    entry.writeUInt32LE(offset, 12); // Offset from start of file
-    entries.push(entry);
-    offset += item.buffer.length;
+    entry.writeUInt32LE(imageData.length, 8); // Size of image data
+    entry.writeUInt32LE(offset, 12); // File offset
+    dirEntries.push(entry);
+
+    offset += imageData.length;
   }
 
-  return Buffer.concat([header, ...entries, ...pngBuffers.map(item => item.buffer)]);
+  return Buffer.concat([header, ...dirEntries, ...imageBuffers]);
 }
 
 async function generate() {
@@ -41,15 +96,14 @@ async function generate() {
 
   console.log('Loading logo from:', logoPath);
 
-  // 1. Trim transparency to find exact logo mark
+  // 1. Trim transparency to extract exact bounding box
   const trimmedBuffer = await sharp(logoPath).trim().toBuffer();
   const trimmedMeta = await sharp(trimmedBuffer).metadata();
   console.log('Trimmed dimensions:', trimmedMeta.width, 'x', trimmedMeta.height);
 
-  // 2. Put trimmed logo onto a balanced square canvas with 5% padding
+  // 2. Put trimmed logo onto a balanced square canvas with 6% optical padding
   const maxDim = Math.max(trimmedMeta.width, trimmedMeta.height);
   const padding = Math.round(maxDim * 0.06);
-  const targetCanvasSize = maxDim + padding * 2;
 
   const centeredMaster = await sharp(trimmedBuffer)
     .resize(maxDim, maxDim, {
@@ -91,7 +145,7 @@ async function generate() {
     console.log(`Generated public/${s.name} (${s.size}x${s.size})`);
   }
 
-  // Also maskable icons with 18% safe-zone padding
+  // 4. Maskable icons for PWA with brand navy background (#0B1528)
   const maskablePadding = Math.round(512 * 0.18);
   const maskableMaster = await sharp(centeredMaster)
     .resize(512 - maskablePadding * 2, 512 - maskablePadding * 2, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -100,7 +154,7 @@ async function generate() {
       bottom: maskablePadding,
       left: maskablePadding,
       right: maskablePadding,
-      background: { r: 11, g: 21, b: 40, alpha: 1 } // #0B1528 navy brand background for maskable PWA
+      background: { r: 11, g: 21, b: 40, alpha: 1 }
     })
     .png()
     .toBuffer();
@@ -115,31 +169,31 @@ async function generate() {
   );
   console.log('Generated maskable icons with brand navy background');
 
-  // 4. Generate multi-resolution ICO file
-  const icoSizes = [16, 32, 48, 64, 128, 256];
-  const icoBuffers = [];
+  // 5. Generate standard uncompressed DIB ICO file (16, 32, 48px)
+  const icoSizes = [16, 32, 48];
+  const frames = [];
 
   for (const size of icoSizes) {
-    const buf = await sharp(centeredMaster)
+    const rawResult = await sharp(centeredMaster)
       .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toBuffer();
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-    icoBuffers.push({ width: size, height: size, buffer: buf });
+    frames.push({ width: size, height: size, rawRgba: rawResult.data });
   }
 
-  const icoFileBuffer = createIco(icoBuffers);
-  fs.writeFileSync(path.join(rootDir, 'public', 'favicon.ico'), icoFileBuffer);
-  fs.writeFileSync(path.join(rootDir, 'src', 'app', 'favicon.ico'), icoFileBuffer);
-  console.log('Generated multi-resolution favicon.ico in public/ and src/app/ (sizes: 16, 32, 48, 64, 128, 256)');
+  const icoBuffer = createDibIco(frames);
+  fs.writeFileSync(path.join(rootDir, 'public', 'favicon.ico'), icoBuffer);
+  fs.writeFileSync(path.join(rootDir, 'src', 'app', 'favicon.ico'), icoBuffer);
+  console.log('Generated standard DIB favicon.ico in public/ and src/app/ (sizes: 16, 32, 48)');
 
-  // 5. Generate src/app/icon.png & src/app/apple-icon.png
+  // 6. Generate src/app/icon.png & src/app/apple-icon.png
   fs.writeFileSync(path.join(rootDir, 'src', 'app', 'icon.png'), centeredMaster);
   const appleTouchBuf = await sharp(centeredMaster).resize(180, 180).png().toBuffer();
   fs.writeFileSync(path.join(rootDir, 'src', 'app', 'apple-icon.png'), appleTouchBuf);
   console.log('Updated src/app/icon.png and src/app/apple-icon.png');
 
-  console.log('ALL FAVICONS & ICONS SUCCESSFULLY GENERATED FROM LOGO.PNG!');
+  console.log('ALL FAVICONS & ICONS SUCCESSFULLY REGENERATED FROM LOGO.PNG!');
 }
 
 generate().catch(err => {
