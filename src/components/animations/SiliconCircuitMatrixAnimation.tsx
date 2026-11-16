@@ -2,10 +2,12 @@ import React from 'react';
 
 /**
  * SiliconCircuitMatrixAnimation
- * Pure background engineering ambient animation for EI House Homepage:
- * - 100% clean background layer (z-0, pointer-events-none)
- * - Zero SVG text elements (ensures 100% readability of page words and tagline)
- * - Subtle blueprint dot matrix and high-speed PCB trace pulses in brand colors (#0090FF & #F59E0B)
+ * Themed for EI House Homepage Hero:
+ * - Represents EI House's overall hardware & engineering ecosystem:
+ *   [ROBOTICS & KINEMATICS] · [EMBEDDED MCU & FIRMWARE] · [IOT TELEMETRY] · [MULTILAYER PCB] · [CALCULATION TOOLS]
+ * - Placed strategically across the top header margin (y: 20-95) and peripheral zones
+ * - 100% clean left text zone (x: 0-780) ensuring headline, tagline, and search bar are perfectly crisp and readable
+ * - Authentic brand colors: Cyber Blue (#0090FF), Solar Amber (#F59E0B), Emerald (#10B981)
  */
 export function SiliconCircuitMatrixAnimation() {
   return (
@@ -13,86 +15,150 @@ export function SiliconCircuitMatrixAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      {/* Soft Ambient Corner Glows (Logo Brand Colors) */}
-      <div className="absolute -top-20 -left-10 w-[500px] h-[350px] rounded-full bg-blue-500/10 blur-[100px]" />
-      <div className="absolute top-10 -right-10 w-[480px] h-[360px] rounded-full bg-amber-500/10 blur-[100px]" />
-      <div className="absolute -bottom-10 left-1/3 w-[450px] h-[300px] rounded-full bg-sky-500/8 blur-[90px]" />
+      {/* Soft Ambient Peripheral Glows */}
+      <div className="absolute -top-24 right-1/4 w-[540px] h-[360px] rounded-full bg-blue-600/10 blur-[100px]" />
+      <div className="absolute top-10 right-10 w-[480px] h-[320px] rounded-full bg-amber-500/10 blur-[95px]" />
+      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-sky-500/8 blur-[90px]" />
 
-      {/* Responsive Background Vector Canvas */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-35"
+        className="absolute inset-0 h-full w-full opacity-60"
         viewBox="0 0 1440 640"
         preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Subtle Blueprint Dot Grid */}
-          <pattern id="cleanCadGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <circle cx="2" cy="2" r="1" fill="#0B1528" fillOpacity="0.08" />
+          {/* Precision Blueprint CAD Grid */}
+          <pattern id="homepageCadGrid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="0.9" fill="#0B1528" fillOpacity="0.07" />
           </pattern>
         </defs>
 
-        <rect width="100%" height="100%" fill="url(#cleanCadGrid)" />
+        <rect width="100%" height="100%" fill="url(#homepageCadGrid)" />
 
-        {/* ------------------------------------------------------------- */}
-        {/* SUBTLE BACKGROUND CIRCUIT TRACES (Routed around text margins) */}
-        {/* ------------------------------------------------------------- */}
+        {/* ============================================================= */}
+        {/* TOP HIGH-SPEED SIGNAL HIGHWAY (y: 24 to 90)                   */}
+        {/* Represents EI House Overall Hardware Disciplines              */}
+        {/* ============================================================= */}
 
-        {/* Top Peripheral Signal Bus (Cyber Blue) */}
+        {/* Primary Bus 01: Cyber Blue High-Speed Data Stream */}
         <path
-          d="M -20 60 L 260 60 L 320 120 L 620 120 L 680 60 L 1120 60 L 1180 120 L 1460 120"
+          d="M -20 45 L 360 45 L 420 85 L 820 85 L 880 45 L 1220 45 L 1260 85 L 1460 85"
           fill="none"
           stroke="#0090FF"
-          strokeWidth="1.5"
+          strokeWidth="1.75"
           className="animate-pcb-trace"
         />
 
-        {/* Companion Trace */}
+        {/* Primary Bus 02: Companion Differential Line */}
         <path
-          d="M -20 72 L 255 72 L 315 132 L 615 132 L 675 72 L 1115 72 L 1175 132 L 1460 132"
+          d="M -20 55 L 355 55 L 415 95 L 825 95 L 885 55 L 1215 55 L 1255 95 L 1460 95"
           fill="none"
-          stroke="#0284C7"
+          stroke="#38BDF8"
           strokeWidth="1"
           strokeOpacity="0.5"
         />
 
-        {/* Lower Peripheral Power & Telemetry Bus (Solar Amber) */}
+        {/* Power Rail: Solar Amber Industrial Bus */}
         <path
-          d="M 60 580 L 320 580 L 400 500 L 780 500 L 860 580 L 1400 580"
+          d="M 120 28 L 540 28 L 600 68 L 1020 68 L 1080 28 L 1460 28"
           fill="none"
           stroke="#F59E0B"
           strokeWidth="1.5"
           className="animate-pcb-trace-fast"
         />
+
+        {/* Top Discipline Identifiers Along the Header Highway */}
+        <g transform="translate(60, 20)">
+          <text x="0" y="0" fill="#64748B" fontSize="8" fontFamily="monospace" fontWeight="bold">
+            EI_HOUSE_OVERALL_ENGINEERING_ECOSYSTEM:
+          </text>
+        </g>
+
+        {/* Node 1: Robotics & Kinematics */}
+        <g transform="translate(420, 85)">
+          <circle cx="0" cy="0" r="10" fill="none" stroke="#0090FF" strokeWidth="0.8" className="animate-radar-ring-1" />
+          <circle cx="0" cy="0" r="3.5" fill="#0090FF" />
+          <text x="14" y="-8" fill="#0284C7" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+            [01. ROBOTICS &amp; AUTOMATION]
+          </text>
+        </g>
+
+        {/* Node 2: Embedded Systems & Microcontrollers */}
+        <g transform="translate(820, 85)">
+          <circle cx="0" cy="0" r="10" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="animate-radar-ring-2" />
+          <circle cx="0" cy="0" r="3.5" fill="#F59E0B" />
+          <text x="14" y="-8" fill="#B45309" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+            [02. EMBEDDED &amp; FIRMWARE]
+          </text>
+        </g>
+
+        {/* Node 3: IoT & Telemetry Hub */}
+        <g transform="translate(1080, 28)">
+          <circle cx="0" cy="0" r="10" fill="none" stroke="#10B981" strokeWidth="0.8" className="animate-radar-ring-3" />
+          <circle cx="0" cy="0" r="3.5" fill="#10B981" />
+          <text x="14" y="-8" fill="#059669" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+            [03. IOT &amp; SENSORS]
+          </text>
+        </g>
+
+        {/* Node 4: Multilayer PCB & Turnkey Hardware */}
+        <g transform="translate(1260, 85)">
+          <circle cx="0" cy="0" r="3.5" fill="#0090FF" />
+          <text x="14" y="-8" fill="#0284C7" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+            [04. HARDWARE R&amp;D]
+          </text>
+        </g>
+
+        {/* ============================================================= */}
+        {/* RIGHT PERIPHERAL TELEMETRY MATRIX (x: 1200-1420, y: 150-480)   */}
+        {/* Sits safely on the far right edge behind peripheral cards     */}
+        {/* ============================================================= */}
+        <g transform="translate(1360, 260)">
+          {/* Micro Via Array */}
+          {[-80, -40, 0, 40, 80].map((vy) => (
+            <g key={`r-via-${vy}`} transform={`translate(0, ${vy})`}>
+              <circle cx="0" cy="0" r="4" fill="#070E1A" stroke="#0090FF" strokeWidth="1" />
+              <circle cx="0" cy="0" r="1.5" fill="#38BDF8" />
+            </g>
+          ))}
+          {/* Signal Bus vertical drop */}
+          <line x1="0" y1="-100" x2="0" y2="100" stroke="#0090FF" strokeWidth="1.2" strokeDasharray="4 4" strokeOpacity="0.4" />
+        </g>
+
+        {/* ============================================================= */}
+        {/* BOTTOM MARGIN BUS (y: 590 to 630)                             */}
+        {/* Sits at the bottom of the section away from text & buttons   */}
+        {/* ============================================================= */}
         <path
-          d="M 60 592 L 315 592 L 395 512 L 775 512 L 855 592 L 1400 592"
+          d="M 40 600 L 420 600 L 480 560 L 980 560 L 1040 600 L 1440 600"
           fill="none"
-          stroke="#FF8C00"
-          strokeWidth="1"
-          strokeOpacity="0.4"
+          stroke="#0090FF"
+          strokeWidth="1.5"
+          className="animate-pcb-trace"
+        />
+        <path
+          d="M 40 612 L 415 612 L 475 572 L 985 572 L 1045 612 L 1440 612"
+          fill="none"
+          stroke="#F59E0B"
+          strokeWidth="1.2"
+          strokeOpacity="0.5"
         />
 
-        {/* Subtle Test Solder Vias with Rings (in corners / margins) */}
-        <g transform="translate(320, 120)">
+        {/* Bottom Solder Test Points */}
+        <g transform="translate(480, 560)">
           <circle cx="0" cy="0" r="8" fill="none" stroke="#0090FF" strokeWidth="0.8" className="animate-radar-ring-1" />
-          <circle cx="0" cy="0" r="3" fill="#0090FF" fillOpacity="0.3" stroke="#0284C7" strokeWidth="1" />
+          <circle cx="0" cy="0" r="3" fill="#0090FF" />
+          <text x="12" y="4" fill="#64748B" fontSize="7" fontFamily="monospace">
+            CALIBRATION_TP1 · 3.3V REF
+          </text>
         </g>
 
-        <g transform="translate(680, 60)">
-          <circle cx="0" cy="0" r="3" fill="#F59E0B" fillOpacity="0.3" stroke="#F59E0B" strokeWidth="1" />
-        </g>
-
-        <g transform="translate(1180, 120)">
+        <g transform="translate(980, 560)">
           <circle cx="0" cy="0" r="8" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="animate-radar-ring-2" />
-          <circle cx="0" cy="0" r="3" fill="#F59E0B" fillOpacity="0.3" stroke="#F59E0B" strokeWidth="1" />
-        </g>
-
-        <g transform="translate(400, 500)">
-          <circle cx="0" cy="0" r="3" fill="#10B981" fillOpacity="0.3" stroke="#059669" strokeWidth="1" />
-        </g>
-
-        <g transform="translate(780, 500)">
-          <circle cx="0" cy="0" r="3" fill="#0284C7" fillOpacity="0.3" stroke="#0284C7" strokeWidth="1" />
+          <circle cx="0" cy="0" r="3" fill="#F59E0B" />
+          <text x="12" y="4" fill="#64748B" fontSize="7" fontFamily="monospace">
+            CALIBRATION_TP2 · GND REF
+          </text>
         </g>
       </svg>
     </div>
