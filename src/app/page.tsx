@@ -51,222 +51,141 @@ export default async function HomePage() {
       <SiteHeader />
 
       <main className="flex-1">
-        {/* 01. Hero Section with Silicon Circuit Architecture Matrix */}
-        <section className="relative overflow-hidden border-b border-slate-200/80 bg-gradient-to-b from-white via-[#F8FAFC] to-white py-14 sm:py-20 lg:py-24">
-          {/* Engineering Silicon Masterboard & Circuit Trace Background Animation */}
+        {/* 01. Hero Section with Logo-Themed Space Animation */}
+        <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/70 to-white py-16 sm:py-24">
+          {/* Subtle Background Circuit Animation (Pure background z-0 layer) */}
           <SiliconCircuitMatrixAnimation />
-
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-              {/* Left Column: High-Impact Typography & Action Suite */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               <div className="lg:col-span-7 space-y-6">
-                {/* Expert Status Pill Badge */}
-                <div className="inline-flex items-center gap-2.5 rounded-full bg-slate-900/5 px-4 py-1.5 text-xs font-semibold text-[#0B1528] border border-blue-600/20 backdrop-blur-md shadow-xs">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0090FF] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0090FF]"></span>
-                  </span>
-                  <span className="font-mono text-slate-700 tracking-wide uppercase text-[11px]">EI HOUSE INDIA · R&amp;D ECOSYSTEM</span>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-[#D97706] font-bold">Hardware &amp; Silicon</span>
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#172D4D]/10 px-3.5 py-1 text-xs font-semibold text-[#172D4D] border border-blue-500/20 backdrop-blur-xs">
+                  {/* Glowing Logo Icon Aura */}
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#0090FF] to-[#FF8C00] opacity-80 blur-xs animate-ping" style={{ animationDuration: '3s' }} />
+                    <Sparkles className="relative h-3.5 w-3.5 text-[#F59E0B]" />
+                  </div>
+                  <span>Engineering Innovation House · India</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0090FF] animate-pulse" />
                 </div>
 
-                {/* Primary Headline with Gradient Accent */}
-                <div className="space-y-3">
-                  <h1 className="font-display text-4xl sm:text-6xl lg:text-[4.2rem] font-black tracking-tight text-[#0B1528] leading-[1.05] text-balance">
-                    Where Hardware Ideas Become{' '}
-                    <span className="bg-gradient-to-r from-[#0090FF] via-[#2563EB] to-[#FF8C00] bg-clip-text text-transparent">
-                      Tangible Reality.
-                    </span>
+                <div className="space-y-2">
+                  <h1 className="font-display text-4xl sm:text-6xl lg:text-[4rem] font-extrabold tracking-tight text-[#0B1528] leading-[1.08] text-balance">
+                    Where Ideas Become Things.
                   </h1>
-                  <p className="text-lg sm:text-xl font-medium text-slate-700 leading-snug">
-                    Practical Electronics. Embedded Firmware. Turnkey PCB R&amp;D.
+                  <p className="text-xl sm:text-2xl font-semibold text-[#172D4D]">
+                    Engineering Knowledge. Practical Innovation. Real-World Solutions.
                   </p>
                 </div>
 
-                <p className="text-base text-slate-600 leading-relaxed max-w-2xl">
-                  EI House is India&apos;s unified hardware engineering platform—taking innovators, researchers,
-                  and builders from breadboard schematics to production-ready silicon circuits.
+                <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
+                  EI House brings together engineering education, practical projects, innovative products,
+                  technical services, and a collaborative technology community under one unified ecosystem.
                 </p>
 
-                {/* Interactive Action Suite */}
-                <div className="flex flex-wrap items-center gap-3.5 pt-1">
-                  <Button asChild size="lg" className="bg-[#0B1528] hover:bg-[#172D4D] text-white shadow-md shadow-slate-900/15 transition-all">
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
                     <Link href="/learn">
-                      <span>Explore 45-Day Tracks</span>
-                      <ArrowRight className="h-4 w-4 ml-2" />
+                      <span>Explore Courses</span>
+                      <ArrowRight className="h-4 w-4 ml-1.5" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg" className="border-slate-300 bg-white/80 hover:bg-slate-50 text-slate-800">
-                    <Link href="/projects">
-                      <Cpu className="h-4 w-4 mr-2 text-[#0090FF]" />
-                      <span>Verified Projects</span>
-                    </Link>
+                  <Button asChild variant="outline" size="lg">
+                    <Link href="/projects">Discover Projects</Link>
                   </Button>
-                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528] hover:bg-slate-100">
-                    <Link href="/tools">
-                      <Wrench className="h-4 w-4 mr-1.5 text-[#F59E0B]" />
-                      <span>EDA Tools</span>
-                    </Link>
+                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
+                    <Link href="/tools">Engineering Tools →</Link>
                   </Button>
-                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528] hover:bg-slate-100">
-                    <Link href="/products">
-                      <ShoppingBag className="h-4 w-4 mr-1.5 text-emerald-600" />
-                      <span>Store</span>
-                    </Link>
+                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
+                    <Link href="/products">Store →</Link>
                   </Button>
                 </div>
 
-                {/* Developer-Grade Quick Search Bar */}
-                <div className="pt-2 max-w-lg">
-                  <form action="/search" method="GET" className="relative flex items-center shadow-xs">
+                {/* Quick Search Band */}
+                <div className="pt-4 max-w-lg">
+                  <form action="/search" method="GET" className="relative flex items-center">
                     <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input
                       type="search"
                       name="q"
-                      placeholder="Search STM32, ESP32, KiCad, LoRa, Robotics, or Courses..."
+                      placeholder="Search courses, projects, STM32, IoT, PCB, or guides..."
                       aria-label="Universal Search"
-                      className="h-11 w-full rounded-xl border border-slate-300 bg-white/95 pl-10 pr-28 text-sm text-[#0B1528] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0090FF] focus:border-transparent transition-all"
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-24 text-sm text-[#0B1528] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#172D4D]"
                     />
                     <button
                       type="submit"
-                      className="absolute right-1.5 h-8 px-3.5 rounded-lg bg-[#0B1528] text-xs font-semibold text-white hover:bg-[#172D4D] transition-colors"
+                      className="absolute right-1.5 h-8 px-3 rounded-md bg-[#172D4D] text-xs font-semibold text-white hover:bg-[#0B1528]"
                     >
-                      Search ↵
+                      Search
                     </button>
                   </form>
                 </div>
               </div>
 
-              {/* Right Column: State-of-the-Art Hardware Workbench Console */}
+              {/* Hero Visual Card */}
               <div className="lg:col-span-5">
-                <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#070E1A] shadow-2xl text-white">
-                  {/* Console Top Bench Header */}
-                  <div className="px-4 py-2.5 bg-[#0B1528] border-b border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="font-mono text-slate-300 font-bold uppercase tracking-wider text-[11px]">
-                        EI-BENCH LAB · ONLINE
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-[#0B1528] shadow-2xl text-white">
+                  <Image
+                    src="/images/about/about-hero.jpg"
+                    alt="Engineering Innovation House (EI House) Ecosystem"
+                    width={1200}
+                    height={675}
+                    priority
+                    className="aspect-[16/9] w-full object-cover"
+                  />
+                  <div className="p-7 space-y-5 bg-gradient-to-br from-[#172D4D] to-[#0B1528]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono text-[#F59E0B] font-bold uppercase tracking-wider">
+                        EI House Ecosystem
                       </span>
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     </div>
-                    <span className="font-mono text-[#F59E0B] text-[10px] uppercase font-semibold">
-                      DUAL-CORE 240MHz
-                    </span>
-                  </div>
-
-                  {/* Hardware Lab Image Showcase with Overlay Badges */}
-                  <div className="relative">
-                    <Image
-                      src="/images/about/about-hero.jpg"
-                      alt="Engineering Innovation House (EI House) Hardware Ecosystem"
-                      width={1200}
-                      height={675}
-                      priority
-                      className="aspect-[16/9] w-full object-cover"
-                    />
-                    {/* Floating Telemetry Badges on Image */}
-                    <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-md bg-[#070E1A]/85 backdrop-blur-md border border-sky-500/40 text-[10px] font-mono text-sky-300 font-bold">
-                        ⚡ STM32 &amp; ESP32
-                      </span>
-                      <span className="px-2.5 py-1 rounded-md bg-[#070E1A]/85 backdrop-blur-md border border-amber-500/40 text-[10px] font-mono text-amber-300 font-bold">
-                        📐 KiCad 8 EDA
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Interactive Pillar Grid */}
-                  <div className="p-6 space-y-4 bg-gradient-to-br from-[#0B1528] via-[#0D1B2A] to-[#070E1A]">
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-display text-xl font-bold text-white">The Innovation Loop</h3>
-                        <span className="text-[10px] font-mono text-[#F59E0B] uppercase font-bold tracking-wider">
-                          4-STAGE PIPELINE
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">Integrated hardware lifecycle from fundamentals to mass silicon fabrication.</p>
+                      <h3 className="font-display text-2xl font-bold">The Innovation Loop</h3>
+                      <p className="text-xs text-slate-300">Six integrated pillars designed to take you from student to hardware innovator.</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5 pt-1 text-xs">
-                      <div className="p-3 rounded-xl bg-white/[0.06] border border-white/10 hover:border-sky-500/50 transition-all space-y-1">
-                        <div className="flex items-center gap-1.5 text-[#38BDF8]">
-                          <GraduationCap className="h-4 w-4" />
-                          <p className="font-bold text-white">1. Learn</p>
-                        </div>
+                    <div className="grid grid-cols-2 gap-2.5 pt-2 text-xs">
+                      <div className="p-3 rounded-lg bg-white/10 backdrop-blur-sm space-y-1">
+                        <GraduationCap className="h-4 w-4 text-[#F59E0B]" />
+                        <p className="font-bold">1. Learn</p>
                         <p className="text-[11px] text-slate-300">45-day practical programs</p>
                       </div>
-
-                      <div className="p-3 rounded-xl bg-white/[0.06] border border-white/10 hover:border-amber-500/50 transition-all space-y-1">
-                        <div className="flex items-center gap-1.5 text-[#F59E0B]">
-                          <Wrench className="h-4 w-4" />
-                          <p className="font-bold text-white">2. Build</p>
-                        </div>
-                        <p className="text-[11px] text-slate-300">Verified hardware builds</p>
+                      <div className="p-3 rounded-lg bg-white/10 backdrop-blur-sm space-y-1">
+                        <Wrench className="h-4 w-4 text-[#F59E0B]" />
+                        <p className="font-bold">2. Build</p>
+                        <p className="text-[11px] text-slate-300">Real verified hardware</p>
                       </div>
-
-                      <div className="p-3 rounded-xl bg-white/[0.06] border border-white/10 hover:border-emerald-500/50 transition-all space-y-1">
-                        <div className="flex items-center gap-1.5 text-[#34D399]">
-                          <Lightbulb className="h-4 w-4" />
-                          <p className="font-bold text-white">3. Innovate</p>
-                        </div>
-                        <p className="text-[11px] text-slate-300">Products &amp; turnkey R&amp;D</p>
+                      <div className="p-3 rounded-lg bg-white/10 backdrop-blur-sm space-y-1">
+                        <Lightbulb className="h-4 w-4 text-[#F59E0B]" />
+                        <p className="font-bold">3. Innovate</p>
+                        <p className="text-[11px] text-slate-300">Products & turnkey R&D</p>
                       </div>
-
-                      <div className="p-3 rounded-xl bg-white/[0.06] border border-white/10 hover:border-indigo-500/50 transition-all space-y-1">
-                        <div className="flex items-center gap-1.5 text-[#818CF8]">
-                          <Users className="h-4 w-4" />
-                          <p className="font-bold text-white">4. Connect</p>
-                        </div>
-                        <p className="text-[11px] text-slate-300">Pan-India maker network</p>
+                      <div className="p-3 rounded-lg bg-white/10 backdrop-blur-sm space-y-1">
+                        <Users className="h-4 w-4 text-[#F59E0B]" />
+                        <p className="font-bold">4. Connect</p>
+                        <p className="text-[11px] text-slate-300">Vibrant peer network</p>
                       </div>
                     </div>
 
-                    {/* Founder Signature & Verification Bar */}
-                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-full overflow-hidden border border-amber-400/80 shrink-0 bg-slate-800 ring-2 ring-amber-500/20">
+                    <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full overflow-hidden border border-amber-400/60 shrink-0 bg-slate-800">
                           <Image
                             src="/images/founder/monu-prajapati-square.jpg"
                             alt="Er. Monu Prajapati — Founder"
-                            width={28}
-                            height={28}
+                            width={24}
+                            height={24}
                             className="h-full w-full object-cover object-top"
                           />
                         </div>
-                        <span className="text-[11px]">
-                          Founded by <strong className="text-white">{SITE_CONFIG.founder.fullNameWithPrefix}</strong>
-                        </span>
+                        <span>Founded by <strong>{SITE_CONFIG.founder.fullNameWithPrefix}</strong></span>
                       </div>
-                      <Link href="/about#founder" className="text-[#F59E0B] font-semibold hover:underline text-[11px]">
+                      <Link href="/about#founder" className="text-[#F59E0B] font-semibold hover:underline">
                         Founder Profile →
                       </Link>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Live Hardware Ecosystem Highlights Bar */}
-        <section className="bg-white border-b border-slate-200/80 py-5 select-none">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                <p className="text-2xl font-black text-[#0B1528] font-display">45-Day</p>
-                <p className="text-xs font-semibold text-slate-600">Hands-on Immersion Tracks</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                <p className="text-2xl font-black text-[#0090FF] font-display">100%</p>
-                <p className="text-xs font-semibold text-slate-600">Bench-Verified Schematics</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                <p className="text-2xl font-black text-[#F59E0B] font-display">Multi-Layer</p>
-                <p className="text-xs font-semibold text-slate-600">PCB Design &amp; Turnkey R&amp;D</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                <p className="text-2xl font-black text-emerald-600 font-display">10,000+</p>
-                <p className="text-xs font-semibold text-slate-600">Active Maker &amp; Eng Community</p>
               </div>
             </div>
           </div>
