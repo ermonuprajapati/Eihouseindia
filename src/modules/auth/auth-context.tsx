@@ -268,79 +268,95 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
+    let unsubscribeAuth: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = undefined;
-      }
+    const startAuthListener = () => {
+      unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = undefined;
+        }
 
-      setFirebaseUser(user);
+        setFirebaseUser(user);
 
-      if (!user) {
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
+        if (!user) {
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
 
-      // Step 1: INSTANT HYDRATION - Load local cache immediately (0ms delay)
-      const cached = getCachedProfile(user.uid);
-      if (cached) {
-        setProfile(cached);
-        setLoading(false);
-      }
+        // Step 1: INSTANT HYDRATION - Load local cache immediately (0ms delay)
+        const cached = getCachedProfile(user.uid);
+        if (cached) {
+          setProfile(cached);
+          setLoading(false);
+        }
 
-      // Step 2: Background sync with Firestore
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        unsubscribeProfile = onSnapshot(
-          userRef,
-          (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.data();
-              const updatedProfile: UserProfile = {
-                uid: data.uid,
-                email: data.email,
-                username: data.username,
-                displayName: data.displayName,
-                avatar: data.avatar || '',
-                bio: data.bio || '',
-                website: data.website || '',
-                role: data.role || 'USER',
-                status: data.status || 'ACTIVE',
-                createdAt: serializeTimestamp(data.createdAt),
-                updatedAt: serializeTimestamp(data.updatedAt),
-              };
-              setProfile(updatedProfile);
-              setCachedProfile(user.uid, updatedProfile);
+        // Step 2: Background sync with Firestore
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          unsubscribeProfile = onSnapshot(
+            userRef,
+            (snapshot) => {
+              if (snapshot.exists()) {
+                const data = snapshot.data();
+                const updatedProfile: UserProfile = {
+                  uid: data.uid,
+                  email: data.email,
+                  username: data.username,
+                  displayName: data.displayName,
+                  avatar: data.avatar || '',
+                  bio: data.bio || '',
+                  website: data.website || '',
+                  role: data.role || 'USER',
+                  status: data.status || 'ACTIVE',
+                  createdAt: serializeTimestamp(data.createdAt),
+                  updatedAt: serializeTimestamp(data.updatedAt),
+                };
+                setProfile(updatedProfile);
+                setCachedProfile(user.uid, updatedProfile);
+                setLoading(false);
+              } else {
+                // Create user profile document if this is a fresh account
+                ensureUserProfileDocument(user)
+                  .then((createdProfile) => {
+                    setProfile(createdProfile);
+                    setCachedProfile(user.uid, createdProfile);
+                    setLoading(false);
+                  })
+                  .catch((e) => {
+                    console.error('Failed to create user profile:', e);
+                    setLoading(false);
+                  });
+              }
+            },
+            (error) => {
+              console.error('Profile listener error:', error);
               setLoading(false);
-            } else {
-              // Create user profile document if this is a fresh account
-              ensureUserProfileDocument(user)
-                .then((createdProfile) => {
-                  setProfile(createdProfile);
-                  setCachedProfile(user.uid, createdProfile);
-                  setLoading(false);
-                })
-                .catch((e) => {
-                  console.error('Failed to create user profile:', e);
-                  setLoading(false);
-                });
             }
-          },
-          (error) => {
-            console.error('Profile listener error:', error);
-            setLoading(false);
-          }
-        );
-      } catch (error) {
-        console.error('Failed to sync user profile:', error);
-        setLoading(false);
-      }
-    });
+          );
+        } catch (error) {
+          console.error('Failed to sync user profile:', error);
+          setLoading(false);
+        }
+      });
+    };
+
+    let idleId: number | undefined;
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(startAuthListener, { timeout: 1000 });
+    } else {
+      timeoutId = setTimeout(startAuthListener, 50);
+    }
 
     return () => {
-      unsubscribeAuth();
+      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId) clearTimeout(timeoutId);
+      if (unsubscribeAuth) unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
     };
   }, []);

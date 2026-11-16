@@ -4,7 +4,6 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
   doc,
   getDocFromServer,
   type Firestore,
@@ -38,9 +37,7 @@ export const db: Firestore = (() => {
     return initializeFirestore(
       firebaseApp,
       {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
+        localCache: persistentLocalCache({}),
       },
       firestoreDatabaseId && firestoreDatabaseId !== '(default)' ? firestoreDatabaseId : undefined
     );

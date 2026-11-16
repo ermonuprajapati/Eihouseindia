@@ -14,6 +14,7 @@ const fraunces = Fraunces({
   weight: ['500', '600', '700'],
   variable: '--font-display',
   display: 'swap',
+  preload: false,
 });
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -21,6 +22,7 @@ const plusJakarta = Plus_Jakarta_Sans({
   weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
   display: 'swap',
+  preload: true,
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -28,6 +30,7 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ['400', '500', '600'],
   variable: '--font-mono',
   display: 'swap',
+  preload: false,
 });
 
 export const viewport: Viewport = {
