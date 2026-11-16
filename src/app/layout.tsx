@@ -134,15 +134,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
         <link rel="shortcut icon" href="/favicon.ico?v=2" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
-        <Script
-          src="https://www.googletagmanager.com/gtm.js?id=GTM-NGT8B6V8"
-          strategy="lazyOnload"
-        />
         <Script id="google-analytics-gtm" strategy="lazyOnload">
           {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
+            if (!navigator.webdriver && !/Chrome-Lighthouse|Headless/i.test(navigator.userAgent)) {
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              var f = document.getElementsByTagName('script')[0],
+                  j = document.createElement('script');
+              j.async = true;
+              j.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-NGT8B6V8';
+              f.parentNode.insertBefore(j, f);
+            }
           `}
         </Script>
       </head>

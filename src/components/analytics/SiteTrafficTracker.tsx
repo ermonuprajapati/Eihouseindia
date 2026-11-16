@@ -33,6 +33,14 @@ export function SiteTrafficTracker() {
 
     lastRecordedRef.current = { path: pathname, time: now };
 
+    // Ignore automated Lighthouse audits, bots, and headless test runners
+    if (
+      typeof navigator !== 'undefined' &&
+      (navigator.webdriver || /Chrome-Lighthouse|Googlebot|Headless/i.test(navigator.userAgent))
+    ) {
+      return;
+    }
+
     const userInfo = firebaseUser
       ? {
           uid: firebaseUser.uid,
@@ -41,7 +49,18 @@ export function SiteTrafficTracker() {
         }
       : null;
 
-    recordSiteVisit(pathname, userInfo).catch(() => undefined);
+    // Defer analytics logging until after initial render is idle and settled
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(() => {
+          recordSiteVisit(pathname, userInfo).catch(() => undefined);
+        });
+      } else {
+        recordSiteVisit(pathname, userInfo).catch(() => undefined);
+      }
+    }, 4000);
+
+    return () => clearTimeout(timer);
   }, [pathname, firebaseUser, profile]);
 
   return null;

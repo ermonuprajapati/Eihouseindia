@@ -40,6 +40,7 @@ export function SiteHeader() {
               alt="EI HOUSE INDIA Logo"
               width={36}
               height={36}
+              sizes="36px"
               className="h-8 w-8 object-contain"
               priority
             />

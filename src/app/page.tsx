@@ -232,7 +232,7 @@ export default async function HomePage() {
         </section>
 
         {/* 02. Explore EI House — The Eight Pillars Grid */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white content-auto">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
             <div className="text-center max-w-2xl mx-auto space-y-3">
               <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
@@ -424,7 +424,7 @@ export default async function HomePage() {
         </section>
 
         {/* 03. Recommended Engineering Software & Tools (Top 12 Featured Directory) */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/60 to-white">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/60 to-white content-auto">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="max-w-3xl space-y-2">
@@ -613,7 +613,7 @@ export default async function HomePage() {
         </section>
 
         {/* 03. Featured Courses Preview */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50 content-auto">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -688,7 +688,7 @@ export default async function HomePage() {
         </section>
 
         {/* 04. Technical Blog & Latest Publications (Real Firestore Data) */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white content-auto">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -737,7 +737,7 @@ export default async function HomePage() {
         </section>
 
         {/* 05. College Labs & Franchise Banner */}
-        <section className="py-16 sm:py-20 bg-slate-900 text-white">
+        <section className="py-16 sm:py-20 bg-slate-900 text-white content-auto">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
               <div className="lg:col-span-8 space-y-4">
