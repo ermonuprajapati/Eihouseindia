@@ -35,6 +35,31 @@ export const POPULAR_SUPPLIER_PRESETS: SupplierPreset[] = [
     defaultBadge: 'Verified Sensors',
   },
   {
+    name: 'Robocraze',
+    logoUrl: 'https://robocraze.com/cdn/shop/files/robocraze_logo_new_small.png?v=1614338944',
+    defaultBadge: 'Official Raspberry Pi Reseller',
+  },
+  {
+    name: 'Probots',
+    logoUrl: '',
+    defaultBadge: 'Microcontrollers & Sensors',
+  },
+  {
+    name: 'Thingbits',
+    logoUrl: '',
+    defaultBadge: 'Maker Electronics & 3D Printing',
+  },
+  {
+    name: 'Robodium',
+    logoUrl: '',
+    defaultBadge: 'Robotics Parts & Prototyping',
+  },
+  {
+    name: 'element14 India',
+    logoUrl: '',
+    defaultBadge: 'Authorized Global Distributor',
+  },
+  {
     name: 'Mouser Electronics',
     logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/48/Mouser_Electronics_logo.svg',
     defaultBadge: 'Global Stock',
@@ -43,6 +68,21 @@ export const POPULAR_SUPPLIER_PRESETS: SupplierPreset[] = [
     name: 'DigiKey',
     logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/2f/Digi-Key_logo.svg',
     defaultBadge: 'Authorized Distributor',
+  },
+  {
+    name: 'ElectronicsComp',
+    logoUrl: 'https://www.electronicscomp.com/image/catalog/logo.png',
+    defaultBadge: 'Budget Friendly',
+  },
+  {
+    name: 'Bambu Lab',
+    logoUrl: '',
+    defaultBadge: 'High-Speed 3D Printers',
+  },
+  {
+    name: 'Creality',
+    logoUrl: '',
+    defaultBadge: '3D Printing Solutions',
   },
   {
     name: 'JLCPCB',

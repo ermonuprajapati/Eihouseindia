@@ -255,6 +255,7 @@ export interface TrustedSupplier {
   category?: string;
   badge?: string;
   description?: string;
+  tags?: string[];
   order?: number;
   featured?: boolean;
   createdAt: string;
