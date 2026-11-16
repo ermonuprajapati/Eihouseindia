@@ -132,13 +132,34 @@ Shipping City/Address: ${address || 'Not provided'}`;
           <div className="space-y-6">
             {/* Product summary card */}
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#F59E0B]">
-                  {product.category}
-                </span>
-                <p className="font-semibold text-sm text-[#0B1528] line-clamp-1">{product.name}</p>
+              <div className="flex items-center gap-3 min-w-0">
+                {(product.images?.[0] || product.imageUrl) ? (
+                  <div className="h-12 w-12 rounded-lg bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-1 relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={product.images?.[0] || product.imageUrl}
+                      alt={product.name}
+                      className="h-full w-full object-contain"
+                    />
+                    {product.images && product.images.length > 1 && (
+                      <span className="absolute bottom-0 right-0 text-[8px] font-mono bg-[#172D4D] text-white px-1 rounded-tl">
+                        {product.images.length}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-12 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 text-slate-400">
+                    <ShoppingBag className="h-5 w-5" />
+                  </div>
+                )}
+                <div className="space-y-0.5 min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#F59E0B]">
+                    {product.category}
+                  </span>
+                  <p className="font-semibold text-sm text-[#0B1528] line-clamp-1">{product.name}</p>
+                </div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className="text-base font-extrabold text-[#0B1528]">{product.price}</p>
                 <span className="text-[10px] text-emerald-600 font-semibold">Taxes Included</span>
               </div>

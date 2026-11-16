@@ -315,6 +315,10 @@ export async function fetchProducts(): Promise<Product[]> {
 
     return snap.docs.map((docSnap) => {
       const data = docSnap.data();
+      const imagesList = Array.isArray(data.images) && data.images.length > 0
+        ? data.images.map(String).filter((img: string) => img.trim().length > 0)
+        : (data.imageUrl ? [String(data.imageUrl)] : []);
+
       return {
         id: docSnap.id,
         name: String(data.name || ''),
@@ -323,7 +327,8 @@ export async function fetchProducts(): Promise<Product[]> {
         badge: data.badge ? String(data.badge) : undefined,
         price: String(data.price || '₹0'),
         mrp: data.mrp ? String(data.mrp) : undefined,
-        imageUrl: data.imageUrl ? String(data.imageUrl) : undefined,
+        imageUrl: imagesList[0] || (data.imageUrl ? String(data.imageUrl) : undefined),
+        images: imagesList,
         inStock: data.inStock !== false,
         features: Array.isArray(data.features) ? data.features.map(String) : [],
         description: data.description ? String(data.description) : undefined,
@@ -371,6 +376,12 @@ export async function saveProductAdmin(
   const prodRef = doc(db, 'products', productId);
   const logId = `log_${Date.now()}_prod`;
 
+  const rawImages = Array.isArray(productData.images) && productData.images.length > 0
+    ? productData.images.map((img) => img.trim()).filter((img) => img.length > 0)
+    : (productData.imageUrl && productData.imageUrl.trim().length > 0 ? [productData.imageUrl.trim()] : []);
+
+  const primaryImage = rawImages[0] || productData.imageUrl?.trim() || null;
+
   const payload = {
     id: productId,
     name: productData.name.trim(),
@@ -379,7 +390,8 @@ export async function saveProductAdmin(
     badge: productData.badge?.trim() || null,
     price: productData.price.trim(),
     mrp: productData.mrp?.trim() || null,
-    imageUrl: productData.imageUrl?.trim() || null,
+    imageUrl: primaryImage,
+    images: rawImages,
     inStock: Boolean(productData.inStock),
     features: productData.features.filter((f) => f.trim().length > 0),
     description: productData.description?.trim() || null,
@@ -432,6 +444,7 @@ export async function saveProductAdmin(
       badge: payload.badge || undefined,
       mrp: payload.mrp || undefined,
       imageUrl: payload.imageUrl || undefined,
+      images: payload.images,
       description: payload.description || undefined,
       relatedBlogSlug: payload.relatedBlogSlug || undefined,
       relatedBlogTitle: payload.relatedBlogTitle || undefined,

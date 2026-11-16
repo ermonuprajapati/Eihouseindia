@@ -181,6 +181,7 @@ export default function AdminPanelPage() {
     price: string;
     mrp: string;
     imageUrl: string;
+    images: string[];
     inStock: boolean;
     features: string;
     description: string;
@@ -200,6 +201,7 @@ export default function AdminPanelPage() {
   const [uploadingProdImage, setUploadingProdImage] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState(false);
+  const [newImageUrlInput, setNewImageUrlInput] = useState('');
 
   // Category modal state
   const [catForm, setCatForm] = useState<{
@@ -509,19 +511,89 @@ export default function AdminPanelPage() {
     }
   };
 
-  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile || !productModal) return;
+  const handleProductMultipleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !profile || !productModal) return;
     setUploadingProdImage(true);
     try {
-      const mediaItem = await uploadEditorialImage(file, profile.uid);
-      setProductModal((prev) => (prev ? { ...prev, imageUrl: mediaItem.url } : null));
-      toast.success('Product image uploaded to Cloudinary.');
+      const fileArray = Array.from(files);
+      const uploadPromises = fileArray.map((file) => uploadEditorialImage(file, profile.uid));
+      const uploadedMediaItems = await Promise.all(uploadPromises);
+      const newUrls = uploadedMediaItems.map((item) => item.url);
+
+      setProductModal((prev) => {
+        if (!prev) return null;
+        const existing = Array.isArray(prev.images) && prev.images.length > 0
+          ? prev.images
+          : (prev.imageUrl ? [prev.imageUrl] : []);
+        const combined = [...existing, ...newUrls];
+        return {
+          ...prev,
+          imageUrl: combined[0] || '',
+          images: combined,
+        };
+      });
+      toast.success(`${newUrls.length} image(s) uploaded to Cloudinary.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload product image.');
+      toast.error(error instanceof Error ? error.message : 'Failed to upload product image(s).');
     } finally {
       setUploadingProdImage(false);
+      e.target.value = '';
     }
+  };
+
+  const handleRemoveProductImage = (indexToRemove: number) => {
+    setProductModal((prev) => {
+      if (!prev) return null;
+      const existing = Array.isArray(prev.images) && prev.images.length > 0
+        ? prev.images
+        : (prev.imageUrl ? [prev.imageUrl] : []);
+      const updated = existing.filter((_, idx) => idx !== indexToRemove);
+      return {
+        ...prev,
+        imageUrl: updated[0] || '',
+        images: updated,
+      };
+    });
+    toast.info('Image removed from product list.');
+  };
+
+  const handleSetCoverProductImage = (indexToCover: number) => {
+    setProductModal((prev) => {
+      if (!prev) return null;
+      const existing = Array.isArray(prev.images) && prev.images.length > 0
+        ? [...prev.images]
+        : (prev.imageUrl ? [prev.imageUrl] : []);
+      if (indexToCover >= 0 && indexToCover < existing.length) {
+        const [selected] = existing.splice(indexToCover, 1);
+        existing.unshift(selected);
+      }
+      return {
+        ...prev,
+        imageUrl: existing[0] || '',
+        images: existing,
+      };
+    });
+    toast.success('Cover image updated.');
+  };
+
+  const handleAddProductImageUrl = () => {
+    if (!newImageUrlInput.trim() || !productModal) return;
+    const url = newImageUrlInput.trim();
+    setProductModal((prev) => {
+      if (!prev) return null;
+      const existing = Array.isArray(prev.images) && prev.images.length > 0
+        ? prev.images
+        : (prev.imageUrl ? [prev.imageUrl] : []);
+      const combined = [...existing, url];
+      return {
+        ...prev,
+        imageUrl: combined[0] || '',
+        images: combined,
+      };
+    });
+    setNewImageUrlInput('');
+    toast.success('Image URL added.');
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -538,6 +610,10 @@ export default function AdminPanelPage() {
         .map((f) => f.trim())
         .filter((f) => f.length > 0);
 
+      const imagesToSave = Array.isArray(productModal.images) && productModal.images.length > 0
+        ? productModal.images
+        : (productModal.imageUrl.trim() ? [productModal.imageUrl.trim()] : []);
+
       await saveProductAdmin(
         {
           id: productModal.id,
@@ -547,7 +623,8 @@ export default function AdminPanelPage() {
           badge: productModal.badge.trim() || undefined,
           price: productModal.price.trim(),
           mrp: productModal.mrp.trim() || undefined,
-          imageUrl: productModal.imageUrl.trim() || undefined,
+          imageUrl: imagesToSave[0] || productModal.imageUrl.trim() || undefined,
+          images: imagesToSave,
           inStock: productModal.inStock,
           features: featuresList,
           description: productModal.description.trim() || undefined,
@@ -1243,6 +1320,7 @@ export default function AdminPanelPage() {
                             price: '₹',
                             mrp: '',
                             imageUrl: '',
+                            images: [],
                             inStock: true,
                             features: '',
                             description: '',
@@ -1293,10 +1371,15 @@ export default function AdminPanelPage() {
                                     )}
                                     <div className="min-w-0">
                                       <p className="font-medium text-[#0B1528] truncate">{prod.name}</p>
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
                                         {prod.badge && (
                                           <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
                                             {prod.badge}
+                                          </span>
+                                        )}
+                                        {prod.images && prod.images.length > 1 && (
+                                          <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.2 rounded font-semibold">
+                                            {prod.images.length} photos
                                           </span>
                                         )}
                                         <span className="text-xs text-slate-400 font-mono">/{prod.slug}</span>
@@ -1326,7 +1409,11 @@ export default function AdminPanelPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      const prodImages = Array.isArray(prod.images) && prod.images.length > 0
+                                        ? prod.images
+                                        : (prod.imageUrl ? [prod.imageUrl] : []);
+
                                       setProductModal({
                                         id: prod.id,
                                         name: prod.name,
@@ -1335,7 +1422,8 @@ export default function AdminPanelPage() {
                                         badge: prod.badge || '',
                                         price: prod.price,
                                         mrp: prod.mrp || '',
-                                        imageUrl: prod.imageUrl || '',
+                                        imageUrl: prodImages[0] || prod.imageUrl || '',
+                                        images: prodImages,
                                         inStock: prod.inStock,
                                         features: (prod.features || []).join('\n'),
                                         description: prod.description || '',
@@ -1350,8 +1438,8 @@ export default function AdminPanelPage() {
                                         relatedBlogSlug: prod.relatedBlogSlug || '',
                                         relatedBlogTitle: prod.relatedBlogTitle || '',
                                         isNew: false,
-                                      })
-                                    }
+                                      });
+                                    }}
                                   >
                                     Edit
                                   </Button>
@@ -2849,35 +2937,118 @@ export default function AdminPanelPage() {
                 </div>
               </div>
 
-              {/* Image Upload */}
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Product Image (Cloudinary)
-                </Label>
-                <div className="flex items-center gap-4">
-                  {productModal.imageUrl ? (
-                    <div className="h-16 w-16 relative rounded-lg border border-slate-200 bg-white p-1 shrink-0 overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={productModal.imageUrl} alt="Preview" className="h-full w-full object-contain" />
-                    </div>
-                  ) : (
-                    <div className="h-16 w-16 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 shrink-0">
-                      <ShoppingBag className="h-6 w-6" />
-                    </div>
-                  )}
-                  <div className="space-y-1 flex-1">
+              {/* Multiple Images Upload & Gallery */}
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Product Images (Cloudinary CDN)
+                    </Label>
+                    <p className="text-[11px] text-slate-500">
+                      Upload single or multiple photos (1 to 5+ angles). The first image is the main Cover Photo.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                    {(productModal.images || (productModal.imageUrl ? [productModal.imageUrl] : [])).length} Images
+                  </span>
+                </div>
+
+                {/* Upload Controls */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1">
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleProductImageUpload}
+                      multiple
+                      onChange={handleProductMultipleImagesUpload}
                       disabled={uploadingProdImage}
-                      className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#172D4D] file:text-white hover:file:bg-[#0B1528] cursor-pointer"
+                      className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#172D4D] file:text-white hover:file:bg-[#0B1528] cursor-pointer w-full"
                     />
-                    <p className="text-[11px] text-slate-500">
-                      {uploadingProdImage ? 'Uploading to Cloudinary...' : 'Uploads directly to Cloudinary CDN.'}
-                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="url"
+                      placeholder="Or paste image URL..."
+                      value={newImageUrlInput}
+                      onChange={(e) => setNewImageUrlInput(e.target.value)}
+                      className="h-8 text-xs min-w-[180px]"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAddProductImageUrl}
+                      className="h-8 text-xs shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add URL
+                    </Button>
                   </div>
                 </div>
+
+                {uploadingProdImage && (
+                  <p className="text-xs font-semibold text-blue-600 animate-pulse">
+                    Uploading images to Cloudinary CDN, please wait...
+                  </p>
+                )}
+
+                {/* Image Previews Grid */}
+                {(() => {
+                  const currentImages = Array.isArray(productModal.images) && productModal.images.length > 0
+                    ? productModal.images
+                    : (productModal.imageUrl ? [productModal.imageUrl] : []);
+
+                  if (currentImages.length === 0) {
+                    return (
+                      <div className="h-20 rounded-lg border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 text-xs">
+                        <ShoppingBag className="h-6 w-6 mb-1 text-slate-300" />
+                        <span>No images added yet. Click &quot;Choose Files&quot; above to add 1 to 5 images.</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2.5 pt-1">
+                      {currentImages.map((imgUrl, idx) => (
+                        <div
+                          key={`prod-img-${idx}`}
+                          className={`group relative rounded-lg border overflow-hidden bg-white p-1 flex flex-col items-center justify-between ${
+                            idx === 0 ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-200'
+                          }`}
+                        >
+                          <div className="relative h-20 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={imgUrl} alt={`Product ${idx + 1}`} className="h-full w-full object-contain" />
+                          </div>
+
+                          <div className="w-full flex items-center justify-between gap-1 pt-1.5 px-0.5">
+                            {idx === 0 ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                ★ Cover
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetCoverProductImage(idx)}
+                                className="text-[10px] text-slate-500 hover:text-amber-700 hover:underline"
+                              >
+                                Make Cover
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductImage(idx)}
+                              className="text-slate-400 hover:text-red-600 p-0.5 rounded"
+                              title="Delete image"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Key Features & Description */}

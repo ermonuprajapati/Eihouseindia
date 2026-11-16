@@ -15,6 +15,8 @@ import {
   X,
   Globe,
   SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
@@ -34,6 +36,98 @@ const SUPPLIER_FILTER_CATEGORIES = [
   '3D Printing & Manufacturing',
   'Test & Measurement',
 ] as const;
+
+function ProductCardGallery({ item }: { item: Product }) {
+  const images = useMemo(() => {
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      return item.images;
+    }
+    if (item.imageUrl) {
+      return [item.imageUrl];
+    }
+    return [];
+  }, [item.images, item.imageUrl]);
+
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  if (images.length === 0) {
+    return (
+      <div className="h-44 w-full rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-slate-400 border border-slate-100">
+        <ShoppingBag className="h-8 w-8 text-slate-300" />
+      </div>
+    );
+  }
+
+  const currentSrc = images[activeIndex] || images[0];
+
+  return (
+    <div className="group/gallery relative h-44 w-full rounded-xl bg-slate-50 overflow-hidden border border-slate-100 flex items-center justify-center p-2">
+      <Image
+        src={currentSrc}
+        alt={`${item.name} - photo ${activeIndex + 1}`}
+        fill
+        className="object-contain p-2 transition-all duration-200"
+        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+      />
+
+      {images.length > 1 && (
+        <>
+          {/* Arrow navigation buttons */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+            }}
+            aria-label="Previous photo"
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-10"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+            }}
+            aria-label="Next photo"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-10"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          {/* Dots thumbnail selector */}
+          <div className="absolute bottom-2 inset-x-0 flex items-center justify-center gap-1 z-10">
+            {images.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setActiveIndex(idx);
+                }}
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === activeIndex
+                    ? 'w-4 bg-[#172D4D]'
+                    : 'w-1.5 bg-slate-300 hover:bg-slate-400'
+                }`}
+                aria-label={`Go to photo ${idx + 1}`}
+              />
+            ))}
+          </div>
+
+          {/* Photo count indicator */}
+          <span className="absolute top-2 right-2 text-[10px] font-mono font-semibold bg-white/90 backdrop-blur-xs text-slate-700 px-1.5 py-0.5 rounded-md border border-slate-200 shadow-xs z-10">
+            {activeIndex + 1}/{images.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function ProductsCatalogClient() {
   const [products, setProducts] = useState<Product[]>(DEFAULT_HARDWARE_PRODUCTS);
@@ -214,22 +308,35 @@ export function ProductsCatalogClient() {
   return (
     <section id="products-catalog" className="py-16 sm:py-20 border-b border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
-        {/* Category tabs */}
+        {/* Category tabs with counts */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-          {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setSelectedCategory(c)}
-              className={`text-xs font-semibold px-4 py-2 rounded-full border whitespace-nowrap transition-colors ${
-                selectedCategory === c
-                  ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-sm'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              {c}
-            </button>
-          ))}
+          {categories.map((c) => {
+            const count =
+              c === 'All Hardware'
+                ? products.length
+                : products.filter((p) => p.category === c).length;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSelectedCategory(c)}
+                className={`text-xs font-semibold px-4 py-2 rounded-full border whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  selectedCategory === c
+                    ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span>{c}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    selectedCategory === c ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Products grid */}
@@ -271,33 +378,32 @@ export function ProductsCatalogClient() {
                     </div>
                   </div>
 
-                  {/* Product Image */}
-                  {item.imageUrl ? (
-                    <div className="relative h-44 w-full rounded-xl bg-slate-50 overflow-hidden border border-slate-100 flex items-center justify-center p-2">
-                      <Image
-                        src={item.imageUrl}
-                        alt={item.name}
-                        fill
-                        className="object-contain p-2"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-28 w-full rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-slate-400 border border-slate-100">
-                      <ShoppingBag className="h-8 w-8 text-slate-300" />
-                    </div>
-                  )}
+                  {/* Product Image Gallery (Supports 1 to 5+ photos) */}
+                  <ProductCardGallery item={item} />
 
                   {/* Title & Price */}
                   <div className="space-y-1">
                     <h3 className="font-display text-lg font-bold text-[#0B1528] leading-snug">
                       {item.name}
                     </h3>
-                    <div className="flex items-baseline gap-2 pt-1">
+                    <div className="flex items-baseline gap-2 pt-1 flex-wrap">
                       <span className="text-xl font-extrabold text-[#0B1528]">{item.price}</span>
                       {item.mrp && (
                         <span className="text-xs text-slate-400 line-through">{item.mrp}</span>
                       )}
+                      {item.mrp && (() => {
+                        const priceNum = parseInt(item.price.replace(/[^0-9]/g, ''), 10);
+                        const mrpNum = parseInt(item.mrp.replace(/[^0-9]/g, ''), 10);
+                        if (mrpNum > priceNum && priceNum > 0) {
+                          const discount = Math.round(((mrpNum - priceNum) / mrpNum) * 100);
+                          return (
+                            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded">
+                              {discount}% OFF
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       <span className="text-[11px] font-semibold text-emerald-600">Inclusive of Taxes</span>
                     </div>
                     {item.description && (

@@ -222,6 +222,7 @@ export interface Product {
   price: string;
   mrp?: string;
   imageUrl?: string;
+  images?: string[];
   inStock: boolean;
   features: string[];
   description?: string;

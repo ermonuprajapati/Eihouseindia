@@ -68,4 +68,30 @@ describe('Products & Hardware Store Service', () => {
     expect(names).toContain('bambu lab');
     expect(names).toContain('creality');
   });
+
+  it('supports multiple images array for product catalog', () => {
+    const multiImageProduct = {
+      id: 'test-multi-prod',
+      name: 'Test Board Multi Angle',
+      slug: 'test-board-multi-angle',
+      category: 'EI House Original Boards',
+      price: '₹999',
+      inStock: true,
+      features: ['Feature 1', 'Feature 2'],
+      suppliers: [],
+      images: [
+        'https://example.com/front.jpg',
+        'https://example.com/back.jpg',
+        'https://example.com/pinout.jpg',
+        'https://example.com/side.jpg',
+        'https://example.com/schematic.jpg',
+      ],
+      imageUrl: 'https://example.com/front.jpg',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    expect(multiImageProduct.images.length).toBe(5);
+    expect(multiImageProduct.imageUrl).toBe(multiImageProduct.images[0]);
+  });
 });
