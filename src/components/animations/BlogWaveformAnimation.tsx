@@ -2,9 +2,10 @@ import React from 'react';
 
 /**
  * BlogWaveformAnimation
- * Themed for Technical Blog & Publications:
- * - Oscilloscope waveform frequency stream
- * - Floating technical & engineering mathematics symbols (∑, Ω, ∫, Δ, σ)
+ * Themed for Engineering Blog, Editorial Publications & Hardware Research:
+ * - Digital Signal Processing (DSP) FFT Spectrum Analyzer
+ * - High-speed Carrier Waveform with Frequency Modulation
+ * - Technical telemetry stream representing deep hardware teardowns & research
  */
 export function BlogWaveformAnimation() {
   return (
@@ -12,47 +13,85 @@ export function BlogWaveformAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      <div className="absolute top-5 right-1/4 w-[480px] h-[300px] rounded-full bg-indigo-500/10 blur-[85px]" />
-      <div className="absolute bottom-5 left-10 w-[380px] h-[250px] rounded-full bg-blue-500/10 blur-[80px]" />
+      <div className="absolute top-0 right-1/4 w-[480px] h-[320px] rounded-full bg-indigo-600/10 blur-[85px]" />
+      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-blue-600/10 blur-[80px]" />
 
       <svg
-        className="absolute inset-0 h-full w-full opacity-35"
+        className="absolute inset-0 h-full w-full opacity-55"
+        viewBox="0 0 1440 420"
+        preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Continuous Flowing Oscilloscope Sine Wave */}
+        <defs>
+          <pattern id="blogGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1" fill="#0B1528" fillOpacity="0.08" />
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#blogGrid)" />
+
+        {/* -------------------------------------------------------- */}
+        {/* FAST FOURIER TRANSFORM (FFT) SPECTRUM ANALYZER BARS      */}
+        {/* -------------------------------------------------------- */}
+        <g transform="translate(720, 260)">
+          {/* Baseline Zero-Axis Line */}
+          <line x1="-320" y1="0" x2="320" y2="0" stroke="#334155" strokeWidth="1.5" />
+
+          {/* Equalizer Frequency Spectrum Bins */}
+          {[
+            { x: -300, h: 40, cls: 'animate-spectrum-1', col: '#6366F1' },
+            { x: -270, h: 65, cls: 'animate-spectrum-2', col: '#6366F1' },
+            { x: -240, h: 90, cls: 'animate-spectrum-3', col: '#0090FF' },
+            { x: -210, h: 120, cls: 'animate-spectrum-4', col: '#0090FF' },
+            { x: -180, h: 75, cls: 'animate-spectrum-5', col: '#38BDF8' },
+            { x: -150, h: 110, cls: 'animate-spectrum-2', col: '#38BDF8' },
+            { x: -120, h: 140, cls: 'animate-spectrum-1', col: '#F59E0B' },
+            { x: -90, h: 85, cls: 'animate-spectrum-3', col: '#F59E0B' },
+            { x: -60, h: 160, cls: 'animate-spectrum-4', col: '#FF8C00' },
+            { x: -30, h: 95, cls: 'animate-spectrum-2', col: '#FF8C00' },
+            { x: 0, h: 180, cls: 'animate-spectrum-1', col: '#0090FF' },
+            { x: 30, h: 130, cls: 'animate-spectrum-5', col: '#0090FF' },
+            { x: 60, h: 150, cls: 'animate-spectrum-3', col: '#38BDF8' },
+            { x: 90, h: 110, cls: 'animate-spectrum-2', col: '#38BDF8' },
+            { x: 120, h: 80, cls: 'animate-spectrum-4', col: '#10B981' },
+            { x: 150, h: 135, cls: 'animate-spectrum-1', col: '#10B981' },
+            { x: 180, h: 90, cls: 'animate-spectrum-5', col: '#6366F1' },
+            { x: 210, h: 115, cls: 'animate-spectrum-3', col: '#6366F1' },
+            { x: 240, h: 70, cls: 'animate-spectrum-2', col: '#A855F7' },
+            { x: 270, h: 50, cls: 'animate-spectrum-4', col: '#A855F7' },
+            { x: 300, h: 30, cls: 'animate-spectrum-1', col: '#A855F7' },
+          ].map((bar, idx) => (
+            <rect
+              key={`fft-bar-${idx}`}
+              x={bar.x - 8}
+              y={-bar.h}
+              width="16"
+              height={bar.h}
+              rx="3"
+              fill={bar.col}
+              fillOpacity="0.75"
+              className={bar.cls}
+            />
+          ))}
+
+          {/* Spectrum Axis Readout */}
+          <text x="-320" y="24" fill="#64748B" fontSize="8" fontFamily="monospace">0 Hz</text>
+          <text x="0" y="24" textAnchor="middle" fill="#0090FF" fontSize="8" fontFamily="monospace" fontWeight="bold">CENTER: 2.45 GHz</text>
+          <text x="320" y="24" textAnchor="end" fill="#64748B" fontSize="8" fontFamily="monospace">SPAN: 100 MHz</text>
+        </g>
+
+        {/* Dynamic Continuous Carrier Wave (Upper Section) */}
         <path
-          d="M 0 100 Q 60 40 120 100 T 240 100 T 360 100 T 480 100 T 600 100 T 720 100 T 840 100 T 960 100 T 1080 100 T 1200 100"
+          d="M 40 100 Q 120 40 200 100 T 360 100 T 520 100 T 680 100 T 840 100 T 1000 100 T 1160 100 T 1320 100 T 1440 100"
           fill="none"
-          stroke="#6366F1"
-          strokeWidth="1.8"
-          strokeDasharray="6 3"
+          stroke="#0090FF"
+          strokeWidth="1.75"
           className="animate-pcb-trace"
         />
 
-        {/* Square Pulse Clock Signal Wave */}
-        <path
-          d="M 50 140 L 110 140 L 110 80 L 170 80 L 170 140 L 230 140 L 230 80 L 290 80 L 290 140 L 350 140 L 350 80 L 410 80 L 410 140 L 470 140 L 470 80 L 530 80 L 530 140 L 590 140"
-          fill="none"
-          stroke="#3B82F6"
-          strokeWidth="1.2"
-          opacity="0.6"
-        />
-
-        {/* Floating Technical & LaTeX Mathematical Symbols */}
-        <text x="140" y="60" fill="#6366F1" fontSize="24" fontFamily="serif" fontWeight="bold" opacity="0.4" className="animate-float-slow">
-          ∑
-        </text>
-        <text x="320" y="50" fill="#3B82F6" fontSize="22" fontFamily="serif" fontWeight="bold" opacity="0.4" className="animate-float-slow" style={{ animationDelay: '1s' }}>
-          Ω
-        </text>
-        <text x="520" y="65" fill="#8B5CF6" fontSize="24" fontFamily="serif" fontWeight="bold" opacity="0.35" className="animate-float-slow" style={{ animationDelay: '1.8s' }}>
-          ∫
-        </text>
-        <text x="740" y="55" fill="#3B82F6" fontSize="20" fontFamily="sans-serif" fontWeight="bold" opacity="0.35" className="animate-float-slow" style={{ animationDelay: '2.5s' }}>
-          ΔV
-        </text>
-        <text x="880" y="60" fill="#6366F1" fontSize="22" fontFamily="serif" fontWeight="bold" opacity="0.4" className="animate-float-slow" style={{ animationDelay: '0.5s' }}>
-          λ
+        {/* Technical Editorial Header */}
+        <text x="80" y="60" fill="#64748B" fontSize="8" fontFamily="monospace">
+          EDITORIAL_DSP: 1024-PT FFT · TEARDOWNS · HARDWARE ARCHITECTURE · PEER REVIEWED
         </text>
       </svg>
     </div>

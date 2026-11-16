@@ -2,10 +2,10 @@ import React from 'react';
 
 /**
  * LibrarySiliconAnimation
- * Themed for Engineering Library & Technical Datasheets:
- * - Central Silicon Microcontroller / IC Package
- * - Pulsing PCB bus lines carrying streaming data
- * - Hexadecimal & binary address markers
+ * Themed for Engineering Library, Datasheets & Component Registry:
+ * - Microcontroller Architectural Pinout Breakdown (GPIO, I2C, SPI, UART, ADC)
+ * - Memory Register Address Map (APB1, APB2, AHB Bus Matrix)
+ * - Data bus activity demonstrating comprehensive hardware documentation
  */
 export function LibrarySiliconAnimation() {
   return (
@@ -13,67 +13,99 @@ export function LibrarySiliconAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      <div className="absolute top-0 right-1/4 w-[450px] h-[300px] rounded-full bg-emerald-500/10 blur-[85px]" />
-      <div className="absolute -bottom-10 left-10 w-[380px] h-[250px] rounded-full bg-indigo-500/10 blur-[80px]" />
+      <div className="absolute top-0 right-1/4 w-[480px] h-[320px] rounded-full bg-emerald-600/10 blur-[85px]" />
+      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-blue-600/10 blur-[80px]" />
 
       <svg
-        className="absolute inset-0 h-full w-full opacity-40"
+        className="absolute inset-0 h-full w-full opacity-55"
+        viewBox="0 0 1440 420"
+        preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* PCB Circuit Traces with Animated Signal Dashes */}
-        <path
-          d="M 50 120 L 160 120 L 220 60 L 380 60 L 420 100 L 580 100"
-          fill="none"
-          stroke="#10B981"
-          strokeWidth="1.5"
-          className="animate-pcb-trace"
-        />
-        <path
-          d="M 120 160 L 200 160 L 250 210 L 450 210 L 490 170 L 680 170"
-          fill="none"
-          stroke="#6366F1"
-          strokeWidth="1.5"
-          className="animate-pcb-trace"
-          style={{ animationDuration: '2.5s' }}
-        />
-        <path
-          d="M 720 40 L 780 40 L 830 90 L 980 90"
-          fill="none"
-          stroke="#10B981"
-          strokeWidth="1.2"
-          className="animate-pcb-trace"
-        />
+        <defs>
+          <pattern id="libGrid" width="45" height="45" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1" fill="#0B1528" fillOpacity="0.08" />
+          </pattern>
+        </defs>
 
-        {/* Central Silicon Microchip Die */}
-        <g transform="translate(420, 100)">
-          {/* IC Body */}
-          <rect x="-35" y="-35" width="70" height="70" rx="8" fill="#0B1528" stroke="#10B981" strokeWidth="1.5" />
-          <circle cx="-25" cy="-25" r="3" fill="#10B981" />
-          <text x="0" y="4" textAnchor="middle" fill="#34D399" fontSize="10" fontFamily="monospace" fontWeight="bold">
-            MCU·32
+        <rect width="100%" height="100%" fill="url(#libGrid)" />
+
+        {/* -------------------------------------------------------- */}
+        {/* SILICON IC PINOUT SCHEMATIC (Center Platform)            */}
+        {/* -------------------------------------------------------- */}
+        <g transform="translate(720, 210)">
+          {/* IC Silicon Package Body */}
+          <rect
+            x="-160"
+            y="-100"
+            width="320"
+            height="200"
+            rx="8"
+            fill="#070E1A"
+            stroke="#059669"
+            strokeWidth="1.75"
+          />
+
+          {/* IC Label & Part Number */}
+          <text x="0" y="-55" textAnchor="middle" fill="#34D399" fontSize="10" fontFamily="monospace" fontWeight="bold">
+            STM32F401RE / ESP32-S3
           </text>
-          {/* Chip Pins */}
-          {[-20, -10, 0, 10, 20].map((offset) => (
-            <React.Fragment key={offset}>
-              <rect x="-42" y={offset - 2} width="7" height="4" fill="#10B981" opacity="0.8" />
-              <rect x="35" y={offset - 2} width="7" height="4" fill="#10B981" opacity="0.8" />
-              <rect x={offset - 2} y="-42" width="4" height="7" fill="#10B981" opacity="0.8" />
-              <rect x={offset - 2} y="35" width="4" height="7" fill="#10B981" opacity="0.8" />
-            </React.Fragment>
-          ))}
+          <text x="0" y="-38" textAnchor="middle" fill="#64748B" fontSize="7.5" fontFamily="monospace">
+            64-PIN LQFP ARCHITECTURE PINOUT
+          </text>
+
+          {/* Silicon Core Center LED Heartbeat */}
+          <circle cx="0" cy="0" r="14" fill="#059669" fillOpacity="0.2" className="animate-chip-heartbeat" />
+          <circle cx="0" cy="0" r="3.5" fill="#34D399" />
+          <text x="0" y="22" textAnchor="middle" fill="#93C5FD" fontSize="7.5" fontFamily="monospace">
+            ARM CORTEX-M4F @ 84MHz
+          </text>
+
+          {/* Left Pins (GPIO & Communications) */}
+          {[
+            { label: 'PA9 (USART1_TX)', color: '#38BDF8' },
+            { label: 'PA10 (USART1_RX)', color: '#38BDF8' },
+            { label: 'PB6 (I2C1_SCL)', color: '#F59E0B' },
+            { label: 'PB7 (I2C1_SDA)', color: '#F59E0B' },
+            { label: 'PA5 (SPI1_SCK)', color: '#10B981' },
+          ].map((pin, i) => {
+            const py = -60 + i * 30;
+            return (
+              <g key={`lpin-${i}`}>
+                <line x1="-160" y1={py} x2="-230" y2={py} stroke={pin.color} strokeWidth="1.5" />
+                <circle cx="-230" cy={py} r="3" fill="#070E1A" stroke={pin.color} strokeWidth="1.2" />
+                <text x="-240" y={py + 3} textAnchor="end" fill={pin.color} fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                  {pin.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Right Pins (Analog, Clocks & Power) */}
+          {[
+            { label: 'VDD (3.3V POWER)', color: '#EF4444' },
+            { label: 'GND (SYSTEM GND)', color: '#64748B' },
+            { label: 'PA0 (ADC1_IN0)', color: '#A855F7' },
+            { label: 'NRST (SYS_RESET)', color: '#F59E0B' },
+            { label: 'OSC_IN (8MHz HSE)', color: '#38BDF8' },
+          ].map((pin, i) => {
+            const py = -60 + i * 30;
+            return (
+              <g key={`rpin-${i}`}>
+                <line x1="160" y1={py} x2="230" y2={py} stroke={pin.color} strokeWidth="1.5" />
+                <circle cx="230" cy={py} r="3" fill="#070E1A" stroke={pin.color} strokeWidth="1.2" />
+                <text x="240" y={py + 3} textAnchor="start" fill={pin.color} fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                  {pin.label}
+                </text>
+              </g>
+            );
+          })}
         </g>
 
-        {/* Binary / Hexadecimal Memory Nodes */}
-        <g transform="translate(180, 50)" fill="#6366F1" opacity="0.5" fontSize="8" fontFamily="monospace">
-          <text x="0" y="0">0x08000000 // FLASH</text>
-          <text x="0" y="14">0x20000000 // SRAM</text>
-        </g>
-
-        {/* Via Test Points */}
-        <circle cx="160" cy="120" r="4" fill="#10B981" fillOpacity="0.3" stroke="#10B981" strokeWidth="1.2" />
-        <circle cx="220" cy="60" r="4" fill="#10B981" fillOpacity="0.3" stroke="#10B981" strokeWidth="1.2" />
-        <circle cx="250" cy="210" r="4" fill="#6366F1" fillOpacity="0.3" stroke="#6366F1" strokeWidth="1.2" />
-        <circle cx="490" cy="170" r="4" fill="#6366F1" fillOpacity="0.3" stroke="#6366F1" strokeWidth="1.2" />
+        {/* Technical Calibration Watermarks */}
+        <text x="80" y="60" fill="#64748B" fontSize="8" fontFamily="monospace">
+          LIBRARY_REGISTRY: 5,000+ COMPONENT DATASHEETS · FOOTPRINTS & SYMBOLS · 3D STEP MODELS
+        </text>
       </svg>
     </div>
   );

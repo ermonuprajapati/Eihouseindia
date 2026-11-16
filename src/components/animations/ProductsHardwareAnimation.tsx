@@ -2,9 +2,10 @@ import React from 'react';
 
 /**
  * ProductsHardwareAnimation
- * Themed for Hardware Store & Electronic Products:
- * - Floating electronic components (SMD packages, capacitors, crystal oscillator)
- * - Cybernetic hardware workbench aura
+ * Themed for Hardware Store, Development Boards & Electronic Components:
+ * - SMD Silicon Package & Gold-Plated Solder Footprints
+ * - 2.54mm Standard Pin Headers & Power Delivery Bus
+ * - Microcontroller Dev-Board Blueprint with Component Markings
  */
 export function ProductsHardwareAnimation() {
   return (
@@ -12,48 +13,108 @@ export function ProductsHardwareAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      <div className="absolute top-0 right-10 w-[480px] h-[340px] rounded-full bg-amber-500/10 blur-[90px]" />
-      <div className="absolute bottom-0 left-10 w-[400px] h-[280px] rounded-full bg-blue-500/10 blur-[80px]" />
+      <div className="absolute top-0 right-1/4 w-[500px] h-[340px] rounded-full bg-amber-500/10 blur-[90px]" />
+      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-blue-500/10 blur-[85px]" />
 
       <svg
-        className="absolute inset-0 h-full w-full opacity-35"
+        className="absolute inset-0 h-full w-full opacity-55"
+        viewBox="0 0 1440 420"
+        preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Floating Component A: SMD Chip Package (Left) */}
-        <g transform="translate(140, 110)" className="animate-float-slow">
-          <rect x="-24" y="-24" width="48" height="48" rx="6" fill="#1E293B" stroke="#F59E0B" strokeWidth="1.5" />
-          <circle cx="0" cy="0" r="10" fill="none" stroke="#F59E0B" strokeWidth="1" strokeDasharray="3 2" />
-          <circle cx="-16" cy="-16" r="2.5" fill="#F59E0B" />
-          {/* Solder Terminals */}
-          {[-14, 0, 14].map((y) => (
-            <React.Fragment key={y}>
-              <rect x="-30" y={y - 2.5} width="6" height="5" fill="#94A3B8" />
-              <rect x="24" y={y - 2.5} width="6" height="5" fill="#94A3B8" />
-            </React.Fragment>
+        <defs>
+          <pattern id="hardwareGrid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.2" fill="#0B1528" fillOpacity="0.1" />
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#hardwareGrid)" />
+
+        {/* -------------------------------------------------------- */}
+        {/* HARDWARE BOARD SILICON PLATFORM (Center)                 */}
+        {/* -------------------------------------------------------- */}
+        <g transform="translate(720, 210)">
+          {/* Main Hardware PCB Carrier */}
+          <rect
+            x="-220"
+            y="-110"
+            width="440"
+            height="220"
+            rx="12"
+            fill="#070E1A"
+            stroke="#1E3A8A"
+            strokeWidth="1.5"
+          />
+
+          {/* Golden Corner Mounting Holes */}
+          {[[-200, -90], [200, -90], [-200, 90], [200, 90]].map(([hx, hy], i) => (
+            <g key={`hole-${i}`} transform={`translate(${hx}, ${hy})`}>
+              <circle cx="0" cy="0" r="7" fill="none" stroke="#F59E0B" strokeWidth="1.5" />
+              <circle cx="0" cy="0" r="3.5" fill="#070E1A" stroke="#0090FF" strokeWidth="1" />
+            </g>
           ))}
-          <text x="0" y="36" textAnchor="middle" fill="#F59E0B" fontSize="9" fontFamily="monospace">SMD·SOIC</text>
+
+          {/* Central Microcontroller IC (LQFP-64) */}
+          <rect
+            x="-50"
+            y="-50"
+            width="100"
+            height="100"
+            rx="6"
+            fill="#0B1528"
+            stroke="#F59E0B"
+            strokeWidth="1.5"
+          />
+          {/* Silicon Core Logo Marking */}
+          <circle cx="0" cy="0" r="12" fill="#0090FF" fillOpacity="0.2" className="animate-chip-heartbeat" />
+          <circle cx="0" cy="0" r="3" fill="#F59E0B" />
+          <text x="0" y="-12" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+            EI-CORE
+          </text>
+          <text x="0" y="18" textAnchor="middle" fill="#93C5FD" fontSize="6" fontFamily="monospace">
+            GENUINE MCU
+          </text>
+
+          {/* Surrounding Gold Pin Leads */}
+          {[-35, -20, -5, 10, 25, 40].map((p, idx) => (
+            <g key={`lead-${idx}`}>
+              <line x1={p - 5} y1="-50" x2={p - 5} y2="-62" stroke="#F59E0B" strokeWidth="1.5" />
+              <line x1={p - 5} y1="50" x2={p - 5} y2="62" stroke="#F59E0B" strokeWidth="1.5" />
+              <line x1="-50" y1={p - 5} x2="-62" y2={p - 5} stroke="#F59E0B" strokeWidth="1.5" />
+              <line x1="50" y1={p - 5} x2="62" y2={p - 5} stroke="#F59E0B" strokeWidth="1.5" />
+            </g>
+          ))}
+
+          {/* Left Standard 2.54mm GPIO Header Strip */}
+          <rect x="-180" y="-70" width="16" height="140" rx="3" fill="#0B1528" stroke="#334155" strokeWidth="1" />
+          {[-50, -30, -10, 10, 30, 50].map((py, idx) => (
+            <circle key={`gpio-l-${idx}`} cx="-172" cy={py} r="3" fill="#F59E0B" stroke="#0090FF" strokeWidth="0.8" />
+          ))}
+
+          {/* Right Standard 2.54mm GPIO Header Strip */}
+          <rect x="164" y="-70" width="16" height="140" rx="3" fill="#0B1528" stroke="#334155" strokeWidth="1" />
+          {[-50, -30, -10, 10, 30, 50].map((py, idx) => (
+            <circle key={`gpio-r-${idx}`} cx="172" cy={py} r="3" fill="#F59E0B" stroke="#0090FF" strokeWidth="0.8" />
+          ))}
+
+          {/* USB Type-C Connector Receptacle */}
+          <rect x="-218" y="-18" width="12" height="36" rx="3" fill="#334155" stroke="#94A3B8" strokeWidth="1" />
+          <text x="-160" y="-80" fill="#64748B" fontSize="6.5" fontFamily="monospace">USB-C PD</text>
+
+          {/* Active Data Bus Traces */}
+          <path
+            d="M -160 0 L -50 0 M 50 0 L 150 0"
+            fill="none"
+            stroke="#0090FF"
+            strokeWidth="1.5"
+            className="animate-pcb-trace"
+          />
         </g>
 
-        {/* Floating Component B: Cylindrical Capacitor (Right) */}
-        <g transform="translate(860, 120)" className="animate-float-slow" style={{ animationDelay: '1.2s' }}>
-          <ellipse cx="0" cy="-20" rx="18" ry="8" fill="#3B82F6" stroke="#1D4ED8" strokeWidth="1.2" />
-          <path d="M -18 -20 L -18 20 A 18 8 0 0 0 18 20 L 18 -20 Z" fill="#1E3A8A" stroke="#1D4ED8" strokeWidth="1.2" />
-          <ellipse cx="0" cy="20" rx="18" ry="8" fill="#2563EB" stroke="#1D4ED8" strokeWidth="1.2" />
-          {/* Stripe Indicator */}
-          <line x1="-12" y1="-20" x2="-12" y2="20" stroke="#93C5FD" strokeWidth="3" />
-          <text x="0" y="42" textAnchor="middle" fill="#60A5FA" fontSize="9" fontFamily="monospace">1000μF 25V</text>
-        </g>
-
-        {/* Component C: Resistor Bands (Center) */}
-        <g transform="translate(520, 70)" className="animate-float-slow" style={{ animationDelay: '2s' }}>
-          <path d="M -40 0 L -25 0 Q -20 -8 -15 -8 L 15 -8 Q 20 0 25 0 L 40 0" fill="none" stroke="#94A3B8" strokeWidth="1.5" />
-          <rect x="-20" y="-7" width="40" height="14" rx="4" fill="#FDE68A" stroke="#D97706" strokeWidth="1" />
-          {/* Color code stripes */}
-          <rect x="-14" y="-7" width="3" height="14" fill="#92400E" />
-          <rect x="-6" y="-7" width="3" height="14" fill="#000000" />
-          <rect x="2" y="-7" width="3" height="14" fill="#DC2626" />
-          <rect x="10" y="-7" width="3" height="14" fill="#D97706" />
-        </g>
+        {/* Board Verification Callouts */}
+        <text x="80" y="80" fill="#64748B" fontSize="8" fontFamily="monospace">
+          HARDWARE_STATUS: VERIFIED_HARDWARE · ROHS_COMPLIANT · CE/FCC_READY
+        </text>
       </svg>
     </div>
   );
