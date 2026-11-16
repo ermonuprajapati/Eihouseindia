@@ -34,15 +34,13 @@ export function SiteHeader() {
           href="/"
           className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#0B1528] whitespace-nowrap shrink-0 flex items-center gap-2.5 group"
         >
-          <div className="relative flex items-center justify-center">
-            {/* Logo Brand Color Space Aura: Dual Cyber Blue & Solar Amber Glow */}
-            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#0090FF] via-[#FF8C00] to-[#0090FF] opacity-35 blur-xs group-hover:opacity-75 transition-opacity duration-500 animate-pulse-glow" />
+          <div className="flex items-center justify-center shrink-0">
             <Image
               src="/images/logo.png"
               alt="EI HOUSE INDIA Logo"
-              width={34}
-              height={34}
-              className="relative h-8 w-8 object-contain rounded drop-shadow-sm group-hover:scale-105 transition-transform"
+              width={36}
+              height={36}
+              className="h-8 w-8 object-contain"
               priority
             />
           </div>
