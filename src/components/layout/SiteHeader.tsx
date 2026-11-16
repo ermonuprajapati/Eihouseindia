@@ -47,7 +47,7 @@ export function SiteHeader() {
           </div>
           <div className="flex flex-col">
             <span className="leading-tight font-extrabold text-[#0B1528] group-hover:text-blue-700 transition-colors">EI HOUSE</span>
-            <span className="text-[10px] tracking-wider font-semibold text-[#F59E0B] uppercase leading-none hidden sm:inline">
+            <span className="text-[10px] tracking-wider font-semibold text-[#B45309] uppercase leading-none hidden sm:inline">
               Innovation House
             </span>
           </div>
@@ -60,24 +60,28 @@ export function SiteHeader() {
         >
           <Link
             href="/learn"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Learn
           </Link>
           <Link
             href="/projects"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Projects
           </Link>
           <Link
             href="/products"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Store
           </Link>
           <Link
             href="/tools"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D] flex items-center gap-1"
           >
             <span>Engineering Tools</span>
@@ -87,36 +91,42 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/library"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
           >
             Library
           </Link>
           <Link
             href="/services"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Services
           </Link>
           <Link
             href="/articles"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Blog
           </Link>
           <Link
             href="/community"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             Community
           </Link>
           <Link
             href="/partnerships"
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 text-slate-500"
+            prefetch={false}
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 text-slate-600"
           >
             Labs & Franchise
           </Link>
           <Link
             href="/about"
+            prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
           >
             About
@@ -127,6 +137,7 @@ export function SiteHeader() {
         <div className="hidden lg:flex items-center gap-3 shrink-0">
           <Link
             href="/search"
+            prefetch={false}
             className="p-2 text-slate-500 hover:text-[#0B1528] rounded-md hover:bg-slate-100 transition-colors"
             title="Search Platform"
           >

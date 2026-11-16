@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/modules/auth/auth-context';
-import { recordSiteVisit } from '@/modules/analytics/analytics-service';
 
 export function SiteTrafficTracker() {
   const pathname = usePathname();
@@ -31,8 +30,6 @@ export function SiteTrafficTracker() {
       return;
     }
 
-    lastRecordedRef.current = { path: pathname, time: now };
-
     // Ignore automated Lighthouse audits, bots, and headless test runners
     if (
       typeof navigator !== 'undefined' &&
@@ -49,18 +46,32 @@ export function SiteTrafficTracker() {
         }
       : null;
 
-    // Defer analytics logging until after initial render is idle and settled
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        window.requestIdleCallback(() => {
-          recordSiteVisit(pathname, userInfo).catch(() => undefined);
-        });
-      } else {
-        recordSiteVisit(pathname, userInfo).catch(() => undefined);
-      }
-    }, 4000);
+    let fired = false;
+    const triggerVisitLog = () => {
+      if (fired) return;
+      fired = true;
+      lastRecordedRef.current = { path: pathname, time: Date.now() };
+      import('@/modules/analytics/analytics-service')
+        .then(({ recordSiteVisit }) => recordSiteVisit(pathname, userInfo))
+        .catch(() => undefined);
+    };
 
-    return () => clearTimeout(timer);
+    const events = ['scroll', 'pointerdown', 'touchstart', 'keydown'] as const;
+    const onInteract = () => {
+      events.forEach((ev) => window.removeEventListener(ev, onInteract));
+      triggerVisitLog();
+    };
+
+    events.forEach((ev) => window.addEventListener(ev, onInteract, { once: true, passive: true }));
+    const timer = setTimeout(() => {
+      events.forEach((ev) => window.removeEventListener(ev, onInteract));
+      triggerVisitLog();
+    }, 6500);
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((ev) => window.removeEventListener(ev, onInteract));
+    };
   }, [pathname, firebaseUser, profile]);
 
   return null;

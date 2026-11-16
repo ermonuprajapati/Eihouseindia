@@ -1,30 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider,
-  signOut as firebaseSignOut,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  updateProfile,
-  type User,
-} from 'firebase/auth';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  onSnapshot,
-  serverTimestamp,
-  writeBatch,
-  type Timestamp,
-} from 'firebase/firestore';
-import { auth, db } from '@/config/firebase';
+import type { User } from 'firebase/auth';
+import type { Timestamp } from 'firebase/firestore';
 import { SITE_CONFIG } from '@/config/site';
 import type { UserProfile, UserRole } from '@/types';
 
@@ -47,6 +25,56 @@ interface AuthContextValue {
   resendVerificationEmail: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+}
+
+type FirebaseDeps = {
+  auth: import('firebase/auth').Auth;
+  db: import('firebase/firestore').Firestore;
+  firebaseAuth: typeof import('firebase/auth');
+  firebaseFirestore: typeof import('firebase/firestore');
+};
+
+let depsPromise: Promise<FirebaseDeps> | null = null;
+
+function loadFirebaseDeps(): Promise<FirebaseDeps> {
+  if (!depsPromise) {
+    depsPromise = Promise.all([
+      import('@/config/firebase'),
+      import('firebase/auth'),
+      import('firebase/firestore'),
+    ]).then(([fbConfig, firebaseAuth, firebaseFirestore]) => ({
+      auth: fbConfig.auth,
+      db: fbConfig.db,
+      firebaseAuth,
+      firebaseFirestore,
+    }));
+  }
+  return depsPromise;
+}
+
+function hasLikelyAuthSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (sessionStorage.getItem('firebase_auth_redirect')) return true;
+    const path = window.location.pathname;
+    if (path.startsWith('/auth') || path.startsWith('/dashboard') || path.startsWith('/admin')) {
+      return true;
+    }
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith('eihouse_profile_') ||
+          k.startsWith('firebase:') ||
+          k === 'eihouse_has_auth')
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    return true;
+  }
+  return false;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -75,6 +103,7 @@ function setCachedProfile(uid: string, profile: UserProfile): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(`eihouse_profile_${uid}`, JSON.stringify(profile));
+    localStorage.setItem('eihouse_has_auth', '1');
   } catch {
     // Ignore quota errors
   }
@@ -83,6 +112,7 @@ function setCachedProfile(uid: string, profile: UserProfile): void {
 function clearCachedProfile(uid?: string): void {
   if (typeof window === 'undefined') return;
   try {
+    localStorage.removeItem('eihouse_has_auth');
     if (uid) {
       localStorage.removeItem(`eihouse_profile_${uid}`);
     } else {
@@ -141,6 +171,9 @@ async function ensureUserProfileDocument(
   user: User,
   overrides?: { displayName?: string; username?: string }
 ): Promise<UserProfile> {
+  const { db, firebaseFirestore } = await loadFirebaseDeps();
+  const { doc, getDoc, writeBatch, serverTimestamp } = firebaseFirestore;
+
   const userRef = doc(db, 'users', user.uid);
   const publicRef = doc(db, 'publicProfiles', user.uid);
 
@@ -220,7 +253,6 @@ async function ensureUserProfileDocument(
     console.warn('Could not write user profile to Firestore:', error);
   }
 
-  // Send branded welcome email on first time registration / Google sign-in
   if (email) {
     sendWelcomeEmailNotice(email, displayName, user.uid);
   }
@@ -246,14 +278,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only query redirect result if a redirect sign-in was actually initiated,
-    // avoiding the expensive apis.google.com iframe overhead on standard page views.
     if (typeof window === 'undefined') return;
     const isRedirectPending = sessionStorage.getItem('firebase_auth_redirect');
     if (!isRedirectPending) return;
 
     sessionStorage.removeItem('firebase_auth_redirect');
-    getRedirectResult(auth)
+    loadFirebaseDeps()
+      .then(({ auth, firebaseAuth }) =>
+        firebaseAuth.getRedirectResult(auth, firebaseAuth.browserPopupRedirectResolver)
+      )
       .then((credential) => {
         if (credential?.user) {
           ensureUserProfileDocument(credential.user).catch((e) =>
@@ -269,93 +302,117 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
     let unsubscribeAuth: (() => void) | undefined;
+    let cancelled = false;
 
-    const startAuthListener = () => {
-      unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-        if (unsubscribeProfile) {
-          unsubscribeProfile();
-          unsubscribeProfile = undefined;
-        }
+    const startAuthListener = async () => {
+      try {
+        const { auth, db, firebaseAuth, firebaseFirestore } = await loadFirebaseDeps();
+        if (cancelled) return;
 
-        setFirebaseUser(user);
+        unsubscribeAuth = firebaseAuth.onAuthStateChanged(auth, (user) => {
+          if (unsubscribeProfile) {
+            unsubscribeProfile();
+            unsubscribeProfile = undefined;
+          }
 
-        if (!user) {
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
+          setFirebaseUser(user);
 
-        // Step 1: INSTANT HYDRATION - Load local cache immediately (0ms delay)
-        const cached = getCachedProfile(user.uid);
-        if (cached) {
-          setProfile(cached);
-          setLoading(false);
-        }
+          if (!user) {
+            setProfile(null);
+            setLoading(false);
+            return;
+          }
 
-        // Step 2: Background sync with Firestore
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          unsubscribeProfile = onSnapshot(
-            userRef,
-            (snapshot) => {
-              if (snapshot.exists()) {
-                const data = snapshot.data();
-                const updatedProfile: UserProfile = {
-                  uid: data.uid,
-                  email: data.email,
-                  username: data.username,
-                  displayName: data.displayName,
-                  avatar: data.avatar || '',
-                  bio: data.bio || '',
-                  website: data.website || '',
-                  role: data.role || 'USER',
-                  status: data.status || 'ACTIVE',
-                  createdAt: serializeTimestamp(data.createdAt),
-                  updatedAt: serializeTimestamp(data.updatedAt),
-                };
-                setProfile(updatedProfile);
-                setCachedProfile(user.uid, updatedProfile);
+          try {
+            localStorage.setItem('eihouse_has_auth', '1');
+          } catch {
+            // ignore
+          }
+
+          // Step 1: INSTANT HYDRATION - Load local cache immediately
+          const cached = getCachedProfile(user.uid);
+          if (cached) {
+            setProfile(cached);
+            setLoading(false);
+          }
+
+          // Step 2: Background sync with Firestore
+          try {
+            const userRef = firebaseFirestore.doc(db, 'users', user.uid);
+            unsubscribeProfile = firebaseFirestore.onSnapshot(
+              userRef,
+              (snapshot) => {
+                if (snapshot.exists()) {
+                  const data = snapshot.data();
+                  const updatedProfile: UserProfile = {
+                    uid: data.uid,
+                    email: data.email,
+                    username: data.username,
+                    displayName: data.displayName,
+                    avatar: data.avatar || '',
+                    bio: data.bio || '',
+                    website: data.website || '',
+                    role: data.role || 'USER',
+                    status: data.status || 'ACTIVE',
+                    createdAt: serializeTimestamp(data.createdAt),
+                    updatedAt: serializeTimestamp(data.updatedAt),
+                  };
+                  setProfile(updatedProfile);
+                  setCachedProfile(user.uid, updatedProfile);
+                  setLoading(false);
+                } else {
+                  ensureUserProfileDocument(user)
+                    .then((createdProfile) => {
+                      setProfile(createdProfile);
+                      setCachedProfile(user.uid, createdProfile);
+                      setLoading(false);
+                    })
+                    .catch((e) => {
+                      console.error('Failed to create user profile:', e);
+                      setLoading(false);
+                    });
+                }
+              },
+              (error) => {
+                console.error('Profile listener error:', error);
                 setLoading(false);
-              } else {
-                // Create user profile document if this is a fresh account
-                ensureUserProfileDocument(user)
-                  .then((createdProfile) => {
-                    setProfile(createdProfile);
-                    setCachedProfile(user.uid, createdProfile);
-                    setLoading(false);
-                  })
-                  .catch((e) => {
-                    console.error('Failed to create user profile:', e);
-                    setLoading(false);
-                  });
               }
-            },
-            (error) => {
-              console.error('Profile listener error:', error);
-              setLoading(false);
-            }
-          );
-        } catch (error) {
-          console.error('Failed to sync user profile:', error);
-          setLoading(false);
-        }
-      });
+            );
+          } catch (error) {
+            console.error('Failed to sync user profile:', error);
+            setLoading(false);
+          }
+        });
+      } catch {
+        setLoading(false);
+      }
     };
 
-    let idleId: number | undefined;
-    let timeoutId: NodeJS.Timeout | undefined;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(startAuthListener, { timeout: 1000 });
-    } else {
-      timeoutId = setTimeout(startAuthListener, 50);
+    if (hasLikelyAuthSession()) {
+      startAuthListener();
+      return () => {
+        cancelled = true;
+        if (unsubscribeAuth) unsubscribeAuth();
+        if (unsubscribeProfile) unsubscribeProfile();
+      };
     }
 
+    // First-time anonymous visitor on a public route: unblock UI immediately
+    // and only load Firebase Auth SDK upon user interaction.
+    setLoading(false);
+
+    const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+    const onFirstInteract = () => {
+      events.forEach((ev) => window.removeEventListener(ev, onFirstInteract));
+      startAuthListener();
+    };
+    events.forEach((ev) =>
+      window.addEventListener(ev, onFirstInteract, { once: true, passive: true })
+    );
+
     return () => {
-      if (idleId && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(idleId);
-      }
-      if (timeoutId) clearTimeout(timeoutId);
+      cancelled = true;
+      events.forEach((ev) => window.removeEventListener(ev, onFirstInteract));
       if (unsubscribeAuth) unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
     };
@@ -373,7 +430,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isEditor = effectiveRole === 'ADMIN' || effectiveRole === 'EDITOR';
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {
-    const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const { auth, firebaseAuth } = await loadFirebaseDeps();
+    const credential = await firebaseAuth.signInWithEmailAndPassword(auth, email.trim(), password);
     await ensureUserProfileDocument(credential.user);
   }, []);
 
@@ -389,22 +447,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       displayName: string;
       username: string;
     }) => {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await updateProfile(credential.user, { displayName: displayName.trim() });
+      const { auth, firebaseAuth } = await loadFirebaseDeps();
+      const credential = await firebaseAuth.createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
+      await firebaseAuth.updateProfile(credential.user, { displayName: displayName.trim() });
       await ensureUserProfileDocument(credential.user, {
         displayName: displayName.trim(),
         username: username.trim().toLowerCase(),
       });
-      await sendEmailVerification(credential.user).catch(() => undefined);
+      await firebaseAuth.sendEmailVerification(credential.user).catch(() => undefined);
     },
     []
   );
 
   const loginWithGoogle = useCallback(async () => {
-    const provider = new GoogleAuthProvider();
+    const { auth, firebaseAuth } = await loadFirebaseDeps();
+    const provider = new firebaseAuth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
-      const credential = await signInWithPopup(auth, provider);
+      const credential = await firebaseAuth.signInWithPopup(
+        auth,
+        provider,
+        firebaseAuth.browserPopupRedirectResolver
+      );
       await ensureUserProfileDocument(credential.user).catch((e) =>
         console.warn('Profile sync warning on Google login:', e)
       );
@@ -415,7 +483,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('firebase_auth_redirect', '1');
         }
-        await signInWithRedirect(auth, provider);
+        await firebaseAuth.signInWithRedirect(
+          auth,
+          provider,
+          firebaseAuth.browserPopupRedirectResolver
+        );
         return;
       }
       throw popupError;
@@ -423,27 +495,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const { auth, firebaseAuth } = await loadFirebaseDeps();
     clearCachedProfile(firebaseUser?.uid);
-    await firebaseSignOut(auth);
+    await firebaseAuth.signOut(auth);
     setProfile(null);
   }, [firebaseUser?.uid]);
 
   const resendVerificationEmail = useCallback(async () => {
+    const { auth, firebaseAuth } = await loadFirebaseDeps();
     if (!auth.currentUser) {
       throw new Error('You must be signed in to verify your email.');
     }
-    await sendEmailVerification(auth.currentUser);
+    await firebaseAuth.sendEmailVerification(auth.currentUser);
   }, []);
 
   const sendPasswordReset = useCallback(async (email: string) => {
-    await sendPasswordResetEmail(auth, email.trim());
+    const { auth, firebaseAuth } = await loadFirebaseDeps();
+    await firebaseAuth.sendPasswordResetEmail(auth, email.trim());
   }, []);
 
   const refreshProfile = useCallback(async () => {
+    const { auth, db, firebaseFirestore } = await loadFirebaseDeps();
     if (!auth.currentUser) return;
     await auth.currentUser.reload();
     setFirebaseUser({ ...auth.currentUser } as User);
-    const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+    const snap = await firebaseFirestore.getDoc(
+      firebaseFirestore.doc(db, 'users', auth.currentUser.uid)
+    );
     if (snap.exists()) {
       const data = snap.data();
       const updatedProfile: UserProfile = {
@@ -464,14 +542,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Ensure bootstrap admin marker document exists if verified bootstrap admin logs in
   useEffect(() => {
     if (isBootstrapAdmin && firebaseUser) {
-      setDoc(
-        doc(db, 'admins', firebaseUser.uid),
-        { uid: firebaseUser.uid, email: firebaseUser.email, grantedAt: serverTimestamp() },
-        { merge: true }
-      ).catch(() => undefined);
+      loadFirebaseDeps()
+        .then(({ db, firebaseFirestore }) =>
+          firebaseFirestore.setDoc(
+            firebaseFirestore.doc(db, 'admins', firebaseUser.uid),
+            {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              grantedAt: firebaseFirestore.serverTimestamp(),
+            },
+            { merge: true }
+          )
+        )
+        .catch(() => undefined);
     }
   }, [isBootstrapAdmin, firebaseUser]);
 

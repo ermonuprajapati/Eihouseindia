@@ -4,8 +4,6 @@ import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { newsletterSchema } from '@/lib/validation';
-import { subscribeToNewsletter } from '@/modules/posts/post-service';
 
 export function NewsletterForm({ source = 'homepage' }: { source?: string }) {
   const [email, setEmail] = useState('');
@@ -14,14 +12,18 @@ export function NewsletterForm({ source = 'homepage' }: { source?: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = newsletterSchema.safeParse({ email });
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message || 'Enter a valid email address');
-      return;
-    }
-
     setSubmitting(true);
     try {
+      const [{ newsletterSchema }, { subscribeToNewsletter }] = await Promise.all([
+        import('@/lib/validation'),
+        import('@/modules/posts/post-service'),
+      ]);
+      const parsed = newsletterSchema.safeParse({ email });
+      if (!parsed.success) {
+        toast.error(parsed.error.issues[0]?.message || 'Enter a valid email address');
+        return;
+      }
+
       await subscribeToNewsletter(parsed.data.email, source);
       setSubscribed(true);
       setEmail('');

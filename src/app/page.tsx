@@ -38,7 +38,7 @@ export const revalidate = 60;
 
 export default async function HomePage() {
   const [latestPosts, allTools] = await Promise.all([
-    getPublishedPosts({ limitCount: 12 }),
+    getPublishedPosts({ limitCount: 6 }),
     fetchTools().catch(() => DEFAULT_ENGINEERING_TOOLS),
   ]);
 
@@ -130,6 +130,7 @@ export default async function HomePage() {
                     width={1200}
                     height={675}
                     priority
+                    fetchPriority="high"
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px"
                     className="aspect-[16/9] w-full object-cover"
                   />
@@ -141,7 +142,7 @@ export default async function HomePage() {
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     </div>
                     <div className="space-y-1">
-                      <h3 className="font-display text-2xl font-bold">The Innovation Loop</h3>
+                      <h2 className="font-display text-2xl font-bold">The Innovation Loop</h2>
                       <p className="text-xs text-slate-300">Six integrated pillars designed to take you from student to hardware innovator.</p>
                     </div>
 
@@ -232,10 +233,10 @@ export default async function HomePage() {
         </section>
 
         {/* 02. Explore EI House — The Eight Pillars Grid */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white content-auto">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-12">
             <div className="text-center max-w-2xl mx-auto space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#B45309]">
                 Core Ecosystem
               </span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold text-[#0B1528]">
@@ -251,9 +252,9 @@ export default async function HomePage() {
               <Image
                 src="/images/ecosystem/integrated-ecosystem.jpg"
                 alt="Integrated Engineering Education, Innovation, Products, Services and Technology Community Ecosystem"
-                width={1024}
-                height={1024}
-                sizes="(max-width: 768px) 100vw, 896px"
+                width={460}
+                height={460}
+                sizes="(max-width: 500px) 92vw, 460px"
                 loading="lazy"
                 className="w-full h-auto max-h-[460px] object-contain rounded-xl"
               />
@@ -263,7 +264,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Education</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Education</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <GraduationCap className="h-5 w-5" />
                     </div>
@@ -274,7 +275,7 @@ export default async function HomePage() {
                     Structured 45-day practical training programs, hands-on offline laboratory sessions, and verified certifications in Embedded Systems, IoT, Robotics, and PCB Design.
                   </p>
                 </div>
-                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Browse Programs</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -283,7 +284,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Hardware</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Hardware</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Wrench className="h-5 w-5" />
                     </div>
@@ -294,7 +295,7 @@ export default async function HomePage() {
                     Verified schematics, source code repositories, and complete documentation for academic final-year major projects and DIY open-source builds.
                   </p>
                 </div>
-                <Link href="/projects" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/projects" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Explore Projects</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -303,7 +304,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Commerce</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Commerce</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <ShoppingBag className="h-5 w-5" />
                     </div>
@@ -314,7 +315,7 @@ export default async function HomePage() {
                     Authentic development boards, microcontroller modules, sensors, robotics kits, and high-strength 3D printing filaments bench-tested for reliability.
                   </p>
                 </div>
-                <Link href="/products" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/products" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Shop Hardware</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -323,7 +324,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Software</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Software</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Cpu className="h-5 w-5" />
                     </div>
@@ -334,7 +335,7 @@ export default async function HomePage() {
                     Curated directory of 35+ essential tools across Electronics, Mechanical CAD, 3D Printing, Programming, Simulation &amp; Solvers.
                   </p>
                 </div>
-                <Link href="/tools" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/tools" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Explore Tools Directory</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -343,7 +344,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Resources</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Resources</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <BookOpen className="h-5 w-5" />
                     </div>
@@ -354,7 +355,7 @@ export default async function HomePage() {
                     Engineering reference repository featuring microcontroller pinouts, component datasheets, and ready-to-flash code libraries.
                   </p>
                 </div>
-                <Link href="/library" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/library" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Open Engineering Library</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -363,7 +364,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Solutions</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Solutions</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Lightbulb className="h-5 w-5" />
                     </div>
@@ -374,7 +375,7 @@ export default async function HomePage() {
                     Turnkey multi-layer PCB design, embedded firmware development, functional 3D enclosures, and custom IoT hardware prototyping for businesses and innovators.
                   </p>
                 </div>
-                <Link href="/services" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/services" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Request Service Quote</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -383,7 +384,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Community</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Community</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Users className="h-5 w-5" />
                     </div>
@@ -394,7 +395,7 @@ export default async function HomePage() {
                     A collaborative platform to discuss bench problems, ask technical questions, review code, share project builds, and network with fellow engineers.
                   </p>
                 </div>
-                <Link href="/community" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/community" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Join Community</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -403,7 +404,7 @@ export default async function HomePage() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider">Institutions</span>
+                    <span className="text-xs font-bold text-[#B45309] uppercase tracking-wider">Institutions</span>
                     <div className="h-10 w-10 rounded-lg bg-[#172D4D]/10 flex items-center justify-center text-[#172D4D]">
                       <Building2 className="h-5 w-5" />
                     </div>
@@ -414,7 +415,7 @@ export default async function HomePage() {
                     Partnering with universities, polytechnics, and schools to establish cutting-edge Robotics &amp; STEM Innovation Centers with equipment and curriculum.
                   </p>
                 </div>
-                <Link href="/partnerships" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-2">
+                <Link href="/partnerships" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   <span>Partner With Us</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
@@ -424,7 +425,7 @@ export default async function HomePage() {
         </section>
 
         {/* 03. Recommended Engineering Software & Tools (Top 12 Featured Directory) */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/60 to-white content-auto">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-gradient-to-b from-white via-slate-50/60 to-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="max-w-3xl space-y-2">
@@ -613,11 +614,11 @@ export default async function HomePage() {
         </section>
 
         {/* 03. Featured Courses Preview */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50 content-auto">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#B45309]">
                   Practical Education
                 </span>
                 <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#0B1528]">
@@ -628,7 +629,7 @@ export default async function HomePage() {
                 </p>
               </div>
               <Button asChild variant="outline" size="sm">
-                <Link href="/learn">View All Courses →</Link>
+                <Link href="/learn" prefetch={false}>View All Courses →</Link>
               </Button>
             </div>
 
@@ -638,31 +639,31 @@ export default async function HomePage() {
                   <Cpu className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Flagship Program</span>
+                  <span className="text-[10px] font-bold text-[#B45309] uppercase">Flagship Program</span>
                   <h3 className="font-display text-lg font-bold text-[#0B1528]">Advanced Embedded Systems & STM32</h3>
                   <p className="text-xs text-slate-500 mt-0.5">45 Days · Bare-Metal C & FreeRTOS</p>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                   Learn ARM Cortex-M architecture, peripheral HAL drivers, interrupt controllers, and FreeRTOS multi-threading.
                 </p>
-                <Link href="/learn" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-1">
+                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   View Syllabus & Hardware Included →
                 </Link>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-6 space-y-4 hover:shadow-md transition-shadow">
-                <div className="h-10 w-10 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center text-[#F59E0B]">
+                <div className="h-10 w-10 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center text-[#B45309]">
                   <Zap className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Industry Ready</span>
+                  <span className="text-[10px] font-bold text-[#B45309] uppercase">Industry Ready</span>
                   <h3 className="font-display text-lg font-bold text-[#0B1528]">Industrial IoT & Cloud Telemetry</h3>
                   <p className="text-xs text-slate-500 mt-0.5">45 Days · ESP32, LoRa & MQTT</p>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                   Design end-to-end edge sensor nodes, secure MQTT communication, TLS authentication, and real-time cloud dashboards.
                 </p>
-                <Link href="/learn" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-1">
+                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   View Syllabus & Hardware Included →
                 </Link>
               </div>
@@ -672,14 +673,14 @@ export default async function HomePage() {
                   <Bot className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#F59E0B] uppercase">Robotics</span>
+                  <span className="text-[10px] font-bold text-[#B45309] uppercase">Robotics</span>
                   <h3 className="font-display text-lg font-bold text-[#0B1528]">Robotics Engineering & Autonomous Systems</h3>
                   <p className="text-xs text-slate-500 mt-0.5">45 Days · ROS 2, Encoders & LiDAR</p>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                   Assemble mobile rovers and multi-axis arms with PID control, encoder feedback, 2D SLAM mapping, and ROS 2 nodes.
                 </p>
-                <Link href="/learn" className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline pt-1">
+                <Link href="/learn" prefetch={false} className="inline-flex items-center text-xs font-bold text-[#172D4D] hover:underline py-1.5">
                   View Syllabus & Hardware Included →
                 </Link>
               </div>
@@ -688,11 +689,11 @@ export default async function HomePage() {
         </section>
 
         {/* 04. Technical Blog & Latest Publications (Real Firestore Data) */}
-        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white content-auto">
+        <section className="py-16 sm:py-20 border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#B45309]">
                   Technical Publication
                 </span>
                 <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#0B1528]">
@@ -704,10 +705,10 @@ export default async function HomePage() {
               </div>
               <div className="flex items-center gap-3">
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/articles">Browse All Articles</Link>
+                  <Link href="/articles" prefetch={false}>Browse All Articles</Link>
                 </Button>
                 <Button asChild size="sm" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
-                  <Link href="/dashboard/editor">
+                  <Link href="/dashboard/editor" prefetch={false}>
                     <PenLine className="h-3.5 w-3.5 mr-1" />
                     <span>Write An Article</span>
                   </Link>
@@ -729,7 +730,7 @@ export default async function HomePage() {
                   Be the first author to publish a technical guide or project walkthrough on EI House.
                 </p>
                 <Button asChild size="sm">
-                  <Link href="/dashboard/editor">Start Writing Now</Link>
+                  <Link href="/dashboard/editor" prefetch={false}>Start Writing Now</Link>
                 </Button>
               </div>
             )}
@@ -737,7 +738,7 @@ export default async function HomePage() {
         </section>
 
         {/* 05. College Labs & Franchise Banner */}
-        <section className="py-16 sm:py-20 bg-slate-900 text-white content-auto">
+        <section className="py-16 sm:py-20 bg-slate-900 text-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
               <div className="lg:col-span-8 space-y-4">

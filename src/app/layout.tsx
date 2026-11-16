@@ -143,16 +143,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
         <Script id="google-analytics-gtm" strategy="lazyOnload">
           {`
-            if (!navigator.webdriver && !/Chrome-Lighthouse|Headless/i.test(navigator.userAgent)) {
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              var f = document.getElementsByTagName('script')[0],
-                  j = document.createElement('script');
-              j.async = true;
-              j.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-NGT8B6V8';
-              f.parentNode.insertBefore(j, f);
-            }
+            (function() {
+              if (navigator.webdriver || /Chrome-Lighthouse|Headless/i.test(navigator.userAgent)) return;
+              var loaded = false;
+              function loadGtm() {
+                if (loaded) return;
+                loaded = true;
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                var f = document.getElementsByTagName('script')[0],
+                    j = document.createElement('script');
+                j.async = true;
+                j.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-NGT8B6V8';
+                f.parentNode.insertBefore(j, f);
+              }
+              ['scroll', 'pointerdown', 'touchstart', 'keydown', 'mousemove'].forEach(function(ev) {
+                window.addEventListener(ev, loadGtm, { once: true, passive: true });
+              });
+            })();
           `}
         </Script>
       </head>

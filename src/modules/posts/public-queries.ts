@@ -66,7 +66,7 @@ function toIsoOrNull(value: unknown): string | null {
   return toIso(value);
 }
 
-function mapDocToPost(id: string, data: Record<string, unknown>): Post {
+function mapDocToPost(id: string, data: Record<string, unknown>, includeContent = true): Post {
   return {
     id,
     authorId: String(data.authorId || ''),
@@ -76,7 +76,9 @@ function mapDocToPost(id: string, data: Record<string, unknown>): Post {
     title: String(data.title || ''),
     slug: String(data.slug || ''),
     excerpt: String(data.excerpt || ''),
-    content: (data.content as Post['content']) || { type: 'doc', content: [] },
+    content: includeContent
+      ? (data.content as Post['content']) || { type: 'doc', content: [] }
+      : { type: 'doc', content: [] },
     coverImage: String(data.coverImage || ''),
     categoryId: String(data.categoryId || ''),
     categoryName: String(data.categoryName || ''),
@@ -178,7 +180,7 @@ export async function getPublishedPosts(options?: {
         ref = ref.where('featured', '==', true);
       }
       const snap = await ref.get();
-      const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data(), false));
       const sorted = sortPostsDescending(posts).slice(offset, offset + limitCount);
       setInQueryCache(cacheKey, sorted, 60_000);
       return sorted;
@@ -188,7 +190,7 @@ export async function getPublishedPosts(options?: {
     const fallbackSnap = await getDocs(
       query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
     );
-    let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
+    let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data(), false));
     if (options?.categoryId) {
       posts = posts.filter((p) => p.categoryId === options.categoryId);
     }
@@ -225,13 +227,13 @@ export async function getPublishedPostsFeed(options?: {
           ref = ref.where('categoryId', '==', options.categoryId);
         }
         const snap = await ref.get();
-        const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+        const posts = snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data(), false));
         allPosts = sortPostsDescending(posts);
       } else {
         const fallbackSnap = await getDocs(
           query(collection(db, 'posts'), where('status', '==', 'PUBLISHED'))
         );
-        let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
+        let posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data(), false));
         if (options?.categoryId) {
           posts = posts.filter((p) => p.categoryId === options.categoryId);
         }
@@ -381,7 +383,7 @@ export async function getPublishedPostsByAuthorId(
           .limit(limitCount)
           .get();
         if (!snap.empty) {
-          return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+          return snap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data(), false));
         }
       } catch (err) {
         console.warn('Fallback getPublishedPostsByAuthorId admin:', err);
@@ -391,7 +393,7 @@ export async function getPublishedPostsByAuthorId(
         .where('status', '==', 'PUBLISHED')
         .where('authorId', '==', authorId)
         .get();
-      const posts = fallbackSnap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data()));
+      const posts = fallbackSnap.docs.map((d: QueryDocumentSnapshot) => mapDocToPost(d.id, d.data(), false));
       return sortPostsDescending(posts).slice(0, limitCount);
     }
 
@@ -405,7 +407,7 @@ export async function getPublishedPostsByAuthorId(
       );
       const snap = await getDocs(q);
       if (!snap.empty) {
-        return snap.docs.map((d) => mapDocToPost(d.id, d.data()));
+        return snap.docs.map((d) => mapDocToPost(d.id, d.data(), false));
       }
     } catch (err) {
       console.warn('Fallback getPublishedPostsByAuthorId client:', err);
@@ -418,7 +420,7 @@ export async function getPublishedPostsByAuthorId(
         where('authorId', '==', authorId)
       )
     );
-    const posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data()));
+    const posts = fallbackSnap.docs.map((d) => mapDocToPost(d.id, d.data(), false));
     return sortPostsDescending(posts).slice(0, limitCount);
   } catch {
     return [];
