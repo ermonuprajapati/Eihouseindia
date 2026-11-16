@@ -15,6 +15,8 @@ const fraunces = Fraunces({
   variable: '--font-display',
   display: 'swap',
   preload: false,
+  fallback: ['Georgia', 'Cambria', 'serif'],
+  adjustFontFallback: true,
 });
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -23,6 +25,8 @@ const plusJakarta = Plus_Jakarta_Sans({
   variable: '--font-sans',
   display: 'swap',
   preload: true,
+  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+  adjustFontFallback: true,
 });
 
 const jetbrainsMono = JetBrains_Mono({

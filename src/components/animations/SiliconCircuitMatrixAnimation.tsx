@@ -13,7 +13,7 @@ export function SiliconCircuitMatrixAnimation() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
+      className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0 [contain:strict]"
     >
       {/* Soft Ambient Peripheral Glows */}
       <div className="absolute -top-24 right-1/4 w-[540px] h-[360px] rounded-full bg-blue-600/10 blur-[100px]" />
