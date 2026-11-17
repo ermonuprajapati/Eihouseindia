@@ -255,6 +255,11 @@ service cloud.firestore {
       allow create, update, delete: if isEditor() && isValidId(libraryId);
     }
 
+    match /datasheets/{datasheetId} {
+      allow read: if true;
+      allow create, update, delete: if isEditor() && isValidId(datasheetId);
+    }
+
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();

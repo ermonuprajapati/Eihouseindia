@@ -5,7 +5,7 @@ const sharp = require('sharp');
 /**
  * Creates a standard Windows ICO file containing uncompressed 32-bit DIB bitmaps
  * for maximum compatibility with all browsers (Chrome, Edge, Firefox, Safari)
- * and Windows desktop shells without relying on PNG-in-ICO decompression.
+ * and Windows desktop shells.
  */
 function createDibIco(frames) {
   const count = frames.length;
@@ -51,15 +51,24 @@ function createDibIco(frames) {
         const b = rawRgba[srcIdx + 2];
         const a = rawRgba[srcIdx + 3];
 
-        xorData[dstIdx + 0] = b; // Blue
-        xorData[dstIdx + 1] = g; // Green
-        xorData[dstIdx + 2] = r; // Red
-        xorData[dstIdx + 3] = a; // Alpha
-
-        if (a === 0) {
+        if (a < 128) {
+          xorData[dstIdx + 0] = 0;
+          xorData[dstIdx + 1] = 0;
+          xorData[dstIdx + 2] = 0;
+          xorData[dstIdx + 3] = 0;
           const byteIdx = y * andRowBytes + Math.floor(x / 8);
           const bitIdx = 7 - (x % 8);
           andMask[byteIdx] |= (1 << bitIdx);
+        } else {
+          // Composite semi-transparent edge pixels over white so ICO never has dark fringes
+          const alphaNorm = a / 255;
+          const outR = Math.round(r * alphaNorm + 255 * (1 - alphaNorm));
+          const outG = Math.round(g * alphaNorm + 255 * (1 - alphaNorm));
+          const outB = Math.round(b * alphaNorm + 255 * (1 - alphaNorm));
+          xorData[dstIdx + 0] = outB; // Blue
+          xorData[dstIdx + 1] = outG; // Green
+          xorData[dstIdx + 2] = outR; // Red
+          xorData[dstIdx + 3] = 255; // Solid alpha inside the squircle
         }
       }
     }
@@ -96,66 +105,145 @@ async function generate() {
 
   console.log('Loading logo from:', logoPath);
 
-  // 1. Trim transparency to extract exact bounding box
-  const trimmedBuffer = await sharp(logoPath).trim().toBuffer();
-  const trimmedMeta = await sharp(trimmedBuffer).metadata();
-  console.log('Trimmed dimensions:', trimmedMeta.width, 'x', trimmedMeta.height);
+  // 1. Clean low-alpha background noise (< 45 alpha) and find exact true bounding box
+  const { data: rawLogo, info: logoInfo } = await sharp(logoPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
-  // 2. Put trimmed logo onto a balanced square canvas with 6% optical padding
-  const maxDim = Math.max(trimmedMeta.width, trimmedMeta.height);
-  const padding = Math.round(maxDim * 0.06);
+  const cleanedRgba = Buffer.from(rawLogo);
+  let minX = logoInfo.width;
+  let minY = logoInfo.height;
+  let maxX = 0;
+  let maxY = 0;
 
-  const centeredMaster = await sharp(trimmedBuffer)
-    .resize(maxDim, maxDim, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    })
-    .extend({
-      top: padding,
-      bottom: padding,
-      left: padding,
-      right: padding,
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    })
-    .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  for (let y = 0; y < logoInfo.height; y++) {
+    for (let x = 0; x < logoInfo.width; x++) {
+      const idx = (y * logoInfo.width + x) * 4;
+      const a = cleanedRgba[idx + 3];
+      if (a < 45) {
+        cleanedRgba[idx + 0] = 0;
+        cleanedRgba[idx + 1] = 0;
+        cleanedRgba[idx + 2] = 0;
+        cleanedRgba[idx + 3] = 0;
+      } else {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  console.log(`Cleaned noise and cropped to true bounds: ${cropWidth}x${cropHeight} (from ${minX},${minY})`);
+
+  const croppedLogoPng = await sharp(cleanedRgba, {
+    raw: { width: logoInfo.width, height: logoInfo.height, channels: 4 },
+  })
+    .extract({ left: minX, top: minY, width: cropWidth, height: cropHeight })
     .png()
     .toBuffer();
 
-  console.log('Created centered master 512x512');
+  // 2. Create high-contrast 512x512 rounded squircle badge master
+  // Pure white rounded squircle background ensures 100% visibility on both Dark Mode and Light Mode browser tabs
+  const badgeSvg = Buffer.from(`
+    <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="#FFFFFF"/>
+    </svg>
+  `);
 
-  // 3. Generate PNG sizes
+  const innerLogoSize = 444; // ~87% of 512x512 inside the squircle for maximum legibility at 16x16 & 32x32
+  const resizedLogo = await sharp(croppedLogoPng)
+    .resize(innerLogoSize, innerLogoSize, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .modulate({ saturation: 1.12 })
+    .sharpen()
+    .png()
+    .toBuffer();
+
+  const centeredMaster = await sharp(badgeSvg)
+    .composite([{ input: resizedLogo, gravity: 'center' }])
+    .png()
+    .toBuffer();
+
+  console.log('Created high-contrast 512x512 squircle favicon master');
+
+  // 3. Generate PNG sizes in public/
   const sizes = [
     { name: 'favicon-16x16.png', size: 16 },
     { name: 'favicon-32x32.png', size: 32 },
     { name: 'favicon-48x48.png', size: 48 },
+    { name: 'favicon-96x96.png', size: 96 },
     { name: 'apple-touch-icon.png', size: 180 },
     { name: 'icon-192x192.png', size: 192 },
     { name: 'icon-512x512.png', size: 512 },
+    { name: 'icon-512.png', size: 512 },
     { name: 'favicon.png', size: 512 },
   ];
 
   for (const s of sizes) {
-    const outBuf = await sharp(centeredMaster)
-      .resize(s.size, s.size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    let pipeline = sharp(centeredMaster).resize(s.size, s.size, {
+      fit: 'contain',
+      kernel: sharp.kernel.lanczos3,
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
+    });
+    if (s.size <= 48) {
+      pipeline = pipeline.sharpen({ sigma: 0.8 });
+    }
+    const { data: rawData, info: rawInfo } = await pipeline
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Un-premultiply dark SVG corner fringe so rounded corners stay pure white + alpha
+    const fixedBuf = Buffer.from(rawData);
+    for (let i = 0; i < fixedBuf.length; i += 4) {
+      const a = fixedBuf[i + 3];
+      if (a === 0) {
+        fixedBuf[i] = 255;
+        fixedBuf[i + 1] = 255;
+        fixedBuf[i + 2] = 255;
+      } else if (a < 255 && fixedBuf[i] === fixedBuf[i + 1] && fixedBuf[i + 1] === fixedBuf[i + 2]) {
+        fixedBuf[i] = 255;
+        fixedBuf[i + 1] = 255;
+        fixedBuf[i + 2] = 255;
+      }
+    }
+
+    const outBuf = await sharp(fixedBuf, {
+      raw: { width: rawInfo.width, height: rawInfo.height, channels: 4 },
+    })
       .png()
       .toBuffer();
-
     const destPath = path.join(rootDir, 'public', s.name);
     fs.writeFileSync(destPath, outBuf);
     console.log(`Generated public/${s.name} (${s.size}x${s.size})`);
   }
 
-  // 4. Maskable icons for PWA with brand navy background (#0B1528)
-  const maskablePadding = Math.round(512 * 0.18);
-  const maskableMaster = await sharp(centeredMaster)
-    .resize(512 - maskablePadding * 2, 512 - maskablePadding * 2, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .extend({
-      top: maskablePadding,
-      bottom: maskablePadding,
-      left: maskablePadding,
-      right: maskablePadding,
-      background: { r: 11, g: 21, b: 40, alpha: 1 }
+  // 4. Maskable icons for PWA (full-bleed white background with safe-zone centered logo)
+  const maskableLogoSize = 370;
+  const maskableLogo = await sharp(croppedLogoPng)
+    .resize(maskableLogoSize, maskableLogoSize, {
+      fit: 'contain',
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
     })
+    .modulate({ saturation: 1.12 })
+    .png()
+    .toBuffer();
+
+  const maskableMaster = await sharp({
+    create: {
+      width: 512,
+      height: 512,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  })
+    .composite([{ input: maskableLogo, gravity: 'center' }])
     .png()
     .toBuffer();
 
@@ -167,15 +255,21 @@ async function generate() {
     path.join(rootDir, 'public', 'icon-maskable-512x512.png'),
     await sharp(maskableMaster).resize(512, 512).png().toBuffer()
   );
-  console.log('Generated maskable icons with brand navy background');
+  console.log('Generated clean maskable PWA icons');
 
-  // 5. Generate standard uncompressed DIB ICO file (16, 32, 48px)
-  const icoSizes = [16, 32, 48];
+  // 5. Generate standard uncompressed DIB ICO file (48, 32, 16px — 48px first so browsers/Next.js see high-res)
+  const icoSizes = [48, 32, 16];
   const frames = [];
 
   for (const size of icoSizes) {
     const rawResult = await sharp(centeredMaster)
-      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(size, size, {
+        fit: 'contain',
+        kernel: sharp.kernel.lanczos3,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .sharpen({ sigma: 0.8 })
+      .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
 
@@ -185,18 +279,19 @@ async function generate() {
   const icoBuffer = createDibIco(frames);
   fs.writeFileSync(path.join(rootDir, 'public', 'favicon.ico'), icoBuffer);
   fs.writeFileSync(path.join(rootDir, 'src', 'app', 'favicon.ico'), icoBuffer);
-  console.log('Generated standard DIB favicon.ico in public/ and src/app/ (sizes: 16, 32, 48)');
+  console.log('Generated standard DIB favicon.ico in public/ and src/app/ (sizes: 48, 32, 16)');
 
   // 6. Generate src/app/icon.png & src/app/apple-icon.png
   fs.writeFileSync(path.join(rootDir, 'src', 'app', 'icon.png'), centeredMaster);
-  const appleTouchBuf = await sharp(centeredMaster).resize(180, 180).png().toBuffer();
+  const appleTouchBuf = await sharp(maskableMaster).resize(180, 180).png().toBuffer();
   fs.writeFileSync(path.join(rootDir, 'src', 'app', 'apple-icon.png'), appleTouchBuf);
+  fs.writeFileSync(path.join(rootDir, 'public', 'apple-touch-icon.png'), appleTouchBuf);
   console.log('Updated src/app/icon.png and src/app/apple-icon.png');
 
-  console.log('ALL FAVICONS & ICONS SUCCESSFULLY REGENERATED FROM LOGO.PNG!');
+  console.log('ALL FAVICONS & ICONS SUCCESSFULLY REGENERATED!');
 }
 
-generate().catch(err => {
+generate().catch((err) => {
   console.error('Error generating favicons:', err);
   process.exit(1);
 });

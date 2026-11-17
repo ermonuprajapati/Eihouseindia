@@ -62,111 +62,367 @@ function makeToolBrandSvg(monogram: string, bg: string, fg = '#ffffff'): string 
 }
 
 export const TOOL_OFFICIAL_LOGOS: Record<string, string> = {
-  kicad: makeToolBrandSvg('Ki', '#314CB0'),
-  'autodesk-fusion': makeToolBrandSvg('F360', '#FF6B00'),
-  fusion360: makeToolBrandSvg('F360', '#FF6B00'),
-  wokwi: makeToolBrandSvg('Wk', '#0090FF'),
-  freecad: makeToolBrandSvg('FC', '#E63946'),
-  ansys: makeToolBrandSvg('AN', '#FFB703', '#0B1528'),
-  vscode: makeToolBrandSvg('VS', '#007ACC'),
-  'vs-code': makeToolBrandSvg('VS', '#007ACC'),
-  'visual-studio-code': makeToolBrandSvg('VS', '#007ACC'),
-  ltspice: makeToolBrandSvg('LT', '#005596'),
-  solidworks: makeToolBrandSvg('SW', '#E31B23'),
-  matlab: makeToolBrandSvg('ML', '#E16100'),
-  'matlab-simulink': makeToolBrandSvg('ML', '#E16100'),
-  simulink: makeToolBrandSvg('SL', '#E16100'),
-  cisco: makeToolBrandSvg('CS', '#049FD9'),
-  'cisco-packet-tracer': makeToolBrandSvg('PT', '#049FD9'),
-  packettracer: makeToolBrandSvg('PT', '#049FD9'),
-  blender: makeToolBrandSvg('BL', '#EA7600'),
-  docker: makeToolBrandSvg('DK', '#2496ED'),
-  tinkercad: makeToolBrandSvg('TC', '#1498D5'),
-  easyeda: makeToolBrandSvg('EE', '#2563EB'),
-  proteus: makeToolBrandSvg('PR', '#1E3A8A'),
-  altium: makeToolBrandSvg('AL', '#A58E46'),
-  'altium-designer': makeToolBrandSvg('AL', '#A58E46'),
-  qelectrotech: makeToolBrandSvg('QE', '#0284C7'),
-  'factory-io': makeToolBrandSvg('FIO', '#0F172A'),
-  arduino: makeToolBrandSvg('AR', '#00979D'),
-  'arduino-ide': makeToolBrandSvg('AR', '#00979D'),
-  stm32: makeToolBrandSvg('ST', '#03234B'),
-  stm32cubeide: makeToolBrandSvg('ST', '#03234B'),
-  onshape: makeToolBrandSvg('ON', '#16A34A'),
-  autocad: makeToolBrandSvg('AC', '#C8102E'),
-  openscad: makeToolBrandSvg('OS', '#F59E0B', '#0B1528'),
-  simscale: makeToolBrandSvg('SS', '#0284C7'),
-  openfoam: makeToolBrandSvg('OF', '#1D4ED8'),
-  cura: makeToolBrandSvg('CU', '#2563EB'),
-  'ultimaker-cura': makeToolBrandSvg('CU', '#2563EB'),
-  prusaslicer: makeToolBrandSvg('PS', '#FA6831'),
-  'bambu-studio': makeToolBrandSvg('BB', '#00AE42'),
-  github: makeToolBrandSvg('GH', '#181717'),
-  python: makeToolBrandSvg('PY', '#3776AB'),
-  jupyter: makeToolBrandSvg('JP', '#F37626'),
-  colab: makeToolBrandSvg('CO', '#F9AB00', '#0B1528'),
-  'google-colab': makeToolBrandSvg('CO', '#F9AB00', '#0B1528'),
-  git: makeToolBrandSvg('GT', '#F05032'),
-  wireshark: makeToolBrandSvg('WS', '#1679A7'),
-  virtualbox: makeToolBrandSvg('VB', '#183A61'),
-  'oracle-virtualbox': makeToolBrandSvg('VB', '#183A61'),
-  ubuntu: makeToolBrandSvg('UB', '#E95420'),
-  nmap: makeToolBrandSvg('NM', '#0B1528'),
-  postman: makeToolBrandSvg('PM', '#FF6C37'),
-  digikey: makeToolBrandSvg('DK', '#CC0000'),
-  'digikey-calculators': makeToolBrandSvg('DK', '#CC0000'),
-  wolframalpha: makeToolBrandSvg('WA', '#DD1100'),
-  'wolfram-alpha': makeToolBrandSvg('WA', '#DD1100'),
+  kicad: 'https://cdn.simpleicons.org/kicad/314CB0',
+  'autodesk-fusion': 'https://www.google.com/s2/favicons?domain=autodesk.com&sz=128',
+  fusion360: 'https://www.google.com/s2/favicons?domain=autodesk.com&sz=128',
+  wokwi: 'https://www.google.com/s2/favicons?domain=wokwi.com&sz=128',
+  freecad: 'https://cdn.simpleicons.org/freecad/CB333B',
+  ansys: 'https://cdn.simpleicons.org/ansys/FFB71B',
+  vscode: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
+  'vs-code': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
+  'visual-studio-code': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
+  ltspice: 'https://www.google.com/s2/favicons?domain=analog.com&sz=128',
+  solidworks: 'https://www.google.com/s2/favicons?domain=solidworks.com&sz=128',
+  matlab: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/matlab/matlab-original.svg',
+  'matlab-simulink': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/matlab/matlab-original.svg',
+  simulink: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/matlab/matlab-original.svg',
+  cisco: 'https://cdn.simpleicons.org/cisco/1BA0D7',
+  'cisco-packet-tracer': 'https://cdn.simpleicons.org/cisco/1BA0D7',
+  packettracer: 'https://cdn.simpleicons.org/cisco/1BA0D7',
+  blender: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/blender/blender-original.svg',
+  docker: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/docker/docker-original.svg',
+  tinkercad: 'https://www.google.com/s2/favicons?domain=tinkercad.com&sz=128',
+  easyeda: 'https://www.google.com/s2/favicons?domain=easyeda.com&sz=128',
+  proteus: 'https://www.google.com/s2/favicons?domain=labcenter.com&sz=128',
+  altium: 'https://cdn.simpleicons.org/altiumdesigner/A5915F',
+  'altium-designer': 'https://cdn.simpleicons.org/altiumdesigner/A5915F',
+  qelectrotech: 'https://www.google.com/s2/favicons?domain=qelectrotech.org&sz=128',
+  'factory-io': 'https://www.google.com/s2/favicons?domain=factoryio.com&sz=128',
+  arduino: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/arduino/arduino-original.svg',
+  'arduino-ide': 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/arduino/arduino-original.svg',
+  stm32: 'https://cdn.simpleicons.org/stmicroelectronics/03234B',
+  stm32cubeide: 'https://cdn.simpleicons.org/stmicroelectronics/03234B',
+  onshape: 'https://www.google.com/s2/favicons?domain=onshape.com&sz=128',
+  autocad: 'https://cdn.simpleicons.org/autocad/E51050',
+  openscad: 'https://cdn.simpleicons.org/openscad/F9D72C',
+  simscale: 'https://www.google.com/s2/favicons?domain=simscale.com&sz=128',
+  openfoam: 'https://www.google.com/s2/favicons?domain=openfoam.com&sz=128',
+  cura: 'https://cdn.simpleicons.org/ultimaker/0000EE',
+  'ultimaker-cura': 'https://cdn.simpleicons.org/ultimaker/0000EE',
+  prusaslicer: 'https://cdn.simpleicons.org/prusa/FA6831',
+  'bambu-studio': 'https://www.google.com/s2/favicons?domain=bambulab.com&sz=128',
+  github: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/github/github-original.svg',
+  python: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg',
+  jupyter: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/jupyter/jupyter-original.svg',
+  colab: 'https://cdn.simpleicons.org/googlecolab/F9AB00',
+  'google-colab': 'https://cdn.simpleicons.org/googlecolab/F9AB00',
+  git: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/git/git-original.svg',
+  wireshark: 'https://cdn.simpleicons.org/wireshark/1679A7',
+  virtualbox: 'https://cdn.simpleicons.org/virtualbox/183A61',
+  'oracle-virtualbox': 'https://cdn.simpleicons.org/virtualbox/183A61',
+  ubuntu: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/ubuntu/ubuntu-original.svg',
+  nmap: 'https://www.google.com/s2/favicons?domain=nmap.org&sz=128',
+  postman: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/postman/postman-original.svg',
+  digikey: 'https://upload.wikimedia.org/wikipedia/commons/2/2f/Digi-Key_logo.svg',
+  'digikey-calculators': 'https://upload.wikimedia.org/wikipedia/commons/2/2f/Digi-Key_logo.svg',
+  wolframalpha: 'https://cdn.simpleicons.org/wolfram/DD1100',
+  'wolfram-alpha': 'https://cdn.simpleicons.org/wolfram/DD1100',
 };
 
-export const TOOL_HERO_IMAGES: Record<string, string> = {
-  kicad: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=65',
-  'autodesk-fusion': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=65',
-  wokwi: 'https://images.unsplash.com/photo-1608555855762-2b657eb1c348?auto=format&fit=crop&w=400&q=65',
-  freecad: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=65',
-  ansys: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=65',
-  vscode: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=65',
-  'vs-code': 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=65',
-  ltspice: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=400&q=65',
-  solidworks: 'https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=400&q=65',
-  matlab: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=65',
-  'matlab-simulink': 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=65',
-  'cisco-packet-tracer': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=400&q=65',
-  blender: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=65',
-  docker: 'https://images.unsplash.com/photo-1605745341112-85968b19335b?auto=format&fit=crop&w=400&q=65',
-};
+function escSvg(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
-export const CATEGORY_HERO_FALLBACKS: Record<string, string> = {
-  Electronics: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=65',
-  Mechanical: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=65',
-  '3D Printing': 'https://images.unsplash.com/photo-1631556097152-c39479bcffec?auto=format&fit=crop&w=400&q=65',
-  Programming: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=65',
-  'IT & Networking': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=400&q=65',
-  Simulation: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=65',
-  Calculators: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=65',
-};
+/**
+ * Generates an authentic, tool-specific 16:9 software interface visual
+ * representing the actual workspace of the engineering tool or EI House calculator.
+ */
+function buildToolInterfaceSvg(tool: Partial<EngineeringTool>): string {
+  const slug = (tool.slug || '').toLowerCase();
+  const name = escSvg(tool.name || 'Engineering Tool');
+  const subtitle = escSvg((tool.mainApplication || tool.category || 'Workspace').slice(0, 48));
+
+  // 1. EI House Interactive Calculators — Authentic Calculator UI Representation
+  if (tool.toolType === 'interactive' || tool.category === 'Calculators') {
+    const calcFormulas: Record<string, { eq: string; in1: string; in2: string; out: string }> = {
+      'ohms-law': { eq: 'V = I × R   |   P = V × I', in1: 'Voltage (V): 12.0 V', in2: 'Resistance (R): 100 Ω', out: 'I = 0.12 A  |  P = 1.44 W' },
+      'resistor-color-code': { eq: '4-Band / 5-Band IEC 60062 Decoder', in1: 'Bands: Brown · Black · Red · Gold', in2: 'Multiplier: ×100 Ω (±5%)', out: '1.0 kΩ ±5% (950–1050 Ω)' },
+      'voltage-divider': { eq: 'Vout = Vin × [ R2 / (R1 + R2) ]', in1: 'Vin: 5.0 V  |  R1: 10 kΩ', in2: 'R2: 20 kΩ (ADC Input)', out: 'Vout = 3.333 V (Ratio 0.67)' },
+      'led-resistor': { eq: 'R = (Vs − Vf) / If', in1: 'Supply Vs: 5.0V | LED Vf: 2.1V', in2: 'Target Current If: 15 mA', out: 'R = 193.3 Ω → Use 220 Ω (0.04W)' },
+      '555-timer': { eq: 'f = 1.44 / ((R1 + 2·R2) × C)', in1: 'R1: 1 kΩ | R2: 10 kΩ', in2: 'Capacitor C: 0.1 µF', out: 'f = 685.7 Hz | Duty: 52.4%' },
+      'pcb-trace': { eq: 'IPC-2221 External Layer Trace Sizing', in1: 'Current: 3.0 A | Temp Rise: 10°C', in2: 'Copper Weight: 1.0 oz/ft²', out: 'Min Width: 52.8 mil (1.34 mm)' },
+      'motor-torque': { eq: 'P (W) = (2π × RPM × T) / 60', in1: 'Speed: 300 RPM', in2: 'Torque: 1.50 N·m', out: 'Power = 47.1 W (0.063 HP)' },
+      'gear-ratio': { eq: 'GR = N_driven / N_driver', in1: 'Driver T1: 16T | Driven T2: 64T', in2: 'Input: 1200 RPM @ 0.4 N·m', out: 'Ratio 4.0:1 → 300 RPM @ 1.52 N·m' },
+      'cylinder-force': { eq: 'F = P × π × (D/2)²', in1: 'Bore: 50 mm | Rod: 20 mm', in2: 'Pressure: 6.0 bar (0.6 MPa)', out: 'Push: 1178 N | Pull: 989 N' },
+      'base64-encoder': { eq: 'UTF-8 ⇄ Base64 & RFC-3986 URL Codec', in1: 'Input: EI_HOUSE_IOT_NODE_01', in2: 'Mode: Bidirectional Live Encode', out: 'RUlfSE9VU0VfSU9UX05PREVfMDE=' },
+      'number-converter': { eq: 'DEC ⇄ HEX (0x) ⇄ BIN (0b) ⇄ OCT', in1: 'DEC: 255   |   HEX: 0xFF', in2: 'OCT: 0o377 |   ASCII: ÿ', out: 'BIN: 1111 1111 (8-bit Register)' },
+      'subnet-calculator': { eq: 'IPv4 CIDR Block & Host Mask Solver', in1: 'IP: 192.168.10.1 / 24', in2: 'Mask: 255.255.255.0', out: 'Hosts: .1 – .254 (254 Usable)' },
+      '3d-print-cost': { eq: 'Total = Material + Energy + Machine', in1: 'Weight: 85g PLA @ ₹1200/kg', in2: 'Time: 4.5 hrs @ 150W', out: 'Estimated Job Cost: ₹148.50' },
+      'stepper-calibration': { eq: 'Steps/mm = (Steps × Micro) / Pitch', in1: '1.8° Motor (200) | 1/16 Step', in2: 'GT2 Belt (2mm) | 20T Pulley', out: '80.00 steps/mm (Marlin/Klipper)' },
+    };
+    const spec = calcFormulas[tool.calculatorKey || ''] || {
+      eq: 'f(x) = Engineering Solver Engine',
+      in1: 'Parameter A: Verified Input',
+      in2: 'Parameter B: SI Units',
+      out: 'Live Computed Engineering Output',
+    };
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#0B1528"/>
+      <rect x="14" y="12" width="452" height="246" rx="10" fill="#111F38" stroke="#243B61" stroke-width="1.5"/>
+      <rect x="14" y="12" width="452" height="32" rx="10" fill="#172D4D"/>
+      <circle cx="30" cy="28" r="4.5" fill="#EF4444"/><circle cx="44" cy="28" r="4.5" fill="#F59E0B"/><circle cx="58" cy="28" r="4.5" fill="#10B981"/>
+      <text x="74" y="32" fill="#E2E8F0" font-family="monospace" font-size="11" font-weight="bold">EI HOUSE SOLVER // ${name}</text>
+      <rect x="28" y="56" width="424" height="34" rx="6" fill="#091224" stroke="#F59E0B" stroke-width="1" stroke-opacity="0.5"/>
+      <text x="40" y="77" fill="#F59E0B" font-family="monospace" font-size="12" font-weight="bold">${escSvg(spec.eq)}</text>
+      <rect x="28" y="102" width="204" height="52" rx="6" fill="#162847" stroke="#2D4A77" stroke-width="1"/>
+      <text x="38" y="120" fill="#94A3B8" font-family="sans-serif" font-size="9" font-weight="bold">INPUT PARAMETER 01</text>
+      <text x="38" y="140" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${escSvg(spec.in1)}</text>
+      <rect x="248" y="102" width="204" height="52" rx="6" fill="#162847" stroke="#2D4A77" stroke-width="1"/>
+      <text x="258" y="120" fill="#94A3B8" font-family="sans-serif" font-size="9" font-weight="bold">INPUT PARAMETER 02</text>
+      <text x="258" y="140" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${escSvg(spec.in2)}</text>
+      <rect x="28" y="168" width="424" height="62" rx="8" fill="#06392F" stroke="#10B981" stroke-width="1.5"/>
+      <text x="42" y="188" fill="#6EE7B7" font-family="sans-serif" font-size="9" font-weight="bold">COMPUTED ENGINEERING RESULT</text>
+      <text x="42" y="213" fill="#ECFDF5" font-family="monospace" font-size="14" font-weight="bold">${escSvg(spec.out)}</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 2. PCB Layout & Schematic EDA Suite (KiCad, EasyEDA, Altium Designer)
+  if (slug.includes('kicad') || slug.includes('easyeda') || slug.includes('altium')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#09131C"/>
+      <rect x="0" y="0" width="480" height="28" fill="#16222F"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#E2E8F0" font-family="monospace" font-size="11" font-weight="bold">${name} — Multi-Layer PCB Layout &amp; DRC Editor</text>
+      <g stroke="#132A38" stroke-width="1">
+        <line x1="0" y1="60" x2="400" y2="60"/><line x1="0" y1="100" x2="400" y2="100"/><line x1="0" y1="140" x2="400" y2="140"/><line x1="0" y1="180" x2="400" y2="180"/><line x1="0" y1="220" x2="400" y2="220"/>
+        <line x1="60" y1="28" x2="60" y2="270"/><line x1="120" y1="28" x2="120" y2="270"/><line x1="180" y1="28" x2="180" y2="270"/><line x1="240" y1="28" x2="240" y2="270"/><line x1="300" y1="28" x2="300" y2="270"/><line x1="360" y1="28" x2="360" y2="270"/>
+      </g>
+      <rect x="34" y="46" width="336" height="202" rx="6" fill="#082018" stroke="#F59E0B" stroke-width="1.5"/>
+      <path d="M 60 80 L 110 80 L 135 105 L 185 105" fill="none" stroke="#EF4444" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M 60 100 L 100 100 L 125 125 L 185 125" fill="none" stroke="#EF4444" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M 255 110 L 300 110 L 325 80 L 350 80" fill="none" stroke="#3B82F6" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M 255 130 L 290 130 L 320 165 L 350 165" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+      <path d="M 140 210 L 210 210 L 210 165" fill="none" stroke="#EF4444" stroke-width="4" stroke-linecap="round"/>
+      <rect x="182" y="92" width="74" height="74" rx="4" fill="#1E293B" stroke="#94A3B8" stroke-width="1.5"/>
+      <text x="219" y="126" text-anchor="middle" fill="#38BDF8" font-family="monospace" font-size="10" font-weight="bold">U1: MCU</text>
+      <text x="219" y="140" text-anchor="middle" fill="#94A3B8" font-family="monospace" font-size="8">QFP-48</text>
+      <g fill="#F59E0B">
+        <rect x="174" y="100" width="8" height="4"/><rect x="174" y="110" width="8" height="4"/><rect x="174" y="120" width="8" height="4"/><rect x="174" y="130" width="8" height="4"/><rect x="174" y="140" width="8" height="4"/><rect x="174" y="150" width="8" height="4"/>
+        <rect x="256" y="100" width="8" height="4"/><rect x="256" y="110" width="8" height="4"/><rect x="256" y="120" width="8" height="4"/><rect x="256" y="130" width="8" height="4"/><rect x="256" y="140" width="8" height="4"/><rect x="256" y="150" width="8" height="4"/>
+      </g>
+      <circle cx="135" cy="105" r="5" fill="#F59E0B" stroke="#082018" stroke-width="2"/>
+      <circle cx="125" cy="125" r="5" fill="#F59E0B" stroke="#082018" stroke-width="2"/>
+      <circle cx="300" cy="110" r="5" fill="#F59E0B" stroke="#082018" stroke-width="2"/>
+      <rect x="392" y="28" width="88" height="242" fill="#111C28" stroke="#1E293B" stroke-width="1"/>
+      <text x="402" y="48" fill="#94A3B8" font-family="sans-serif" font-size="9" font-weight="bold">LAYERS</text>
+      <rect x="402" y="58" width="10" height="10" fill="#EF4444"/><text x="418" y="67" fill="#E2E8F0" font-family="monospace" font-size="9">F.Cu (Top)</text>
+      <rect x="402" y="76" width="10" height="10" fill="#3B82F6"/><text x="418" y="85" fill="#E2E8F0" font-family="monospace" font-size="9">B.Cu (Bot)</text>
+      <rect x="402" y="94" width="10" height="10" fill="#10B981"/><text x="418" y="103" fill="#E2E8F0" font-family="monospace" font-size="9">In1.GND</text>
+      <rect x="402" y="112" width="10" height="10" fill="#F59E0B"/><text x="418" y="121" fill="#E2E8F0" font-family="monospace" font-size="9">Edge.Cuts</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 3. Microcontroller & Circuit Simulators (Wokwi, Tinkercad, Proteus, Factory I/O)
+  if (slug.includes('wokwi') || slug.includes('tinkercad') || slug.includes('proteus') || slug.includes('factory')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#0F172A"/>
+      <rect x="0" y="0" width="480" height="28" fill="#1E293B"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${name} — Interactive Hardware &amp; MCU Simulator</text>
+      <rect x="16" y="40" width="210" height="214" rx="8" fill="#090D16" stroke="#334155"/>
+      <text x="28" y="60" fill="#38BDF8" font-family="monospace" font-size="10">#include &lt;WiFi.h&gt;</text>
+      <text x="28" y="78" fill="#F472B6" font-family="monospace" font-size="10">void setup() {</text>
+      <text x="38" y="94" fill="#E2E8F0" font-family="monospace" font-size="10">Serial.begin(115200);</text>
+      <text x="38" y="110" fill="#E2E8F0" font-family="monospace" font-size="10">pinMode(2, OUTPUT);</text>
+      <text x="28" y="126" fill="#F472B6" font-family="monospace" font-size="10">}</text>
+      <text x="28" y="146" fill="#F472B6" font-family="monospace" font-size="10">void loop() {</text>
+      <text x="38" y="162" fill="#A7F3D0" font-family="monospace" font-size="10">digitalWrite(2, HIGH);</text>
+      <text x="38" y="178" fill="#94A3B8" font-family="monospace" font-size="10">delay(500);</text>
+      <text x="28" y="194" fill="#F472B6" font-family="monospace" font-size="10">}</text>
+      <rect x="28" y="212" width="186" height="28" rx="5" fill="#064E3B"/>
+      <text x="40" y="230" fill="#34D399" font-family="monospace" font-size="10">▶ SIMULATION RUNNING: 100%</text>
+      <rect x="240" y="40" width="224" height="214" rx="8" fill="#1E293B" stroke="#475569"/>
+      <rect x="268" y="65" width="90" height="150" rx="6" fill="#047857" stroke="#10B981" stroke-width="2"/>
+      <rect x="286" y="76" width="54" height="42" rx="3" fill="#94A3B8"/>
+      <text x="313" y="101" text-anchor="middle" fill="#0F172A" font-family="monospace" font-size="9" font-weight="bold">ESP32-S3</text>
+      <circle cx="313" cy="175" r="5" fill="#10B981"/>
+      <path d="M 358 140 L 405 140 L 405 105" fill="none" stroke="#38BDF8" stroke-width="3"/>
+      <path d="M 358 158 L 425 158 L 425 105" fill="none" stroke="#F59E0B" stroke-width="3"/>
+      <rect x="385" y="64" width="62" height="44" rx="4" fill="#090D16" stroke="#38BDF8" stroke-width="1.5"/>
+      <text x="416" y="84" text-anchor="middle" fill="#38BDF8" font-family="monospace" font-size="8">OLED 128x64</text>
+      <text x="416" y="98" text-anchor="middle" fill="#10B981" font-family="monospace" font-size="9">TEMP: 26.4C</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 4. SPICE Analog & Electrical Schematic Simulation (LTspice, QElectroTech)
+  if (slug.includes('ltspice') || slug.includes('qelectrotech')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#0B1320"/>
+      <rect x="0" y="0" width="480" height="28" fill="#162336"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${name} — SPICE Waveform &amp; Schematic Capture</text>
+      <rect x="14" y="38" width="452" height="106" rx="6" fill="#060B12" stroke="#1E293B"/>
+      <text x="26" y="54" fill="#10B981" font-family="monospace" font-size="9">V(vout) [dB] — Transient &amp; AC Bode Response</text>
+      <path d="M 26 115 Q 50 60, 74 115 T 122 115 T 170 115 T 218 115 T 266 115 T 314 115 T 362 115 T 410 115 T 450 115" fill="none" stroke="#10B981" stroke-width="2"/>
+      <path d="M 26 105 Q 50 135, 74 105 T 122 105 T 170 105 T 218 105 T 266 105 T 314 105 T 362 105 T 410 105 T 450 105" fill="none" stroke="#38BDF8" stroke-width="1.8" stroke-dasharray="4 2"/>
+      <rect x="14" y="152" width="452" height="104" rx="6" fill="#131F31" stroke="#334155"/>
+      <g stroke="#E2E8F0" stroke-width="2" fill="none">
+        <circle cx="70" cy="204" r="18"/>
+        <line x1="70" y1="168" x2="70" y2="186"/><line x1="70" y1="222" x2="70" y2="240"/>
+        <line x1="70" y1="168" x2="150" y2="168"/>
+        <polyline points="150,168 158,158 168,178 178,158 188,178 198,158 206,168"/>
+        <line x1="206" y1="168" x2="340" y2="168"/>
+        <line x1="270" y1="168" x2="270" y2="196"/><line x1="254" y1="196" x2="286" y2="196"/><line x1="254" y1="206" x2="286" y2="206"/><line x1="270" y1="206" x2="270" y2="240"/>
+        <line x1="70" y1="240" x2="340" y2="240"/>
+      </g>
+      <text x="165" y="152" fill="#F59E0B" font-family="monospace" font-size="10">R1 = 4.7kΩ</text>
+      <text x="294" y="205" fill="#38BDF8" font-family="monospace" font-size="10">C1 = 100nF</text>
+      <text x="355" y="198" fill="#94A3B8" font-family="monospace" font-size="10">.tran 0 10ms</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 5. 3D Parametric CAD & Mechanical Design (Fusion, FreeCAD, SOLIDWORKS, Onshape, AutoCAD, OpenSCAD)
+  if (
+    slug.includes('fusion') ||
+    slug.includes('freecad') ||
+    slug.includes('solidworks') ||
+    slug.includes('onshape') ||
+    slug.includes('autocad') ||
+    slug.includes('openscad')
+  ) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#111827"/>
+      <rect x="0" y="0" width="480" height="28" fill="#1F2937"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#F9FAFB" font-family="monospace" font-size="11" font-weight="bold">${name} — 3D Parametric CAD Viewport</text>
+      <rect x="12" y="38" width="110" height="218" rx="6" fill="#1E293B" stroke="#334155"/>
+      <text x="22" y="56" fill="#94A3B8" font-family="sans-serif" font-size="9" font-weight="bold">FEATURE TREE</text>
+      <text x="22" y="76" fill="#38BDF8" font-family="monospace" font-size="9">▾ Origin (XYZ)</text>
+      <text x="22" y="94" fill="#E2E8F0" font-family="monospace" font-size="9">├─ Sketch1 (2D)</text>
+      <text x="22" y="112" fill="#E2E8F0" font-family="monospace" font-size="9">├─ Extrude1 (25mm)</text>
+      <text x="22" y="130" fill="#E2E8F0" font-family="monospace" font-size="9">├─ Fillet (R3.0)</text>
+      <text x="22" y="148" fill="#10B981" font-family="monospace" font-size="9">└─ Hole M4x0.7</text>
+      <g transform="translate(290, 148)" stroke="#38BDF8" stroke-width="2" fill="#1D4ED8" fill-opacity="0.25">
+        <polygon points="0,-65 95,-20 95,45 0,90 -95,45 -95,-20"/>
+        <line x1="0" y1="-65" x2="0" y2="25" stroke="#93C5FD"/>
+        <line x1="0" y1="25" x2="95" y2="-20" stroke="#93C5FD"/>
+        <line x1="0" y1="25" x2="-95" y2="-20" stroke="#93C5FD"/>
+        <ellipse cx="0" cy="-20" rx="28" ry="14" fill="#0F172A" stroke="#F59E0B" stroke-width="2"/>
+      </g>
+      <text x="290" y="64" text-anchor="middle" fill="#F59E0B" font-family="monospace" font-size="10">⌀ 24.00 mm ±0.05</text>
+      <g transform="translate(435, 225)" stroke-width="2">
+        <line x1="0" y1="0" x2="22" y2="0" stroke="#EF4444"/><text x="25" y="3" fill="#EF4444" font-family="monospace" font-size="8">X</text>
+        <line x1="0" y1="0" x2="0" y2="-22" stroke="#10B981"/><text x="-3" y="-25" fill="#10B981" font-family="monospace" font-size="8">Z</text>
+        <line x1="0" y1="0" x2="-15" y2="12" stroke="#3B82F6"/><text x="-24" y="18" fill="#3B82F6" font-family="monospace" font-size="8">Y</text>
+      </g>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 6. FEA / CFD Multipysics Simulation (Ansys, SimScale, OpenFOAM)
+  if (slug.includes('ansys') || slug.includes('simscale') || slug.includes('openfoam')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <defs>
+        <linearGradient id="feaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#2563EB"/>
+          <stop offset="35%" stop-color="#10B981"/>
+          <stop offset="70%" stop-color="#F59E0B"/>
+          <stop offset="100%" stop-color="#EF4444"/>
+        </linearGradient>
+      </defs>
+      <rect width="480" height="270" fill="#0B1324"/>
+      <rect x="0" y="0" width="480" height="28" fill="#162238"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${name} — FEA / CFD Mesh &amp; Von Mises Stress Contour</text>
+      <rect x="24" y="46" width="22" height="190" rx="3" fill="url(#feaGrad)" transform="rotate(90 120 120)" opacity="0"/>
+      <rect x="95" y="105" width="290" height="68" rx="12" fill="url(#feaGrad)" stroke="#E2E8F0" stroke-width="1.5"/>
+      <g stroke="#0F172A" stroke-width="0.8" opacity="0.55">
+        <line x1="135" y1="105" x2="135" y2="173"/><line x1="175" y1="105" x2="175" y2="173"/><line x1="215" y1="105" x2="215" y2="173"/><line x1="255" y1="105" x2="255" y2="173"/><line x1="295" y1="105" x2="295" y2="173"/><line x1="335" y1="105" x2="335" y2="173"/>
+        <line x1="95" y1="128" x2="385" y2="128"/><line x1="95" y1="150" x2="385" y2="150"/>
+      </g>
+      <circle cx="135" cy="139" r="16" fill="#0B1324" stroke="#E2E8F0" stroke-width="1.5"/>
+      <circle cx="345" cy="139" r="16" fill="#0B1324" stroke="#EF4444" stroke-width="2"/>
+      <text x="240" y="76" text-anchor="middle" fill="#38BDF8" font-family="monospace" font-size="11" font-weight="bold">Max Von Mises Stress: 248.6 MPa (Nodes: 42,810)</text>
+      <rect x="95" y="210" width="290" height="14" rx="4" fill="url(#feaGrad)"/>
+      <text x="95" y="238" fill="#60A5FA" font-family="monospace" font-size="9">0.0 MPa (Min)</text>
+      <text x="385" y="238" text-anchor="end" fill="#F87171" font-family="monospace" font-size="9">250.0 MPa (Max)</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 7. 3D Printing Slicers & 3D Rendering (Cura, PrusaSlicer, Bambu Studio, Blender)
+  if (slug.includes('cura') || slug.includes('prusa') || slug.includes('bambu') || slug.includes('blender')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+      <rect width="480" height="270" fill="#12161F"/>
+      <rect x="0" y="0" width="480" height="28" fill="#1E2433"/>
+      <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+      <text x="56" y="18" fill="#F8FAFC" font-family="monospace" font-size="11" font-weight="bold">${name} — 3D Build Plate &amp; Toolpath Preview</text>
+      <polygon points="240,85 370,145 240,215 110,145" fill="#1E293B" stroke="#475569" stroke-width="1.5"/>
+      <g stroke="#F97316" stroke-width="2.2" fill="none">
+        <polygon points="240,115 295,142 240,170 185,142" fill="#EA580C" fill-opacity="0.25"/>
+        <polygon points="240,98 295,125 240,153 185,125" fill="#F97316" fill-opacity="0.3"/>
+        <polygon points="240,82 295,109 240,137 185,109" fill="#FB923C" fill-opacity="0.4" stroke="#FDBA74"/>
+      </g>
+      <rect x="348" y="42" width="118" height="84" rx="6" fill="#0F172A" stroke="#334155"/>
+      <text x="358" y="60" fill="#F59E0B" font-family="monospace" font-size="9" font-weight="bold">SLICE SETTINGS</text>
+      <text x="358" y="76" fill="#E2E8F0" font-family="monospace" font-size="9">Layer: 0.20 mm</text>
+      <text x="358" y="92" fill="#E2E8F0" font-family="monospace" font-size="9">Infill: 25% Gyroid</text>
+      <text x="358" y="108" fill="#34D399" font-family="monospace" font-size="9">Time: 2h 14m (42g)</text>
+    </svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
+
+  // 8. Code Editors, Embedded IDEs & Scientific Computing
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+    <rect width="480" height="270" fill="#0D1117"/>
+    <rect x="0" y="0" width="480" height="28" fill="#161B22"/>
+    <circle cx="16" cy="14" r="4" fill="#EF4444"/><circle cx="28" cy="14" r="4" fill="#F59E0B"/><circle cx="40" cy="14" r="4" fill="#10B981"/>
+    <text x="56" y="18" fill="#E6EDF3" font-family="monospace" font-size="11" font-weight="bold">${name} — Engineering Workspace</text>
+    <rect x="12" y="38" width="112" height="218" rx="6" fill="#161B22" stroke="#30363D"/>
+    <text x="22" y="56" fill="#8B949E" font-family="sans-serif" font-size="9" font-weight="bold">EXPLORER</text>
+    <text x="22" y="76" fill="#58A6FF" font-family="monospace" font-size="9">▾ src/firmware</text>
+    <text x="28" y="94" fill="#C9D1D9" font-family="monospace" font-size="9">main.cpp</text>
+    <text x="28" y="112" fill="#C9D1D9" font-family="monospace" font-size="9">config.h</text>
+    <text x="28" y="130" fill="#3FB950" font-family="monospace" font-size="9">Makefile</text>
+    <rect x="134" y="38" width="334" height="150" rx="6" fill="#0D1117" stroke="#30363D"/>
+    <text x="148" y="60" fill="#FF7B72" font-family="monospace" font-size="10">// ${name}</text>
+    <text x="148" y="78" fill="#79C0FF" font-family="monospace" font-size="10">${subtitle}</text>
+    <text x="148" y="102" fill="#D2A8FF" font-family="monospace" font-size="10">int main(void) {</text>
+    <text x="164" y="120" fill="#C9D1D9" font-family="monospace" font-size="10">SystemClock_Config();</text>
+    <text x="164" y="138" fill="#A5D6FF" font-family="monospace" font-size="10">HAL_Init(); /* Verified */</text>
+    <text x="164" y="156" fill="#3FB950" font-family="monospace" font-size="10">return 0;</text>
+    <text x="148" y="172" fill="#D2A8FF" font-family="monospace" font-size="10">}</text>
+    <rect x="134" y="196" width="334" height="60" rx="6" fill="#161B22" stroke="#30363D"/>
+    <text x="148" y="216" fill="#8B949E" font-family="monospace" font-size="9">TERMINAL // BUILD OUTPUT</text>
+    <text x="148" y="236" fill="#3FB950" font-family="monospace" font-size="10">✓ Build succeeded — 0 errors, 0 warnings</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 export function getToolLogoUrl(tool: Partial<EngineeringTool>): string {
-  if (tool.icon?.trim() && !tool.icon.includes('wikimedia.org')) return tool.icon.trim();
+  if (tool.icon?.trim()) return tool.icon.trim();
+  if (tool.officialLogoUrl?.trim()) return tool.officialLogoUrl.trim();
+  if (tool.toolType === 'interactive' || tool.category === 'Calculators') {
+    if (!tool.officialWebsite) return '/images/logo.png';
+  }
   const slug = (tool.slug || '').toLowerCase().trim();
   const name = (tool.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
   if (TOOL_OFFICIAL_LOGOS[slug]) return TOOL_OFFICIAL_LOGOS[slug];
   for (const [key, url] of Object.entries(TOOL_OFFICIAL_LOGOS)) {
     if (slug.includes(key) || name.includes(key)) return url;
   }
+  if (tool.officialWebsite) {
+    try {
+      const host = new URL(tool.officialWebsite).hostname;
+      if (host) return `https://www.google.com/s2/favicons?domain=${host}&sz=128`;
+    } catch {
+      // ignore invalid URL
+    }
+  }
   const initials = (tool.name || 'ET').slice(0, 2).toUpperCase();
   return makeToolBrandSvg(initials, '#172D4D');
 }
 
 export function getToolHeroImageUrl(tool: Partial<EngineeringTool>): string {
-  const customUrl = tool.imageUrl?.trim();
-  if (customUrl && !customUrl.includes('1581092335397-9583fe92d232')) {
-    return customUrl.replace('w=800&q=80', 'w=400&q=65');
+  const customUrl = tool.imageUrl?.trim() || tool.screenshotSourceUrl?.trim();
+  if (customUrl && !customUrl.includes('images.unsplash.com')) {
+    return customUrl;
   }
-  const slug = (tool.slug || '').toLowerCase().trim();
-  if (TOOL_HERO_IMAGES[slug]) return TOOL_HERO_IMAGES[slug];
-  const cat = tool.category || 'Electronics';
-  return CATEGORY_HERO_FALLBACKS[cat] || CATEGORY_HERO_FALLBACKS.Electronics;
+  return buildToolInterfaceSvg(tool);
 }
 
 export const DEFAULT_ENGINEERING_TOOLS: EngineeringTool[] = [
@@ -1297,6 +1553,30 @@ export const DEFAULT_ENGINEERING_TOOLS: EngineeringTool[] = [
   },
 ];
 
+function mergeToolsWithDefaults(firestoreList: EngineeringTool[]): EngineeringTool[] {
+  if (firestoreList.length === 0) return DEFAULT_ENGINEERING_TOOLS;
+
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
+  const merged: EngineeringTool[] = [];
+
+  for (const item of firestoreList) {
+    seenIds.add(item.id);
+    if (item.slug) seenSlugs.add(item.slug.toLowerCase());
+    merged.push(item);
+  }
+
+  for (const def of DEFAULT_ENGINEERING_TOOLS) {
+    if (!seenIds.has(def.id) && !seenSlugs.has(def.slug.toLowerCase())) {
+      seenIds.add(def.id);
+      seenSlugs.add(def.slug.toLowerCase());
+      merged.push(def);
+    }
+  }
+
+  return merged.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+}
+
 export async function fetchTools(): Promise<EngineeringTool[]> {
   try {
     const q = query(collection(db, 'tools'), orderBy('order', 'asc'));
@@ -1306,33 +1586,38 @@ export async function fetchTools(): Promise<EngineeringTool[]> {
       return DEFAULT_ENGINEERING_TOOLS;
     }
 
-    return snapshot.docs.map((docSnap) => {
+    const list = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
+      const defMatch = DEFAULT_ENGINEERING_TOOLS.find((d) => d.id === docSnap.id || d.slug === data.slug);
       return {
         id: docSnap.id,
-        name: String(data.name || 'Untitled Tool'),
-        slug: String(data.slug || docSnap.id),
-        domain: (data.domain as EngineeringDomain) || 'General Engineering',
-        category: (data.category as ToolCategory) || 'Electronics',
-        mainApplication: data.mainApplication ? String(data.mainApplication) : undefined,
-        officialWebsite: data.officialWebsite ? String(data.officialWebsite) : undefined,
-        licenseType: data.licenseType ? String(data.licenseType) : undefined,
-        platform: data.platform ? String(data.platform) : undefined,
-        badge: data.badge ? String(data.badge) : undefined,
-        summary: String(data.summary || ''),
-        description: String(data.description || ''),
+        name: String(data.name || defMatch?.name || 'Untitled Tool'),
+        slug: String(data.slug || defMatch?.slug || docSnap.id),
+        domain: (data.domain as EngineeringDomain) || defMatch?.domain || 'General Engineering',
+        category: (data.category as ToolCategory) || defMatch?.category || 'Electronics',
+        mainApplication: data.mainApplication ? String(data.mainApplication) : defMatch?.mainApplication,
+        officialWebsite: data.officialWebsite ? String(data.officialWebsite) : defMatch?.officialWebsite,
+        licenseType: data.licenseType ? String(data.licenseType) : defMatch?.licenseType,
+        platform: data.platform ? String(data.platform) : defMatch?.platform,
+        badge: data.badge ? String(data.badge) : defMatch?.badge,
+        summary: String(data.summary || defMatch?.summary || ''),
+        description: String(data.description || defMatch?.description || ''),
         icon: data.icon ? String(data.icon) : undefined,
         imageUrl: data.imageUrl ? String(data.imageUrl) : undefined,
-        toolType: (data.toolType as 'built-in' | 'external' | 'interactive' | 'software') || 'software',
-        externalUrl: data.externalUrl ? String(data.externalUrl) : undefined,
-        calculatorKey: data.calculatorKey ? String(data.calculatorKey) : undefined,
-        featured: Boolean(data.featured),
-        order: typeof data.order === 'number' ? data.order : 0,
-        tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+        officialLogoUrl: data.officialLogoUrl ? String(data.officialLogoUrl) : undefined,
+        screenshotSourceUrl: data.screenshotSourceUrl ? String(data.screenshotSourceUrl) : undefined,
+        imageAlt: data.imageAlt ? String(data.imageAlt) : undefined,
+        toolType: (data.toolType as 'built-in' | 'external' | 'interactive' | 'software') || defMatch?.toolType || 'software',
+        externalUrl: data.externalUrl ? String(data.externalUrl) : defMatch?.externalUrl,
+        calculatorKey: data.calculatorKey ? String(data.calculatorKey) : defMatch?.calculatorKey,
+        featured: Boolean(data.featured ?? defMatch?.featured),
+        order: typeof data.order === 'number' ? data.order : defMatch?.order ?? 0,
+        tags: Array.isArray(data.tags) && data.tags.length > 0 ? data.tags.map(String) : defMatch?.tags || [],
         createdAt: toIso(data.createdAt),
         updatedAt: toIso(data.updatedAt),
       };
     });
+    return mergeToolsWithDefaults(list);
   } catch {
     return DEFAULT_ENGINEERING_TOOLS;
   }
@@ -1366,6 +1651,9 @@ export async function saveToolAdmin(
     description: tool.description.trim(),
     icon: tool.icon?.trim() || '',
     imageUrl: tool.imageUrl?.trim() || '',
+    officialLogoUrl: tool.officialLogoUrl?.trim() || '',
+    screenshotSourceUrl: tool.screenshotSourceUrl?.trim() || '',
+    imageAlt: tool.imageAlt?.trim() || '',
     toolType: tool.toolType || 'software',
     externalUrl: tool.externalUrl?.trim() || tool.officialWebsite?.trim() || '',
     calculatorKey: tool.calculatorKey?.trim() || '',

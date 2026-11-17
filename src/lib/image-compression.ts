@@ -28,6 +28,21 @@ export async function compressAndOptimizeImage(
     };
   }
 
+  // Preserve SVG vector files without rasterizing
+  if (file.type === 'image/svg+xml') {
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 =
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(arrayBuffer).toString('base64')
+        : btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    return {
+      base64,
+      mimeType: 'image/svg+xml',
+      sizeBytes: file.size,
+      fileName: file.name,
+    };
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -69,9 +84,13 @@ export async function compressAndOptimizeImage(
         return;
       }
 
-      // Fill white background for transparent PNG/WebP conversions
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
+      // Preserve transparency for PNG/WebP logos; fill white only for JPEG
+      if (file.type === 'image/jpeg') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        ctx.clearRect(0, 0, width, height);
+      }
       ctx.drawImage(img, 0, 0, width, height);
 
       // Prefer WebP for optimal compression ratio, fallback to JPEG

@@ -1,5 +1,6 @@
 export type UserRole = 'USER' | 'EDITOR' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'SUSPENDED';
+export * from './datasheet';
 
 export type PostStatus =
   | 'DRAFT'
@@ -176,10 +177,14 @@ export interface ModerationLog {
     | 'MANAGE_PRODUCT'
     | 'MANAGE_SUPPLIER'
     | 'DELETE_SUPPLIER'
+    | 'MANAGE_TOOL'
+    | 'DELETE_TOOL'
+    | 'MANAGE_LIBRARY'
+    | 'DELETE_LIBRARY'
     | 'REPLY_INQUIRY'
     | 'DELETE_INQUIRY'
     | 'UPDATE_SETTINGS';
-  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT' | 'SUPPLIER' | 'INQUIRY';
+  targetType: 'POST' | 'USER' | 'CATEGORY' | 'COMMENT' | 'REPORT' | 'SETTINGS' | 'PRODUCT' | 'SUPPLIER' | 'TOOL' | 'LIBRARY' | 'INQUIRY';
   targetId: string;
   reason?: string;
   createdAt: string;
@@ -310,6 +315,9 @@ export interface EngineeringTool {
   description: string;
   icon?: string;
   imageUrl?: string;
+  officialLogoUrl?: string;
+  screenshotSourceUrl?: string;
+  imageAlt?: string;
   toolType: 'built-in' | 'external' | 'interactive' | 'software';
   externalUrl?: string;
   calculatorKey?: string;
@@ -338,6 +346,9 @@ export interface LibraryItem {
   summary: string;
   description?: string;
   imageUrl?: string;
+  iconUrl?: string;
+  imageAlt?: string;
+  imageSource?: string;
   fileUrl?: string;
   externalUrl?: string;
   fileFormat?: string;

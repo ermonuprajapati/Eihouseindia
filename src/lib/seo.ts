@@ -9,7 +9,7 @@ export function buildOrganizationJsonLd() {
     alternateName: [...SITE_CONFIG.alternateNames],
     legalName: SITE_CONFIG.entity.legalName,
     url: SITE_CONFIG.url,
-    logo: `${SITE_CONFIG.url}/icon-512.png`,
+    logo: `${SITE_CONFIG.url}/icon-512x512.png`,
     description: SITE_CONFIG.description,
     slogan: SITE_CONFIG.tagline,
     email: SITE_CONFIG.contactEmail,

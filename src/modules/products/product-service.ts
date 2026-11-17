@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { handleFirestoreError, OperationType } from '@/lib/firestore-errors';
+import { normalizeImageUrl } from '@/lib/image-utils';
 import type { Product, UserProfile, UserRole } from '@/types';
 
 export interface SupplierPreset {
@@ -315,9 +316,15 @@ export async function fetchProducts(): Promise<Product[]> {
 
     return snap.docs.map((docSnap) => {
       const data = docSnap.data();
-      const imagesList = Array.isArray(data.images) && data.images.length > 0
+      const rawImagesList = Array.isArray(data.images) && data.images.length > 0
         ? data.images.map(String).filter((img: string) => img.trim().length > 0)
         : (data.imageUrl ? [String(data.imageUrl)] : []);
+
+      const imagesList = rawImagesList
+        .map((url) => normalizeImageUrl(url))
+        .filter((url) => url.length > 0);
+
+      const primaryImg = imagesList[0] || (data.imageUrl ? normalizeImageUrl(String(data.imageUrl)) : undefined);
 
       return {
         id: docSnap.id,
@@ -327,7 +334,7 @@ export async function fetchProducts(): Promise<Product[]> {
         badge: data.badge ? String(data.badge) : undefined,
         price: String(data.price || '₹0'),
         mrp: data.mrp ? String(data.mrp) : undefined,
-        imageUrl: imagesList[0] || (data.imageUrl ? String(data.imageUrl) : undefined),
+        imageUrl: primaryImg || undefined,
         images: imagesList,
         inStock: data.inStock !== false,
         features: Array.isArray(data.features) ? data.features.map(String) : [],
@@ -377,10 +384,10 @@ export async function saveProductAdmin(
   const logId = `log_${Date.now()}_prod`;
 
   const rawImages = Array.isArray(productData.images) && productData.images.length > 0
-    ? productData.images.map((img) => img.trim()).filter((img) => img.length > 0)
-    : (productData.imageUrl && productData.imageUrl.trim().length > 0 ? [productData.imageUrl.trim()] : []);
+    ? productData.images.map((img) => normalizeImageUrl(img)).filter((img) => img.length > 0)
+    : (productData.imageUrl && productData.imageUrl.trim().length > 0 ? [normalizeImageUrl(productData.imageUrl)] : []);
 
-  const primaryImage = rawImages[0] || productData.imageUrl?.trim() || null;
+  const primaryImage = rawImages[0] || (productData.imageUrl ? normalizeImageUrl(productData.imageUrl) : null);
 
   const payload = {
     id: productId,

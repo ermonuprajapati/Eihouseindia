@@ -9,8 +9,15 @@ const uploadSchema = z.object({
   mediaId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/),
   uploaderId: z.string().min(1).max(128),
   fileName: z.string().min(1).max(200),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/avif']),
-  sizeBytes: z.number().positive().max(10 * 1024 * 1024), // Max 10 MB raw, compressed will be < 800 KB
+  mimeType: z.enum([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/avif',
+    'image/svg+xml',
+    'application/pdf',
+  ]),
+  sizeBytes: z.number().positive().max(10 * 1024 * 1024), // Max 10 MB raw
   base64: z.string().min(10),
 });
 
@@ -38,7 +45,7 @@ export async function POST(request: Request) {
         {
           folder: 'eihouseindia',
           public_id: mediaId,
-          resource_type: 'image',
+          resource_type: mimeType === 'application/pdf' ? 'raw' : 'image',
           overwrite: true,
         }
       );

@@ -97,6 +97,13 @@ export function SiteHeader() {
             Library
           </Link>
           <Link
+            href="/datasheets"
+            prefetch={false}
+            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
+          >
+            Datasheets
+          </Link>
+          <Link
             href="/services"
             prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
@@ -249,6 +256,10 @@ export function SiteHeader() {
             <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
               <span>Engineering Library (Datasheets &amp; Code)</span>
               <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-bold">New</span>
+            </Link>
+            <Link href="/datasheets" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
+              <span>Component Datasheet Finder</span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">New</span>
             </Link>
             <Link href="/services" onClick={() => setMobileOpen(false)} className="py-1.5">
               Engineering Services & R&D

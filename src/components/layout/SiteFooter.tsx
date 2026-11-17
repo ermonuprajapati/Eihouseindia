@@ -85,6 +85,11 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/datasheets" prefetch={false} className="inline-block py-1 text-slate-400 hover:text-white transition-colors">
+                  Component Datasheets Finder
+                </Link>
+              </li>
+              <li>
                 <Link href="/services" prefetch={false} className="inline-block py-1 text-slate-400 hover:text-white transition-colors">
                   R&D & Engineering Services
                 </Link>

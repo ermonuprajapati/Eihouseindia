@@ -23,6 +23,15 @@ import {
   ChevronUp,
   Wrench,
   BookOpen,
+  Search,
+  X,
+  User,
+  FolderOpen,
+  Cpu,
+  ExternalLink,
+  ShieldCheck,
+  FileText,
+  Edit3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -71,6 +80,7 @@ import {
 } from '@/modules/admin/admin-service';
 import { fetchCategories } from '@/modules/categories/category-service';
 import { deleteEditorialMedia, uploadEditorialImage } from '@/modules/storage/storage-service';
+import { normalizeImageUrl } from '@/lib/image-utils';
 import {
   deleteProductAdmin,
   fetchProducts,
@@ -85,26 +95,25 @@ import {
 } from '@/modules/suppliers/supplier-service';
 import {
   fetchTools,
-  saveToolAdmin,
   deleteToolAdmin,
-  ENGINEERING_DOMAINS,
-  TOOL_CATEGORIES,
-  TOOL_LICENSES,
+  getToolLogoUrl,
 } from '@/modules/tools/tool-service';
 import {
   fetchLibraryItems,
-  saveLibraryItemAdmin,
   deleteLibraryItemAdmin,
-  LIBRARY_CATEGORIES,
+  getLibraryLogoUrl,
 } from '@/modules/library/library-service';
+import { ToolAdminModal } from '@/components/tools/ToolAdminModal';
+import { LibraryAdminModal } from '@/components/library/LibraryAdminModal';
+import { DatasheetAdminModal } from '@/components/datasheets/DatasheetAdminModal';
+import { fetchDatasheets, DEFAULT_DATASHEETS } from '@/modules/datasheets/datasheet-service';
 import { categorySchema, slugify } from '@/lib/validation';
 import type {
   Category,
   Comment,
+  ComponentDatasheet,
   ContactInquiryItem,
-  EngineeringDomain,
   EngineeringTool,
-  LibraryCategory,
   LibraryItem,
   MediaItem,
   ModerationLog,
@@ -113,8 +122,6 @@ import type {
   ReportItem,
   SiteSettings,
   Tag,
-  ToolCategory,
-  ToolLicenseType,
   TrustedSupplier,
   UserProfile,
   UserRole,
@@ -126,6 +133,7 @@ type AdminSection =
   | 'products'
   | 'tools'
   | 'library'
+  | 'datasheets'
   | 'suppliers'
   | 'inquiries'
   | 'pending'
@@ -202,6 +210,9 @@ export default function AdminPanelPage() {
   const [savingProduct, setSavingProduct] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState(false);
   const [newImageUrlInput, setNewImageUrlInput] = useState('');
+  const [blogSearchQuery, setBlogSearchQuery] = useState('');
+  const [blogAuthorFilter, setBlogAuthorFilter] = useState('ALL');
+  const [blogCategoryFilter, setBlogCategoryFilter] = useState('ALL');
 
   // Category modal state
   const [catForm, setCatForm] = useState<{
@@ -244,57 +255,19 @@ export default function AdminPanelPage() {
 
   // Tools & Software Directory state
   const [toolsList, setToolsList] = useState<EngineeringTool[]>([]);
-  const [toolModal, setToolModal] = useState<{
-    id?: string;
-    name: string;
-    slug: string;
-    domain: EngineeringDomain;
-    category: ToolCategory | string;
-    mainApplication: string;
-    officialWebsite: string;
-    licenseType: ToolLicenseType | string;
-    platform: string;
-    badge: string;
-    summary: string;
-    description: string;
-    toolType: 'built-in' | 'external' | 'interactive' | 'software';
-    externalUrl: string;
-    calculatorKey: string;
-    featured: boolean;
-    order: number;
-    tags: string;
-    isNew: boolean;
-  } | null>(null);
+  const [toolModal, setToolModal] = useState<(Partial<EngineeringTool> & { isNew?: boolean }) | null>(null);
   const [deleteToolTarget, setDeleteToolTarget] = useState<EngineeringTool | null>(null);
-  const [savingTool, setSavingTool] = useState(false);
   const [deletingTool, setDeletingTool] = useState(false);
 
   // Library state
   const [libraryList, setLibraryList] = useState<LibraryItem[]>([]);
-  const [libraryModal, setLibraryModal] = useState<{
-    id?: string;
-    title: string;
-    slug: string;
-    domain: EngineeringDomain;
-    category: LibraryCategory;
-    badge: string;
-    summary: string;
-    description: string;
-    imageUrl: string;
-    fileUrl: string;
-    externalUrl: string;
-    fileFormat: string;
-    fileSize: string;
-    version: string;
-    authorOrSource: string;
-    tags: string;
-    featured: boolean;
-    order: number;
-    isNew: boolean;
-  } | null>(null);
+  const [libraryModal, setLibraryModal] = useState<(Partial<LibraryItem> & { isNew?: boolean }) | null>(null);
   const [deleteLibraryTarget, setDeleteLibraryTarget] = useState<LibraryItem | null>(null);
-  const [savingLibrary, setSavingLibrary] = useState(false);
   const [deletingLibrary, setDeletingLibrary] = useState(false);
+
+  // Datasheets state
+  const [datasheetsList, setDatasheetsList] = useState<ComponentDatasheet[]>(DEFAULT_DATASHEETS);
+  const [datasheetModal, setDatasheetModal] = useState<(Partial<ComponentDatasheet> & { isNew?: boolean }) | null>(null);
 
   const loadAllAdminData = useCallback(async (showSpinner = false) => {
     if (!firebaseUser || !isEditor) return;
@@ -318,6 +291,7 @@ export default function AdminPanelPage() {
         suppliersRes,
         toolsRes,
         libraryRes,
+        datasheetsRes,
       ] = await Promise.all([
         getAdminDashboardStats().catch(() => null),
         getPostsForAdmin().catch(() => []),
@@ -334,6 +308,7 @@ export default function AdminPanelPage() {
         fetchSuppliers().catch(() => []),
         fetchTools().catch(() => []),
         fetchLibraryItems().catch(() => []),
+        fetchDatasheets().catch(() => DEFAULT_DATASHEETS),
       ]);
 
       setStats(statsRes);
@@ -351,6 +326,69 @@ export default function AdminPanelPage() {
       setSuppliersList(suppliersRes || []);
       setToolsList(toolsRes || []);
       setLibraryList(libraryRes || []);
+      setDatasheetsList(datasheetsRes || DEFAULT_DATASHEETS);
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const reqSection = params.get('section') as AdminSection | null;
+        if (reqSection) {
+          setSection(reqSection);
+        }
+        const editProdId = params.get('editProduct');
+        if (editProdId && productsRes) {
+          const prod = productsRes.find((p) => p.id === editProdId);
+          if (prod) {
+            const prodImages = Array.isArray(prod.images) && prod.images.length > 0
+              ? prod.images
+              : (prod.imageUrl ? [prod.imageUrl] : []);
+            setProductModal({
+              id: prod.id,
+              name: prod.name,
+              slug: prod.slug,
+              category: prod.category,
+              badge: prod.badge || '',
+              price: prod.price,
+              mrp: prod.mrp || '',
+              imageUrl: prodImages[0] || prod.imageUrl || '',
+              images: prodImages,
+              inStock: prod.inStock,
+              features: (prod.features || []).join('\n'),
+              description: prod.description || '',
+              suppliers: (prod.suppliers || []).map((s) => ({
+                id: s.id,
+                name: s.name,
+                logoUrl: s.logoUrl || '',
+                url: s.url,
+                price: s.price || '',
+                badge: s.badge || '',
+              })),
+              relatedBlogSlug: prod.relatedBlogSlug || '',
+              relatedBlogTitle: prod.relatedBlogTitle || '',
+              isNew: false,
+            });
+            window.history.replaceState({}, '', '/admin');
+          }
+        }
+        const editSupId = params.get('editSupplier');
+        if (editSupId && suppliersRes) {
+          const sup = suppliersRes.find((s) => s.id === editSupId);
+          if (sup) {
+            setSupplierModal({
+              id: sup.id,
+              name: sup.name,
+              url: sup.url,
+              logoUrl: sup.logoUrl || '',
+              category: sup.category || 'Electronics & Sensors',
+              badge: sup.badge || '',
+              description: sup.description || '',
+              order: sup.order ?? 1,
+              featured: sup.featured ?? true,
+              isNew: false,
+            });
+            window.history.replaceState({}, '', '/admin');
+          }
+        }
+      }
     } finally {
       setLoadingData(false);
     }
@@ -579,7 +617,8 @@ export default function AdminPanelPage() {
 
   const handleAddProductImageUrl = () => {
     if (!newImageUrlInput.trim() || !productModal) return;
-    const url = newImageUrlInput.trim();
+    const url = normalizeImageUrl(newImageUrlInput.trim());
+    if (!url) return;
     setProductModal((prev) => {
       if (!prev) return null;
       const existing = Array.isArray(prev.images) && prev.images.length > 0
@@ -853,50 +892,6 @@ export default function AdminPanelPage() {
     }
   };
 
-  const handleToolSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!toolModal || !profile) return;
-    if (!toolModal.name.trim()) {
-      toast.error('Tool name is required.');
-      return;
-    }
-    setSavingTool(true);
-    try {
-      await saveToolAdmin(
-        {
-          id: toolModal.id,
-          name: toolModal.name.trim(),
-          slug: toolModal.slug.trim() || slugify(toolModal.name),
-          domain: toolModal.domain,
-          category: toolModal.category as ToolCategory,
-          mainApplication: toolModal.mainApplication.trim(),
-          officialWebsite: toolModal.officialWebsite.trim(),
-          licenseType: toolModal.licenseType as ToolLicenseType,
-          platform: toolModal.platform.trim(),
-          badge: toolModal.badge.trim(),
-          summary: toolModal.summary.trim(),
-          description: toolModal.description.trim(),
-          toolType: toolModal.toolType,
-          externalUrl: toolModal.officialWebsite.trim() || toolModal.externalUrl.trim(),
-          calculatorKey: toolModal.calculatorKey.trim(),
-          featured: toolModal.featured,
-          order: Number(toolModal.order) || 1,
-          tags: toolModal.tags.split(',').map((t) => t.trim()).filter(Boolean),
-        },
-        toolModal.isNew,
-        profile,
-        effectiveRole
-      );
-      toast.success(toolModal.isNew ? 'New engineering tool created!' : 'Tool updated successfully!');
-      setToolModal(null);
-      loadAllAdminData(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save tool.');
-    } finally {
-      setSavingTool(false);
-    }
-  };
-
   const handleConfirmDeleteTool = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deleteToolTarget || !profile) return;
@@ -910,50 +905,6 @@ export default function AdminPanelPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to delete tool.');
     } finally {
       setDeletingTool(false);
-    }
-  };
-
-  const handleLibrarySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!libraryModal || !profile) return;
-    if (!libraryModal.title.trim()) {
-      toast.error('Resource title is required.');
-      return;
-    }
-    setSavingLibrary(true);
-    try {
-      await saveLibraryItemAdmin(
-        {
-          id: libraryModal.id,
-          title: libraryModal.title.trim(),
-          slug: libraryModal.slug.trim() || slugify(libraryModal.title),
-          domain: libraryModal.domain,
-          category: libraryModal.category,
-          badge: libraryModal.badge.trim(),
-          summary: libraryModal.summary.trim(),
-          description: libraryModal.description.trim(),
-          imageUrl: libraryModal.imageUrl.trim(),
-          fileUrl: libraryModal.fileUrl.trim(),
-          externalUrl: libraryModal.externalUrl.trim(),
-          fileFormat: libraryModal.fileFormat.trim() || 'PDF Reference',
-          fileSize: libraryModal.fileSize.trim(),
-          version: libraryModal.version.trim(),
-          authorOrSource: libraryModal.authorOrSource.trim(),
-          featured: libraryModal.featured,
-          order: Number(libraryModal.order) || 1,
-          tags: libraryModal.tags.split(',').map((t) => t.trim()).filter(Boolean),
-        },
-        libraryModal.isNew,
-        profile,
-        effectiveRole
-      );
-      toast.success(libraryModal.isNew ? 'New library resource added!' : 'Resource updated successfully!');
-      setLibraryModal(null);
-      loadAllAdminData(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save library resource.');
-    } finally {
-      setSavingLibrary(false);
     }
   };
 
@@ -992,6 +943,7 @@ export default function AdminPanelPage() {
     { id: 'products', label: `Store Products (EI House) (${productsList.length})` },
     { id: 'tools', label: `Engineering Tools (${toolsList.length})` },
     { id: 'library', label: `Engineering Library (${libraryList.length})` },
+    { id: 'datasheets', label: `Datasheet Finder (${datasheetsList.length})` },
     { id: 'suppliers', label: `Suppliers (Not in Store) (${suppliersList.length})` },
     { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
@@ -1030,7 +982,15 @@ export default function AdminPanelPage() {
             list.map((post) => (
               <tr key={post.id} className="hover:bg-slate-50/70">
                 <td className="px-4 py-3 max-w-xs">
-                  <p className="font-medium text-[#0B1528] truncate">{post.title}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-[#0B1528] truncate">{post.title}</p>
+                    <Link
+                      href={`/dashboard/editor/${post.id}`}
+                      className="shrink-0 text-[11px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-2 py-0.5 rounded"
+                    >
+                      Edit
+                    </Link>
+                  </div>
                   <p className="text-xs font-mono text-slate-400 truncate">/{post.slug}</p>
                   {post.rejectionReason && (
                     <p className="mt-1 text-xs text-red-700">Note: {post.rejectionReason}</p>
@@ -1311,7 +1271,10 @@ export default function AdminPanelPage() {
                       <Button
                         variant="primary"
                         size="sm"
-                        onClick={() =>
+                        onClick={() => {
+                          setBlogSearchQuery('');
+                          setBlogAuthorFilter('ALL');
+                          setBlogCategoryFilter('ALL');
                           setProductModal({
                             name: '',
                             slug: '',
@@ -1328,8 +1291,8 @@ export default function AdminPanelPage() {
                             relatedBlogSlug: '',
                             relatedBlogTitle: '',
                             isNew: true,
-                          })
-                        }
+                          });
+                        }}
                       >
                         <Plus className="h-4 w-4 mr-1.5" />
                         <span>Add New Product</span>
@@ -1370,7 +1333,48 @@ export default function AdminPanelPage() {
                                       </div>
                                     )}
                                     <div className="min-w-0">
-                                      <p className="font-medium text-[#0B1528] truncate">{prod.name}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="font-medium text-[#0B1528] truncate">{prod.name}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const prodImages = Array.isArray(prod.images) && prod.images.length > 0
+                                              ? prod.images
+                                              : (prod.imageUrl ? [prod.imageUrl] : []);
+                                            setBlogSearchQuery('');
+                                            setBlogAuthorFilter('ALL');
+                                            setBlogCategoryFilter('ALL');
+                                            setProductModal({
+                                              id: prod.id,
+                                              name: prod.name,
+                                              slug: prod.slug,
+                                              category: prod.category,
+                                              badge: prod.badge || '',
+                                              price: prod.price,
+                                              mrp: prod.mrp || '',
+                                              imageUrl: prodImages[0] || prod.imageUrl || '',
+                                              images: prodImages,
+                                              inStock: prod.inStock,
+                                              features: (prod.features || []).join('\n'),
+                                              description: prod.description || '',
+                                              suppliers: (prod.suppliers || []).map((s) => ({
+                                                id: s.id,
+                                                name: s.name,
+                                                logoUrl: s.logoUrl || '',
+                                                url: s.url,
+                                                price: s.price || '',
+                                                badge: s.badge || '',
+                                              })),
+                                              relatedBlogSlug: prod.relatedBlogSlug || '',
+                                              relatedBlogTitle: prod.relatedBlogTitle || '',
+                                              isNew: false,
+                                            });
+                                          }}
+                                          className="shrink-0 text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         {prod.badge && (
                                           <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
@@ -1414,6 +1418,9 @@ export default function AdminPanelPage() {
                                         ? prod.images
                                         : (prod.imageUrl ? [prod.imageUrl] : []);
 
+                                      setBlogSearchQuery('');
+                                      setBlogAuthorFilter('ALL');
+                                      setBlogCategoryFilter('ALL');
                                       setProductModal({
                                         id: prod.id,
                                         name: prod.name,
@@ -1495,7 +1502,7 @@ export default function AdminPanelPage() {
                             calculatorKey: '',
                             featured: false,
                             order: toolsList.length + 1,
-                            tags: '',
+                            tags: [],
                             isNew: true,
                           })
                         }
@@ -1529,16 +1536,33 @@ export default function AdminPanelPage() {
                             toolsList.map((tool) => (
                               <tr key={tool.id} className="hover:bg-slate-50/70">
                                 <td className="px-4 py-3 max-w-xs">
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center gap-1.5">
-                                      <p className="font-semibold text-[#0B1528]">{tool.name}</p>
-                                      {tool.featured && (
-                                        <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded font-semibold">
-                                          Top 12 Featured
-                                        </span>
-                                      )}
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="h-8 w-8 rounded-lg border border-slate-200 bg-white p-1 shrink-0 flex items-center justify-center overflow-hidden mt-0.5">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={getToolLogoUrl(tool)}
+                                        alt={tool.name}
+                                        className="max-h-full max-w-full object-contain"
+                                      />
                                     </div>
-                                    <p className="text-xs text-slate-500 line-clamp-1">{tool.summary}</p>
+                                    <div className="space-y-0.5 min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <p className="font-semibold text-[#0B1528] truncate">{tool.name}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => setToolModal({ ...tool, isNew: false })}
+                                          className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                        {tool.featured && (
+                                          <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded font-semibold">
+                                            Top 12 Featured
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-slate-500 line-clamp-1">{tool.summary}</p>
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-xs">
@@ -1584,29 +1608,7 @@ export default function AdminPanelPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                      setToolModal({
-                                        id: tool.id,
-                                        name: tool.name,
-                                        slug: tool.slug,
-                                        domain: tool.domain,
-                                        category: tool.category || 'Electronics',
-                                        mainApplication: tool.mainApplication || '',
-                                        officialWebsite: tool.officialWebsite || tool.externalUrl || '',
-                                        licenseType: tool.licenseType || 'Free',
-                                        platform: tool.platform || 'Desktop (Windows / Mac / Linux)',
-                                        badge: tool.badge || '',
-                                        summary: tool.summary,
-                                        description: tool.description,
-                                        toolType: tool.toolType || 'software',
-                                        externalUrl: tool.externalUrl || '',
-                                        calculatorKey: tool.calculatorKey || '',
-                                        featured: Boolean(tool.featured),
-                                        order: tool.order ?? 1,
-                                        tags: (tool.tags || []).join(', '),
-                                        isNew: false,
-                                      })
-                                    }
+                                    onClick={() => setToolModal({ ...tool, isNew: false })}
                                   >
                                     Edit
                                   </Button>
@@ -1654,13 +1656,14 @@ export default function AdminPanelPage() {
                             summary: '',
                             description: '',
                             imageUrl: '',
+                            iconUrl: '',
                             fileUrl: '',
                             externalUrl: '',
                             fileFormat: 'PDF Reference',
                             fileSize: '1.2 MB',
                             version: 'v1.0',
                             authorOrSource: 'EI House Hardware Lab',
-                            tags: '',
+                            tags: [],
                             featured: false,
                             order: libraryList.length + 1,
                             isNew: true,
@@ -1695,16 +1698,33 @@ export default function AdminPanelPage() {
                             libraryList.map((item) => (
                               <tr key={item.id} className="hover:bg-slate-50/70">
                                 <td className="px-4 py-3 max-w-sm">
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center gap-1.5">
-                                      <p className="font-semibold text-[#0B1528]">{item.title}</p>
-                                      {item.badge && (
-                                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
-                                          {item.badge}
-                                        </span>
-                                      )}
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="h-8 w-8 rounded-lg border border-slate-200 bg-white p-1 shrink-0 flex items-center justify-center overflow-hidden mt-0.5">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={getLibraryLogoUrl(item)}
+                                        alt={item.title}
+                                        className="max-h-full max-w-full object-contain"
+                                      />
                                     </div>
-                                    <p className="text-xs text-slate-500 line-clamp-1">{item.summary}</p>
+                                    <div className="space-y-0.5 min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <p className="font-semibold text-[#0B1528] truncate">{item.title}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => setLibraryModal({ ...item, isNew: false })}
+                                          className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                        {item.badge && (
+                                          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                            {item.badge}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-slate-500 line-clamp-1">{item.summary}</p>
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-xs">
@@ -1726,29 +1746,7 @@ export default function AdminPanelPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                      setLibraryModal({
-                                        id: item.id,
-                                        title: item.title,
-                                        slug: item.slug,
-                                        domain: item.domain,
-                                        category: item.category,
-                                        badge: item.badge || '',
-                                        summary: item.summary,
-                                        description: item.description || '',
-                                        imageUrl: item.imageUrl || '',
-                                        fileUrl: item.fileUrl || '',
-                                        externalUrl: item.externalUrl || '',
-                                        fileFormat: item.fileFormat || 'PDF Reference',
-                                        fileSize: item.fileSize || '',
-                                        version: item.version || '',
-                                        authorOrSource: item.authorOrSource || '',
-                                        tags: (item.tags || []).join(', '),
-                                        featured: Boolean(item.featured),
-                                        order: item.order ?? 1,
-                                        isNew: false,
-                                      })
-                                    }
+                                    onClick={() => setLibraryModal({ ...item, isNew: false })}
                                   >
                                     Edit
                                   </Button>
@@ -1760,6 +1758,143 @@ export default function AdminPanelPage() {
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                     <span>Delete</span>
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'datasheets' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                            <Cpu className="h-6 w-6 text-primary" />
+                            Component Datasheets ({datasheetsList.length})
+                          </h2>
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 gap-1 border-slate-300"
+                          >
+                            <Link href="/datasheets" target="_blank" rel="noopener noreferrer">
+                              <span>View Public Portal</span>
+                              <ExternalLink className="h-3 w-3 text-slate-400" />
+                            </Link>
+                          </Button>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Catalog of verified electronic component datasheets with official AllDataSheet &amp; manufacturer links.
+                        </p>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          setDatasheetModal({
+                            isNew: true,
+                            category: 'Operational Amplifiers',
+                            mountingType: 'Through Hole',
+                            verified: true,
+                            featured: false,
+                          })
+                        }
+                        className="bg-[#172D4D] hover:bg-[#0B1528] text-white shrink-0 font-semibold gap-1.5 shadow-2xs"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add Component Datasheet</span>
+                      </Button>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3">Part Number</th>
+                            <th className="px-4 py-3">Manufacturer</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Package / Pins</th>
+                            <th className="px-4 py-3 text-center">Status</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {datasheetsList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                                No datasheets found. Click &quot;Add Component Datasheet&quot; above to create one.
+                              </td>
+                            </tr>
+                          ) : (
+                            datasheetsList.map((item) => (
+                              <tr key={item.id} className="hover:bg-slate-50/70">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold text-sm text-[#0B1528]">
+                                      {item.partNumber}
+                                    </span>
+                                    {item.featured && (
+                                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
+                                        ★ Featured
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-slate-700">
+                                  {item.manufacturer}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded bg-slate-100 text-slate-700 px-2 py-0.5 text-[10px] font-medium border border-slate-200">
+                                    {item.category}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
+                                  {item.package || '—'}{item.pinCount ? ` (${item.pinCount}P)` : ''}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {item.verified ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                      <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                                      Verified
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                      Unverified
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap space-x-1.5">
+                                  <Button
+                                    asChild
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-slate-300"
+                                  >
+                                    <a
+                                      href={item.datasheetUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open Datasheet"
+                                    >
+                                      <FileText className="h-3 w-3 text-slate-500" />
+                                      <span className="hidden sm:inline">PDF</span>
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-slate-300"
+                                    onClick={() => setDatasheetModal({ ...item, isNew: false })}
+                                  >
+                                    <Edit3 className="h-3 w-3 text-slate-500" />
+                                    <span>Edit</span>
                                   </Button>
                                 </td>
                               </tr>
@@ -1795,12 +1930,12 @@ export default function AdminPanelPage() {
                           onClick={() => {
                             if (!profile) return;
                             seedInitialSuppliers(profile, effectiveRole).then(() => {
-                              toast.success('Seeded 8 default suppliers in Firestore.');
+                              toast.success('Seeded 18 default suppliers in Firestore.');
                               loadAllAdminData(false);
                             });
                           }}
                         >
-                          Sync Default 8 Suppliers
+                          Sync Default 18 Suppliers
                         </Button>
                         <Button
                           variant="primary"
@@ -2832,17 +2967,26 @@ export default function AdminPanelPage() {
       {/* Product Add / Edit Dialog */}
       <Dialog open={Boolean(productModal)} onOpenChange={(o) => !o && setProductModal(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {productModal?.isNew ? 'Add New Hardware Product' : 'Edit Product'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Configure product details, stock availability, and verified supplier outbound links with logos.
-            </DialogDescription>
-          </DialogHeader>
-
           {productModal && (
             <form onSubmit={handleSaveProduct} className="space-y-5">
+              <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur-sm pb-3 pt-1">
+                <DialogHeader className="space-y-0.5 text-left">
+                  <DialogTitle>
+                    {productModal.isNew ? 'Add New Hardware Product' : `Edit Product: ${productModal.name}`}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    Configure product details, stock availability, related blog tutorial, and product photos.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setProductModal(null)} disabled={savingProduct}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="sm" disabled={savingProduct}>
+                    {savingProduct ? 'Saving...' : productModal.isNew ? 'Create Product' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="prod-name">Product Name *</Label>
@@ -3079,7 +3223,7 @@ export default function AdminPanelPage() {
               </div>
 
               {/* Related Blog Tutorial / Guide */}
-              <div className="space-y-2.5 rounded-xl border border-sky-150 bg-sky-50/60 p-3.5">
+              <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/60 p-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="prod-blog-select" className="text-xs font-semibold text-sky-950 flex items-center gap-1.5">
                     <BookOpen className="h-4 w-4 text-sky-600" />
@@ -3090,50 +3234,285 @@ export default function AdminPanelPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Agar is component ya development board ka koi practical blog ya tutorial website par published hai, to use yahan link karein. Store page par product card par &ldquo;Read Blog: [Tutorial Title]&rdquo; ka button show hoga. Agar koi blog nahi hai to link automatically hide rahega.
+                  Agar is component ya development board ka koi practical blog ya tutorial website par published hai, to use Author Name, Category ya Title se filter karke select karein. Store page par product card par &ldquo;Read Blog&rdquo; ka button show hoga.
                 </p>
 
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-slate-700">Choose from Published Articles:</label>
-                  <select
-                    id="prod-blog-select"
-                    value={productModal.relatedBlogSlug || ''}
-                    onChange={(e) => {
-                      const selectedSlug = e.target.value;
-                      const matched = publishedPosts.find((p) => p.slug === selectedSlug);
-                      setProductModal({
-                        ...productModal,
-                        relatedBlogSlug: selectedSlug,
-                        relatedBlogTitle: matched ? matched.title : '',
-                      });
-                    }}
-                    className="w-full text-xs rounded-md border border-slate-300 bg-white px-2.5 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  >
-                    <option value="">-- No explicit link / Auto-match keyword --</option>
-                    {publishedPosts.map((p) => (
-                      <option key={p.id || p.slug} value={p.slug}>
-                        {p.title} (/blog/{p.slug})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {(() => {
+                  const getPostAuthorLabel = (p: Post) => {
+                    if (p.authorName && p.authorName.trim()) return p.authorName.trim();
+                    if (p.authorUsername && p.authorUsername.trim()) return p.authorUsername.trim();
+                    const foundUser = users.find((u) => u.uid === p.authorId);
+                    if (foundUser?.displayName) return foundUser.displayName;
+                    if (foundUser?.username) return foundUser.username;
+                    return 'Editorial Team';
+                  };
 
-                {productModal.relatedBlogSlug && (
-                  <div className="space-y-1 pt-1">
-                    <label className="text-[11px] font-medium text-slate-700">Display Title / Button Text:</label>
-                    <Input
-                      value={productModal.relatedBlogTitle || ''}
-                      onChange={(e) =>
-                        setProductModal({ ...productModal, relatedBlogTitle: e.target.value })
-                      }
-                      placeholder="e.g. Getting Started with ESP32-S3 & Pinout Guide"
-                      className="text-xs bg-white"
-                    />
-                    <p className="text-[10px] text-slate-500">
-                      Destination URL: <code className="font-mono text-sky-700">/blog/{productModal.relatedBlogSlug}</code>
-                    </p>
-                  </div>
-                )}
+                  const getPostCategoryLabel = (p: Post) => {
+                    if (p.categoryName && p.categoryName.trim()) return p.categoryName.trim();
+                    const foundCat = categories.find(
+                      (c) => c.id === p.categoryId || c.slug === p.categoryId || c.slug === p.categorySlug
+                    );
+                    if (foundCat?.name) return foundCat.name;
+                    if (p.categoryId && p.categoryId.trim()) return p.categoryId.trim();
+                    return 'General';
+                  };
+
+                  const uniqueBlogAuthors = Array.from(
+                    new Set(publishedPosts.map((p) => getPostAuthorLabel(p)))
+                  ).sort((a, b) => a.localeCompare(b));
+
+                  const uniqueBlogCategories = Array.from(
+                    new Set([
+                      ...categories.map((c) => c.name),
+                      ...publishedPosts.map((p) => getPostCategoryLabel(p)),
+                    ].filter(Boolean))
+                  ).sort((a, b) => a.localeCompare(b));
+
+                  const filteredBlogs = publishedPosts.filter((p) => {
+                    const authorLabel = getPostAuthorLabel(p);
+                    const catLabel = getPostCategoryLabel(p);
+
+                    if (blogAuthorFilter !== 'ALL' && authorLabel !== blogAuthorFilter) {
+                      return false;
+                    }
+                    if (blogCategoryFilter !== 'ALL' && catLabel !== blogCategoryFilter) {
+                      return false;
+                    }
+                    if (!blogSearchQuery.trim()) return true;
+
+                    const q = blogSearchQuery.toLowerCase().trim();
+                    const haystack = `${p.title} ${p.slug} ${authorLabel} ${p.authorUsername || ''} ${catLabel} ${(p.tags || []).join(' ')}`.toLowerCase();
+                    return haystack.includes(q);
+                  });
+
+                  const hasActiveBlogFilters =
+                    blogSearchQuery.trim().length > 0 ||
+                    blogAuthorFilter !== 'ALL' ||
+                    blogCategoryFilter !== 'ALL';
+
+                  const selectedBlogPost = productModal.relatedBlogSlug
+                    ? publishedPosts.find((p) => p.slug === productModal.relatedBlogSlug)
+                    : null;
+
+                  // Ensure currently selected blog stays in dropdown options even if filtered out
+                  const selectOptions =
+                    selectedBlogPost && !filteredBlogs.some((p) => p.slug === selectedBlogPost.slug)
+                      ? [selectedBlogPost, ...filteredBlogs]
+                      : filteredBlogs;
+
+                  return (
+                    <div className="space-y-2.5">
+                      {/* Search & Filter Controls (Keyword, Author Name, Category) */}
+                      <div className="rounded-lg border border-sky-200/80 bg-white p-2.5 space-y-2 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                            <Search className="h-3 w-3 text-sky-600" />
+                            <span>Search &amp; Filter Blogs ({filteredBlogs.length} of {publishedPosts.length})</span>
+                          </span>
+                          {hasActiveBlogFilters && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBlogSearchQuery('');
+                                setBlogAuthorFilter('ALL');
+                                setBlogCategoryFilter('ALL');
+                              }}
+                              className="text-[10px] font-semibold text-sky-700 hover:text-sky-900 underline cursor-pointer"
+                            >
+                              Reset Filters
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {/* Keyword Search */}
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              value={blogSearchQuery}
+                              onChange={(e) => setBlogSearchQuery(e.target.value)}
+                              placeholder="Search title, author, tag..."
+                              aria-label="Search blog articles"
+                              className="h-8 w-full rounded-md border border-slate-300 bg-slate-50/60 pl-8 pr-7 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            />
+                            {blogSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setBlogSearchQuery('')}
+                                aria-label="Clear blog search"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Filter by Author Name */}
+                          <div className="relative">
+                            <select
+                              aria-label="Filter blogs by Author Name"
+                              value={blogAuthorFilter}
+                              onChange={(e) => setBlogAuthorFilter(e.target.value)}
+                              className="h-8 w-full rounded-md border border-slate-300 bg-slate-50/60 px-2.5 text-xs text-slate-800 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            >
+                              <option value="ALL">👤 All Authors ({uniqueBlogAuthors.length})</option>
+                              {uniqueBlogAuthors.map((author) => {
+                                const count = publishedPosts.filter((p) => getPostAuthorLabel(p) === author).length;
+                                return (
+                                  <option key={author} value={author}>
+                                    {author} ({count})
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+
+                          {/* Filter by Category */}
+                          <div className="relative">
+                            <select
+                              aria-label="Filter blogs by Category"
+                              value={blogCategoryFilter}
+                              onChange={(e) => setBlogCategoryFilter(e.target.value)}
+                              className="h-8 w-full rounded-md border border-slate-300 bg-slate-50/60 px-2.5 text-xs text-slate-800 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            >
+                              <option value="ALL">📁 All Categories ({uniqueBlogCategories.length})</option>
+                              {uniqueBlogCategories.map((cat) => {
+                                const count = publishedPosts.filter((p) => getPostCategoryLabel(p) === cat).length;
+                                return (
+                                  <option key={cat} value={cat}>
+                                    {cat} ({count})
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Selector */}
+                      <div className="space-y-1">
+                        <label htmlFor="prod-blog-select" className="text-[11px] font-medium text-slate-700">
+                          Choose from Filtered Articles:
+                        </label>
+                        <select
+                          id="prod-blog-select"
+                          value={productModal.relatedBlogSlug || ''}
+                          onChange={(e) => {
+                            const selectedSlug = e.target.value;
+                            const matched = publishedPosts.find((p) => p.slug === selectedSlug);
+                            setProductModal({
+                              ...productModal,
+                              relatedBlogSlug: selectedSlug,
+                              relatedBlogTitle: matched ? matched.title : '',
+                            });
+                          }}
+                          className="w-full text-xs rounded-md border border-slate-300 bg-white px-2.5 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        >
+                          <option value="">-- No explicit link / Auto-match keyword --</option>
+                          {selectOptions.map((p) => (
+                            <option key={p.id || p.slug} value={p.slug}>
+                              {p.title} — by {getPostAuthorLabel(p)} [{getPostCategoryLabel(p)}]
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Interactive Visual Filtered Results List (shows Author, Category & Title clearly) */}
+                      {filteredBlogs.length > 0 ? (
+                        <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white shadow-2xs">
+                          {filteredBlogs.slice(0, 25).map((p) => {
+                            const isSelected = productModal.relatedBlogSlug === p.slug;
+                            const authorLabel = getPostAuthorLabel(p);
+                            const catLabel = getPostCategoryLabel(p);
+                            return (
+                              <button
+                                key={p.id || p.slug}
+                                type="button"
+                                onClick={() =>
+                                  setProductModal({
+                                    ...productModal,
+                                    relatedBlogSlug: isSelected ? '' : p.slug,
+                                    relatedBlogTitle: isSelected ? '' : p.title,
+                                  })
+                                }
+                                className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-sky-50/90 border-l-2 border-l-sky-600'
+                                    : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="min-w-0 space-y-0.5">
+                                  <p className="text-xs font-semibold text-[#0B1528] truncate">
+                                    {p.title}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                                    <span className="inline-flex items-center gap-1 font-medium text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">
+                                      <User className="h-2.5 w-2.5 text-sky-600" />
+                                      {authorLabel}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 font-medium text-amber-800 bg-amber-50 border border-amber-200/70 px-1.5 py-0.2 rounded">
+                                      <FolderOpen className="h-2.5 w-2.5 text-amber-600" />
+                                      {catLabel}
+                                    </span>
+                                    <span className="font-mono text-slate-400 truncate">/blog/{p.slug}</span>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white border-emerald-600'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:border-sky-400 hover:text-sky-700'
+                                  }`}
+                                >
+                                  {isSelected ? '✓ Selected' : 'Select'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center text-xs text-slate-500">
+                          No published blogs match the current Author / Category / Search filter.
+                        </div>
+                      )}
+
+                      {productModal.relatedBlogSlug && (
+                        <div className="space-y-1.5 pt-1 rounded-lg border border-sky-200 bg-white p-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-sky-900">
+                              Display Title / Button Text on Store Card:
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setProductModal({
+                                  ...productModal,
+                                  relatedBlogSlug: '',
+                                  relatedBlogTitle: '',
+                                })
+                              }
+                              className="text-[10px] font-semibold text-red-600 hover:underline cursor-pointer"
+                            >
+                              Unlink Blog
+                            </button>
+                          </div>
+                          <Input
+                            value={productModal.relatedBlogTitle || ''}
+                            onChange={(e) =>
+                              setProductModal({ ...productModal, relatedBlogTitle: e.target.value })
+                            }
+                            placeholder="e.g. Getting Started with ESP32-S3 & Pinout Guide"
+                            className="text-xs bg-white"
+                          />
+                          <p className="text-[10px] text-slate-500">
+                            Destination URL: <code className="font-mono text-sky-700">/blog/{productModal.relatedBlogSlug}</code>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Fulfillment Note */}
@@ -3508,229 +3887,15 @@ export default function AdminPanelPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Tool Add/Edit Dialog */}
-      <Dialog open={Boolean(toolModal)} onOpenChange={(o) => !o && setToolModal(null)}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
-              <Wrench className="h-5 w-5 text-primary" />
-              {toolModal?.isNew ? 'Add Engineering Software / Tool' : 'Edit Software & Tool Details'}
-            </DialogTitle>
-            <DialogDescription>
-              Configure software directory details, official vendor URLs, license models, and calculation parameters.
-            </DialogDescription>
-          </DialogHeader>
-
-          {toolModal && (
-            <form onSubmit={handleToolSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toolName">Software / Tool Name *</Label>
-                  <Input
-                    id="toolName"
-                    value={toolModal.name}
-                    onChange={(e) => setToolModal({ ...toolModal, name: e.target.value })}
-                    placeholder="e.g. KiCad, Autodesk Fusion, Wokwi"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="toolSlug">URL Slug</Label>
-                  <Input
-                    id="toolSlug"
-                    value={toolModal.slug}
-                    onChange={(e) => setToolModal({ ...toolModal, slug: e.target.value })}
-                    placeholder="e.g. kicad, autodesk-fusion"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toolCategory">Category *</Label>
-                  <select
-                    id="toolCategory"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
-                    value={toolModal.category}
-                    onChange={(e) =>
-                      setToolModal({ ...toolModal, category: e.target.value as ToolCategory })
-                    }
-                  >
-                    {TOOL_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="toolDomain">Engineering Domain *</Label>
-                  <select
-                    id="toolDomain"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
-                    value={toolModal.domain}
-                    onChange={(e) =>
-                      setToolModal({ ...toolModal, domain: e.target.value as EngineeringDomain })
-                    }
-                  >
-                    {ENGINEERING_DOMAINS.map((dom) => (
-                      <option key={dom} value={dom}>{dom}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="toolMainApp">Main Application *</Label>
-                <Input
-                  id="toolMainApp"
-                  value={toolModal.mainApplication}
-                  onChange={(e) => setToolModal({ ...toolModal, mainApplication: e.target.value })}
-                  placeholder="e.g. Professional schematic capture & PCB layout design"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toolWebsite">Official Website URL</Label>
-                  <Input
-                    id="toolWebsite"
-                    value={toolModal.officialWebsite}
-                    onChange={(e) => setToolModal({ ...toolModal, officialWebsite: e.target.value })}
-                    placeholder="https://www.kicad.org/"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="toolLicense">License / Pricing Model *</Label>
-                  <select
-                    id="toolLicense"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
-                    value={toolModal.licenseType}
-                    onChange={(e) =>
-                      setToolModal({ ...toolModal, licenseType: e.target.value as ToolLicenseType })
-                    }
-                  >
-                    {TOOL_LICENSES.map((lic) => (
-                      <option key={lic} value={lic}>{lic}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toolPlatform">Platform / Installation</Label>
-                  <Input
-                    id="toolPlatform"
-                    value={toolModal.platform}
-                    onChange={(e) => setToolModal({ ...toolModal, platform: e.target.value })}
-                    placeholder="e.g. Desktop (Windows / Mac / Linux) or Web Browser"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="toolBadge">Trust / Highlight Badge</Label>
-                  <Input
-                    id="toolBadge"
-                    value={toolModal.badge}
-                    onChange={(e) => setToolModal({ ...toolModal, badge: e.target.value })}
-                    placeholder="e.g. Open Source, Top Pick, Interactive"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="toolSummary">Short Summary *</Label>
-                <Textarea
-                  id="toolSummary"
-                  rows={2}
-                  value={toolModal.summary}
-                  onChange={(e) => setToolModal({ ...toolModal, summary: e.target.value })}
-                  placeholder="One or two sentences describing what the software is best for..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="toolDescription">Extended Details / Usage Notes</Label>
-                <Textarea
-                  id="toolDescription"
-                  rows={3}
-                  value={toolModal.description}
-                  onChange={(e) => setToolModal({ ...toolModal, description: e.target.value })}
-                  placeholder="Full technical details, system requirements, licensing specifics..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="toolCalcKey">Interactive Calculator Key (Optional)</Label>
-                  <select
-                    id="toolCalcKey"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-xs font-mono"
-                    value={toolModal.calculatorKey}
-                    onChange={(e) => setToolModal({ ...toolModal, calculatorKey: e.target.value })}
-                  >
-                    <option value="">None / External Software</option>
-                    <option value="ohms-law">ohms-law (V, I, R, P)</option>
-                    <option value="resistor-color-code">resistor-color-code (4/5 Band)</option>
-                    <option value="voltage-divider">voltage-divider (Vin, R1, R2)</option>
-                    <option value="led-resistor">led-resistor (Vs, Vf, If)</option>
-                    <option value="555-timer">555-timer (R1, R2, C)</option>
-                    <option value="pcb-trace">pcb-trace (IPC-2221 Track Width)</option>
-                    <option value="motor-torque">motor-torque (RPM, Torque, Watts)</option>
-                    <option value="gear-ratio">gear-ratio (Teeth T1, T2, Speed)</option>
-                    <option value="cylinder-force">cylinder-force (Pneumatic/Hydraulic)</option>
-                    <option value="base64-encoder">base64-encoder (Base64/URL)</option>
-                    <option value="number-converter">number-converter (Dec, Hex, Bin, ASCII)</option>
-                    <option value="subnet-calculator">subnet-calculator (IPv4 CIDR)</option>
-                    <option value="3d-print-cost">3d-print-cost (Grams, Electricity)</option>
-                    <option value="stepper-calibration">stepper-calibration (Steps/mm)</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="toolOrder">Display Order</Label>
-                  <Input
-                    id="toolOrder"
-                    type="number"
-                    value={toolModal.order}
-                    onChange={(e) => setToolModal({ ...toolModal, order: Number(e.target.value) })}
-                    min={1}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="toolTags">Tags (Comma-separated)</Label>
-                <Input
-                  id="toolTags"
-                  value={toolModal.tags}
-                  onChange={(e) => setToolModal({ ...toolModal, tags: e.target.value })}
-                  placeholder="e.g. PCB Design, Open Source, CAD, Simulation"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
-                <Switch
-                  id="toolFeatured"
-                  checked={toolModal.featured}
-                  onCheckedChange={(v) => setToolModal({ ...toolModal, featured: v })}
-                />
-                <Label htmlFor="toolFeatured" className="text-xs font-semibold text-slate-800">
-                  Feature in &ldquo;Top 12 Featured Tools&rdquo; Showcase on Directory
-                </Label>
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => setToolModal(null)} disabled={savingTool}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={savingTool}>
-                  {savingTool ? 'Saving Tool...' : toolModal.isNew ? 'Create Tool' : 'Save Changes'}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Unified Tool Add/Edit Modal with Dual Media Upload */}
+      <ToolAdminModal
+        tool={toolModal}
+        isNew={Boolean(toolModal?.isNew)}
+        open={Boolean(toolModal)}
+        onOpenChange={(o) => !o && setToolModal(null)}
+        onSaved={() => void loadAllAdminData(false)}
+        defaultOrder={toolsList.length + 1}
+      />
 
       {/* Delete Tool Confirmation Dialog */}
       <Dialog open={Boolean(deleteToolTarget)} onOpenChange={(o) => !o && setDeleteToolTarget(null)}>
@@ -3756,183 +3921,24 @@ export default function AdminPanelPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Library Add/Edit Dialog */}
-      <Dialog open={Boolean(libraryModal)} onOpenChange={(o) => !o && setLibraryModal(null)}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[#0B1528]">
-              <BookOpen className="h-5 w-5 text-primary" />
-              {libraryModal?.isNew ? 'Add Engineering Resource' : 'Edit Library Item'}
-            </DialogTitle>
-            <DialogDescription>
-              Add datasheets, pinout charts, open-source firmware drivers, or mechanical CAD standards.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Unified Library Add/Edit Modal with Separate Cover, Icon & PDF Upload */}
+      <LibraryAdminModal
+        item={libraryModal}
+        isNew={Boolean(libraryModal?.isNew)}
+        open={Boolean(libraryModal)}
+        onOpenChange={(o) => !o && setLibraryModal(null)}
+        onSaved={() => void loadAllAdminData(false)}
+        defaultOrder={libraryList.length + 1}
+      />
 
-          {libraryModal && (
-            <form onSubmit={handleLibrarySubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="libTitle">Resource Title *</Label>
-                  <Input
-                    id="libTitle"
-                    value={libraryModal.title}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, title: e.target.value })}
-                    placeholder="e.g. ESP32-S3 Complete Pinout Matrix"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libSlug">URL Slug</Label>
-                  <Input
-                    id="libSlug"
-                    value={libraryModal.slug}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, slug: e.target.value })}
-                    placeholder="e.g. esp32-s3-pinout"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="libDomain">Engineering Domain *</Label>
-                  <select
-                    id="libDomain"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
-                    value={libraryModal.domain}
-                    onChange={(e) =>
-                      setLibraryModal({ ...libraryModal, domain: e.target.value as EngineeringDomain })
-                    }
-                  >
-                    {ENGINEERING_DOMAINS.map((dom) => (
-                      <option key={dom} value={dom}>{dom}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libCategory">Resource Category *</Label>
-                  <select
-                    id="libCategory"
-                    className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
-                    value={libraryModal.category}
-                    onChange={(e) =>
-                      setLibraryModal({ ...libraryModal, category: e.target.value as LibraryCategory })
-                    }
-                  >
-                    {LIBRARY_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="libSummary">Summary Description *</Label>
-                <Textarea
-                  id="libSummary"
-                  rows={2}
-                  value={libraryModal.summary}
-                  onChange={(e) => setLibraryModal({ ...libraryModal, summary: e.target.value })}
-                  placeholder="Summary shown on resource card..."
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="libFormat">File Format</Label>
-                  <Input
-                    id="libFormat"
-                    value={libraryModal.fileFormat}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, fileFormat: e.target.value })}
-                    placeholder="e.g. PDF, KiCad, STEP"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libSize">File Size</Label>
-                  <Input
-                    id="libSize"
-                    value={libraryModal.fileSize}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, fileSize: e.target.value })}
-                    placeholder="e.g. 2.4 MB"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libVersion">Version / Standard</Label>
-                  <Input
-                    id="libVersion"
-                    value={libraryModal.version}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, version: e.target.value })}
-                    placeholder="e.g. v2.1, ISO 261"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="libFileUrl">Direct File Download URL</Label>
-                  <Input
-                    id="libFileUrl"
-                    value={libraryModal.fileUrl}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, fileUrl: e.target.value })}
-                    placeholder="https://.../resource.pdf"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libExtUrl">External Specs / Docs URL</Label>
-                  <Input
-                    id="libExtUrl"
-                    value={libraryModal.externalUrl}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, externalUrl: e.target.value })}
-                    placeholder="https://espressif.com/..."
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="libAuthor">Author / Source Organization</Label>
-                  <Input
-                    id="libAuthor"
-                    value={libraryModal.authorOrSource}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, authorOrSource: e.target.value })}
-                    placeholder="e.g. EI House Hardware Lab, STMicroelectronics"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="libOrder">Display Order</Label>
-                  <Input
-                    id="libOrder"
-                    type="number"
-                    value={libraryModal.order}
-                    onChange={(e) => setLibraryModal({ ...libraryModal, order: Number(e.target.value) })}
-                    min={1}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="libTags">Tags (Comma-separated)</Label>
-                <Input
-                  id="libTags"
-                  value={libraryModal.tags}
-                  onChange={(e) => setLibraryModal({ ...libraryModal, tags: e.target.value })}
-                  placeholder="e.g. ESP32, Pinout, GPIO, IoT"
-                />
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button type="button" variant="outline" onClick={() => setLibraryModal(null)} disabled={savingLibrary}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={savingLibrary}>
-                  {savingLibrary ? 'Saving Resource...' : libraryModal.isNew ? 'Create Resource' : 'Save Changes'}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Datasheet Add/Edit Modal */}
+      <DatasheetAdminModal
+        item={datasheetModal}
+        isNew={Boolean(datasheetModal?.isNew)}
+        open={Boolean(datasheetModal)}
+        onOpenChange={(o) => !o && setDatasheetModal(null)}
+        onSaved={() => void loadAllAdminData(false)}
+      />
 
       {/* Delete Library Confirmation Dialog */}
       <Dialog open={Boolean(deleteLibraryTarget)} onOpenChange={(o) => !o && setDeleteLibraryTarget(null)}>

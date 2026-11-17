@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { SITE_CONFIG } from '@/config/site';
 import { submitContactInquiry } from '@/modules/posts/post-service';
+import { normalizeImageUrl } from '@/lib/image-utils';
 import type { Product } from '@/types';
 
 interface ProductOrderModalProps {
@@ -137,8 +138,11 @@ Shipping City/Address: ${address || 'Not provided'}`;
                   <div className="h-12 w-12 rounded-lg bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-1 relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={product.images?.[0] || product.imageUrl}
+                      src={normalizeImageUrl(product.images?.[0] || product.imageUrl)}
                       alt={product.name}
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
                       className="h-full w-full object-contain"
                     />
                     {product.images && product.images.length > 1 && (

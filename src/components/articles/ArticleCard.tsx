@@ -1,12 +1,18 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import { Edit3 } from 'lucide-react';
+import { useOptionalAuth } from '@/modules/auth/auth-context';
 import type { Post } from '@/types';
 import { ArticleCoverMedia } from './ArticleCoverMedia';
 
 export { ArticleCoverMedia };
 
 export function ArticleCard({ post }: { post: Post }) {
+  const auth = useOptionalAuth();
+  const isEditor = Boolean(auth?.isEditor);
   const dateLabel = format(new Date(post.publishedAt || post.createdAt), 'MMM d, yyyy');
 
   return (
@@ -31,11 +37,24 @@ export function ArticleCard({ post }: { post: Post }) {
           <span className="tabular-nums">{post.readingTime} min read</span>
         </div>
 
-        <h3 className="font-display text-xl font-semibold leading-snug text-[#0B1528] group-hover:text-[#1D4ED8] transition-colors text-balance">
-          <Link href={`/blog/${post.slug}`} prefetch={false} className="inline-block py-0.5">
-            {post.title}
-          </Link>
-        </h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-display text-xl font-semibold leading-snug text-[#0B1528] group-hover:text-[#1D4ED8] transition-colors text-balance">
+            <Link href={`/blog/${post.slug}`} prefetch={false} className="inline-block py-0.5">
+              {post.title}
+            </Link>
+          </h3>
+          {isEditor && (
+            <Link
+              href={`/dashboard/editor/${post.id}`}
+              prefetch={false}
+              className="shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-[#0B1528] hover:text-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 transition-colors mt-1"
+              title="Edit this article"
+            >
+              <Edit3 className="h-3 w-3" />
+              <span>Edit</span>
+            </Link>
+          )}
+        </div>
 
         <p className="mt-2.5 text-sm leading-relaxed text-slate-600 line-clamp-3">
           {post.excerpt}

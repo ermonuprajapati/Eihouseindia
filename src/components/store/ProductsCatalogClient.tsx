@@ -17,12 +17,17 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Edit3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/config/site';
+import { useOptionalAuth } from '@/modules/auth/auth-context';
 import { fetchProducts, DEFAULT_HARDWARE_PRODUCTS } from '@/modules/products/product-service';
 import { fetchSuppliers, DEFAULT_TRUSTED_SUPPLIERS } from '@/modules/suppliers/supplier-service';
 import { ProductOrderModal } from '@/components/store/ProductOrderModal';
+import { ProductDetailModal } from '@/components/store/ProductDetailModal';
+import { normalizeImageUrl } from '@/lib/image-utils';
 import type { Product, TrustedSupplier, Post } from '@/types';
 
 const SUPPLIER_FILTER_CATEGORIES = [
@@ -38,21 +43,27 @@ const SUPPLIER_FILTER_CATEGORIES = [
 ] as const;
 
 function ProductCardGallery({ item }: { item: Product }) {
-  const images = useMemo(() => {
-    if (Array.isArray(item.images) && item.images.length > 0) {
-      return item.images;
-    }
-    if (item.imageUrl) {
-      return [item.imageUrl];
-    }
-    return [];
-  }, [item.images, item.imageUrl]);
-
   const [activeIndex, setActiveIndex] = useState(0);
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setActiveIndex(0);
+    setFailedUrls(new Set());
+  }, [item.id]);
+
+  const images = useMemo(() => {
+    const rawList = Array.isArray(item.images) && item.images.length > 0
+      ? item.images
+      : (item.imageUrl ? [item.imageUrl] : []);
+    
+    return rawList
+      .map((url) => normalizeImageUrl(url))
+      .filter((url) => Boolean(url) && !failedUrls.has(url));
+  }, [item.images, item.imageUrl, failedUrls]);
 
   if (images.length === 0) {
     return (
-      <div className="h-44 w-full rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-slate-400 border border-slate-100">
+      <div className="h-40 w-full rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 relative overflow-hidden">
         <ShoppingBag className="h-8 w-8 text-slate-300" />
       </div>
     );
@@ -61,14 +72,24 @@ function ProductCardGallery({ item }: { item: Product }) {
   const currentSrc = images[activeIndex] || images[0];
 
   return (
-    <div className="group/gallery relative h-44 w-full rounded-xl bg-slate-50 overflow-hidden border border-slate-100 flex items-center justify-center p-2">
+    <div className="group/gallery relative h-40 w-full rounded-xl bg-slate-50/80 overflow-hidden border border-slate-100 flex items-center justify-center p-2">
       <Image
         src={currentSrc}
         alt={`${item.name} - photo ${activeIndex + 1}`}
         fill
-        className="object-contain p-2 transition-all duration-200"
-        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        unoptimized
+        onError={() => {
+          setFailedUrls((prev) => new Set(prev).add(currentSrc));
+        }}
+        className="object-contain p-2.5 transition-transform duration-300 group-hover/card:scale-105"
+        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
       />
+
+      {/* Quick View Hover Pill */}
+      <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-[#0B1528]/85 px-2.5 py-1 text-[10px] font-semibold text-white opacity-0 group-hover/card:opacity-100 transition-opacity shadow-sm z-10 whitespace-nowrap">
+        <Eye className="h-3 w-3 text-[#F59E0B]" />
+        <span>Click for Full Details</span>
+      </span>
 
       {images.length > 1 && (
         <>
@@ -81,9 +102,9 @@ function ProductCardGallery({ item }: { item: Product }) {
               setActiveIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
             }}
             aria-label="Previous photo"
-            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-10"
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-20 cursor-pointer"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -93,34 +114,13 @@ function ProductCardGallery({ item }: { item: Product }) {
               setActiveIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
             }}
             aria-label="Next photo"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-10"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-white/90 shadow-md border border-slate-200 flex items-center justify-center text-slate-700 opacity-0 group-hover/gallery:opacity-100 transition-opacity hover:bg-white z-20 cursor-pointer"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5" />
           </button>
 
-          {/* Dots thumbnail selector */}
-          <div className="absolute bottom-2 inset-x-0 flex items-center justify-center gap-1 z-10">
-            {images.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setActiveIndex(idx);
-                }}
-                className={`h-1.5 rounded-full transition-all ${
-                  idx === activeIndex
-                    ? 'w-4 bg-[#172D4D]'
-                    : 'w-1.5 bg-slate-300 hover:bg-slate-400'
-                }`}
-                aria-label={`Go to photo ${idx + 1}`}
-              />
-            ))}
-          </div>
-
           {/* Photo count indicator */}
-          <span className="absolute top-2 right-2 text-[10px] font-mono font-semibold bg-white/90 backdrop-blur-xs text-slate-700 px-1.5 py-0.5 rounded-md border border-slate-200 shadow-xs z-10">
+          <span className="absolute bottom-1.5 right-1.5 text-[9px] font-mono font-semibold bg-white/90 backdrop-blur-xs text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs z-10">
             {activeIndex + 1}/{images.length}
           </span>
         </>
@@ -130,15 +130,21 @@ function ProductCardGallery({ item }: { item: Product }) {
 }
 
 export function ProductsCatalogClient() {
+  const auth = useOptionalAuth();
+  const isEditor = Boolean(auth?.isEditor);
   const [products, setProducts] = useState<Product[]>(DEFAULT_HARDWARE_PRODUCTS);
   const [suppliers, setSuppliers] = useState<TrustedSupplier[]>(DEFAULT_TRUSTED_SUPPLIERS);
   const [publishedPosts, setPublishedPosts] = useState<Post[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All Hardware');
+  const [productSearch, setProductSearch] = useState<string>('');
+  const [productSort, setProductSort] = useState<'featured' | 'price-asc' | 'price-desc' | 'in-stock'>('featured');
+  const [detailModalProduct, setDetailModalProduct] = useState<Product | null>(null);
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
 
   // External Suppliers Sourcing State
   const [supplierSearch, setSupplierSearch] = useState<string>('');
   const [selectedSupplierCategory, setSelectedSupplierCategory] = useState<string>('All Categories');
+  const [failedLogoIds, setFailedLogoIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let isMounted = true;
@@ -181,9 +187,29 @@ export function ProductsCatalogClient() {
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === 'All Hardware') return products;
-    return products.filter((p) => p.category === selectedCategory);
-  }, [products, selectedCategory]);
+    const parsePrice = (priceStr: string) => parseInt(priceStr.replace(/[^0-9]/g, ''), 10) || 0;
+
+    const list = products.filter((p) => {
+      if (selectedCategory !== 'All Hardware' && p.category !== selectedCategory) {
+        return false;
+      }
+      if (productSort === 'in-stock' && !p.inStock) {
+        return false;
+      }
+      if (!productSearch.trim()) return true;
+      const q = productSearch.toLowerCase().trim();
+      const haystack = `${p.name} ${p.category} ${p.badge || ''} ${p.description || ''} ${(p.features || []).join(' ')}`.toLowerCase();
+      return haystack.includes(q);
+    });
+
+    if (productSort === 'price-asc') {
+      return [...list].sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+    }
+    if (productSort === 'price-desc') {
+      return [...list].sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+    }
+    return list;
+  }, [products, selectedCategory, productSearch, productSort]);
 
   // Critical Duplicate Prevention & Normalization for External Suppliers
   const deduplicatedSuppliers = useMemo(() => {
@@ -306,208 +332,264 @@ export function ProductsCatalogClient() {
   };
 
   return (
-    <section id="products-catalog" className="py-16 sm:py-20 border-b border-slate-200 bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
-        {/* Category tabs with counts */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-          {categories.map((c) => {
-            const count =
-              c === 'All Hardware'
-                ? products.length
-                : products.filter((p) => p.category === c).length;
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setSelectedCategory(c)}
-                className={`text-xs font-semibold px-4 py-2 rounded-full border whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  selectedCategory === c
-                    ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-sm'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                }`}
+    <section id="products-catalog" className="py-12 sm:py-16 border-b border-slate-200 bg-white">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+        {/* Commercial Store Filter, Search & Sort Header */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-3.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="search"
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder="Search boards, sensors, kits, or specifications..."
+                aria-label="Search store products"
+                className="h-9 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 text-xs sm:text-sm text-[#0B1528] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#172D4D] transition-all"
+              />
+              {productSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProductSearch('')}
+                  aria-label="Clear product search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Sort & Results Count */}
+            <div className="flex items-center justify-between sm:justify-end gap-3">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <strong className="text-[#0B1528]">{filteredProducts.length}</strong> products
+              </span>
+              <select
+                aria-label="Sort products"
+                value={productSort}
+                onChange={(e) =>
+                  setProductSort(e.target.value as 'featured' | 'price-asc' | 'price-desc' | 'in-stock')
+                }
+                className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#172D4D]"
               >
-                <span>{c}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    selectedCategory === c ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                <option value="featured">Sort: Featured</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+                <option value="in-stock">In Stock Only</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Category tabs with counts */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
+            {categories.map((c) => {
+              const count =
+                c === 'All Hardware'
+                  ? products.length
+                  : products.filter((p) => p.category === c).length;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setSelectedCategory(c)}
+                  className={`text-xs font-semibold px-3.5 py-1.5 rounded-full border whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                    selectedCategory === c
+                      ? 'bg-[#172D4D] text-white border-[#172D4D] shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  <span>{c}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      selectedCategory === c ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Products grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Compact Commercial Products Grid (4 per row on desktop, click product for full details) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filteredProducts.map((item) => {
             const whatsappText = encodeURIComponent(
               `Hello EI House India, I want to order:\n\n*Product:* ${item.name}\n*Price:* ${item.price}\n\nPlease share delivery and payment details.`
             );
             const whatsappLink = `https://wa.me/${SITE_CONFIG.whatsappNumber}?text=${whatsappText}`;
+            const relatedBlog = resolveRelatedBlog(item);
+
+            const priceNum = parseInt(item.price.replace(/[^0-9]/g, ''), 10);
+            const mrpNum = item.mrp ? parseInt(item.mrp.replace(/[^0-9]/g, ''), 10) : 0;
+            const discount =
+              mrpNum > priceNum && priceNum > 0
+                ? Math.round(((mrpNum - priceNum) / mrpNum) * 100)
+                : 0;
 
             return (
               <div
                 key={item.id}
-                className="rounded-2xl border border-slate-200 bg-white p-6 flex flex-col justify-between space-y-6 shadow-sm hover:shadow-md transition-all relative overflow-hidden"
+                onClick={() => setDetailModalProduct(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setDetailModalProduct(item);
+                  }
+                }}
+                className="group/card rounded-2xl border border-slate-200/90 bg-white p-4 flex flex-col justify-between space-y-3.5 shadow-2xs hover:shadow-lg hover:border-[#172D4D]/30 transition-all relative overflow-hidden cursor-pointer text-left"
               >
-                <div className="space-y-4">
-                  {/* Category & Badges */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-[#F59E0B] uppercase tracking-wider">
-                      {item.category}
-                    </span>
-                    <div className="flex items-center gap-1.5">
+                {/* Upper Clickable Product Summary (Compact Commercial Layout) */}
+                <div className="space-y-2.5">
+                  {/* Top Row: Badge & Stock Status */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1 min-w-0">
+                      {discount > 0 && (
+                        <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.5 rounded shadow-2xs shrink-0">
+                          {discount}% OFF
+                        </span>
+                      )}
                       {item.badge && (
-                        <span className="text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded">
+                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded truncate">
                           {item.badge}
                         </span>
                       )}
-                      {item.inStock ? (
-                        <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          In Stock
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Out of Stock
-                        </span>
-                      )}
                     </div>
-                  </div>
 
-                  {/* Product Image Gallery (Supports 1 to 5+ photos) */}
-                  <ProductCardGallery item={item} />
-
-                  {/* Title & Price */}
-                  <div className="space-y-1">
-                    <h3 className="font-display text-lg font-bold text-[#0B1528] leading-snug">
-                      {item.name}
-                    </h3>
-                    <div className="flex items-baseline gap-2 pt-1 flex-wrap">
-                      <span className="text-xl font-extrabold text-[#0B1528]">{item.price}</span>
-                      {item.mrp && (
-                        <span className="text-xs text-slate-400 line-through">{item.mrp}</span>
-                      )}
-                      {item.mrp && (() => {
-                        const priceNum = parseInt(item.price.replace(/[^0-9]/g, ''), 10);
-                        const mrpNum = parseInt(item.mrp.replace(/[^0-9]/g, ''), 10);
-                        if (mrpNum > priceNum && priceNum > 0) {
-                          const discount = Math.round(((mrpNum - priceNum) / mrpNum) * 100);
-                          return (
-                            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded">
-                              {discount}% OFF
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-                      <span className="text-[11px] font-semibold text-emerald-600">Inclusive of Taxes</span>
-                    </div>
-                    {item.description && (
-                      <p className="text-xs text-slate-500 pt-1 line-clamp-2 leading-relaxed">
-                        {item.description}
-                      </p>
+                    {item.inStock ? (
+                      <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        In Stock
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
+                        <AlertCircle className="h-2.5 w-2.5" />
+                        Out of Stock
+                      </span>
                     )}
                   </div>
 
-                  {/* Key Specifications */}
-                  {item.features && item.features.length > 0 && (
-                    <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Key Specifications:
+                  {/* Product Image Showcase */}
+                  <ProductCardGallery item={item} />
+
+                  {/* Category, Title & Commercial Price */}
+                  <div className="space-y-1 pt-0.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <p className="text-[10px] font-bold text-[#F59E0B] uppercase tracking-wider truncate">
+                        {item.category}
                       </p>
-                      <ul className="space-y-1 text-xs text-slate-600">
-                        {item.features.map((f, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#172D4D] mt-1.5 shrink-0" />
-                            <span>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Related Blog / Tutorial Guide Link (Only displayed if available) */}
-                  {(() => {
-                    const relatedBlog = resolveRelatedBlog(item);
-                    if (!relatedBlog) return null;
-
-                    return (
-                      <div className="pt-3 border-t border-slate-100">
+                      {isEditor && (
                         <Link
-                          href={`/blog/${relatedBlog.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group/blog flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50/70 hover:bg-amber-100/90 border border-amber-200/80 transition-all text-xs text-amber-950 shadow-2xs"
+                          href={`/admin?section=products&editProduct=${encodeURIComponent(item.id)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 hover:bg-[#0B1528] hover:text-white px-1.5 py-0.2 text-[10px] font-semibold text-slate-700 transition-colors shrink-0"
+                          title={`Edit ${item.name}`}
                         >
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="p-1 rounded-md bg-[#F59E0B]/20 text-[#B45309] shrink-0">
-                              <BookOpen className="h-3.5 w-3.5" />
-                            </span>
-                            <div className="truncate text-left">
-                              <span className="text-[10px] uppercase font-bold text-[#B45309] tracking-wider block leading-none">
-                                Read Blog of this Product
-                              </span>
-                              <span className="truncate block font-semibold text-slate-800 group-hover/blog:text-[#0B1528] mt-0.5">
-                                Read Blog: {relatedBlog.title}
-                              </span>
-                            </div>
-                          </div>
-                          <ArrowRight className="h-3.5 w-3.5 text-[#B45309] shrink-0 group-hover/blog:translate-x-0.5 transition-transform" />
+                          <Edit3 className="h-2.5 w-2.5" />
+                          <span>Edit</span>
                         </Link>
-                      </div>
-                    );
-                  })()}
+                      )}
+                    </div>
+                    <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#0B1528] group-hover/card:text-[#0090FF] transition-colors leading-snug line-clamp-2 min-h-[2.5rem]">
+                      {item.name}
+                    </h3>
+
+                    <div className="flex items-baseline gap-1.5 pt-1 flex-wrap">
+                      <span className="text-lg font-extrabold text-[#0B1528]">{item.price}</span>
+                      {item.mrp && (
+                        <span className="text-xs text-slate-400 line-through">{item.mrp}</span>
+                      )}
+                      <span className="text-[10px] font-medium text-emerald-600 ml-auto">
+                        Incl. taxes
+                      </span>
+                    </div>
+
+                    {/* Subtle cue that clicking opens full description & specifications */}
+                    <div className="pt-1 flex items-center justify-between text-[11px] font-semibold text-slate-500 group-hover/card:text-[#172D4D] transition-colors">
+                      <span>
+                        View Full Details
+                        {item.features && item.features.length > 0
+                          ? ` & ${item.features.length} Specs`
+                          : ''}
+                      </span>
+                      <ArrowRight className="h-3 w-3 group-hover/card:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-200">
-                  {/* Direct Buy / Order from EI House */}
+                {/* Bottom Pinned Section: Blog Read Link + Inquiry / Order Buttons (Always Visible) */}
+                <div
+                  className="space-y-2 pt-2.5 border-t border-slate-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Related Blog / Tutorial Guide Link */}
+                  {relatedBlog && (
+                    <Link
+                      href={`/blog/${relatedBlog.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group/blog flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-amber-50/80 hover:bg-amber-100 border border-amber-200/80 transition-all text-[11px] text-amber-950"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <BookOpen className="h-3.5 w-3.5 text-[#B45309] shrink-0" />
+                        <span className="truncate font-semibold text-slate-800 group-hover/blog:text-[#0B1528]">
+                          Read Blog: {relatedBlog.title}
+                        </span>
+                      </div>
+                      <ArrowRight className="h-3 w-3 text-[#B45309] shrink-0 group-hover/blog:translate-x-0.5 transition-transform" />
+                    </Link>
+                  )}
+
+                  {/* Direct Inquiry / Order + WhatsApp Buttons */}
                   {item.inStock ? (
-                    <div className="space-y-2">
-                      {/* Order from EI House Modal Form */}
+                    <div className="grid grid-cols-5 gap-1.5">
                       <Button
                         size="sm"
                         onClick={() => setOrderModalProduct(item)}
-                        className="w-full bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-xs shadow-xs flex items-center justify-center gap-1.5 py-2.5"
+                        className="col-span-3 h-8 bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-[11px] px-2 shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <ShoppingBag className="h-4 w-4" />
-                        <span>Order from EI House</span>
+                        <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Order / Inquiry</span>
                       </Button>
 
-                      {/* WhatsApp Buy */}
                       <Button
                         asChild
                         size="sm"
                         variant="outline"
-                        className="w-full border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-xs flex items-center justify-center gap-1.5"
+                        className="col-span-2 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2 flex items-center justify-center gap-1"
                       >
                         <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Quick Order via WhatsApp</span>
+                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">WhatsApp</span>
                         </a>
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-2.5 text-center">
-                        <p className="text-xs font-semibold text-rose-800">
-                          Temporarily Out of Stock in EI House Lab
-                        </p>
-                        <p className="text-[11px] text-rose-600">
-                          Pre-orders open for next batch dispatch.
-                        </p>
-                      </div>
+                    <div className="grid grid-cols-5 gap-1.5">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setOrderModalProduct(item)}
-                        className="w-full text-xs border-slate-300 font-semibold text-slate-700 hover:bg-slate-50"
+                        className="col-span-3 h-8 text-[11px] border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 px-2 flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
-                        <span>Pre-Order from EI House</span>
+                        <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Pre-Order Inquiry</span>
+                      </Button>
+
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="col-span-2 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2 flex items-center justify-center gap-1"
+                      >
+                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">WhatsApp</span>
+                        </a>
                       </Button>
                     </div>
                   )}
@@ -612,15 +694,14 @@ export function ProductsCatalogClient() {
                     <div className="flex items-center justify-between gap-3">
                       {/* Logo or High-Grade Monogram Identity */}
                       <div className="h-12 w-28 relative rounded-xl bg-slate-50 p-2 border border-slate-200/70 flex items-center justify-center shrink-0 overflow-hidden">
-                        {sup.logoUrl && sup.logoUrl.trim().length > 0 ? (
+                        {sup.logoUrl && sup.logoUrl.trim().length > 0 && !failedLogoIds.has(sup.id) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={sup.logoUrl}
                             alt={`${sup.name} logo`}
                             className="max-h-full max-w-full object-contain"
-                            onError={(e) => {
-                              // Fallback to text identity if remote image fails
-                              (e.target as HTMLElement).style.display = 'none';
+                            onError={() => {
+                              setFailedLogoIds((prev) => new Set(prev).add(sup.id));
                             }}
                           />
                         ) : (
@@ -647,9 +728,21 @@ export function ProductsCatalogClient() {
 
                     {/* Supplier Name & Category Header */}
                     <div>
-                      <h3 className="font-display text-base font-bold text-[#0B1528] group-hover:text-[#0090FF] transition-colors leading-snug">
-                        {sup.name}
-                      </h3>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-display text-base font-bold text-[#0B1528] group-hover:text-[#0090FF] transition-colors leading-snug">
+                          {sup.name}
+                        </h3>
+                        {isEditor && (
+                          <Link
+                            href={`/admin?section=suppliers&editSupplier=${encodeURIComponent(sup.id)}`}
+                            className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 hover:bg-[#0B1528] hover:text-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 transition-colors shrink-0"
+                            title={`Edit ${sup.name}`}
+                          >
+                            <Edit3 className="h-2.5 w-2.5" />
+                            <span>Edit</span>
+                          </Link>
+                        )}
+                      </div>
                       {sup.category && (
                         <p className="text-xs font-semibold text-[#0090FF] mt-0.5">
                           {sup.category}
@@ -731,6 +824,15 @@ export function ProductsCatalogClient() {
           )}
         </div>
       </div>
+
+      {/* Commercial Product Full Details Dialog (Opens when clicking a product card) */}
+      <ProductDetailModal
+        product={detailModalProduct}
+        relatedBlog={detailModalProduct ? resolveRelatedBlog(detailModalProduct) : null}
+        open={Boolean(detailModalProduct)}
+        onOpenChange={(open) => !open && setDetailModalProduct(null)}
+        onOrderClick={(prod) => setOrderModalProduct(prod)}
+      />
 
       {/* Order Inquiry Dialog */}
       <ProductOrderModal

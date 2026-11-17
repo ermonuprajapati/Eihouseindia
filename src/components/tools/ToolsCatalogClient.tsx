@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Search,
   Sparkles,
@@ -23,12 +24,16 @@ import {
   ArrowUpRight,
   ChevronRight,
   Code2,
+  Edit3,
+  Plus,
 } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InteractiveToolModal } from '@/components/tools/InteractiveToolModal';
+import { ToolAdminModal } from '@/components/tools/ToolAdminModal';
+import { useAuth } from '@/modules/auth/auth-context';
 import {
   fetchTools,
   TOOL_LICENSES,
@@ -43,27 +48,30 @@ interface ToolsCatalogClientProps {
 }
 
 export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
+  const { isEditor } = useAuth();
   const [tools, setTools] = useState<EngineeringTool[]>(initialTools);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedLicense, setSelectedLicense] = useState<string>('All Licenses');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [activeCalculatorTool, setActiveCalculatorTool] = useState<EngineeringTool | null>(null);
+  const [editingTool, setEditingTool] = useState<Partial<EngineeringTool> | null>(null);
+  const [isCreatingTool, setIsCreatingTool] = useState(false);
+  const [failedLogoIds, setFailedLogoIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    let isMounted = true;
+  const reloadTools = useCallback(() => {
     fetchTools()
       .then((data) => {
-        if (isMounted && data.length > 0) {
+        if (data.length > 0) {
           setTools(data);
         }
       })
       .catch((err) => console.warn('Could not refresh tools from firestore:', err));
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    reloadTools();
+  }, [reloadTools]);
 
   // Filtered tools
   const filteredTools = useMemo(() => {
@@ -295,69 +303,100 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {featuredTools.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className="group relative rounded-xl border border-slate-200 bg-white p-4 hover:border-[#F59E0B] hover:shadow-md transition-all flex flex-col justify-between"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-[#0B1528] group-hover:bg-[#0B1528] group-hover:text-white transition-colors">
-                            {getCategoryIcon(tool.category)}
+                {featuredTools.map((tool) => {
+                  const logoUrl = getToolLogoUrl(tool);
+                  return (
+                    <div
+                      key={tool.id}
+                      className="group relative rounded-xl border border-slate-200 bg-white p-4 hover:border-[#F59E0B] hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-9 w-9 rounded-lg bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                              {!failedLogoIds.has(tool.id) ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={logoUrl}
+                                  alt={`${tool.name} official logo`}
+                                  className="max-h-full max-w-full object-contain"
+                                  onError={() =>
+                                    setFailedLogoIds((prev) => new Set(prev).add(tool.id))
+                                  }
+                                />
+                              ) : (
+                                getCategoryIcon(tool.category)
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-sm font-bold text-[#0B1528] group-hover:text-[#F59E0B] transition-colors leading-tight truncate">
+                                {tool.name}
+                              </h3>
+                              <span className="text-[11px] text-slate-500 font-medium block truncate">
+                                {tool.category || tool.domain}
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-sm font-bold text-[#0B1528] group-hover:text-[#F59E0B] transition-colors leading-tight">
-                              {tool.name}
-                            </h3>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              {tool.category || tool.domain}
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isEditor && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCreatingTool(false);
+                                  setEditingTool(tool);
+                                }}
+                                title={`Edit ${tool.name}`}
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-[#0B1528] hover:text-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                                <span>Edit</span>
+                              </button>
+                            )}
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getLicenseBadgeStyle(
+                                tool.licenseType
+                              )}`}
+                            >
+                              {tool.licenseType || 'Tool'}
                             </span>
                           </div>
                         </div>
 
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getLicenseBadgeStyle(
-                            tool.licenseType
-                          )}`}
-                        >
-                          {tool.licenseType || 'Tool'}
-                        </span>
+                        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                          {tool.mainApplication || tool.summary}
+                        </p>
                       </div>
 
-                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                        {tool.mainApplication || tool.summary}
-                      </p>
-                    </div>
+                      <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1 truncate max-w-[120px]">
+                          <Laptop className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{tool.platform || 'Cross-Platform'}</span>
+                        </span>
 
-                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1 truncate max-w-[120px]">
-                        <Laptop className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{tool.platform || 'Cross-Platform'}</span>
-                      </span>
-
-                      {tool.officialWebsite ? (
-                        <a
-                          href={tool.officialWebsite}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B] transition-colors"
-                        >
-                          <span>Official website</span>
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </a>
-                      ) : tool.toolType === 'interactive' ? (
-                        <button
-                          onClick={() => setActiveCalculatorTool(tool)}
-                          className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B]"
-                        >
-                          <span>Launch Solver</span>
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
+                        {tool.officialWebsite ? (
+                          <a
+                            href={tool.officialWebsite}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B] transition-colors"
+                          >
+                            <span>Official website</span>
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </a>
+                        ) : tool.toolType === 'interactive' ? (
+                          <button
+                            onClick={() => setActiveCalculatorTool(tool)}
+                            className="inline-flex items-center gap-1 font-semibold text-[#0B1528] hover:text-[#F59E0B]"
+                          >
+                            <span>Launch Solver</span>
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -368,6 +407,43 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
         {/* ========================================================= */}
         <section className="py-8 bg-[#FAFBFD]" id="directory">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+            {/* Contextual Admin Quick Management Bar (Only visible to authenticated Editors/Admins) */}
+            {isEditor && (
+              <div className="sticky top-16 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white/95 backdrop-blur-sm px-4 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#0B1528]">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Admin Quick Edit Mode — Click &ldquo;Edit&rdquo; on any tool card to upload logos, screenshots, or update details.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setIsCreatingTool(true);
+                      setEditingTool({
+                        name: '',
+                        slug: '',
+                        domain: 'Electronics & Embedded',
+                        category: 'Electronics',
+                        licenseType: 'Free',
+                        platform: 'Desktop (Windows / Mac / Linux)',
+                        badge: 'Recommended',
+                        toolType: 'software',
+                        order: tools.length + 1,
+                      });
+                    }}
+                    className="h-8 text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    <span>Add New Tool</span>
+                  </Button>
+                  <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                    <Link href="/admin">Admin Console</Link>
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Suggested Menu / Category Tabs */}
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
               {navCategories.map((cat) => {
@@ -494,7 +570,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={getToolLogoUrl(tool)}
-                                alt={tool.name}
+                                alt={`${tool.name} official logo`}
                                 className="h-full w-full object-contain"
                                 onError={(e) => {
                                   (e.currentTarget as HTMLElement).style.display = 'none';
@@ -506,6 +582,19 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                               <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-semibold px-1.5 py-0.2 rounded">
                                 {tool.badge}
                               </span>
+                            )}
+                            {isEditor && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCreatingTool(false);
+                                  setEditingTool(tool);
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 hover:bg-[#0B1528] hover:text-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="h-2.5 w-2.5" />
+                                <span>Edit</span>
+                              </button>
                             )}
                           </div>
                         </td>
@@ -570,62 +659,98 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                       key={tool.id}
                       className="group rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
                     >
-                      {/* Hero Image Header with Tool Name and Real Logo ON TOP */}
-                      <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-gradient-to-br from-[#0B1528] via-[#12233D] to-[#172D4D]">
-                        {/* Background Hero Banner */}
+                      {/* 16:9 Actual Software Interface / Product Image */}
+                      <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#0B1528] border-b border-slate-200/80">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={heroImg}
-                          alt={tool.name}
+                          alt={tool.imageAlt || `${tool.name} interface screenshot`}
                           loading="lazy"
-                          className="absolute inset-0 h-full w-full object-cover opacity-40 group-hover:scale-105 group-hover:opacity-50 transition-all duration-500"
+                          className="h-full w-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1528] via-[#0B1528]/60 to-transparent" />
 
-                        {/* Top Badges */}
-                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-10">
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-amber-300 border border-amber-400/30">
+                        {/* Top Badges & Contextual Admin Edit Button */}
+                        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-10">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#0B1528]/85 backdrop-blur-md text-amber-300 border border-amber-400/30 shadow-xs">
                             {tool.category || tool.domain}
                           </span>
-                          <span
-                            className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border backdrop-blur-md ${getLicenseBadgeStyle(
-                              tool.licenseType
-                            )}`}
-                          >
-                            {tool.licenseType || 'Software'}
-                          </span>
-                        </div>
 
-                        {/* Real Logo & Tool Name directly on Hero Image */}
-                        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-3 z-10">
-                          <div className="h-12 w-12 rounded-xl bg-white p-1.5 shadow-lg border border-white/90 shrink-0 flex items-center justify-center overflow-hidden">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={logoUrl}
-                              alt={`${tool.name} logo`}
-                              loading="lazy"
-                              className="h-full w-full object-contain"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="text-base sm:text-lg font-bold text-white drop-shadow-md truncate group-hover:text-amber-300 transition-colors">
-                              {tool.name}
-                            </h3>
-                            {tool.badge && (
-                              <span className="text-[10px] font-semibold text-amber-200 bg-amber-400/20 border border-amber-300/30 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                                {tool.badge}
-                              </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border backdrop-blur-md shadow-xs ${getLicenseBadgeStyle(
+                                tool.licenseType
+                              )}`}
+                            >
+                              {tool.licenseType || 'Software'}
+                            </span>
+
+                            {isEditor && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCreatingTool(false);
+                                  setEditingTool(tool);
+                                }}
+                                title={`Edit ${tool.name}`}
+                                className="inline-flex items-center gap-1 rounded-full bg-white/95 hover:bg-[#F59E0B] text-[#0B1528] border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold shadow-md transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                                <span>Edit</span>
+                              </button>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      {/* Card Content Body */}
+                      {/* Card Content Body with Dedicated Official Logo & Identity */}
                       <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
-                        <div className="space-y-2.5">
+                        <div className="space-y-3">
+                          {/* Official Software Logo + Name Header */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-11 w-11 rounded-xl bg-white p-1.5 shadow-2xs border border-slate-200 shrink-0 flex items-center justify-center overflow-hidden">
+                                {!failedLogoIds.has(tool.id) ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={logoUrl}
+                                    alt={`${tool.name} official logo`}
+                                    loading="lazy"
+                                    className="max-h-full max-w-full object-contain"
+                                    onError={() =>
+                                      setFailedLogoIds((prev) => new Set(prev).add(tool.id))
+                                    }
+                                  />
+                                ) : (
+                                  <span className="text-[#172D4D]">{getCategoryIcon(tool.category)}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-base font-bold text-[#0B1528] truncate group-hover:text-[#172D4D] transition-colors">
+                                    {tool.name}
+                                  </h3>
+                                  {isEditor && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsCreatingTool(false);
+                                        setEditingTool(tool);
+                                      }}
+                                      className="text-[11px] font-semibold text-blue-600 hover:underline shrink-0 cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
+                                {tool.badge && (
+                                  <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                                    {tool.badge}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Main Application */}
                           {tool.mainApplication && (
                             <div className="text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5">
@@ -677,7 +802,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                           ) : tool.toolType === 'interactive' ? (
                             <button
                               onClick={() => setActiveCalculatorTool(tool)}
-                              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors"
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                             >
                               <span>Open Solver</span>
                               <ChevronRight className="h-3 w-3" />
@@ -700,6 +825,16 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
       <InteractiveToolModal
         tool={activeCalculatorTool}
         onClose={() => setActiveCalculatorTool(null)}
+      />
+
+      {/* Contextual Admin Add/Edit Tool Modal */}
+      <ToolAdminModal
+        tool={editingTool}
+        isNew={isCreatingTool}
+        open={Boolean(editingTool)}
+        onOpenChange={(open) => !open && setEditingTool(null)}
+        onSaved={reloadTools}
+        defaultOrder={tools.length + 1}
       />
 
       <SiteFooter />

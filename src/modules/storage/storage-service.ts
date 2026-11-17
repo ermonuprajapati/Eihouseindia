@@ -9,6 +9,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/webp',
   'image/avif',
+  'image/svg+xml',
 ]);
 
 // Allow up to 10 MB raw files from high-res phone cameras
@@ -18,7 +19,7 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
     return {
       valid: false,
-      error: 'Unsupported image format. Please upload JPEG, PNG, WebP, or AVIF.',
+      error: 'Unsupported image format. Please upload SVG, PNG, JPEG, WebP, or AVIF.',
     };
   }
   if (file.size <= 0 || file.size > MAX_RAW_FILE_SIZE_BYTES) {
@@ -28,6 +29,46 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
     };
   }
   return { valid: true };
+}
+
+export async function uploadResourceDocument(file: File, userId: string): Promise<MediaItem> {
+  if (file.type !== 'application/pdf') {
+    throw new Error('Unsupported document format. Please upload a PDF file.');
+  }
+  if (file.size <= 0 || file.size > MAX_RAW_FILE_SIZE_BYTES) {
+    throw new Error('Document file size must be under 10 MB.');
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = typeof Buffer !== 'undefined' ? Buffer.from(arrayBuffer).toString('base64') : btoa(binary);
+  const mediaId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+
+  const response = await fetch('/api/media', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mediaId,
+      uploaderId: userId,
+      fileName: sanitizedFileName,
+      mimeType: 'application/pdf',
+      sizeBytes: file.size,
+      base64,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to upload document.');
+  }
+
+  const result = await response.json();
+  return result.media as MediaItem;
 }
 
 /**
