@@ -90,6 +90,16 @@ export function SiteHeader() {
             </span>
           </Link>
           <Link
+            href="/engineering-lab"
+            prefetch={false}
+            className="hover:text-blue-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-blue-700 flex items-center gap-1"
+          >
+            <span>Virtual Lab</span>
+            <span className="text-[9px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-800 px-1 py-0.2 rounded border border-blue-200">
+              2D/3D
+            </span>
+          </Link>
+          <Link
             href="/library"
             prefetch={false}
             className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
@@ -252,6 +262,10 @@ export function SiteHeader() {
             <Link href="/tools" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
               <span>Engineering Tools &amp; Software Directory</span>
               <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">New</span>
+            </Link>
+            <Link href="/engineering-lab" onClick={() => setMobileOpen(false)} className="py-1.5 font-bold text-blue-700 flex items-center justify-between">
+              <span>Universal Engineering Lab (2D/3D Sim &amp; PCB)</span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-bold">Free</span>
             </Link>
             <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
               <span>Engineering Library (Datasheets &amp; Code)</span>

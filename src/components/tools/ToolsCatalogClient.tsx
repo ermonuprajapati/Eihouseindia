@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   Info,
   ArrowUpRight,
+  ArrowRight,
   ChevronRight,
   Code2,
   Edit3,
@@ -277,6 +278,36 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
               student eligibility, or account registration. For example, <strong>FreeCAD</strong> and{' '}
               <strong>KiCad</strong> are completely open-source, whereas commercial CAD &amp; simulation
               platforms (like SOLIDWORKS, Ansys, or MATLAB) have their own licensing terms and student editions.
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* 02B. EI HOUSE UNIVERSAL ENGINEERING LAB LAUNCH BANNER */}
+        {/* ========================================================= */}
+        <section className="bg-gradient-to-r from-[#070D18] via-[#0B1528] to-[#172D4D] text-white py-8 px-4 sm:px-6 lg:px-8 border-b border-white/10 relative overflow-hidden">
+          <div className="absolute -right-24 -top-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-400/30">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Now Live • 100% Free &amp; Browser-Based</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-display font-bold text-white tracking-tight">
+                EI House Universal Engineering Lab
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Design interactive electronics circuits with live Modified Nodal Analysis (MNA), write &amp; run virtual Arduino MCU C/C++ firmware with UART telemetry, route 2D PCB traces, inspect 3D boards, and export production-ready RS-274X Gerber &amp; NC Drill files directly in your web browser.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+              <Link
+                href="/engineering-lab"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <span>Launch Engineering Lab</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
           </div>
         </section>

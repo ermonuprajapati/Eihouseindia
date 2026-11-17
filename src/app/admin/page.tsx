@@ -988,12 +988,21 @@ export default function AdminPanelPage() {
                 <td className="px-4 py-3 max-w-xs">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-[#0B1528] truncate">{post.title}</p>
-                    <Link
-                      href={`/dashboard/editor/${post.id}`}
-                      className="shrink-0 text-[11px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-2 py-0.5 rounded"
-                    >
-                      Edit
-                    </Link>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Link
+                        href={`/dashboard/editor/${post.id}`}
+                        className="shrink-0 text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setDeletePostTarget(post)}
+                        className="shrink-0 text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.5 rounded cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs font-mono text-slate-400 truncate">/{post.slug}</p>
                   {post.rejectionReason && (
@@ -1378,6 +1387,13 @@ export default function AdminPanelPage() {
                                         >
                                           Edit
                                         </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDeleteProductTarget(prod)}
+                                          className="shrink-0 text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Delete
+                                        </button>
                                       </div>
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         {prod.badge && (
@@ -1559,6 +1575,13 @@ export default function AdminPanelPage() {
                                         >
                                           Edit
                                         </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDeleteToolTarget(tool)}
+                                          className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Delete
+                                        </button>
                                         {tool.featured && (
                                           <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.2 rounded font-semibold">
                                             Top 12 Featured
@@ -1721,6 +1744,13 @@ export default function AdminPanelPage() {
                                         >
                                           Edit
                                         </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDeleteLibraryTarget(item)}
+                                          className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Delete
+                                        </button>
                                         {item.badge && (
                                           <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
                                             {item.badge}
@@ -1844,6 +1874,31 @@ export default function AdminPanelPage() {
                                     <span className="font-mono font-bold text-sm text-[#0B1528]">
                                       {item.partNumber}
                                     </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDatasheetModal({ ...item, isNew: false })}
+                                      className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!profile) return;
+                                        if (confirm(`Are you sure you want to permanently delete datasheet for "${item.partNumber}"?`)) {
+                                          try {
+                                            await deleteDatasheetAdmin(item.id, item.partNumber, profile, effectiveRole);
+                                            setDatasheetsList((prev) => prev.filter((d) => d.id !== item.id));
+                                            toast.success(`Datasheet for "${item.partNumber}" deleted.`);
+                                          } catch (err) {
+                                            toast.error(err instanceof Error ? err.message : 'Failed to delete datasheet.');
+                                          }
+                                        }
+                                      }}
+                                      className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                    >
+                                      Delete
+                                    </button>
                                     {item.featured && (
                                       <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
                                         ★ Featured
@@ -2022,7 +2077,36 @@ export default function AdminPanelPage() {
                                         </span>
                                       )}
                                     </div>
-                                    <span className="font-semibold text-[#0B1528]">{sup.name}</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-semibold text-[#0B1528]">{sup.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setSupplierModal({
+                                            id: sup.id,
+                                            name: sup.name,
+                                            url: sup.url,
+                                            logoUrl: sup.logoUrl || '',
+                                            category: sup.category || 'General',
+                                            badge: sup.badge || '',
+                                            description: sup.description || '',
+                                            order: sup.order ?? 1,
+                                            featured: sup.featured ?? false,
+                                            isNew: false,
+                                          })
+                                        }
+                                        className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeleteSupplierTarget(sup)}
+                                        className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
                                   </div>
                                 </td>
 
@@ -2178,6 +2262,22 @@ export default function AdminPanelPage() {
                                   <tr className="hover:bg-slate-50/70 transition">
                                     <td className="px-4 py-3 align-top min-w-[200px]">
                                       <p className="font-semibold text-[#0B1528]">{inq.name || 'Anonymous Visitor'}</p>
+                                      <div className="flex items-center gap-1.5 mt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenReplyModal(inq)}
+                                          className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Reply
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setDeleteInquiryTarget(inq)}
+                                          className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
                                       <a
                                         href={`mailto:${inq.email}`}
                                         className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
@@ -2479,7 +2579,32 @@ export default function AdminPanelPage() {
                           {categories.map((cat) => (
                             <tr key={cat.id}>
                               <td className="px-4 py-3 font-mono tabular-nums">{cat.order}</td>
-                              <td className="px-4 py-3 font-medium text-[#0B1528]">{cat.name}</td>
+                              <td className="px-4 py-3 font-medium text-[#0B1528]">
+                                <div className="flex items-center gap-2">
+                                  <span>{cat.name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCatForm({ ...cat, isNew: false })}
+                                    className="text-[10px] font-semibold text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirm(`Delete category "${cat.name}"?`)) {
+                                        deleteCategoryAdmin(cat.id, profile).then(() => {
+                                          toast.success('Category deleted.');
+                                          loadAllAdminData();
+                                        });
+                                      }
+                                    }}
+                                    className="text-[10px] font-semibold text-red-600 hover:underline bg-red-50 border border-red-200 px-1.5 py-0.2 rounded cursor-pointer"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
                               <td className="px-4 py-3 font-mono text-xs text-slate-500">{cat.slug}</td>
                               <td className="px-4 py-3 text-right space-x-2">
                                 <Button
@@ -2935,6 +3060,25 @@ export default function AdminPanelPage() {
                 />
               </div>
               <DialogFooter>
+                {!catForm.isNew && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => {
+                      if (confirm(`Delete category "${catForm.name}"?`)) {
+                        deleteCategoryAdmin(catForm.id, profile).then(() => {
+                          toast.success('Category deleted.');
+                          setCatForm(null);
+                          loadAllAdminData();
+                        });
+                      }
+                    }}
+                    className="mr-auto"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={() => setCatForm(null)}>
                   Cancel
                 </Button>
