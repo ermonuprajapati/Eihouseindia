@@ -29,14 +29,21 @@ export interface CircuitComponent {
   id: string;
   type: string;
   label: string;
+  designator?: string;
   category: ComponentCategory;
   x: number;
   y: number;
   rotation: 0 | 90 | 180 | 270;
+  mirrored?: boolean;
   value: string;
   parameters: Record<string, number | string | boolean>;
   pins: ComponentPin[];
   footprint: string;
+  model3d?: string;
+  tolerance?: number;
+  internalResistance?: number;
+  model?: string;
+  initialCondition?: number;
   state?: {
     voltage?: number;
     current?: number;

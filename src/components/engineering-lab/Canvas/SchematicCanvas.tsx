@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
-import { RotateCw, Trash2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { RotateCw, Trash2, ZoomIn, ZoomOut, Maximize2, FlipHorizontal } from 'lucide-react';
+import { SchematicSymbol } from './SchematicSymbols';
 
 interface SchematicCanvasProps {
   components: CircuitComponent[];
@@ -11,11 +12,32 @@ interface SchematicCanvasProps {
   onSelectComponent: (id: string | null) => void;
   onUpdateComponentPosition: (id: string, x: number, y: number) => void;
   onRotateComponent: (id: string) => void;
+  onMirrorComponent?: (id: string) => void;
   onDeleteComponent: (id: string) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire: (wireId: string) => void;
   isSimulating: boolean;
   simulationStates: Record<string, { voltage: number; current: number; on?: boolean }>;
+}
+
+/**
+ * Calculates rotated and mirrored world coordinates for a component's pin terminal.
+ */
+export function getPinWorldCoord(
+  comp: CircuitComponent,
+  pin: { x: number; y: number }
+): { x: number; y: number } {
+  let px = pin.x;
+  const py = pin.y;
+  if (comp.mirrored) {
+    px = -px;
+  }
+  const rad = ((comp.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const rx = Math.round(px * cos - py * sin);
+  const ry = Math.round(px * sin + py * cos);
+  return { x: comp.x + rx, y: comp.y + ry };
 }
 
 export function SchematicCanvas({
@@ -25,6 +47,7 @@ export function SchematicCanvas({
   onSelectComponent,
   onUpdateComponentPosition,
   onRotateComponent,
+  onMirrorComponent,
   onDeleteComponent,
   onAddWire,
   onDeleteWire,
@@ -128,6 +151,44 @@ export function SchematicCanvas({
     }
   };
 
+  // Calculate Solder Junction Dots (Points where 3 or more wire connections meet)
+  const junctionDots = useMemo(() => {
+    const pointCounts = new Map<string, { count: number; x: number; y: number }>();
+
+    for (const wire of wires) {
+      const fromComp = components.find((c) => c.id === wire.fromCompId);
+      const toComp = components.find((c) => c.id === wire.toCompId);
+      if (!fromComp || !toComp) continue;
+
+      const fromPin = fromComp.pins.find((p) => p.id === wire.fromPinId);
+      const toPin = toComp.pins.find((p) => p.id === wire.toPinId);
+      if (!fromPin || !toPin) continue;
+
+      const p1 = getPinWorldCoord(fromComp, fromPin);
+      const p2 = getPinWorldCoord(toComp, toPin);
+
+      const k1 = `${p1.x},${p1.y}`;
+      const k2 = `${p2.x},${p2.y}`;
+
+      const e1 = pointCounts.get(k1) || { count: 0, x: p1.x, y: p1.y };
+      e1.count += 1;
+      pointCounts.set(k1, e1);
+
+      const e2 = pointCounts.get(k2) || { count: 0, x: p2.x, y: p2.y };
+      e2.count += 1;
+      pointCounts.set(k2, e2);
+    }
+
+    const junctions: { x: number; y: number }[] = [];
+    pointCounts.forEach((val) => {
+      if (val.count >= 3) {
+        junctions.push({ x: val.x, y: val.y });
+      }
+    });
+
+    return junctions;
+  }, [wires, components]);
+
   return (
     <div
       ref={containerRef}
@@ -181,10 +242,9 @@ export function SchematicCanvas({
             const toPin = toComp.pins.find((p) => p.id === wire.toPinId);
             if (!fromPin || !toPin) return null;
 
-            const x1 = fromComp.x + fromPin.x;
-            const y1 = fromComp.y + fromPin.y;
-            const x2 = toComp.x + toPin.x;
-            const y2 = toComp.y + toPin.y;
+            // Rotated World Coordinates of Pins
+            const { x: x1, y: y1 } = getPinWorldCoord(fromComp, fromPin);
+            const { x: x2, y: y2 } = getPinWorldCoord(toComp, toPin);
 
             // Manhattan orthogonal wire path: horizontal then vertical
             const midX = (x1 + x2) / 2;
@@ -224,12 +284,27 @@ export function SchematicCanvas({
                   />
                 )}
 
-                {/* Junction Pin Nodes */}
+                {/* Pin Terminal End Dots */}
                 <circle cx={x1} cy={y1} r={3} fill="#10B981" />
                 <circle cx={x2} cy={y2} r={3} fill="#10B981" />
               </g>
             );
           })}
+
+          {/* Solder Junction Dots (Points where 3+ wires meet) */}
+          {junctionDots.map((junc, idx) => (
+            <circle
+              key={idx}
+              cx={junc.x}
+              cy={junc.y}
+              r={4.5}
+              fill="#10B981"
+              stroke="#064E3B"
+              strokeWidth={1.5}
+            >
+              <title>Electrical Solder Junction Dot</title>
+            </circle>
+          ))}
 
           {/* Active Wire being drawn */}
           {activeWireStart && (
@@ -243,7 +318,7 @@ export function SchematicCanvas({
           )}
         </svg>
 
-        {/* Component Nodes Layer */}
+        {/* Component Nodes Layer: Standard IEEE Schematic Symbols */}
         {components.map((comp) => {
           const isSelected = selectedCompId === comp.id;
           const state = simulationStates[comp.id];
@@ -268,86 +343,69 @@ export function SchematicCanvas({
                   }
                 }
               }}
-              className={`absolute select-none group cursor-move transition-shadow ${
-                isSelected ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950 rounded-lg' : ''
-              }`}
+              className="absolute cursor-move"
               style={{
                 left: `${comp.x}px`,
                 top: `${comp.y}px`,
-                transform: `translate(-50%, -50%) rotate(${comp.rotation}deg)`,
+                transform: 'translate(-50%, -50%)',
               }}
             >
-              {/* Component Body Graphic */}
-              <div className="relative bg-slate-900/90 border border-slate-700 rounded-lg p-2 flex flex-col items-center justify-center min-w-[70px] shadow-lg backdrop-blur-sm">
-                {/* Component Symbol & Type badge */}
-                <div className="text-[10px] font-mono text-emerald-400 font-semibold tracking-wider uppercase mb-0.5">
-                  {comp.type.replace(/_/g, ' ')}
-                </div>
+              {/* Professional IEEE / IEC Schematic Vector Symbol */}
+              <SchematicSymbol
+                component={comp}
+                isSelected={isSelected}
+                isSimulating={isSimulating}
+                simState={state}
+              />
 
-                <div className="text-xs font-bold text-slate-100">{comp.value || comp.label}</div>
+              {/* Exact Terminal Pin Interactive Circles */}
+              {comp.pins.map((pin) => {
+                // Compute rotated offset relative to component center
+                const world = getPinWorldCoord(comp, pin);
+                const localX = world.x - comp.x;
+                const localY = world.y - comp.y;
 
-                {/* LED Dynamic Glow Effect */}
-                {comp.type === 'LED' && (
+                return (
                   <div
-                    className={`w-4 h-4 rounded-full mt-1 border transition-all ${
-                      state?.on
-                        ? 'bg-rose-500 border-rose-300 shadow-[0_0_15px_#F43F5E]'
-                        : 'bg-rose-950 border-rose-800 opacity-60'
-                    }`}
-                  />
-                )}
-
-                {/* 555 Timer Output State */}
-                {comp.type === 'TIMER_555' && (
-                  <div className="text-[9px] text-slate-400 mt-1 font-mono">
-                    Out: <span className={state?.on ? 'text-emerald-400 font-bold' : 'text-slate-500'}>{state?.on ? 'HIGH (5V)' : 'LOW (0V)'}</span>
+                    key={pin.id}
+                    onClick={(e) => handlePinClick(e, comp.id, pin.id, world.x, world.y)}
+                    className="absolute w-3.5 h-3.5 rounded-full bg-slate-900 border-2 border-emerald-400 hover:bg-emerald-400 hover:scale-125 transition-all cursor-pointer z-30 flex items-center justify-center group/pin"
+                    style={{
+                      left: `calc(50% + ${localX}px)`,
+                      top: `calc(50% + ${localY}px)`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    title={`Pin: ${pin.name} (${pin.pinType}) — Click to route wire`}
+                  >
+                    <span className="opacity-0 group-hover/pin:opacity-100 absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950 text-[9px] text-emerald-300 font-mono px-1 py-0.5 rounded pointer-events-none whitespace-nowrap border border-slate-800 z-40">
+                      {pin.name}
+                    </span>
                   </div>
-                )}
-
-                {/* Component Live Electrical Readout */}
-                {isSimulating && state && (
-                  <div className="text-[9px] font-mono text-cyan-300 mt-1 flex items-center gap-1.5 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800">
-                    <span>{state.voltage.toFixed(2)}V</span>
-                    <span className="text-slate-600">|</span>
-                    <span>{(state.current * 1000).toFixed(1)}mA</span>
-                  </div>
-                )}
-
-                {/* Component Pins */}
-                {comp.pins.map((pin) => {
-                  return (
-                    <div
-                      key={pin.id}
-                      onClick={(e) => handlePinClick(e, comp.id, pin.id, comp.x + pin.x, comp.y + pin.y)}
-                      className="absolute w-3 h-3 rounded-full bg-slate-800 border-2 border-emerald-400 hover:bg-emerald-400 hover:scale-125 transition-all cursor-pointer z-20 flex items-center justify-center group/pin"
-                      style={{
-                        left: `calc(50% + ${pin.x}px)`,
-                        top: `calc(50% + ${pin.y}px)`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      title={`Pin: ${pin.name} (${pin.pinType}) — Click to route wire`}
-                    >
-                      <span className="opacity-0 group-hover/pin:opacity-100 absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950 text-[9px] text-emerald-300 font-mono px-1 py-0.5 rounded pointer-events-none whitespace-nowrap border border-slate-800">
-                        {pin.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                );
+              })}
 
               {/* Floating Inline Quick Action Bar when Selected */}
               {isSelected && (
                 <div
-                  className="absolute -top-10 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-md p-1 shadow-xl z-30"
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 border border-slate-700 rounded-md p-1 shadow-2xl z-40 backdrop-blur"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     onClick={() => onRotateComponent(comp.id)}
                     className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded transition-colors"
-                    title="Rotate 90° (R key)"
+                    title="Rotate 90° Clockwise (R key)"
                   >
                     <RotateCw className="w-3.5 h-3.5" />
                   </button>
+                  {onMirrorComponent && (
+                    <button
+                      onClick={() => onMirrorComponent(comp.id)}
+                      className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded transition-colors"
+                      title="Mirror Component Horizontally"
+                    >
+                      <FlipHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onDeleteComponent(comp.id)}
                     className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded transition-colors"
@@ -384,20 +442,22 @@ export function SchematicCanvas({
             setZoom(1.0);
             setPan({ x: 0, y: 0 });
           }}
-          className="p-1.5 hover:bg-slate-800 hover:text-white rounded transition-colors border-l border-slate-800 ml-1"
-          title="Reset View"
+          className="p-1.5 hover:bg-slate-800 hover:text-white rounded transition-colors"
+          title="Reset Zoom & Pan (100%)"
         >
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Wiring mode helper tooltip */}
-      {activeWireStart && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xs px-3 py-1.5 rounded-full shadow-lg pointer-events-none flex items-center gap-2 font-medium">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-          Click target component pin to complete connection, or click canvas to cancel.
-        </div>
-      )}
+      {/* Engineering Canvas Status Hint */}
+      <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-mono text-slate-400 pointer-events-none backdrop-blur">
+        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <span>Grid: 10px snap</span>
+        <span className="text-slate-600">|</span>
+        <span>Click pin to wire</span>
+        <span className="text-slate-600">|</span>
+        <span>Scroll to zoom</span>
+      </div>
     </div>
   );
 }

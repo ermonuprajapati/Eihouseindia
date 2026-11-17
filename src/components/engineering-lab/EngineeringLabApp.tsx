@@ -167,6 +167,17 @@ export function EngineeringLabApp() {
     }));
   };
 
+  const handleMirrorComponent = (id: string) => {
+    recordHistory();
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.map((c) => {
+        if (c.id !== id) return c;
+        return { ...c, mirrored: !c.mirrored };
+      }),
+    }));
+  };
+
   const handleDeleteComponent = (id: string) => {
     recordHistory();
     setProject((prev) => ({
@@ -385,6 +396,7 @@ export function EngineeringLabApp() {
           <>
             <ComponentBrowser
               onAddComponent={handleAddComponent}
+              existingComponents={project.components}
               isOpen={isBrowserOpen}
               onToggleOpen={() => setIsBrowserOpen(!isBrowserOpen)}
             />
@@ -397,6 +409,7 @@ export function EngineeringLabApp() {
                 onSelectComponent={setSelectedCompId}
                 onUpdateComponentPosition={handleUpdateComponentPosition}
                 onRotateComponent={handleRotateComponent}
+                onMirrorComponent={handleMirrorComponent}
                 onDeleteComponent={handleDeleteComponent}
                 onAddWire={handleAddWire}
                 onDeleteWire={handleDeleteWire}
@@ -410,6 +423,7 @@ export function EngineeringLabApp() {
                 component={selectedComponent}
                 onUpdateComponent={handleUpdateComponent}
                 onRotateComponent={handleRotateComponent}
+                onMirrorComponent={handleMirrorComponent}
                 onDeleteComponent={handleDeleteComponent}
                 onClose={() => setIsInspectorOpen(false)}
                 simState={selectedCompId ? simStates[selectedCompId] : undefined}

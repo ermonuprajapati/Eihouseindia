@@ -3,11 +3,13 @@ import { CircuitComponent, ComponentCategory } from '../types';
 export interface ComponentTemplate {
   type: string;
   name: string;
+  designatorPrefix: string;
   category: ComponentCategory;
   defaultValue: string;
   defaultParams: Record<string, number | string | boolean>;
   pins: { id: string; name: string; x: number; y: number; pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive' }[];
   footprint: string;
+  model3d?: string;
   width: number;
   height: number;
   symbolSvg: string;
@@ -19,6 +21,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'RESISTOR',
     name: 'Resistor',
+    designatorPrefix: 'R',
     category: 'passive',
     defaultValue: '1kΩ',
     defaultParams: { resistance: 1000, powerRatingW: 0.25, tolerancePercent: 5 },
@@ -26,7 +29,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
       { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
     ],
-    footprint: 'R_0805_2012Metric',
+    footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
+    model3d: 'resistor_axial_horiz',
     width: 60,
     height: 20,
     symbolSvg: 'resistor',
@@ -35,14 +39,16 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'CAPACITOR',
     name: 'Capacitor',
+    designatorPrefix: 'C',
     category: 'passive',
     defaultValue: '10µF',
-    defaultParams: { capacitance: 0.00001, voltageRatingV: 25 },
+    defaultParams: { capacitance: 0.00001, voltageRatingV: 25, polarized: false },
     pins: [
       { id: '1', name: '+', x: -25, y: 0, pinType: 'passive' },
       { id: '2', name: '-', x: 25, y: 0, pinType: 'passive' },
     ],
-    footprint: 'C_0805_2012Metric',
+    footprint: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm',
+    model3d: 'capacitor_radial_can',
     width: 50,
     height: 24,
     symbolSvg: 'capacitor',
@@ -51,6 +57,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'INDUCTOR',
     name: 'Inductor',
+    designatorPrefix: 'L',
     category: 'passive',
     defaultValue: '10mH',
     defaultParams: { inductance: 0.01, maxCurrentA: 0.5 },
@@ -58,7 +65,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
       { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
     ],
-    footprint: 'L_0805_2012Metric',
+    footprint: 'Resistor_SMD:R_0805_2012Metric',
+    model3d: 'resistor_axial_horiz',
     width: 60,
     height: 20,
     symbolSvg: 'inductor',
@@ -67,6 +75,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'POTENTIOMETER',
     name: 'Potentiometer',
+    designatorPrefix: 'RV',
     category: 'passive',
     defaultValue: '10kΩ',
     defaultParams: { resistance: 10000, wiperPosition: 0.5 },
@@ -75,7 +84,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '2', name: 'Wiper', x: 0, y: 20, pinType: 'passive' },
       { id: '3', name: 'B', x: 30, y: -15, pinType: 'passive' },
     ],
-    footprint: 'Potentiometer_Bourns_3296W',
+    footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
+    model3d: 'resistor_axial_horiz',
     width: 60,
     height: 40,
     symbolSvg: 'potentiometer',
@@ -86,14 +96,16 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'DC_VOLTAGE',
     name: 'DC Voltage Source',
+    designatorPrefix: 'V',
     category: 'sources',
     defaultValue: '5V',
-    defaultParams: { voltage: 5.0 },
+    defaultParams: { voltage: 5.0, internalResistance: 0.05 },
     pins: [
       { id: 'p', name: '+', x: 0, y: -25, pinType: 'power' },
       { id: 'n', name: '-', x: 0, y: 25, pinType: 'power' },
     ],
-    footprint: 'PinHeader_1x02_P2.54mm',
+    footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    model3d: 'header_2pin_2.54mm',
     width: 30,
     height: 50,
     symbolSvg: 'dc_source',
@@ -102,14 +114,16 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'BATTERY',
     name: '9V Battery',
+    designatorPrefix: 'BT',
     category: 'sources',
     defaultValue: '9V',
-    defaultParams: { voltage: 9.0, capacityMah: 500 },
+    defaultParams: { voltage: 9.0, internalResistance: 0.2, capacityMah: 500 },
     pins: [
       { id: 'p', name: '+', x: 0, y: -25, pinType: 'power' },
       { id: 'n', name: '-', x: 0, y: 25, pinType: 'power' },
     ],
     footprint: 'BatteryHolder_Keystone_2460_1xAA',
+    model3d: 'battery_9v_block',
     width: 32,
     height: 50,
     symbolSvg: 'battery',
@@ -118,6 +132,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'GROUND',
     name: 'Ground (GND)',
+    designatorPrefix: 'GND',
     category: 'sources',
     defaultValue: '0V',
     defaultParams: { voltage: 0.0 },
@@ -125,6 +140,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '1', name: 'GND', x: 0, y: -15, pinType: 'power' },
     ],
     footprint: 'TestPoint_Pad_D1.0mm',
+    model3d: 'header_2pin_2.54mm',
     width: 24,
     height: 24,
     symbolSvg: 'gnd',
@@ -133,6 +149,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'FUNCTION_GENERATOR',
     name: 'Signal Generator',
+    designatorPrefix: 'V_GEN',
     category: 'sources',
     defaultValue: '1kHz 5V',
     defaultParams: { frequency: 1000, amplitude: 5.0, offset: 0, waveform: 'sine' },
@@ -140,7 +157,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'p', name: 'OUT', x: 30, y: 0, pinType: 'output' },
       { id: 'n', name: 'COM', x: -30, y: 0, pinType: 'power' },
     ],
-    footprint: 'BNC_Amphenol_B6252HB',
+    footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    model3d: 'header_2pin_2.54mm',
     width: 60,
     height: 40,
     symbolSvg: 'func_gen',
@@ -151,14 +169,16 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'LED',
     name: 'LED (Light Emitting Diode)',
+    designatorPrefix: 'LED',
     category: 'active',
     defaultValue: 'Red LED',
-    defaultParams: { color: '#EF4444', forwardVoltage: 2.0, maxCurrentMa: 20 },
+    defaultParams: { color: 'Red', forwardVoltageV: 2.0, maxCurrentMa: 20 },
     pins: [
-      { id: 'a', name: 'Anode (+)', x: -25, y: 0, pinType: 'passive' },
-      { id: 'k', name: 'Cathode (-)', x: 25, y: 0, pinType: 'passive' },
+      { id: 'a', name: 'A (+)', x: -25, y: 0, pinType: 'passive' },
+      { id: 'k', name: 'K (-)', x: 25, y: 0, pinType: 'passive' },
     ],
-    footprint: 'LED_0805_2012Metric',
+    footprint: 'LED_THT:LED_D5.0mm',
+    model3d: 'led_5mm_diffused',
     width: 50,
     height: 30,
     symbolSvg: 'led',
@@ -167,6 +187,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'DIODE',
     name: 'Diode (1N4148 / 1N4007)',
+    designatorPrefix: 'D',
     category: 'active',
     defaultValue: '1N4148',
     defaultParams: { forwardDropV: 0.7, maxCurrentA: 1.0 },
@@ -174,35 +195,39 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'a', name: 'A', x: -25, y: 0, pinType: 'passive' },
       { id: 'k', name: 'K', x: 25, y: 0, pinType: 'passive' },
     ],
-    footprint: 'D_SOD-123',
+    footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
+    model3d: 'resistor_axial_horiz',
     width: 50,
     height: 24,
     symbolSvg: 'diode',
     description: 'Unidirectional current rectifier blocking reverse polarity potentials.',
   },
   {
-    type: 'NPN_TRANSISTOR',
-    name: 'NPN Transistor (BC547 / 2N2222)',
+    type: 'BJT_NPN',
+    name: 'NPN Transistor (2N2222 / BC547)',
+    designatorPrefix: 'Q',
     category: 'active',
     defaultValue: '2N2222',
     defaultParams: { beta: 100, vceSat: 0.2 },
     pins: [
       { id: 'b', name: 'Base', x: -25, y: 0, pinType: 'input' },
-      { id: 'c', name: 'Collector', x: 15, y: -25, pinType: 'passive' },
-      { id: 'e', name: 'Emitter', x: 15, y: 25, pinType: 'passive' },
+      { id: 'c', name: 'Collector', x: 12, y: -25, pinType: 'passive' },
+      { id: 'e', name: 'Emitter', x: 12, y: 25, pinType: 'passive' },
     ],
-    footprint: 'TO-92_Inline',
+    footprint: 'Package_TO_SOT_THT:TO-92_Inline',
+    model3d: 'to92_transistor',
     width: 50,
     height: 50,
     symbolSvg: 'npn',
-    description: 'Bipolar junction transistor current amplifier & high-speed electronic switch.',
+    description: 'Bipolar junction transistor current amplifier & electronic switch.',
   },
   {
     type: 'TIMER_555',
     name: 'NE555 Precision Timer IC',
+    designatorPrefix: 'U',
     category: 'active',
     defaultValue: 'NE555P',
-    defaultParams: { vcc: 5.0 },
+    defaultParams: { vcc: 9.0 },
     pins: [
       { id: '1', name: 'GND', x: -40, y: -30, pinType: 'power' },
       { id: '2', name: 'TRIG', x: -40, y: -10, pinType: 'input' },
@@ -213,7 +238,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '7', name: 'DISCH', x: 40, y: -30, pinType: 'passive' },
       { id: '8', name: 'VCC', x: 40, y: 30, pinType: 'power' },
     ],
-    footprint: 'DIP-8_W7.62mm',
+    footprint: 'Package_DIP:DIP-8_W7.62mm',
+    model3d: 'dip8_integrated_circuit',
     width: 80,
     height: 80,
     symbolSvg: 'ic_dip8',
@@ -224,15 +250,17 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'LOGIC_AND',
     name: 'AND Gate (74HC08)',
+    designatorPrefix: 'U_AND',
     category: 'logic',
     defaultValue: '74HC08',
     defaultParams: {},
     pins: [
-      { id: 'a', name: 'A', x: -30, y: -12, pinType: 'input' },
-      { id: 'b', name: 'B', x: -30, y: 12, pinType: 'input' },
+      { id: 'a', name: 'A', x: -30, y: -8, pinType: 'input' },
+      { id: 'b', name: 'B', x: -30, y: 8, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'SOIC-14_3.9x8.7mm_P1.27mm',
+    footprint: 'Package_DIP:DIP-8_W7.62mm',
+    model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 40,
     symbolSvg: 'and_gate',
@@ -241,15 +269,17 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'LOGIC_OR',
     name: 'OR Gate (74HC32)',
+    designatorPrefix: 'U_OR',
     category: 'logic',
     defaultValue: '74HC32',
     defaultParams: {},
     pins: [
-      { id: 'a', name: 'A', x: -30, y: -12, pinType: 'input' },
-      { id: 'b', name: 'B', x: -30, y: 12, pinType: 'input' },
+      { id: 'a', name: 'A', x: -30, y: -8, pinType: 'input' },
+      { id: 'b', name: 'B', x: -30, y: 8, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'SOIC-14_3.9x8.7mm_P1.27mm',
+    footprint: 'Package_DIP:DIP-8_W7.62mm',
+    model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 40,
     symbolSvg: 'or_gate',
@@ -258,6 +288,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'LOGIC_NOT',
     name: 'NOT Inverter Gate (74HC04)',
+    designatorPrefix: 'U_NOT',
     category: 'logic',
     defaultValue: '74HC04',
     defaultParams: {},
@@ -265,7 +296,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'a', name: 'A', x: -25, y: 0, pinType: 'input' },
       { id: 'out', name: 'Y', x: 25, y: 0, pinType: 'output' },
     ],
-    footprint: 'SOIC-14_3.9x8.7mm_P1.27mm',
+    footprint: 'Package_DIP:DIP-8_W7.62mm',
+    model3d: 'dip8_integrated_circuit',
     width: 50,
     height: 30,
     symbolSvg: 'not_gate',
@@ -274,8 +306,9 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
 
   // MICROCONTROLLER
   {
-    type: 'MCU_ARDUINO_UNO',
+    type: 'ARDUINO_UNO',
     name: 'Virtual Arduino Uno (ATmega328P)',
+    designatorPrefix: 'U_MCU',
     category: 'microcontrollers',
     defaultValue: 'ATmega328P 16MHz',
     defaultParams: { clockMhz: 16, flashKb: 32, ramKb: 2 },
@@ -283,41 +316,21 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '5V', name: '5V', x: -60, y: -45, pinType: 'power' },
       { id: 'GND', name: 'GND', x: -60, y: -25, pinType: 'power' },
       { id: 'A0', name: 'A0', x: -60, y: 0, pinType: 'input' },
-      { id: 'A1', name: 'A1', x: -60, y: 20, pinType: 'input' },
-      { id: 'A2', name: 'A2', x: -60, y: 40, pinType: 'input' },
-      { id: 'D2', name: 'D2', x: 60, y: -40, pinType: 'bidirectional' },
-      { id: 'D3', name: 'D3', x: 60, y: -20, pinType: 'bidirectional' },
-      { id: 'D9', name: 'D9', x: 60, y: 0, pinType: 'bidirectional' },
-      { id: 'D10', name: 'D10', x: 60, y: 20, pinType: 'bidirectional' },
       { id: 'D13', name: 'D13', x: 60, y: 40, pinType: 'bidirectional' },
     ],
-    footprint: 'Module_Arduino_Uno',
+    footprint: 'Package_DIP:DIP-8_W7.62mm',
+    model3d: 'dip8_integrated_circuit',
     width: 120,
     height: 110,
     symbolSvg: 'arduino_uno',
     description: '16MHz 8-bit AVR microcontroller development board with programmable firmware.',
   },
 
-  // ACTUATORS / OUTPUTS
+  // SWITCHES
   {
-    type: 'DC_MOTOR',
-    name: 'DC Toy Motor',
-    category: 'sensors',
-    defaultValue: '3-6V DC',
-    defaultParams: { nominalVoltage: 5.0, rpm: 3000 },
-    pins: [
-      { id: '1', name: '+', x: -25, y: 0, pinType: 'passive' },
-      { id: '2', name: '-', x: 25, y: 0, pinType: 'passive' },
-    ],
-    footprint: 'Motor_DC_130_Small',
-    width: 50,
-    height: 50,
-    symbolSvg: 'motor',
-    description: 'Electromechanical actuator converting electrical energy into rotational motion.',
-  },
-  {
-    type: 'SPST_SWITCH',
+    type: 'SWITCH_SPST',
     name: 'Toggle Switch (SPST)',
+    designatorPrefix: 'SW',
     category: 'passive',
     defaultValue: 'Closed',
     defaultParams: { closed: true },
@@ -325,7 +338,8 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: '1', name: '1', x: -25, y: 0, pinType: 'passive' },
       { id: '2', name: '2', x: 25, y: 0, pinType: 'passive' },
     ],
-    footprint: 'Switch_SPST_Slide_2.54mm',
+    footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    model3d: 'header_2pin_2.54mm',
     width: 50,
     height: 24,
     symbolSvg: 'switch',
@@ -333,19 +347,34 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   },
 ];
 
-export function createComponentInstance(template: ComponentTemplate, x: number, y: number): CircuitComponent {
-  const uniqueId = `${template.type.toLowerCase()}_${Math.random().toString(36).substring(2, 9)}`;
+export function createComponentInstance(
+  template: ComponentTemplate,
+  x: number,
+  y: number,
+  existingComponents?: CircuitComponent[]
+): CircuitComponent {
+  const prefix = template.designatorPrefix || template.type.slice(0, 3);
+  let count = 0;
+  if (existingComponents && Array.isArray(existingComponents)) {
+    count = existingComponents.filter((c) => (c.designator || c.label).startsWith(prefix)).length;
+  }
+  const designator = `${prefix}${count + 1}`;
+  const uniqueId = `${prefix.toLowerCase()}_${Math.random().toString(36).substring(2, 9)}`;
+
   return {
     id: uniqueId,
     type: template.type,
-    label: template.name,
+    designator,
+    label: `${template.name} ${count + 1}`,
     category: template.category,
     x,
     y,
     rotation: 0,
+    mirrored: false,
     value: template.defaultValue,
     parameters: { ...template.defaultParams },
     pins: template.pins.map((p) => ({ ...p })),
     footprint: template.footprint,
+    model3d: template.model3d,
   };
 }

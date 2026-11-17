@@ -11,11 +11,12 @@ import { Search, Plus, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
 interface ComponentBrowserProps {
   onAddComponent: (comp: CircuitComponent) => void;
+  existingComponents?: CircuitComponent[];
   isOpen: boolean;
   onToggleOpen: () => void;
 }
 
-export function ComponentBrowser({ onAddComponent, isOpen, onToggleOpen }: ComponentBrowserProps) {
+export function ComponentBrowser({ onAddComponent, existingComponents, isOpen, onToggleOpen }: ComponentBrowserProps) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ComponentCategory | 'all'>('all');
 
@@ -31,7 +32,7 @@ export function ComponentBrowser({ onAddComponent, isOpen, onToggleOpen }: Compo
   const handleAdd = (template: ComponentTemplate) => {
     // Generate randomized initial position around the canvas center
     const randomOffset = () => Math.floor(Math.random() * 80) - 40;
-    const instance = createComponentInstance(template, 350 + randomOffset(), 250 + randomOffset());
+    const instance = createComponentInstance(template, 350 + randomOffset(), 250 + randomOffset(), existingComponents);
     onAddComponent(instance);
   };
 
