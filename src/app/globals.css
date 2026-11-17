@@ -328,7 +328,14 @@ body {
 
 @media (max-width: 768px) {
   .animate-pcb-trace,
-  .animate-pcb-trace-fast {
+  .animate-pcb-trace-fast,
+  .animate-radar-ring-1,
+  .animate-radar-ring-2,
+  .animate-radar-ring-3,
+  .animate-laser-scan,
+  .animate-chip-heartbeat,
+  .animate-float-slow,
+  .animate-pulse-glow {
     animation: none !important;
   }
 }

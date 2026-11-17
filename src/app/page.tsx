@@ -103,13 +103,13 @@ export default async function HomePage() {
                 {/* Quick Search Band */}
                 <div className="pt-4 max-w-lg">
                   <form action="/search" method="GET" className="relative flex items-center">
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <input
                       type="search"
                       name="q"
                       placeholder="Search courses, projects, STM32, IoT, PCB, or guides..."
                       aria-label="Universal Search"
-                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-24 text-sm text-[#0B1528] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#172D4D]"
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-24 text-sm text-[#0B1528] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#172D4D]"
                     />
                     <button
                       type="submit"

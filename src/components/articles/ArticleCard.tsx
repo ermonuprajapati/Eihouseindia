@@ -18,12 +18,17 @@ export function ArticleCard({ post }: { post: Post }) {
   return (
     <article className="group flex flex-col justify-between border-b border-slate-200 pb-6 sm:border sm:rounded-lg sm:bg-white sm:p-5 sm:hover:border-slate-300 transition-colors">
       <div>
-        <Link href={`/blog/${post.slug}`} prefetch={false} className="block mb-4">
+        <Link
+          href={`/blog/${post.slug}`}
+          prefetch={false}
+          className="block mb-4"
+          aria-label={`Read article: ${post.title}`}
+        >
           <ArticleCoverMedia src={post.coverImage} alt={post.title} aspectClass="aspect-[4/3]" />
         </Link>
 
         {/* Zero-pill metadata */}
-        <div className="mb-2.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+        <div className="mb-2.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <Link
             href={`/category/${post.categorySlug || post.categoryId}`}
             prefetch={false}
