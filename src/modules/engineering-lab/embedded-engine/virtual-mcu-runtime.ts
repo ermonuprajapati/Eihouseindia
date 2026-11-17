@@ -104,7 +104,7 @@ export class VirtualMcuRuntime {
 
     try {
       // Parse Arduino C-style code into executable JavaScript functions
-      // Replaces standard Arduino C constructs (void setup(), void loop(), int, float) with JS syntax
+      // Replaces standard Arduino C constructs (void setup(), void loop(), int, float, #define) with JS syntax
       const jsCode = firmware.code;
 
       // Extract setup and loop function bodies
@@ -112,31 +112,35 @@ export class VirtualMcuRuntime {
       const loopMatch = jsCode.match(/void\s+loop\s*\(\s*\)\s*\{([\s\S]*?)\n\}/);
 
       if (setupMatch || loopMatch) {
+        let globalsCode = jsCode
+          .replace(/void\s+setup\s*\(\s*\)\s*\{[\s\S]*?\n\}/g, '')
+          .replace(/void\s+loop\s*\(\s*\)\s*\{[\s\S]*?\n\}/g, '');
+        globalsCode = this.transpileArduinoToJs(globalsCode);
+
         const setupBody = setupMatch ? this.transpileArduinoToJs(setupMatch[1]) : '';
         const loopBody = loopMatch ? this.transpileArduinoToJs(loopMatch[1]) : '';
 
-        if (!this.setupExecuted) {
-          const setupFn = new Function(
-            'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite',
-            'delay', 'millis', 'Serial', 'HIGH', 'LOW', 'INPUT', 'OUTPUT', 'LED_BUILTIN',
-            setupBody
-          );
-          setupFn(
-            sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite,
-            sandbox.delay, sandbox.millis, sandbox.Serial, sandbox.HIGH, sandbox.LOW, sandbox.INPUT, sandbox.OUTPUT, sandbox.LED_BUILTIN
-          );
-          this.setupExecuted = true;
-        }
+        const fullProgram = `
+          ${globalsCode}
+          if (!__isSetupDone) {
+            ${setupBody}
+          }
+          ${loopBody}
+        `;
 
-        const loopFn = new Function(
+        const runnerFn = new Function(
           'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite',
           'delay', 'millis', 'Serial', 'HIGH', 'LOW', 'INPUT', 'OUTPUT', 'LED_BUILTIN',
-          loopBody
+          '__isSetupDone',
+          fullProgram
         );
-        loopFn(
+
+        runnerFn(
           sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite,
-          sandbox.delay, sandbox.millis, sandbox.Serial, sandbox.HIGH, sandbox.LOW, sandbox.INPUT, sandbox.OUTPUT, sandbox.LED_BUILTIN
+          sandbox.delay, sandbox.millis, sandbox.Serial, sandbox.HIGH, sandbox.LOW, sandbox.INPUT, sandbox.OUTPUT, sandbox.LED_BUILTIN,
+          this.setupExecuted
         );
+        this.setupExecuted = true;
       } else {
         // Direct script execution
         const transCode = this.transpileArduinoToJs(jsCode);
@@ -173,8 +177,9 @@ export class VirtualMcuRuntime {
 
   private transpileArduinoToJs(cCode: string): string {
     return cCode
-      .replace(/\b(int|float|double|char|long|byte|unsigned int|bool|boolean)\s+/g, 'let ')
-      .replace(/\bconst\s+(int|float|double|char|long|byte)\s+/g, 'const ')
+      .replace(/#define\s+([A-Za-z0-9_]+)\s+([^\n]+)/g, 'const $1 = $2;')
+      .replace(/\bconst\s+(volatile\s+)?(unsigned\s+)?(long|int|short|char|byte|float|double|bool|boolean)\s+/g, 'const ')
+      .replace(/\b(volatile\s+)?(unsigned\s+)?(long|int|short|char|byte|float|double|bool|boolean)\s+/g, 'var ')
       .replace(/Serial\.println\s*\(/g, 'Serial.println(')
       .replace(/Serial\.print\s*\(/g, 'Serial.print(');
   }

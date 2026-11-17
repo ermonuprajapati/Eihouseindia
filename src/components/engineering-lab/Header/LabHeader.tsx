@@ -21,6 +21,7 @@ import {
   RefreshCw,
   ArrowLeft,
   ChevronDown,
+  Calculator,
 } from 'lucide-react';
 import { WorkspaceMode } from '@/modules/engineering-lab/types';
 
@@ -166,6 +167,18 @@ export function LabHeader({
         >
           <Code2 className="w-3.5 h-3.5" />
           Embedded MCU
+        </button>
+
+        <button
+          onClick={() => onModeChange('calculators')}
+          className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all ${
+            activeMode === 'calculators'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          R&D Calculators
         </button>
 
         <button

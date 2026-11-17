@@ -1,4 +1,4 @@
-import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack } from '../types';
+import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
 
 export class PcbGenerator {
   /**
@@ -12,6 +12,7 @@ export class PcbGenerator {
   ): PcbLayout {
     const pads: PcbPad[] = [];
     const tracks: PcbTrack[] = [];
+    const placedComponents: PcbComponentPlacement[] = [];
 
     // Scale schematic coordinates down to PCB millimeter space
     // Center of schematic maps to center of board
@@ -30,8 +31,20 @@ export class PcbGenerator {
 
     components.forEach((comp) => {
       // Normalize to 10mm margin inside PCB board boundary
-      const normX = 10 + ((comp.x - minX) / spanX) * (boardWidthMm - 20);
-      const normY = 10 + ((comp.y - minY) / spanY) * (boardHeightMm - 20);
+      const normX = Math.round((10 + ((comp.x - minX) / spanX) * (boardWidthMm - 20)) * 10) / 10;
+      const normY = Math.round((10 + ((comp.y - minY) / spanY) * (boardHeightMm - 20)) * 10) / 10;
+
+      placedComponents.push({
+        componentId: comp.id,
+        designator: comp.designator || comp.label,
+        type: comp.type,
+        label: comp.label,
+        value: comp.value,
+        footprint: comp.footprint,
+        x: normX,
+        y: normY,
+        rotation: comp.rotation || 0,
+      });
 
       comp.pins.forEach((pin, idx) => {
         // Pin offset scaled to PCB footprint dimensions (~2.54mm pitch)
@@ -85,6 +98,7 @@ export class PcbGenerator {
       copperLayers: 2,
       pads,
       tracks,
+      components: placedComponents,
       drcErrors,
     };
   }

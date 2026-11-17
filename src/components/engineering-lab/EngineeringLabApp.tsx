@@ -21,6 +21,7 @@ import { PropertiesInspector } from './Panels/PropertiesInspector';
 import { InstrumentPanel } from './Panels/InstrumentPanel';
 import { FirmwareEditor } from './Panels/FirmwareEditor';
 import { PcbView } from './Panels/PcbView';
+import { CalculatorsPanel } from './Panels/CalculatorsPanel';
 import { LabExperimentsModal } from './Panels/LabExperimentsModal';
 import { LabStatusBar } from './StatusBar/LabStatusBar';
 import { toast } from 'sonner';
@@ -487,6 +488,9 @@ export function EngineeringLabApp() {
             }}
           />
         )}
+
+        {/* R&D Engineering Calculators Mode */}
+        {activeMode === 'calculators' && <CalculatorsPanel />}
       </div>
 
       {/* Guided Experiments Modal */}

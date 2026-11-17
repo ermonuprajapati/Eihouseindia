@@ -5,7 +5,8 @@ export type WorkspaceMode =
   | 'pcb3d'
   | 'firmware'
   | 'instruments'
-  | 'experiments';
+  | 'experiments'
+  | 'calculators';
 
 export type ComponentCategory =
   | 'passive'
@@ -138,6 +139,18 @@ export interface PcbPad {
   layer: 'all' | 'top' | 'bottom';
 }
 
+export interface PcbComponentPlacement {
+  componentId: string;
+  designator: string;
+  type: string;
+  label: string;
+  value: string;
+  footprint: string;
+  x: number; // in mm
+  y: number; // in mm
+  rotation: number;
+}
+
 export interface PcbLayout {
   widthMm: number;
   heightMm: number;
@@ -145,6 +158,7 @@ export interface PcbLayout {
   copperLayers: 2 | 4;
   tracks: PcbTrack[];
   pads: PcbPad[];
+  components?: PcbComponentPlacement[];
   drcErrors: { id: string; message: string; severity: 'error' | 'warning' }[];
 }
 
