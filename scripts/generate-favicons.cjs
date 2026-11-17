@@ -21,6 +21,10 @@ function createDibIco(frames) {
   for (const f of frames) {
     const { width, height, rawRgba } = f;
 
+    const andRowBytes = Math.ceil(width / 32) * 4;
+    const xorLen = width * height * 4;
+    const andLen = andRowBytes * height;
+
     // BITMAPINFOHEADER (40 bytes)
     const bih = Buffer.alloc(40);
     bih.writeUInt32LE(40, 0); // Header size
@@ -29,17 +33,16 @@ function createDibIco(frames) {
     bih.writeUInt16LE(1, 12); // Color planes
     bih.writeUInt16LE(32, 14); // 32 bits per pixel (BGRA)
     bih.writeUInt32LE(0, 16); // Compression: BI_RGB (uncompressed)
-    bih.writeUInt32LE(width * height * 4, 20); // Image data size
+    bih.writeUInt32LE(xorLen + andLen, 20); // Image data size: XOR mask + 1-bit AND mask
     bih.writeInt32LE(0, 24); // Horizontal resolution
     bih.writeInt32LE(0, 28); // Vertical resolution
     bih.writeUInt32LE(0, 32); // Palette colors
     bih.writeUInt32LE(0, 36); // Important colors
 
     // XOR bitmap data: bottom-up BGRA
-    const xorData = Buffer.alloc(width * height * 4);
+    const xorData = Buffer.alloc(xorLen);
     // 1-bit AND mask: bottom-up 1 bit per pixel, padded to 32-bit DWORD boundary
-    const andRowBytes = Math.ceil(width / 32) * 4;
-    const andMask = Buffer.alloc(andRowBytes * height, 0);
+    const andMask = Buffer.alloc(andLen, 0);
 
     for (let y = 0; y < height; y++) {
       const srcRow = height - 1 - y; // Bottom-up row
@@ -179,6 +182,8 @@ async function generate() {
     { name: 'favicon-48x48.png', size: 48 },
     { name: 'favicon-96x96.png', size: 96 },
     { name: 'apple-touch-icon.png', size: 180 },
+    { name: 'android-chrome-192x192.png', size: 192 },
+    { name: 'android-chrome-512x512.png', size: 512 },
     { name: 'icon-192x192.png', size: 192 },
     { name: 'icon-512x512.png', size: 512 },
     { name: 'icon-512.png', size: 512 },
