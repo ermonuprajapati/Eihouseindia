@@ -32,6 +32,7 @@ import {
 } from '@/modules/storage/storage-service';
 import {
   saveLibraryItemAdmin,
+  deleteLibraryItemAdmin,
   LIBRARY_CATEGORIES,
   getLibraryLogoUrl,
   getLibraryHeroImageUrl,
@@ -88,6 +89,7 @@ export function LibraryAdminModal({
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (item && open) {
@@ -257,6 +259,25 @@ export function LibraryAdminModal({
     }
   };
 
+  const handleDelete = async () => {
+    if (!item?.id || !profile || !isEditor) return;
+    if (!confirm(`Are you sure you want to permanently delete "${title || item.title}" from the library?`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteLibraryItemAdmin(item.id, profile, effectiveRole);
+      toast.success(`Resource "${title || item.title}" deleted.`);
+      onSaved();
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete library resource.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
@@ -276,12 +297,26 @@ export function LibraryAdminModal({
             </DialogHeader>
 
             <div className="flex items-center gap-2">
+              {!isNew && item?.id && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={saving || deleting}
+                  className="text-xs font-semibold h-8 gap-1 mr-1"
+                  title="Delete this library resource"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>{deleting ? 'Deleting...' : 'Delete'}</span>
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onOpenChange(false)}
-                disabled={saving}
+                disabled={saving || deleting}
               >
                 Cancel
               </Button>
@@ -289,7 +324,7 @@ export function LibraryAdminModal({
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={saving || uploadingCover || uploadingIcon || uploadingDoc}
+                disabled={saving || deleting || uploadingCover || uploadingIcon || uploadingDoc}
               >
                 {saving ? 'Saving...' : isNew ? 'Create Resource' : 'Save Changes'}
               </Button>

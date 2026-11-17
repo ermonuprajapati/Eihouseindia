@@ -20,6 +20,7 @@ import { useAuth } from '@/modules/auth/auth-context';
 import { uploadEditorialImage, validateImageFile } from '@/modules/storage/storage-service';
 import {
   saveToolAdmin,
+  deleteToolAdmin,
   ENGINEERING_DOMAINS,
   TOOL_CATEGORIES,
   TOOL_LICENSES,
@@ -82,6 +83,7 @@ export function ToolAdminModal({
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (tool && open) {
@@ -238,6 +240,25 @@ export function ToolAdminModal({
     }
   };
 
+  const handleDelete = async () => {
+    if (!tool?.id || !profile || !isEditor) return;
+    if (!confirm(`Are you sure you want to permanently delete "${name || tool.name}" from tools?`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteToolAdmin(tool.id, profile, effectiveRole);
+      toast.success(`Tool "${name || tool.name}" deleted.`);
+      onSaved();
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete tool.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
@@ -255,12 +276,26 @@ export function ToolAdminModal({
             </DialogHeader>
 
             <div className="flex items-center gap-2">
+              {!isNew && tool?.id && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={saving || deleting}
+                  className="text-xs font-semibold h-8 gap-1 mr-1"
+                  title="Delete this tool"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>{deleting ? 'Deleting...' : 'Delete'}</span>
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onOpenChange(false)}
-                disabled={saving}
+                disabled={saving || deleting}
               >
                 Cancel
               </Button>
@@ -268,7 +303,7 @@ export function ToolAdminModal({
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={saving || uploadingLogo || uploadingScreenshot}
+                disabled={saving || deleting || uploadingLogo || uploadingScreenshot}
               >
                 {saving ? 'Saving...' : isNew ? 'Create Tool' : 'Save Changes'}
               </Button>

@@ -199,6 +199,20 @@ export function DatasheetAdminModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {!isNew && item?.id && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={saving || deleting}
+                className="text-xs font-semibold h-8 gap-1 mr-1"
+                title="Delete this datasheet"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{deleting ? 'Deleting...' : 'Delete'}</span>
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -430,23 +444,6 @@ export function DatasheetAdminModal({
               </Label>
             </div>
           </div>
-
-          {/* Delete Button for Existing Record */}
-          {!isNew && item?.id && (
-            <div className="pt-3 border-t border-slate-200 flex justify-end">
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={handleDelete}
-                disabled={deleting || saving}
-                className="text-xs h-8 gap-1"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>{deleting ? 'Deleting...' : 'Delete Datasheet'}</span>
-              </Button>
-            </div>
-          )}
         </form>
       </DialogContent>
     </Dialog>
