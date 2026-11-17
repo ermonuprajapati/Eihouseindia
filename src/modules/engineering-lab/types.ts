@@ -1,0 +1,173 @@
+export type WorkspaceMode =
+  | 'schematic'
+  | 'simulation'
+  | 'pcb2d'
+  | 'pcb3d'
+  | 'firmware'
+  | 'instruments'
+  | 'experiments';
+
+export type ComponentCategory =
+  | 'passive'
+  | 'active'
+  | 'sources'
+  | 'logic'
+  | 'microcontrollers'
+  | 'sensors'
+  | 'displays'
+  | 'instruments';
+
+export interface ComponentPin {
+  id: string;
+  name: string;
+  x: number; // offset relative to component origin
+  y: number;
+  pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive';
+}
+
+export interface CircuitComponent {
+  id: string;
+  type: string;
+  label: string;
+  category: ComponentCategory;
+  x: number;
+  y: number;
+  rotation: 0 | 90 | 180 | 270;
+  value: string;
+  parameters: Record<string, number | string | boolean>;
+  pins: ComponentPin[];
+  footprint: string;
+  state?: {
+    voltage?: number;
+    current?: number;
+    on?: boolean;
+    digitalOut?: number;
+  };
+}
+
+export interface CircuitWire {
+  id: string;
+  fromCompId: string;
+  fromPinId: string;
+  toCompId: string;
+  toPinId: string;
+  points?: { x: number; y: number }[];
+  current?: number;
+}
+
+export interface CircuitProbe {
+  id: string;
+  targetCompId: string;
+  targetPinId: string;
+  color: string;
+  label: string;
+  probeType: 'voltage' | 'current';
+  active: boolean;
+}
+
+export interface SimulationWaveformPoint {
+  time: number;
+  value: number;
+}
+
+export interface VirtualInstrumentState {
+  oscilloscope: {
+    timebaseMs: number; // ms per div (e.g., 1ms, 5ms, 10ms)
+    ch1ScaleV: number;  // V per div (e.g., 1V, 2V, 5V)
+    ch2ScaleV: number;
+    ch1Enabled: boolean;
+    ch2Enabled: boolean;
+    triggerLevel: number;
+    running: boolean;
+  };
+  multimeter: {
+    mode: 'DC_V' | 'AC_V' | 'RESISTANCE' | 'CONTINUITY' | 'CURRENT_MA';
+    reading: number;
+    unit: string;
+    probesConnected: boolean;
+  };
+  functionGenerator: {
+    waveform: 'sine' | 'square' | 'triangle' | 'sawtooth';
+    frequencyHz: number;
+    amplitudeV: number;
+    offsetV: number;
+    dutyCycle: number;
+    enabled: boolean;
+  };
+  logicAnalyzer: {
+    channels: { id: string; label: string; samples: number[] }[];
+    sampleRateHz: number;
+    running: boolean;
+  };
+}
+
+export interface FirmwareState {
+  code: string;
+  language: 'arduino' | 'cpp' | 'micropython';
+  targetMcu: 'ATmega328P' | 'ESP32' | 'RP2040';
+  serialLog: string[];
+  isRunning: boolean;
+  gpioStates: Record<number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
+}
+
+export interface PcbTrack {
+  id: string;
+  layer: 'top_copper' | 'bottom_copper';
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  widthMm: number;
+  netId?: string;
+}
+
+export interface PcbPad {
+  id: string;
+  componentId: string;
+  pinId: string;
+  x: number;
+  y: number;
+  shape: 'round' | 'rect';
+  diameterMm: number;
+  holeMm: number;
+  layer: 'all' | 'top' | 'bottom';
+}
+
+export interface PcbLayout {
+  widthMm: number;
+  heightMm: number;
+  boardThicknessMm: number;
+  copperLayers: 2 | 4;
+  tracks: PcbTrack[];
+  pads: PcbPad[];
+  drcErrors: { id: string; message: string; severity: 'error' | 'warning' }[];
+}
+
+export interface EngineeringProject {
+  id: string;
+  title: string;
+  description: string;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+  components: CircuitComponent[];
+  wires: CircuitWire[];
+  probes: CircuitProbe[];
+  firmware: FirmwareState;
+  pcb: PcbLayout;
+  instruments: VirtualInstrumentState;
+}
+
+export interface GuidedExperiment {
+  id: string;
+  title: string;
+  category: 'analog' | 'digital' | 'mcu' | 'power' | 'rf';
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  description: string;
+  learningObjectives: string[];
+  initialProject: EngineeringProject;
+  guidedSteps: {
+    title: string;
+    instruction: string;
+    expectedMeasurement: string;
+    hint: string;
+  }[];
+}
