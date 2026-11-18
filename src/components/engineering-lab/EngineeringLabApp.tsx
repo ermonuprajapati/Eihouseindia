@@ -294,6 +294,13 @@ export function EngineeringLabApp() {
     }));
   };
 
+  const handleUpdateComponent3DPosition = (id: string, x3d: number, y3d: number, z3d: number) => {
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.map((c) => (c.id === id ? { ...c, x3d, y3d, z3d } : c)),
+    }));
+  };
+
   const handleRotateComponent = (id: string) => {
     recordHistory();
     setProject((prev) => ({
@@ -773,6 +780,7 @@ export function EngineeringLabApp() {
               onAddComponent={handleAddComponent}
               onUpdateComponent={handleUpdateComponent}
               onUpdateComponentPosition={handleUpdateComponentPosition}
+              onUpdateComponent3DPosition={handleUpdateComponent3DPosition}
               onDeleteComponent={handleDeleteComponent}
               onAddWire={handleAddWire}
               onDeleteWire={handleDeleteWire}

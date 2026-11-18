@@ -20,6 +20,21 @@ import {
   Unplug,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  findNearestBreadboardHole,
+  getBreadboardHoleCoords,
+  getResistorColorBands,
+  drawBox3D,
+  BB_DEFAULT_X,
+  BB_DEFAULT_Z,
+  BB_WIDTH,
+  BB_HEIGHT,
+  BB_DEPTH,
+  BB_ROWS,
+  BB_START_X,
+  BB_STEP_X,
+  BB_COL_Z,
+} from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -31,6 +46,7 @@ interface Virtual3dStudioProps {
   onAddComponent: (comp: CircuitComponent) => void;
   onUpdateComponent?: (updated: CircuitComponent) => void;
   onUpdateComponentPosition?: (id: string, x: number, y: number) => void;
+  onUpdateComponent3DPosition?: (id: string, x3d: number, y3d: number, z3d: number) => void;
   onDeleteComponent?: (id: string) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire?: (wireId: string) => void;
@@ -62,6 +78,7 @@ export function Virtual3dStudio({
   onAddComponent,
   onUpdateComponent,
   onUpdateComponentPosition,
+  onUpdateComponent3DPosition,
   onDeleteComponent,
   onAddWire,
   onDeleteWire,
@@ -103,6 +120,17 @@ export function Virtual3dStudio({
     compId: string;
     pinId: string;
     pinName: string;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+
+  // Interactive Breadboard Hole Snap State
+  const [hoveredHole, setHoveredHole] = useState<{
+    id: string;
+    name: string;
+    x3d: number;
+    y3d: number;
+    z3d: number;
     screenX: number;
     screenY: number;
   } | null>(null);
@@ -181,12 +209,17 @@ export function Virtual3dStudio({
   // --------------------------------------------------------------------------
   const getComponentPinWorld3D = useCallback(
     (comp: CircuitComponent, pinId: string): { x: number; y: number; z: number; name: string } => {
+      // Direct Solderless Breadboard Hole Support
+      if (comp.id === 'BREADBOARD' || comp.type === 'BREADBOARD') {
+        return getBreadboardHoleCoords(pinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+      }
+
       const pin = comp.pins.find((p) => p.id === pinId);
       const pinName = pin ? pin.name : pinId;
 
-      // Component 3D origin on workbench / breadboard
-      const compX = (comp.x - 400) * 0.7;
-      const compZ = (comp.y - 300) * 0.7;
+      // Component 3D origin on workbench / breadboard (independent 3D coordinates preferred)
+      const compX = comp.x3d !== undefined ? comp.x3d : (comp.x - 400) * 0.7;
+      const compZ = comp.z3d !== undefined ? comp.z3d : (comp.y - 300) * 0.7;
       const compY = 0; // Surface level
 
       // Board / IC specific pin layout offsets
@@ -196,41 +229,114 @@ export function Virtual3dStudio({
 
       if (comp.type.includes('ARDUINO_UNO')) {
         oy = -14; // Header socket top
-        if (pinId === '5V') { ox = -38; oz = 32; }
-        else if (pinId === 'GND') { ox = -26; oz = 32; }
-        else if (pinId === 'A0') { ox = 8; oz = 32; }
-        else if (pinId === 'A1') { ox = 18; oz = 32; }
-        else if (pinId === 'D13') { ox = -38; oz = -32; }
-        else if (pinId === 'D2') { ox = 28; oz = -32; }
-      } else if (comp.type.includes('MEGA')) {
-        oy = -14;
-        if (pinId === '5V') { ox = -50; oz = 35; }
-        else if (pinId === 'GND') { ox = -35; oz = 35; }
-        else if (pinId === 'D13') { ox = -50; oz = -35; }
+        // Top Digital Header (Z = -31)
+        if (pinId === 'D0' || pinId === '0' || pinId.includes('RX')) { ox = 36; oz = -31; }
+        else if (pinId === 'D1' || pinId === '1' || pinId.includes('TX')) { ox = 30; oz = -31; }
+        else if (pinId === 'D2' || pinId === '2') { ox = 24; oz = -31; }
+        else if (pinId === 'D3' || pinId === '3') { ox = 18; oz = -31; }
+        else if (pinId === 'D4' || pinId === '4') { ox = 12; oz = -31; }
+        else if (pinId === 'D5' || pinId === '5') { ox = 6; oz = -31; }
+        else if (pinId === 'D6' || pinId === '6') { ox = 0; oz = -31; }
+        else if (pinId === 'D7' || pinId === '7') { ox = -6; oz = -31; }
+        else if (pinId === 'D8' || pinId === '8') { ox = -12; oz = -31; }
+        else if (pinId === 'D9' || pinId === '9') { ox = -17; oz = -31; }
+        else if (pinId === 'D10' || pinId === '10') { ox = -22; oz = -31; }
+        else if (pinId === 'D11' || pinId === '11') { ox = -27; oz = -31; }
+        else if (pinId === 'D12' || pinId === '12') { ox = -32; oz = -31; }
+        else if (pinId === 'D13' || pinId === '13') { ox = -37; oz = -31; }
+        else if (pinId === 'GND' && (pin?.y ?? 0) < 0) { ox = -42; oz = -31; }
+        else if (pinId === 'AREF') { ox = -47; oz = -31; }
+        else if (pinId === 'SDA') { ox = -52; oz = -31; }
+        else if (pinId === 'SCL') { ox = -57; oz = -31; }
+        // Bottom Power & Analog Headers (Z = 31)
+        else if (pinId === 'IOREF') { ox = -42; oz = 31; }
+        else if (pinId === 'RESET' || pinId === 'RST') { ox = -36; oz = 31; }
+        else if (pinId === '3V3' || pinId === '3.3V') { ox = -30; oz = 31; }
+        else if (pinId === '5V') { ox = -24; oz = 31; }
+        else if (pinId === 'GND' || pinId === 'GND1' || pinId === 'GND2') { ox = -18; oz = 31; }
+        else if (pinId === 'VIN') { ox = -6; oz = 31; }
+        else if (pinId === 'A0') { ox = 12; oz = 31; }
+        else if (pinId === 'A1') { ox = 18; oz = 31; }
+        else if (pinId === 'A2') { ox = 24; oz = 31; }
+        else if (pinId === 'A3') { ox = 30; oz = 31; }
+        else if (pinId === 'A4') { ox = 36; oz = 31; }
+        else if (pinId === 'A5') { ox = 42; oz = 31; }
+        else { ox = 0; oz = 0; }
+      } else if (comp.type.includes('NANO')) {
+        oy = -10;
+        // Dual row 15-pin DIP headers
+        if (['D1', 'D0', 'RESET', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'].includes(pinId)) {
+          const idx = ['D1', 'D0', 'RESET', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'].indexOf(pinId);
+          ox = -14;
+          oz = -35 + idx * 5;
+        } else {
+          const rPins = ['D13', '3V3', 'AREF', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', '5V', 'RESET2', 'GND2', 'VIN'];
+          const idx = Math.max(0, rPins.indexOf(pinId));
+          ox = 14;
+          oz = -35 + idx * 5;
+        }
       } else if (comp.type.includes('ESP32')) {
         oy = -12;
-        if (pinId === '3V3') { ox = -28; oz = -30; }
-        else if (pinId === 'GND') { ox = -28; oz = -18; }
-        else if (pinId === 'IO2' || pinId === 'IO48') { ox = 28; oz = -18; }
+        const leftPins = ['3V3', 'EN', 'VP', 'VN', 'D34', 'D35', 'D32', 'D33', 'D25', 'D26', 'D27', 'D14', 'D12', 'GND', 'D13'];
+        const rightPins = ['D23', 'D22', 'TX', 'RX', 'D21', 'D19', 'D18', 'D5', 'TX2', 'RX2', 'D4', 'D2', 'D15', 'GND2', '3V3_2'];
+        if (leftPins.includes(pinId)) {
+          ox = -26;
+          oz = -35 + leftPins.indexOf(pinId) * 5;
+        } else if (rightPins.includes(pinId)) {
+          ox = 26;
+          oz = -35 + rightPins.indexOf(pinId) * 5;
+        } else {
+          ox = pinId.includes('3V') ? -26 : 26;
+          oz = 0;
+        }
       } else if (comp.type.includes('PICO')) {
         oy = -10;
-        if (pinId === '3V3') { ox = -25; oz = -35; }
-        else if (pinId === 'GND') { ox = -25; oz = -23; }
-        else if (pinId.includes('GP25')) { ox = 25; oz = -23; }
-      } else if (comp.type === 'LED') {
-        oy = -18; // LED dome pin lead top
-        ox = pinId === 'a' ? -6 : 6;
+        const leftP = ['GP0', 'GP1', 'GND', 'GP2', 'GP3', 'GP4', 'GP5', 'GND2', 'GP6', 'GP7', 'GP8', 'GP9', 'GND3', 'GP10', 'GP11', 'GP12', 'GP13', 'GND4', 'GP14', 'GP15'];
+        if (leftP.includes(pinId)) {
+          ox = -22;
+          oz = -45 + leftP.indexOf(pinId) * 4.6;
+        } else {
+          ox = 22;
+          oz = 0;
+        }
+      } else if (comp.type === 'POTENTIOMETER') {
+        oy = 0;
+        if (pinId === '1' || pinId === 'a' || pinId === 'A') { ox = -14; oz = 8; }
+        else if (pinId === '2' || pinId === 'wiper' || pinId === 'w' || pinId === 'W') { ox = 0; oz = 14; }
+        else if (pinId === '3' || pinId === 'b' || pinId === 'B') { ox = 14; oz = 8; }
+      } else if (comp.type === 'LED' || comp.type === 'ACTUATOR_RGB_LED') {
+        oy = -16;
+        ox = (pinId === 'a' || pinId === '1') ? -6 : 6;
         oz = 0;
       } else if (comp.type === 'RESISTOR') {
-        oy = -8;
-        ox = pinId === '1' ? -20 : 20;
+        oy = 0;
+        ox = pinId === '1' ? -22 : 22;
+        oz = 0;
+      } else if (comp.type === 'CAPACITOR') {
+        oy = 0;
+        ox = pinId === '1' ? -8 : 8;
         oz = 0;
       } else if (comp.type === 'PUSHBUTTON') {
-        oy = -6;
-        ox = pinId === '1' ? -12 : 12;
-        oz = 0;
-      } else if (comp.type === 'TIMER_555' || comp.type.startsWith('LOGIC_')) {
-        oy = -8;
+        oy = 0;
+        if (pinId === '1') { ox = -12; oz = -8; }
+        else if (pinId === '2') { ox = 12; oz = -8; }
+        else if (pinId === '3') { ox = -12; oz = 8; }
+        else if (pinId === '4') { ox = 12; oz = 8; }
+      } else if (comp.type === 'TIMER_555' || comp.type.startsWith('LOGIC_') || comp.type.includes('DIP8')) {
+        oy = 0;
+        if (['1', '2', '3', '4'].includes(pinId)) {
+          ox = -14;
+          oz = -9 + (parseInt(pinId, 10) - 1) * 6;
+        } else {
+          const pNum = parseInt(pinId, 10) || 8;
+          ox = 14;
+          oz = -9 + (8 - pNum) * 6;
+        }
+      } else if (comp.type.includes('7805') || comp.type.includes('MOSFET') || comp.type.includes('TRANSISTOR') || comp.type.includes('TO220')) {
+        oy = 0;
+        if (pinId === '1' || pinId === 'in' || pinId === 'g' || pinId === 'b') { ox = -8; oz = 0; }
+        else if (pinId === '2' || pinId === 'gnd' || pinId === 'd' || pinId === 'c') { ox = 0; oz = 0; }
+        else if (pinId === '3' || pinId === 'out' || pinId === 's' || pinId === 'e') { ox = 8; oz = 0; }
       }
 
       return {
@@ -283,6 +389,8 @@ export function Virtual3dStudio({
       const worldZ = camOriginZ + t * dirZ;
 
       return {
+        world3dX: Math.round(worldX),
+        world3dZ: Math.round(worldZ),
         schematicX: Math.round(worldX / 0.7 + 400),
         schematicY: Math.round(worldZ / 0.7 + 300),
       };
@@ -310,9 +418,26 @@ export function Virtual3dStudio({
 
   // Disconnect start pin and immediately start re-wiring from end pin
   const handleDisconnectStart = (wire: CircuitWire) => {
+    if (onDeleteWire) onDeleteWire(wire.id);
+
+    if (wire.toCompId === 'BREADBOARD' || wire.toCompId === 'bb') {
+      const h3d = getBreadboardHoleCoords(wire.toPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+      setActiveWireStart({
+        compId: 'BREADBOARD',
+        pinId: wire.toPinId,
+        pinName: h3d.name,
+        x3d: h3d.x,
+        y3d: h3d.y,
+        z3d: h3d.z,
+      });
+      setActiveWireColor(wire.color || '#3B82F6');
+      onSelectWire?.(null);
+      toast.info(`Disconnected start pin. Click any pin or breadboard hole to re-connect from ${h3d.name}.`);
+      return;
+    }
+
     const toComp = components.find((c) => c.id === wire.toCompId);
     const toPin = toComp?.pins.find((p) => p.id === wire.toPinId);
-    if (onDeleteWire) onDeleteWire(wire.id);
     if (toComp) {
       const p3d = getComponentPinWorld3D(toComp, wire.toPinId);
       setActiveWireStart({
@@ -325,15 +450,32 @@ export function Virtual3dStudio({
       });
       setActiveWireColor(wire.color || '#3B82F6');
       onSelectWire?.(null);
-      toast.info(`Disconnected from start. Click any pin in 3D to re-connect from ${toComp.label} [${toPin?.name || wire.toPinId}].`);
+      toast.info(`Disconnected start pin. Click any pin or hole in 3D to re-connect from ${toComp.label} [${toPin?.name || wire.toPinId}].`);
     }
   };
 
   // Disconnect end pin and immediately start re-wiring from start pin
   const handleDisconnectEnd = (wire: CircuitWire) => {
+    if (onDeleteWire) onDeleteWire(wire.id);
+
+    if (wire.fromCompId === 'BREADBOARD' || wire.fromCompId === 'bb') {
+      const h3d = getBreadboardHoleCoords(wire.fromPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+      setActiveWireStart({
+        compId: 'BREADBOARD',
+        pinId: wire.fromPinId,
+        pinName: h3d.name,
+        x3d: h3d.x,
+        y3d: h3d.y,
+        z3d: h3d.z,
+      });
+      setActiveWireColor(wire.color || '#3B82F6');
+      onSelectWire?.(null);
+      toast.info(`Disconnected end pin. Click any pin or breadboard hole to re-connect from ${h3d.name}.`);
+      return;
+    }
+
     const fromComp = components.find((c) => c.id === wire.fromCompId);
     const fromPin = fromComp?.pins.find((p) => p.id === wire.fromPinId);
-    if (onDeleteWire) onDeleteWire(wire.id);
     if (fromComp) {
       const p3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
       setActiveWireStart({
@@ -346,7 +488,7 @@ export function Virtual3dStudio({
       });
       setActiveWireColor(wire.color || '#3B82F6');
       onSelectWire?.(null);
-      toast.info(`Disconnected from end. Click any pin in 3D to re-connect from ${fromComp.label} [${fromPin?.name || wire.fromPinId}].`);
+      toast.info(`Disconnected end pin. Click any pin or hole in 3D to re-connect from ${fromComp.label} [${fromPin?.name || wire.fromPinId}].`);
     }
   };
 
@@ -454,7 +596,7 @@ export function Virtual3dStudio({
               y3d: p3d.y,
               z3d: p3d.z,
             });
-            toast.info(`Wiring from ${comp.label} [${hoveredPin.pinName}]... Click another pin to connect.`);
+            toast.info(`Wiring from ${comp.label} [${hoveredPin.pinName}]... Click another pin or breadboard hole.`);
           }
         } else {
           // Complete 3D wire
@@ -466,7 +608,35 @@ export function Virtual3dStudio({
               toPinId: hoveredPin.pinId,
               color: activeWireColor,
             });
-            toast.success(`Connected jumper wire (${activeWireStart.pinName} -> ${hoveredPin.pinName})`);
+            toast.success(`Connected jumper wire (${activeWireStart.pinName} ➔ ${hoveredPin.pinName})`);
+          }
+          setActiveWireStart(null);
+        }
+        return;
+      }
+
+      // 2b. Check if clicked on an interactive breadboard hole
+      if (hoveredHole) {
+        if (!activeWireStart) {
+          setActiveWireStart({
+            compId: 'BREADBOARD',
+            pinId: hoveredHole.id,
+            pinName: hoveredHole.name,
+            x3d: hoveredHole.x3d,
+            y3d: hoveredHole.y3d,
+            z3d: hoveredHole.z3d,
+          });
+          toast.info(`Wiring from ${hoveredHole.name}... Click any pin or hole to complete.`);
+        } else {
+          if (activeWireStart.compId !== 'BREADBOARD' || activeWireStart.pinId !== hoveredHole.id) {
+            onAddWire({
+              fromCompId: activeWireStart.compId,
+              fromPinId: activeWireStart.pinId,
+              toCompId: 'BREADBOARD',
+              toPinId: hoveredHole.id,
+              color: activeWireColor,
+            });
+            toast.success(`Connected jumper wire (${activeWireStart.pinName} ➔ ${hoveredHole.name})`);
           }
           setActiveWireStart(null);
         }
@@ -475,12 +645,25 @@ export function Virtual3dStudio({
 
       // 3. Check if clicked on a wire to select it
       for (const wire of wires) {
-        const fromComp = components.find((c) => c.id === wire.fromCompId);
-        const toComp = components.find((c) => c.id === wire.toCompId);
-        if (!fromComp || !toComp) continue;
+        let p1_3d: { x: number; y: number; z: number } | null = null;
+        let p2_3d: { x: number; y: number; z: number } | null = null;
 
-        const p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
-        const p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+        if (wire.fromCompId === 'BREADBOARD' || wire.fromCompId === 'bb') {
+          p1_3d = getBreadboardHoleCoords(wire.fromPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+        } else {
+          const fromComp = components.find((c) => c.id === wire.fromCompId);
+          if (fromComp) p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
+        }
+
+        if (wire.toCompId === 'BREADBOARD' || wire.toCompId === 'bb') {
+          p2_3d = getBreadboardHoleCoords(wire.toPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+        } else {
+          const toComp = components.find((c) => c.id === wire.toCompId);
+          if (toComp) p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+        }
+
+        if (!p1_3d || !p2_3d) continue;
+
         const pt1 = project3D(p1_3d.x, p1_3d.y, p1_3d.z, canvas.width, canvas.height);
         const pt2 = project3D(p2_3d.x, p2_3d.y, p2_3d.z, canvas.width, canvas.height);
         const midX = (p1_3d.x + p2_3d.x) / 2;
@@ -542,10 +725,14 @@ export function Virtual3dStudio({
       return;
     }
 
-    if (isDraggingComp && dragCompId && onUpdateComponentPosition) {
+    if (isDraggingComp && dragCompId) {
       const pos = unprojectToWorkbench(mouseX, mouseY, canvas.width, canvas.height);
       if (pos) {
-        onUpdateComponentPosition(dragCompId, pos.schematicX, pos.schematicY);
+        if (onUpdateComponent3DPosition) {
+          onUpdateComponent3DPosition(dragCompId, pos.world3dX, 0, pos.world3dZ);
+        } else if (onUpdateComponentPosition) {
+          onUpdateComponentPosition(dragCompId, pos.schematicX, pos.schematicY);
+        }
       }
       return;
     }
@@ -559,7 +746,7 @@ export function Virtual3dStudio({
       return;
     }
 
-    // Pin hover detection: Find nearest pin in projected screen space within 15px radius
+    // Pin hover detection: Find nearest pin in projected screen space within 16px radius
     let foundPin: { compId: string; pinId: string; pinName: string; screenX: number; screenY: number } | null = null;
     let minDistance = 16;
 
@@ -583,6 +770,36 @@ export function Virtual3dStudio({
     }
 
     setHoveredPin(foundPin);
+
+    // Interactive Breadboard Hole Snap Detection
+    if (!foundPin && hasBreadboard) {
+      const pos = unprojectToWorkbench(mouseX, mouseY, canvas.width, canvas.height);
+      if (pos) {
+        const hole = findNearestBreadboardHole(pos.world3dX, pos.world3dZ, BB_DEFAULT_X, BB_DEFAULT_Z);
+        if (hole) {
+          const hp = project3D(hole.x, hole.y, hole.z, canvas.width, canvas.height);
+          if (Math.hypot(hp.px - mouseX, hp.py - mouseY) < 18) {
+            setHoveredHole({
+              id: hole.id,
+              name: hole.name,
+              x3d: hole.x,
+              y3d: hole.y,
+              z3d: hole.z,
+              screenX: hp.px,
+              screenY: hp.py,
+            });
+          } else {
+            setHoveredHole(null);
+          }
+        } else {
+          setHoveredHole(null);
+        }
+      } else {
+        setHoveredHole(null);
+      }
+    } else {
+      setHoveredHole(null);
+    }
   };
 
   const handleMouseUp = () => {
@@ -639,6 +856,7 @@ export function Virtual3dStudio({
 
     const width = canvas.width;
     const height = canvas.height;
+    const proj = (x: number, y: number, z: number) => project3D(x, y, z, width, height);
 
     // 1. Dark Workbench Laboratory Floor
     ctx.fillStyle = '#060B14';
@@ -675,177 +893,185 @@ export function Virtual3dStudio({
       ctx.stroke();
     }
 
-    // 3. 3D Full-Size Solderless Breadboard (830 tie-points)
+    // 3. 3D Full-Size Solderless Breadboard (830 / 400 tie-points)
     if (hasBreadboard) {
-      const bbW = 220;
-      const bbH = 9;
-      const bbD = 130;
-      const bbX = -40;
-      const bbZ = -10;
+      const bbW = BB_WIDTH;
+      const bbH = BB_HEIGHT;
+      const bbD = BB_DEPTH;
+      const bbX = BB_DEFAULT_X;
+      const bbZ = BB_DEFAULT_Z;
 
-      // Breadboard Body Base & Bevel (ABS Plastic Eggshell White)
-      const c1 = project3D(bbX - bbW / 2, 0, bbZ - bbD / 2, width, height);
-      const c2 = project3D(bbX + bbW / 2, 0, bbZ - bbD / 2, width, height);
-      const c3 = project3D(bbX + bbW / 2, 0, bbZ + bbD / 2, width, height);
-      const c4 = project3D(bbX - bbW / 2, 0, bbZ + bbD / 2, width, height);
-
-      const b1 = project3D(bbX - bbW / 2, bbH, bbZ - bbD / 2, width, height);
-      const b2 = project3D(bbX + bbW / 2, bbH, bbZ - bbD / 2, width, height);
-      const b3 = project3D(bbX + bbW / 2, bbH, bbZ + bbD / 2, width, height);
-      const b4 = project3D(bbX - bbW / 2, bbH, bbZ + bbD / 2, width, height);
-
-      // Shadow underneath breadboard
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.moveTo(b1.px + 4, b1.py + 4);
-      ctx.lineTo(b2.px + 4, b2.py + 4);
-      ctx.lineTo(b3.px + 4, b3.py + 4);
-      ctx.lineTo(b4.px + 4, b4.py + 4);
-      ctx.closePath();
-      ctx.fill();
-
-      // Breadboard Top Face (Beige / Off-White ABS)
-      ctx.fillStyle = '#F1F5F9';
-      ctx.strokeStyle = '#CBD5E1';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(c1.px, c1.py);
-      ctx.lineTo(c2.px, c2.py);
-      ctx.lineTo(c3.px, c3.py);
-      ctx.lineTo(c4.px, c4.py);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Front & Side Bevels
-      ctx.fillStyle = '#E2E8F0';
-      ctx.beginPath();
-      ctx.moveTo(c4.px, c4.py);
-      ctx.lineTo(c3.px, c3.py);
-      ctx.lineTo(b3.px, b3.py);
-      ctx.lineTo(b4.px, b4.py);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      // Solid ABS Plastic Body with true 3D perspective shading
+      drawBox3D(
+        ctx,
+        bbX - bbW / 2, -bbH, bbZ - bbD / 2,
+        bbX + bbW / 2, 0, bbZ + bbD / 2,
+        '#F8FAFC', '#E2E8F0', '#CBD5E1', '#94A3B8',
+        proj
+      );
 
       // Central IC Divider Trench / Groove
-      const tr1 = project3D(bbX - bbW / 2 + 10, -0.5, bbZ, width, height);
-      const tr2 = project3D(bbX + bbW / 2 - 10, -0.5, bbZ, width, height);
+      const tr1 = project3D(bbX - bbW / 2 + 8, -0.6, bbZ, width, height);
+      const tr2 = project3D(bbX + bbW / 2 - 8, -0.6, bbZ, width, height);
       ctx.strokeStyle = '#94A3B8';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(tr1.px, tr1.py);
       ctx.lineTo(tr2.px, tr2.py);
       ctx.stroke();
 
-      // Top & Bottom Power Rails (+ Red, - Blue Lines)
-      const rTop1 = project3D(bbX - bbW / 2 + 15, -0.2, bbZ - bbD / 2 + 12, width, height);
-      const rTop2 = project3D(bbX + bbW / 2 - 15, -0.2, bbZ - bbD / 2 + 12, width, height);
-      ctx.strokeStyle = '#EF4444'; // Red +
-      ctx.lineWidth = 1.8;
+      // Top Power Rails (+ Red, - Blue)
+      const rTop1 = project3D(bbX - bbW / 2 + 12, -0.2, bbZ - 44, width, height);
+      const rTop2 = project3D(bbX + bbW / 2 - 12, -0.2, bbZ - 44, width, height);
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(rTop1.px, rTop1.py);
       ctx.lineTo(rTop2.px, rTop2.py);
       ctx.stroke();
 
-      const bTop1 = project3D(bbX - bbW / 2 + 15, -0.2, bbZ - bbD / 2 + 22, width, height);
-      const bTop2 = project3D(bbX + bbW / 2 - 15, -0.2, bbZ - bbD / 2 + 22, width, height);
-      ctx.strokeStyle = '#3B82F6'; // Blue -
-      ctx.lineWidth = 1.8;
+      const bTop1 = project3D(bbX - bbW / 2 + 12, -0.2, bbZ - 36, width, height);
+      const bTop2 = project3D(bbX + bbW / 2 - 12, -0.2, bbZ - 36, width, height);
+      ctx.strokeStyle = '#3B82F6';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(bTop1.px, bTop1.py);
       ctx.lineTo(bTop2.px, bTop2.py);
       ctx.stroke();
 
-      // Breadboard Terminal Sockets / Pin Holes
-      ctx.fillStyle = '#334155';
-      const cols = 28;
-      const startX = bbX - bbW / 2 + 18;
-      const stepX = (bbW - 36) / cols;
+      // Bottom Power Rails (- Blue, + Red)
+      const bBot1 = project3D(bbX - bbW / 2 + 12, -0.2, bbZ + 36, width, height);
+      const bBot2 = project3D(bbX + bbW / 2 - 12, -0.2, bbZ + 36, width, height);
+      ctx.strokeStyle = '#3B82F6';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bBot1.px, bBot1.py);
+      ctx.lineTo(bBot2.px, bBot2.py);
+      ctx.stroke();
 
-      for (let ci = 0; ci < cols; ci += 2) {
-        const hx = startX + ci * stepX;
-        // Upper section holes
-        for (let ri = -20; ri <= -8; ri += 6) {
-          const hp = project3D(hx, -0.8, bbZ + ri, width, height);
+      const rBot1 = project3D(bbX - bbW / 2 + 12, -0.2, bbZ + 44, width, height);
+      const rBot2 = project3D(bbX + bbW / 2 - 12, -0.2, bbZ + 44, width, height);
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(rBot1.px, rBot1.py);
+      ctx.lineTo(rBot2.px, rBot2.py);
+      ctx.stroke();
+
+      // Silkscreen Row Numbers
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'bold 7px monospace';
+      for (let r = 1; r <= BB_ROWS; r += 5) {
+        const rx = BB_START_X + (r - 1) * BB_STEP_X;
+        const tp = project3D(rx, -0.4, bbZ - 28, width, height);
+        ctx.fillText(String(r), tp.px - 3, tp.py);
+        const bp = project3D(rx, -0.4, bbZ + 30, width, height);
+        ctx.fillText(String(r), bp.px - 3, bp.py);
+      }
+
+      // Draw all terminal sockets and power rail sockets
+      ctx.fillStyle = '#0F172A';
+      const colKeys: ('E' | 'D' | 'C' | 'B' | 'A' | 'F' | 'G' | 'H' | 'I' | 'J')[] = ['E', 'D', 'C', 'B', 'A', 'F', 'G', 'H', 'I', 'J'];
+      for (let r = 1; r <= BB_ROWS; r++) {
+        const rx = BB_START_X + (r - 1) * BB_STEP_X;
+        for (const col of colKeys) {
+          const rz = BB_COL_Z[col];
+          const hp = project3D(rx, -0.8, rz, width, height);
           ctx.beginPath();
-          ctx.arc(hp.px, hp.py, 1.2, 0, Math.PI * 2);
+          ctx.arc(hp.px, hp.py, 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Lower section holes
-        for (let ri = 8; ri <= 20; ri += 6) {
-          const hp = project3D(hx, -0.8, bbZ + ri, width, height);
+        // Power rail sockets
+        for (const rz of [bbZ - 44, bbZ - 36, bbZ + 36, bbZ + 44]) {
+          const hp = project3D(rx, -0.8, rz, width, height);
           ctx.beginPath();
-          ctx.arc(hp.px, hp.py, 1.2, 0, Math.PI * 2);
+          ctx.arc(hp.px, hp.py, 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+
+      // Draw Breadboard Hovered Hole Target Indicator
+      if (hoveredHole) {
+        ctx.strokeStyle = '#10B981';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(hoveredHole.screenX, hoveredHole.screenY, 7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#34D399';
+        ctx.beginPath();
+        ctx.arc(hoveredHole.screenX, hoveredHole.screenY, 3, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
     // 4. Render All 3D Components
     for (const comp of components) {
       const isSelected = comp.id === selectedCompId;
-      const compX = (comp.x - 400) * 0.7;
-      const compZ = (comp.y - 300) * 0.7;
+      const compX = comp.x3d !== undefined ? comp.x3d : (comp.x - 400) * 0.7;
+      const compZ = comp.z3d !== undefined ? comp.z3d : (comp.y - 300) * 0.7;
       const compY = 0;
       const simState = simulationStates[comp.id];
 
       // Draw Component Base Footprint / Model
       if (comp.type.includes('ARDUINO_UNO')) {
-        // ARDUINO UNO R3 (Authentic Italian Blue PCB with Hardware Details)
+        // ARDUINO UNO R3 (Authentic Italian Turquoise Blue PCB with True 3D Box Extrusions)
         const bw = 90;
         const bd = 68;
-        const p1 = project3D(compX - bw / 2, compY - 2, compZ - bd / 2, width, height);
-        const p2 = project3D(compX + bw / 2, compY - 2, compZ - bd / 2, width, height);
-        const p3 = project3D(compX + bw / 2, compY - 2, compZ + bd / 2, width, height);
-        const p4 = project3D(compX - bw / 2, compY - 2, compZ + bd / 2, width, height);
 
-        // PCB Substrate Body (Authentic Italian Turquoise Blue)
-        ctx.fillStyle = isSelected ? '#0284C7' : '#00878F';
-        ctx.strokeStyle = isSelected ? '#38BDF8' : '#005C62';
-        ctx.lineWidth = isSelected ? 2.5 : 1.5;
-        ctx.beginPath();
-        ctx.moveTo(p1.px, p1.py);
-        ctx.lineTo(p2.px, p2.py);
-        ctx.lineTo(p3.px, p3.py);
-        ctx.lineTo(p4.px, p4.py);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        // PCB Substrate 3D Slab with thickness
+        drawBox3D(
+          ctx,
+          compX - bw / 2, -2, compZ - bd / 2,
+          compX + bw / 2, 0, compZ + bd / 2,
+          isSelected ? '#0284C7' : '#00878F',
+          isSelected ? '#0369A1' : '#005C62',
+          isSelected ? '#075985' : '#00474C',
+          isSelected ? '#38BDF8' : '#00979C',
+          proj
+        );
 
-        // Silver USB Type-B Port
-        const usbP = project3D(compX - bw / 2 + 10, compY - 9, compZ - bd / 2 + 16, width, height);
-        ctx.fillStyle = '#CBD5E1';
-        ctx.strokeStyle = '#94A3B8';
-        ctx.lineWidth = 1;
-        ctx.fillRect(usbP.px - 7, usbP.py - 7, 14, 13);
-        ctx.strokeRect(usbP.px - 7, usbP.py - 7, 14, 13);
-        // Inner socket aperture
-        ctx.fillStyle = '#1E293B';
-        ctx.fillRect(usbP.px - 4, usbP.py - 3, 8, 7);
-
-        // Black DC Barrel Power Jack
-        const dcP = project3D(compX - bw / 2 + 10, compY - 11, compZ + bd / 2 - 16, width, height);
+        // 3D Silver USB Type-B Port
+        drawBox3D(
+          ctx,
+          compX - bw / 2 + 2, -14, compZ - bd / 2 + 8,
+          compX - bw / 2 + 18, -2, compZ - bd / 2 + 22,
+          '#CBD5E1', '#94A3B8', '#64748B', '#475569',
+          proj
+        );
+        // USB Socket Aperture
+        const usbP = project3D(compX - bw / 2 + 4, -8, compZ - bd / 2 + 15, width, height);
         ctx.fillStyle = '#0F172A';
-        ctx.fillRect(dcP.px - 8, dcP.py - 8, 16, 14);
+        ctx.fillRect(usbP.px - 3, usbP.py - 3, 6, 6);
+
+        // 3D Black DC Barrel Power Jack
+        drawBox3D(
+          ctx,
+          compX - bw / 2 + 2, -14, compZ + bd / 2 - 22,
+          compX - bw / 2 + 18, -2, compZ + bd / 2 - 8,
+          '#0F172A', '#090D16', '#1E293B', '#334155',
+          proj
+        );
         // Center brass terminal pin
+        const dcP = project3D(compX - bw / 2 + 4, -8, compZ + bd / 2 - 15, width, height);
         ctx.fillStyle = '#F59E0B';
         ctx.beginPath();
-        ctx.arc(dcP.px - 2, dcP.py - 1, 2, 0, Math.PI * 2);
+        ctx.arc(dcP.px, dcP.py, 2.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // ATmega328P DIP-28 IC Socket & Microchip
-        const icP = project3D(compX + 10, compY - 6, compZ + 6, width, height);
-        ctx.fillStyle = '#090D16';
-        ctx.fillRect(icP.px - 18, icP.py - 6, 36, 12);
-        ctx.strokeStyle = '#334155';
-        ctx.strokeRect(icP.px - 18, icP.py - 6, 36, 12);
-        // IC Pin 1 notch & legs
-        ctx.fillStyle = '#94A3B8';
-        for (let li = -14; li <= 14; li += 4) {
-          ctx.fillRect(icP.px + li, icP.py - 8, 2, 2);
-          ctx.fillRect(icP.px + li, icP.py + 6, 2, 2);
-        }
+        // 3D ATmega328P DIP-28 IC Socket & Microchip
+        drawBox3D(
+          ctx,
+          compX - 6, -8, compZ - 14,
+          compX + 28, -2, compZ + 14,
+          '#0F172A', '#090D16', '#1E293B', '#334155',
+          proj
+        );
+        // IC Pin 1 notch
+        const icNotch = project3D(compX - 6, -8, compZ, width, height);
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath();
+        ctx.arc(icNotch.px, icNotch.py, 2.5, 0, Math.PI);
+        ctx.fill();
 
         // 16 MHz Silver Crystal Oscillator
         const xtalP = project3D(compX - 8, compY - 5, compZ - 2, width, height);
@@ -861,12 +1087,23 @@ export function Virtual3dStudio({
         ctx.arc(rstP.px, rstP.py, 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Dual Black Female Pin Header Strips
-        const topHdrP = project3D(compX + 4, compY - 6, compZ - bd / 2 + 5, width, height);
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(topHdrP.px - 36, topHdrP.py - 3, 72, 6);
-        const botHdrP = project3D(compX + 4, compY - 6, compZ + bd / 2 - 5, width, height);
-        ctx.fillRect(botHdrP.px - 36, botHdrP.py - 3, 72, 6);
+        // 3D Dual Black Female Pin Header Strips
+        // Top Header Block (Digital Pins 0..13, AREF, GND)
+        drawBox3D(
+          ctx,
+          compX - 44, -14, compZ - bd / 2 + 2,
+          compX + 40, -2, compZ - bd / 2 + 7,
+          '#1E293B', '#0F172A', '#090D16', '#334155',
+          proj
+        );
+        // Bottom Header Block (Power & Analog)
+        drawBox3D(
+          ctx,
+          compX - 44, -14, compZ + bd / 2 - 7,
+          compX + 44, -2, compZ + bd / 2 - 2,
+          '#1E293B', '#0F172A', '#090D16', '#334155',
+          proj
+        );
 
         // Built-in Pin 13 LED (Amber)
         const led13PinState = gpioStates && gpioStates[13]?.value === 1;
@@ -1257,7 +1494,7 @@ export function Virtual3dStudio({
           ctx.stroke();
         });
       } else if (comp.type === 'RESISTOR') {
-        // 3D Axial Resistor with Color Bands
+        // 3D Axial Resistor with Authentic EIA Color Bands
         const r1 = project3D(compX - 16, compY - 8, compZ, width, height);
         const r2 = project3D(compX + 16, compY - 8, compZ, width, height);
 
@@ -1270,17 +1507,112 @@ export function Virtual3dStudio({
         ctx.lineTo(r2.px, r2.py);
         ctx.stroke();
 
-        // Bent Lead Wires
+        // 4 Authentic Color Bands calculated from resistance value
+        const bands = getResistorColorBands(comp.value || String(comp.parameters?.resistance || 1000));
+        const bandStep = (r2.px - r1.px) / 5;
+        const bandStepY = (r2.py - r1.py) / 5;
+        bands.forEach((bColor, bi) => {
+          const bx = r1.px + bandStep * (bi + 1);
+          const by = r1.py + bandStepY * (bi + 1);
+          ctx.strokeStyle = bColor;
+          ctx.lineWidth = 7.5;
+          ctx.beginPath();
+          ctx.moveTo(bx - 1.5, by - 3.5);
+          ctx.lineTo(bx + 1.5, by + 3.5);
+          ctx.stroke();
+        });
+
+        // Bent Lead Wires inserting into breadboard
         const l1 = project3D(compX - 22, compY, compZ, width, height);
         const l2 = project3D(compX + 22, compY, compZ, width, height);
-        ctx.strokeStyle = '#94A3B8';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
         ctx.moveTo(r1.px, r1.py);
         ctx.lineTo(l1.px, l1.py);
         ctx.moveTo(r2.px, r2.py);
         ctx.lineTo(l2.px, l2.py);
         ctx.stroke();
+      } else if (comp.type === 'POTENTIOMETER') {
+        // 3D Potentiometer with Blue Casing and Rotatable Dial Knob
+        const potP = project3D(compX, compY - 8, compZ, width, height);
+        ctx.fillStyle = '#0284C7';
+        ctx.strokeStyle = '#0369A1';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(potP.px, potP.py, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Center silver dial knob
+        ctx.fillStyle = '#E2E8F0';
+        ctx.beginPath();
+        ctx.arc(potP.px, potP.py, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Wiper pointer notch
+        const alpha = Number(comp.parameters?.position ?? 0.5);
+        const angle = -Math.PI * 0.75 + alpha * (Math.PI * 1.5);
+        ctx.strokeStyle = '#0F172A';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(potP.px, potP.py);
+        ctx.lineTo(potP.px + Math.cos(angle) * 8, potP.py + Math.sin(angle) * 8);
+        ctx.stroke();
+
+        // 3 Solder lug terminals
+        [-14, 0, 14].forEach((tx, ti) => {
+          const tp = project3D(compX + tx, compY, compZ + (ti === 1 ? 14 : 8), width, height);
+          ctx.fillStyle = '#94A3B8';
+          ctx.fillRect(tp.px - 2, tp.py - 2, 4, 4);
+        });
+      } else if (comp.type === 'CAPACITOR') {
+        // 3D Radial Canister Capacitor
+        const cBase = project3D(compX, compY, compZ, width, height);
+        const cTop = project3D(compX, compY - 18, compZ, width, height);
+        ctx.fillStyle = '#1E293B';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(cTop.px - 8, cTop.py, 16, cBase.py - cTop.py, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        // Silver Top
+        ctx.fillStyle = '#94A3B8';
+        ctx.beginPath();
+        ctx.arc(cTop.px, cTop.py + 2, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Negative Stripe
+        ctx.fillStyle = '#F8FAFC';
+        ctx.fillRect(cTop.px - 8, cTop.py + 2, 4, cBase.py - cTop.py - 2);
+
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = 'bold 7px monospace';
+        ctx.fillText(comp.value || '10µF', cTop.px - 2, (cTop.py + cBase.py) / 2);
+      } else if (comp.type === 'TIMER_555' || comp.type.startsWith('LOGIC_') || comp.type.includes('DIP8')) {
+        // 3D DIP-8 Molded Epoxy Package
+        drawBox3D(
+          ctx,
+          compX - 14, compY - 10, compZ - 12,
+          compX + 14, compY - 2, compZ + 12,
+          '#0F172A', '#090D16', '#1E293B', '#334155',
+          proj
+        );
+
+        // Pin 1 Notch
+        const notchP = project3D(compX, compY - 10, compZ - 12, width, height);
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath();
+        ctx.arc(notchP.px, notchP.py, 3, 0, Math.PI);
+        ctx.fill();
+
+        // Part Laser Engraving
+        const txtP = project3D(compX, compY - 10, compZ, width, height);
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = 'bold 7.5px monospace';
+        ctx.fillText(comp.type === 'TIMER_555' ? 'NE555P' : comp.designator || comp.type.slice(0, 6), txtP.px - 14, txtP.py + 2);
       } else if (comp.type === 'PUSHBUTTON') {
         // 3D 6x6mm Tactile Pushbutton
         const pbP = project3D(compX, compY - 6, compZ, width, height);
@@ -1342,12 +1674,24 @@ export function Virtual3dStudio({
 
     // 5. Render All 3D Flexible Jumper Wires (Catenary Curves)
     for (const wire of wires) {
-      const fromComp = components.find((c) => c.id === wire.fromCompId);
-      const toComp = components.find((c) => c.id === wire.toCompId);
-      if (!fromComp || !toComp) continue;
+      let p1_3d: { x: number; y: number; z: number } | null = null;
+      let p2_3d: { x: number; y: number; z: number } | null = null;
 
-      const p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
-      const p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+      if (wire.fromCompId === 'BREADBOARD' || wire.fromCompId === 'bb') {
+        p1_3d = getBreadboardHoleCoords(wire.fromPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+      } else {
+        const fromComp = components.find((c) => c.id === wire.fromCompId);
+        if (fromComp) p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
+      }
+
+      if (wire.toCompId === 'BREADBOARD' || wire.toCompId === 'bb') {
+        p2_3d = getBreadboardHoleCoords(wire.toPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+      } else {
+        const toComp = components.find((c) => c.id === wire.toCompId);
+        if (toComp) p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+      }
+
+      if (!p1_3d || !p2_3d) continue;
 
       const pt1 = project3D(p1_3d.x, p1_3d.y, p1_3d.z, width, height);
       const pt2 = project3D(p2_3d.x, p2_3d.y, p2_3d.z, width, height);
@@ -1464,6 +1808,7 @@ export function Virtual3dStudio({
     project3D,
     getComponentPinWorld3D,
     hoveredPin,
+    hoveredHole,
     activeWireStart,
     activeWireColor,
     isSimulating,
@@ -1528,12 +1873,25 @@ export function Virtual3dStudio({
         // Check if right-clicked on an existing wire in 3D
         let hitWire: CircuitWire | null = null;
         for (const wire of wires) {
-          const fromComp = components.find((c) => c.id === wire.fromCompId);
-          const toComp = components.find((c) => c.id === wire.toCompId);
-          if (!fromComp || !toComp) continue;
+          let p1_3d: { x: number; y: number; z: number } | null = null;
+          let p2_3d: { x: number; y: number; z: number } | null = null;
 
-          const p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
-          const p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+          if (wire.fromCompId === 'BREADBOARD' || wire.fromCompId === 'bb') {
+            p1_3d = getBreadboardHoleCoords(wire.fromPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+          } else {
+            const fromComp = components.find((c) => c.id === wire.fromCompId);
+            if (fromComp) p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
+          }
+
+          if (wire.toCompId === 'BREADBOARD' || wire.toCompId === 'bb') {
+            p2_3d = getBreadboardHoleCoords(wire.toPinId, BB_DEFAULT_X, BB_DEFAULT_Z);
+          } else {
+            const toComp = components.find((c) => c.id === wire.toCompId);
+            if (toComp) p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+          }
+
+          if (!p1_3d || !p2_3d) continue;
+
           const pt1 = project3D(p1_3d.x, p1_3d.y, p1_3d.z, canvas.width, canvas.height);
           const pt2 = project3D(p2_3d.x, p2_3d.y, p2_3d.z, canvas.width, canvas.height);
           const midX = (p1_3d.x + p2_3d.x) / 2;
@@ -1725,12 +2083,26 @@ export function Virtual3dStudio({
         </div>
       )}
 
+      {/* Hovered Breadboard Hole Tooltip */}
+      {hoveredHole && !hoveredPin && (
+        <div
+          className="absolute pointer-events-none z-30 bg-slate-950/90 backdrop-blur-md border border-emerald-500/80 text-white px-2.5 py-1 rounded shadow-2xl text-[11px] font-mono flex items-center gap-1.5 transform -translate-x-1/2 -translate-y-8"
+          style={{ left: hoveredHole.screenX, top: hoveredHole.screenY }}
+        >
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>Hole: </span>
+          <strong className="text-emerald-400">{hoveredHole.name}</strong>
+        </div>
+      )}
+
       {/* Interactive 3D Wire Control Floating HUD */}
       {selectedWireId && (() => {
         const selWire = wires.find((w) => w.id === selectedWireId);
         if (!selWire) return null;
         const fromComp = components.find((c) => c.id === selWire.fromCompId);
         const toComp = components.find((c) => c.id === selWire.toCompId);
+        const fromName = fromComp?.label || (selWire.fromCompId === 'BREADBOARD' ? 'Breadboard' : 'Pin');
+        const toName = toComp?.label || (selWire.toCompId === 'BREADBOARD' ? 'Breadboard' : 'Pin');
         const wCurrent = wireCurrents ? (wireCurrents[selWire.id] ?? 0) : 0;
 
         return (
@@ -1740,7 +2112,7 @@ export function Virtual3dStudio({
               <div>
                 <span className="text-[10px] text-amber-400 block uppercase font-bold">Selected Jumper Wire</span>
                 <span className="text-white text-xs">
-                  <strong>{fromComp?.label || 'Pin'}</strong> [{selWire.fromPinId}] ➔ <strong>{toComp?.label || 'Pin'}</strong> [{selWire.toPinId}]
+                  <strong>{fromName}</strong> [{selWire.fromPinId}] ➔ <strong>{toName}</strong> [{selWire.toPinId}]
                 </span>
               </div>
             </div>

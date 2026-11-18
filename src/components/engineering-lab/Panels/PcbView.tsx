@@ -714,6 +714,45 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       ctx.fill();
     });
 
+    // 1b. 3D CAD Board Outline Dimensions Callout
+    const dimTop1 = project3D(0, -2.0, -8);
+    const dimTop2 = project3D(pcb.widthMm, -2.0, -8);
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 1.2 * zoom3D;
+    ctx.beginPath();
+    ctx.moveTo(dimTop1.px, dimTop1.py);
+    ctx.lineTo(dimTop2.px, dimTop2.py);
+    ctx.stroke();
+
+    const dimMidTop = project3D(pcb.widthMm / 2, -2.0, -10);
+    ctx.fillStyle = '#083344';
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 1;
+    ctx.fillRect(dimMidTop.px - 28, dimMidTop.py - 7, 56, 14);
+    ctx.strokeRect(dimMidTop.px - 28, dimMidTop.py - 7, 56, 14);
+    ctx.fillStyle = '#22D3EE';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText(`${pcb.widthMm.toFixed(1)} mm`, dimMidTop.px - 20, dimMidTop.py + 3);
+
+    const dimL1 = project3D(-8, -2.0, 0);
+    const dimL2 = project3D(-8, -2.0, pcb.heightMm);
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 1.2 * zoom3D;
+    ctx.beginPath();
+    ctx.moveTo(dimL1.px, dimL1.py);
+    ctx.lineTo(dimL2.px, dimL2.py);
+    ctx.stroke();
+
+    const dimMidL = project3D(-12, -2.0, pcb.heightMm / 2);
+    ctx.fillStyle = '#083344';
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 1;
+    ctx.fillRect(dimMidL.px - 28, dimMidL.py - 7, 56, 14);
+    ctx.strokeRect(dimMidL.px - 28, dimMidL.py - 7, 56, 14);
+    ctx.fillStyle = '#22D3EE';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText(`${pcb.heightMm.toFixed(1)} mm`, dimMidL.px - 20, dimMidL.py + 3);
+
     // 2. Draw 3D Top Copper Tracks
     if (visibleLayers.topCopper) {
       ctx.strokeStyle = '#EF4444';

@@ -8,6 +8,11 @@ import { TEMPLATE_555_ASTABLE, TEMPLATE_ARDUINO_BLINK } from '@/modules/engineer
 import { COMPONENT_CATALOG, createComponentInstance, ComponentTemplate } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TARGET_BOARDS, TargetBoardSpec } from '@/modules/engineering-lab/embedded-engine/board-definitions';
 import { FirmwareCompiler } from '@/modules/engineering-lab/embedded-engine/firmware-compiler';
+import {
+  findNearestBreadboardHole,
+  getBreadboardHoleCoords,
+  getResistorColorBands,
+} from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
   let solver: CircuitSolver;
@@ -2034,5 +2039,171 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     const step3 = solver.step(components, wires, 0.001, 1.0);
     const potState3 = step3.componentStates['pot1'];
     expect(potState3.voltage).toBeCloseTo(8.0, 1);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AI - Breadboard Spring-Clip Internal Tie-Strip Node Synthesis
+  // --------------------------------------------------------------------------
+  it('TEST AI: validates solderless breadboard internal spring-clip tie-strips synthesize shared electrical nets', () => {
+    // 5V DC Source -> Top Positive Rail [Hole 1]
+    // Top Positive Rail [Hole 15] -> 220Ω Resistor (Pin 1)
+    // 220Ω Resistor (Pin 2) -> Breadboard Row 12, Column A
+    // LED Anode -> Breadboard Row 12, Column C (Same tie-strip as Row 12A!)
+    // LED Cathode -> Top Negative Rail [Hole 10]
+    // Top Negative Rail [Hole 1] -> GND Ground
+    const components: CircuitComponent[] = [
+      {
+        id: 'dc1',
+        type: 'DC_VOLTAGE',
+        label: '5V Source',
+        value: '5V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'PAD',
+        category: 'sources',
+        pins: [
+          { id: 'pos', name: '+', x: 0, y: -20, pinType: 'power' },
+          { id: 'neg', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        parameters: { voltage: 5.0 },
+      },
+      {
+        id: 'gnd',
+        type: 'GND',
+        label: 'GND',
+        value: '0V',
+        x: 0,
+        y: 100,
+        rotation: 0,
+        footprint: 'PAD',
+        category: 'sources',
+        pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+        parameters: {},
+      },
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '220Ω',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        value: 'Red',
+        x: 200,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_THT:LED_D5.0mm',
+        category: 'active',
+        pins: [
+          { id: 'a', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { color: 'Red' },
+      },
+    ];
+
+    const wires: CircuitWire[] = [
+      // 5V pos -> Breadboard Top Positive Rail Hole 1
+      { id: 'w1', fromCompId: 'dc1', fromPinId: 'pos', toCompId: 'BREADBOARD', toPinId: 'bb_rail_top_pos_1' },
+      // Breadboard Top Positive Rail Hole 15 -> Resistor Pin 1 (connected via top positive rail spring-clip!)
+      { id: 'w2', fromCompId: 'BREADBOARD', fromPinId: 'bb_rail_top_pos_15', toCompId: 'r1', toPinId: '1' },
+      // Resistor Pin 2 -> Breadboard Row 12, Column A
+      { id: 'w3', fromCompId: 'r1', fromPinId: '2', toCompId: 'BREADBOARD', toPinId: 'bb_row_12_A' },
+      // Breadboard Row 12, Column C -> LED Anode (connected via Row 12 5-hole spring clip!)
+      { id: 'w4', fromCompId: 'BREADBOARD', fromPinId: 'bb_row_12_C', toCompId: 'led1', toPinId: 'a' },
+      // LED Cathode -> Breadboard Top Negative Rail Hole 10
+      { id: 'w5', fromCompId: 'led1', fromPinId: 'k', toCompId: 'BREADBOARD', toPinId: 'bb_rail_top_neg_10' },
+      // Breadboard Top Negative Rail Hole 1 -> GND
+      { id: 'w6', fromCompId: 'BREADBOARD', fromPinId: 'bb_rail_top_neg_1', toCompId: 'gnd', toPinId: '1' },
+      // DC neg -> GND
+      { id: 'w7', fromCompId: 'dc1', fromPinId: 'neg', toCompId: 'gnd', toPinId: '1' },
+    ];
+
+    const step = solver.step(components, wires, 0.001, 1.0);
+    const ledState = step.componentStates['led1'];
+    expect(ledState).toBeDefined();
+    // LED should be conducting and energized through the breadboard spring clips
+    expect(ledState.on).toBe(true);
+    expect(ledState.current).toBeGreaterThan(0.005); // > 5mA forward current
+    expect(ledState.voltage).toBeGreaterThanOrEqual(1.8); // ~1.9V forward voltage
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AJ - Authentic EIA 4-Band Resistor Color Codes
+  // --------------------------------------------------------------------------
+  it('TEST AJ: computes authentic EIA 4-band color bands from resistance value parameters', () => {
+    // 220Ω: Red (2), Red (2), Brown (x10), Gold (5%)
+    const bands220 = getResistorColorBands('220Ω');
+    expect(bands220).toEqual(['#DC2626', '#DC2626', '#78350F', '#F59E0B']);
+
+    // 10kΩ: Brown (1), Black (0), Orange (x1k), Gold (5%)
+    const bands10k = getResistorColorBands('10kΩ');
+    expect(bands10k).toEqual(['#78350F', '#0F172A', '#EA580C', '#F59E0B']);
+
+    // 1kΩ: Brown (1), Black (0), Red (x100), Gold (5%)
+    const bands1k = getResistorColorBands('1000');
+    expect(bands1k).toEqual(['#78350F', '#0F172A', '#DC2626', '#F59E0B']);
+
+    // 4.7kΩ: Yellow (4), Violet (7), Red (x100), Gold (5%)
+    const bands4k7 = getResistorColorBands('4.7kΩ');
+    expect(bands4k7).toEqual(['#EAB308', '#7C3AED', '#DC2626', '#F59E0B']);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AK - Breadboard Spatial Snapping and 3D Position Decoupling
+  // --------------------------------------------------------------------------
+  it('TEST AK: resolves sub-millimeter breadboard hole coordinates and verifies 3D position independence', () => {
+    // Hole Row 15 Column C
+    const hole15C = getBreadboardHoleCoords('bb_row_15_C');
+    expect(hole15C.name).toContain('Row 15 [C]');
+    expect(hole15C.y).toBe(-1.0);
+
+    // Fast O(1) Snap lookup from world coordinates near Row 15, Column C
+    const snapped = findNearestBreadboardHole(hole15C.x + 0.5, hole15C.z - 0.3);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.id).toBe('bb_row_15_C');
+    expect(snapped!.tieGroup).toBe('bb_tie_row_15_top');
+
+    // Fast O(1) Snap lookup for Top Positive Rail
+    const railHole = getBreadboardHoleCoords('bb_rail_top_pos_5');
+    const snappedRail = findNearestBreadboardHole(railHole.x, railHole.z);
+    expect(snappedRail).not.toBeNull();
+    expect(snappedRail!.tieGroup).toBe('bb_tie_rail_top_pos');
+
+    // 3D Position Independence: Component x3d/y3d/z3d preserves 2D schematic coordinates
+    const testComp: CircuitComponent = {
+      id: 'r_test',
+      type: 'RESISTOR',
+      label: 'R_TEST',
+      value: '1kΩ',
+      x: 350,
+      y: 220,
+      rotation: 0,
+      footprint: 'PAD',
+      category: 'passive',
+      pins: [],
+      parameters: {},
+      x3d: -40,
+      y3d: 0,
+      z3d: -10,
+    };
+
+    expect(testComp.x).toBe(350); // 2D schematic X remains pristine
+    expect(testComp.y).toBe(220); // 2D schematic Y remains pristine
+    expect(testComp.x3d).toBe(-40); // 3D world X
+    expect(testComp.z3d).toBe(-10); // 3D world Z
   });
 });

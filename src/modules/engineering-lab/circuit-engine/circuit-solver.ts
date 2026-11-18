@@ -133,6 +133,36 @@ export class CircuitSolver {
       union(pinA, pinB);
     }
 
+    // Synthesize internal solderless breadboard spring-clip tie-strips
+    // Holes in Row N (cols A..E) tie together; holes in Row N (cols F..J) tie together;
+    // Continuous power rails (+ and -) tie together.
+    const breadboardTies = new Map<string, string>();
+    for (const wire of wires) {
+      for (const end of [{ compId: wire.fromCompId, pinId: wire.fromPinId }, { compId: wire.toCompId, pinId: wire.toPinId }]) {
+        if (end.compId === 'BREADBOARD' || end.compId === 'bb') {
+          const pinKey = `${end.compId}:${end.pinId}`;
+          let tieGroup = end.pinId;
+          if (end.pinId.startsWith('bb_row_')) {
+            const parts = end.pinId.split('_');
+            const row = parts[2];
+            const col = parts[3];
+            const isTop = ['A', 'B', 'C', 'D', 'E'].includes(col);
+            tieGroup = `bb_tie_row_${row}_${isTop ? 'top' : 'bot'}`;
+          } else if (end.pinId.startsWith('bb_rail_')) {
+            const parts = end.pinId.split('_');
+            const section = parts[2]; // top or bot
+            const polarity = parts[3]; // pos or neg
+            tieGroup = `bb_tie_rail_${section}_${polarity}`;
+          }
+          if (breadboardTies.has(tieGroup)) {
+            union(pinKey, breadboardTies.get(tieGroup)!);
+          } else {
+            breadboardTies.set(tieGroup, pinKey);
+          }
+        }
+      }
+    }
+
     // Assign canonical net IDs
     for (const comp of components) {
       for (const pin of comp.pins) {
