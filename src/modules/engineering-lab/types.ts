@@ -109,13 +109,49 @@ export interface VirtualInstrumentState {
   };
 }
 
+export interface FirmwareProjectFile {
+  name: string;
+  content: string;
+  readOnly?: boolean;
+}
+
+export interface FirmwareDiagnostic {
+  file: string;
+  line: number;
+  column: number;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+}
+
 export interface FirmwareState {
   code: string;
   language: 'arduino' | 'cpp' | 'micropython';
-  targetMcu: 'ATmega328P' | 'ESP32' | 'RP2040';
+  targetMcu: string;
+  boardId?: string;
+  projectFiles?: FirmwareProjectFile[];
+  activeFileName?: string;
+  buildLogs?: string[];
+  diagnostics?: FirmwareDiagnostic[];
+  compiledOutput?: {
+    format: '.hex' | '.bin' | '.uf2' | '.elf';
+    payload: string;
+    flashBytesUsed: number;
+    ramBytesUsed: number;
+  };
   serialLog: string[];
   isRunning: boolean;
-  gpioStates: Record<number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
+  isPaused?: boolean;
+  stepCount?: number;
+  baudRate?: number;
+  gpioStates: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
+}
+
+export interface WorkspaceLayoutPrefs {
+  isBrowserOpen: boolean;
+  isInspectorOpen: boolean;
+  browserWidth: number;
+  inspectorWidth: number;
+  activeMode: WorkspaceMode;
 }
 
 export interface PcbTrack {

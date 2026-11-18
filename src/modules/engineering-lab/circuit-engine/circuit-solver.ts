@@ -4,6 +4,7 @@ export interface SolverStepResult {
   nodeVoltages: Record<string, number>;
   componentStates: Record<string, { voltage: number; current: number; on?: boolean; digitalOut?: number }>;
   waveformData: Record<string, SimulationWaveformPoint[]>;
+  wireCurrents?: Record<string, number>;
 }
 
 export class CircuitSolver {
@@ -11,7 +12,6 @@ export class CircuitSolver {
   private nets: Set<string> = new Set();
   private gndNetId: string = 'GND';
   private capacitorVoltages: Map<string, number> = new Map();
-  private inductorCurrents: Map<string, number> = new Map();
   private timer555State: Map<string, { flipFlop: boolean; outV: number }> = new Map();
   private waveformHistory: Map<string, SimulationWaveformPoint[]> = new Map();
   private currentTime: number = 0;
@@ -19,7 +19,6 @@ export class CircuitSolver {
 
   public reset() {
     this.capacitorVoltages.clear();
-    this.inductorCurrents.clear();
     this.timer555State.clear();
     this.waveformHistory.clear();
     this.currentTime = 0;
@@ -32,7 +31,6 @@ export class CircuitSolver {
     this.netMap.clear();
     this.nets.clear();
 
-    // Union-find data structure for net connectivity
     const parent: Map<string, string> = new Map();
     const find = (i: string): string => {
       if (!parent.has(i)) parent.set(i, i);
@@ -47,7 +45,7 @@ export class CircuitSolver {
       if (rootI !== rootJ) parent.set(rootI, rootJ);
     };
 
-    // Initialize all pins as their own set
+    // Initialize all pins
     for (const comp of components) {
       for (const pin of comp.pins) {
         const pinKey = `${comp.id}:${pin.id}`;
@@ -72,13 +70,12 @@ export class CircuitSolver {
       }
     }
 
-    // Look for dedicated GND component to anchor 0V net
+    // Dedicated GND component anchors 0V net
     const gndComp = components.find((c) => c.type === 'GND' || c.type === 'GROUND');
     if (gndComp && gndComp.pins.length > 0) {
       const gndPinKey = `${gndComp.id}:${gndComp.pins[0].id}`;
       this.gndNetId = this.netMap.get(gndPinKey) || 'GND';
     } else {
-      // Default to the first net or synthetic GND
       this.gndNetId = this.nets.values().next().value || 'GND';
     }
   }
@@ -105,7 +102,7 @@ export class CircuitSolver {
     nodeVoltages[this.gndNetId] = 0;
     fixedNodes.add(this.gndNetId);
 
-    // 1. Process Independent Fixed DC & AC Voltage Sources
+    // 1. Process Independent Fixed DC & AC Voltage Sources & MCU Output Pins
     for (const comp of components) {
       if (comp.type === 'DC_VOLTAGE' || comp.type === 'BATTERY') {
         const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`);
@@ -124,7 +121,7 @@ export class CircuitSolver {
             fixedNodes.add(pNet);
           }
         }
-      } else if (comp.type === 'AC_SOURCE' || comp.type === 'FUNCTION_GENERATOR') {
+      } else if (comp.type === 'FUNCTION_GENERATOR') {
         const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`);
         const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`);
         const amp = Number(comp.parameters?.amplitude ?? 5.0);
@@ -151,14 +148,31 @@ export class CircuitSolver {
             fixedNodes.add(pNet);
           }
         }
+      } else if (
+        comp.type.startsWith('ARDUINO_') ||
+        comp.type.startsWith('ESP32') ||
+        comp.type.startsWith('STM32') ||
+        comp.type.startsWith('RASPBERRY_PI_PICO')
+      ) {
+        // MCU 5V or 3.3V power rails & GND
+        const pwrPin = this.netMap.get(`${comp.id}:5V`) || this.netMap.get(`${comp.id}:3V3`);
+        const gndPin = this.netMap.get(`${comp.id}:GND`);
+        const vccVal = comp.type.includes('ESP') || comp.type.includes('STM') || comp.type.includes('PICO') ? 3.3 : 5.0;
+
+        if (pwrPin && !fixedNodes.has(pwrPin)) {
+          nodeVoltages[pwrPin] = vccVal;
+          fixedNodes.add(pwrPin);
+        }
+        if (gndPin && !fixedNodes.has(gndPin)) {
+          nodeVoltages[gndPin] = 0;
+          fixedNodes.add(gndPin);
+        }
       }
     }
 
     // 2. Iterative Modified Nodal Analysis (MNA) with KCL Conductance Formulation
-    // Solves node voltages across R, C, L, and semiconductor junctions
     const iterations = 25;
     for (let iter = 0; iter < iterations; iter++) {
-      // Accumulate KCL node equations: Sum(G_i * V_adj) / Sum(G_i)
       const sumGV: Record<string, number> = {};
       const sumG: Record<string, number> = {};
 
@@ -184,12 +198,38 @@ export class CircuitSolver {
             sumGV[pin2] += g * v1;
             sumG[pin2] += g;
           }
+        } else if (comp.type === 'METER_AMMETER') {
+          // Ammeter acts as an ultra-low resistance shunt (0.001Ω)
+          const pinIn = this.netMap.get(`${comp.id}:in`);
+          const pinOut = this.netMap.get(`${comp.id}:out`);
+          if (pinIn && pinOut && pinIn !== pinOut) {
+            const r = 0.001;
+            const g = 1.0 / r;
+            const v1 = nodeVoltages[pinIn] || 0;
+            const v2 = nodeVoltages[pinOut] || 0;
+
+            sumGV[pinIn] += g * v2;
+            sumG[pinIn] += g;
+            sumGV[pinOut] += g * v1;
+            sumG[pinOut] += g;
+          }
+        } else if (comp.type === 'METER_VOLTMETER' || comp.type === 'METER_MULTIMETER') {
+          // Voltmeter acts as very high 10MΩ impedance
+          const pinP = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:red`);
+          const pinN = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:black`);
+          if (pinP && pinN && pinP !== pinN) {
+            const r = 10000000;
+            const g = 1.0 / r;
+            sumGV[pinP] += g * (nodeVoltages[pinN] || 0);
+            sumG[pinP] += g;
+            sumGV[pinN] += g * (nodeVoltages[pinP] || 0);
+            sumG[pinN] += g;
+          }
         } else if (comp.type === 'CAPACITOR') {
           const pin1 = this.netMap.get(`${comp.id}:1`);
           const pin2 = this.netMap.get(`${comp.id}:2`);
           if (pin1 && pin2 && pin1 !== pin2) {
-            const cVal = Number(comp.parameters?.capacitance ?? 0.00001); // 10uF default
-            // Norton equivalent: G_eq = C / dt, I_eq = G_eq * V_prev
+            const cVal = Number(comp.parameters?.capacitance ?? 0.0000001); // 100nF default
             const gEq = cVal / Math.max(dt, 0.00001);
             const prevVc = this.capacitorVoltages.get(comp.id) ?? 0;
             const iEq = gEq * prevVc;
@@ -203,25 +243,88 @@ export class CircuitSolver {
             sumGV[pin2] += gEq * v1 - iEq;
             sumG[pin2] += gEq;
 
-            // Update capacitor charge
             const newVc = prevVc + 0.1 * ((v1 - v2) - prevVc);
             this.capacitorVoltages.set(comp.id, newVc);
           }
         } else if (comp.type === 'DIODE' || comp.type === 'LED') {
           const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:1`);
           const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:2`);
-          const vf = comp.type === 'LED' ? 2.0 : 0.7; // Forward voltage threshold
+          const vf = comp.type === 'LED' ? 2.0 : 0.7;
           if (aPin && kPin && aPin !== kPin) {
             const va = nodeVoltages[aPin] || 0;
             const vk = nodeVoltages[kPin] || 0;
             const isConducting = (va - vk) > vf;
-            const gDiode = isConducting ? 0.05 : 1e-6; // 20 ohms when conducting
+            const gDiode = isConducting ? 0.05 : 1e-6;
 
             sumGV[aPin] += gDiode * (vk + vf);
             sumG[aPin] += gDiode;
 
             sumGV[kPin] += gDiode * (va - vf);
             sumG[kPin] += gDiode;
+          }
+        } else if (comp.type === 'OPAMP_LM358') {
+          // Operational Amplifier (Inverting / Non-inverting / Comparator)
+          const inNegPin = this.netMap.get(`${comp.id}:in_neg`);
+          const inPosPin = this.netMap.get(`${comp.id}:in_pos`);
+          const outPin = this.netMap.get(`${comp.id}:out`);
+          const vccPin = this.netMap.get(`${comp.id}:vcc`);
+          const veePin = this.netMap.get(`${comp.id}:vee`);
+
+          const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
+          const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+          const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
+          const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
+
+          const openGain = Number(comp.parameters?.openLoopGain ?? 100000);
+          const vIdeal = (vPos - vNeg) * openGain;
+          const vOutClamped = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+
+          if (outPin) {
+            nodeVoltages[outPin] = vOutClamped;
+            fixedNodes.add(outPin);
+          }
+        } else if (comp.type.startsWith('LOGIC_')) {
+          // Digital Logic Gates: 74HC series
+          const aPin = this.netMap.get(`${comp.id}:a`);
+          const bPin = this.netMap.get(`${comp.id}:b`);
+          const outPin = this.netMap.get(`${comp.id}:out`);
+
+          const vA = aPin ? (nodeVoltages[aPin] || 0) : 0;
+          const vB = bPin ? (nodeVoltages[bPin] || 0) : 0;
+          const highThresh = 2.0;
+
+          const isHighA = vA >= highThresh;
+          const isHighB = vB >= highThresh;
+          let logicOutHigh = false;
+
+          switch (comp.type) {
+            case 'LOGIC_AND':
+              logicOutHigh = isHighA && isHighB;
+              break;
+            case 'LOGIC_OR':
+              logicOutHigh = isHighA || isHighB;
+              break;
+            case 'LOGIC_NOT':
+              logicOutHigh = !isHighA;
+              break;
+            case 'LOGIC_NAND':
+              logicOutHigh = !(isHighA && isHighB);
+              break;
+            case 'LOGIC_NOR':
+              logicOutHigh = !(isHighA || isHighB);
+              break;
+            case 'LOGIC_XOR':
+              logicOutHigh = isHighA !== isHighB;
+              break;
+            case 'LOGIC_XNOR':
+              logicOutHigh = isHighA === isHighB;
+              break;
+          }
+
+          const outV = logicOutHigh ? 5.0 : 0.0;
+          if (outPin) {
+            nodeVoltages[outPin] = outV;
+            fixedNodes.add(outPin);
           }
         } else if (comp.type === 'TIMER_555') {
           // NE555 Timer Simulation
@@ -247,11 +350,10 @@ export class CircuitSolver {
             this.timer555State.set(comp.id, state);
           }
 
-          // 555 internal SR Flip-Flop
           if (vTrig < lowerThresh) {
-            state.flipFlop = true; // Set Output HIGH
+            state.flipFlop = true;
           } else if (vThresh > upperThresh) {
-            state.flipFlop = false; // Reset Output LOW
+            state.flipFlop = false;
           }
 
           state.outV = state.flipFlop ? (vcc - 0.2) : (gnd + 0.1);
@@ -265,17 +367,16 @@ export class CircuitSolver {
         }
       }
 
-      // Update non-fixed node voltages using KCL relaxation
+      // KCL relaxation
       for (const net of this.nets) {
         if (!fixedNodes.has(net) && sumG[net] > 0) {
           const calculatedV = sumGV[net] / sumG[net];
-          // Successive over-relaxation
           nodeVoltages[net] = nodeVoltages[net] * 0.3 + calculatedV * 0.7;
         }
       }
     }
 
-    // 3. Compute Detailed Component Electrical Telemetry (Voltage, Current, Power, Visual State)
+    // 3. Compute Detailed Component Telemetry
     const componentStates: Record<string, { voltage: number; current: number; on?: boolean; digitalOut?: number }> = {};
 
     for (const comp of components) {
@@ -292,11 +393,17 @@ export class CircuitSolver {
         if (comp.type === 'RESISTOR' || comp.type === 'POTENTIOMETER') {
           const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
           current = vDiff / r;
+        } else if (comp.type === 'METER_VOLTMETER' || comp.type === 'METER_MULTIMETER') {
+          current = vDiff / 10000000;
+          on = Math.abs(vDiff) > 0.05;
+        } else if (comp.type === 'METER_AMMETER') {
+          current = vDiff / 0.001;
+          on = Math.abs(current) > 0.0001;
         } else if (comp.type === 'LED') {
           const vf = 2.0;
           if (vDiff > vf) {
-            current = (vDiff - vf) / 220; // current-limiting approximation
-            on = current > 0.002; // illuminated when current > 2mA
+            current = (vDiff - vf) / 20; // 20 ohm diode forward dynamic resistance
+            on = current > 0.001; // illuminated when forward current > 1mA
           }
         } else if (comp.type === 'DIODE') {
           current = vDiff > 0.7 ? (vDiff - 0.7) / 10 : 0;
@@ -304,8 +411,11 @@ export class CircuitSolver {
         } else if (comp.type === 'TIMER_555') {
           const state = this.timer555State.get(comp.id);
           on = Boolean(state?.flipFlop);
+        } else if (comp.type.startsWith('LOGIC_')) {
+          const outPin = this.netMap.get(`${comp.id}:out`);
+          const outV = outPin ? (nodeVoltages[outPin] || 0) : 0;
+          on = outV > 2.0;
         } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
-          // Source delivery current
           current = Math.abs(vDiff) / 1000;
         }
 
@@ -315,7 +425,6 @@ export class CircuitSolver {
           on,
         };
 
-        // Record waveform history for Oscilloscope / Logic Analyzer
         let waveHist = this.waveformHistory.get(comp.id);
         if (!waveHist) {
           waveHist = [];
@@ -328,6 +437,34 @@ export class CircuitSolver {
       }
     }
 
+    // 4. Calculate Wire Currents & Conventional Current Direction
+    const wireCurrents: Record<string, number> = {};
+    for (const wire of wires) {
+      const fromComp = components.find((c) => c.id === wire.fromCompId);
+      const toComp = components.find((c) => c.id === wire.toCompId);
+      if (!fromComp || !toComp) continue;
+
+      const netA = this.netMap.get(`${wire.fromCompId}:${wire.fromPinId}`);
+      const netB = this.netMap.get(`${wire.toCompId}:${wire.toPinId}`);
+      const vA = netA ? (nodeVoltages[netA] || 0) : 0;
+      const vB = netB ? (nodeVoltages[netB] || 0) : 0;
+
+      let iVal = vA - vB;
+      if (fromComp.type === 'BATTERY' || fromComp.type === 'DC_VOLTAGE') {
+        const isPosPin = wire.fromPinId === 'p' || wire.fromPinId === '1';
+        const vBat = Number(fromComp.parameters?.voltage ?? 9.0);
+        iVal = isPosPin ? (vBat >= 0 ? 1 : -1) : (vBat >= 0 ? -1 : 1);
+      } else if (toComp.type === 'BATTERY' || toComp.type === 'DC_VOLTAGE') {
+        const isPosPin = wire.toPinId === 'p' || wire.toPinId === '1';
+        const vBat = Number(toComp.parameters?.voltage ?? 9.0);
+        iVal = isPosPin ? (vBat >= 0 ? -1 : 1) : (vBat >= 0 ? 1 : -1);
+      } else {
+        const compCurrent = componentStates[fromComp.id]?.current || componentStates[toComp.id]?.current || 0;
+        iVal = vA >= vB ? compCurrent : -compCurrent;
+      }
+      wireCurrents[wire.id] = iVal;
+    }
+
     const waveformDataObj: Record<string, SimulationWaveformPoint[]> = {};
     this.waveformHistory.forEach((points, id) => {
       waveformDataObj[id] = points;
@@ -337,6 +474,7 @@ export class CircuitSolver {
       nodeVoltages,
       componentStates,
       waveformData: waveformDataObj,
+      wireCurrents,
     };
   }
 }

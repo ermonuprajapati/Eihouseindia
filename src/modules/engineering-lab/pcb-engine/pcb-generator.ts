@@ -159,6 +159,39 @@ export class PcbGenerator {
   }
 
   /**
+   * Generates a Bill of Materials (BOM) summary grouped by component type and value
+   */
+  public static generateBom(components: CircuitComponent[]): {
+    componentType: string;
+    value: string;
+    footprint: string;
+    quantity: number;
+    designators: string[];
+  }[] {
+    const map = new Map<string, { componentType: string; value: string; footprint: string; quantity: number; designators: string[] }>();
+
+    for (const comp of components) {
+      const key = `${comp.type}__${comp.value}__${comp.footprint}`;
+      const des = comp.designator || comp.label;
+      const existing = map.get(key);
+      if (existing) {
+        existing.quantity += 1;
+        existing.designators.push(des);
+      } else {
+        map.set(key, {
+          componentType: comp.type,
+          value: comp.value,
+          footprint: comp.footprint,
+          quantity: 1,
+          designators: [des],
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }
+
+  /**
    * Generates standard RS-274X Gerber Top Copper file content
    */
   public static exportGerberTopCopper(pcb: PcbLayout): string {

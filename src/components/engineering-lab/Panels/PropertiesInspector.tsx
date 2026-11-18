@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { CircuitComponent } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal } from 'lucide-react';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
@@ -12,6 +12,10 @@ interface PropertiesInspectorProps {
   onDeleteComponent: (id: string) => void;
   onClose: () => void;
   simState?: { voltage: number; current: number; on?: boolean };
+  isOpen?: boolean;
+  onToggleOpen?: () => void;
+  width?: number;
+  onWidthChange?: (width: number) => void;
 }
 
 const FOOTPRINT_OPTIONS = [
@@ -51,10 +55,74 @@ export function PropertiesInspector({
   onDeleteComponent,
   onClose,
   simState,
+  isOpen = true,
+  onToggleOpen,
+  width = 320,
+  onWidthChange,
 }: PropertiesInspectorProps) {
+  const isResizingRef = useRef(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current || !onWidthChange) return;
+      const newWidth = Math.max(240, Math.min(550, window.innerWidth - e.clientX));
+      onWidthChange(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [onWidthChange]);
+
+  // PERSISTENT COLLAPSED TAB ON RIGHT EDGE
+  if (!isOpen) {
+    return (
+      <div className="relative z-30 shrink-0">
+        <button
+          onClick={onToggleOpen || onClose}
+          className="absolute right-0 top-1/2 -translate-y-1/2 bg-[#0B1528] hover:bg-slate-800 border-y border-l border-slate-700 text-slate-300 hover:text-white py-3 px-2 rounded-l-lg shadow-2xl transition-all flex flex-col items-center gap-2 group cursor-pointer"
+          title="Open Properties Inspector (Shortcut: I)"
+        >
+          <ChevronLeft className="w-4 h-4 text-sky-400 group-hover:scale-125 transition-transform" />
+          <span className="[writing-mode:vertical-lr] font-mono tracking-widest text-[11px] font-bold uppercase text-slate-300 group-hover:text-sky-400">
+            Inspector [I]
+          </span>
+          <Sliders className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400" />
+        </button>
+      </div>
+    );
+  }
+
   if (!component) {
     return (
-      <aside className="w-80 bg-[#0B1528] border-l border-slate-800 flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs select-none">
+      <aside
+        style={{ width: `${width}px` }}
+        className="bg-[#0B1528] border-l border-slate-800 flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs select-none relative shrink-0"
+      >
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            isResizingRef.current = true;
+          }}
+          className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-sky-500/60 active:bg-sky-500 transition-colors z-30"
+          title="Drag to resize inspector"
+        />
+        <div className="absolute top-3 right-3">
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors"
+            title="Collapse Inspector (I)"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
         <Sliders className="w-8 h-8 text-slate-700 mb-2 stroke-1" />
         <p className="font-semibold text-slate-400">No Component Selected</p>
         <p className="text-[11px] text-slate-600 mt-1 max-w-[200px]">
@@ -83,7 +151,19 @@ export function PropertiesInspector({
   const powerMw = simState ? Math.abs(simState.voltage * simState.current * 1000) : 0;
 
   return (
-    <aside className="w-80 bg-[#0B1528] border-l border-slate-800 flex flex-col h-full z-20 select-none shadow-2xl text-slate-200">
+    <aside
+      style={{ width: `${width}px` }}
+      className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full z-20 select-none shadow-2xl text-slate-200 relative shrink-0 transition-[width] duration-75"
+    >
+      {/* Draggable Resize Handle on Left Edge */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          isResizingRef.current = true;
+        }}
+        className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-sky-500/60 active:bg-sky-500 transition-colors z-30"
+        title="Drag to resize inspector"
+      />
       {/* Panel Header */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
         <div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ interface SchematicCanvasProps {
   onDeleteWire: (wireId: string) => void;
   isSimulating: boolean;
   simulationStates: Record<string, { voltage: number; current: number; on?: boolean }>;
+  wireCurrents?: Record<string, number>;
 }
 
 /**
@@ -53,6 +54,7 @@ export function SchematicCanvas({
   onDeleteWire,
   isSimulating,
   simulationStates,
+  wireCurrents,
 }: SchematicCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -270,18 +272,26 @@ export function SchematicCanvas({
                   className="transition-colors group-hover:stroke-rose-400"
                 />
 
-                {/* Animated Current Flow Dots */}
+                {/* Animated Conventional Current Flow Dots with Polarity Direction */}
                 {isSimulating && (
-                  <path
-                    d={pathData}
-                    fill="none"
-                    stroke="#FBBF24"
-                    strokeWidth={3}
-                    strokeDasharray="4, 16"
-                    strokeDashoffset={-animOffset}
-                    strokeLinecap="round"
-                    opacity={0.85}
-                  />
+                  (() => {
+                    const wCurrent = wireCurrents ? (wireCurrents[wire.id] ?? 0) : 1;
+                    const hasCurrent = Math.abs(wCurrent) > 0.000001;
+                    if (!hasCurrent) return null;
+                    const isReverse = wCurrent < 0;
+                    return (
+                      <path
+                        d={pathData}
+                        fill="none"
+                        stroke="#FBBF24"
+                        strokeWidth={3}
+                        strokeDasharray="4, 16"
+                        strokeDashoffset={isReverse ? animOffset : -animOffset}
+                        strokeLinecap="round"
+                        opacity={0.9}
+                      />
+                    );
+                  })()
                 )}
 
                 {/* Pin Terminal End Dots */}

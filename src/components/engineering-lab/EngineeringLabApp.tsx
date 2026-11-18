@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import {
   EngineeringProject,
   WorkspaceMode,
@@ -18,13 +19,67 @@ import { LabHeader } from './Header/LabHeader';
 import { SchematicCanvas } from './Canvas/SchematicCanvas';
 import { ComponentBrowser } from './Panels/ComponentBrowser';
 import { PropertiesInspector } from './Panels/PropertiesInspector';
-import { InstrumentPanel } from './Panels/InstrumentPanel';
-import { FirmwareEditor } from './Panels/FirmwareEditor';
-import { PcbView } from './Panels/PcbView';
-import { CalculatorsPanel } from './Panels/CalculatorsPanel';
-import { LabExperimentsModal } from './Panels/LabExperimentsModal';
 import { LabStatusBar } from './StatusBar/LabStatusBar';
 import { toast } from 'sonner';
+import { RefreshCw } from 'lucide-react';
+
+// DYNAMIC LAZY-LOADING OF HEAVY MODULES FOR SECTION 12 PERFORMANCE OPTIMIZATION
+const PcbView = dynamic(
+  () => import('./Panels/PcbView').then((m) => m.PcbView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#070D18] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-emerald-400" />
+        Initializing 2D/3D PCB CAD Engine...
+      </div>
+    ),
+  }
+);
+
+const FirmwareEditor = dynamic(
+  () => import('./Panels/FirmwareEditor').then((m) => m.FirmwareEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#070D18] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-purple-400" />
+        Loading Firmware Development Environment & Toolchain...
+      </div>
+    ),
+  }
+);
+
+const InstrumentPanel = dynamic(
+  () => import('./Panels/InstrumentPanel').then((m) => m.InstrumentPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#070D18] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-sky-400" />
+        Loading Virtual Instruments Bench...
+      </div>
+    ),
+  }
+);
+
+const CalculatorsPanel = dynamic(
+  () => import('./Panels/CalculatorsPanel').then((m) => m.CalculatorsPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#070D18] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-amber-400" />
+        Loading Engineering Calculators...
+      </div>
+    ),
+  }
+);
+
+const LabExperimentsModal = dynamic(
+  () => import('./Panels/LabExperimentsModal').then((m) => m.LabExperimentsModal),
+  { ssr: false }
+);
 
 export function EngineeringLabApp() {
   // Project State
@@ -39,15 +94,54 @@ export function EngineeringLabApp() {
   // Selection
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
 
-  // Side Panel Open States
+  // SECTION 11: WORKSPACE PERSISTENCE & LAYOUT PREFERENCES
   const [isBrowserOpen, setIsBrowserOpen] = useState(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [browserWidth, setBrowserWidth] = useState(288);
+  const [inspectorWidth, setInspectorWidth] = useState(320);
   const [isExperimentsModalOpen, setIsExperimentsModalOpen] = useState(false);
+
+  // Load layout preferences from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ei_lab_workspace_layout_prefs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.isBrowserOpen === 'boolean') setIsBrowserOpen(parsed.isBrowserOpen);
+        if (typeof parsed.isInspectorOpen === 'boolean') setIsInspectorOpen(parsed.isInspectorOpen);
+        if (typeof parsed.browserWidth === 'number' && parsed.browserWidth >= 200) setBrowserWidth(parsed.browserWidth);
+        if (typeof parsed.inspectorWidth === 'number' && parsed.inspectorWidth >= 200) setInspectorWidth(parsed.inspectorWidth);
+      }
+    } catch {}
+  }, []);
+
+  // Save layout preferences on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'ei_lab_workspace_layout_prefs',
+        JSON.stringify({ isBrowserOpen, isInspectorOpen, browserWidth, inspectorWidth })
+      );
+    } catch {}
+  }, [isBrowserOpen, isInspectorOpen, browserWidth, inspectorWidth]);
+
+  // Reset workspace layout
+  const handleResetLayout = () => {
+    setIsBrowserOpen(true);
+    setIsInspectorOpen(true);
+    setBrowserWidth(288);
+    setInspectorWidth(320);
+    try {
+      localStorage.removeItem('ei_lab_workspace_layout_prefs');
+    } catch {}
+    toast.success('Workspace layout reset to defaults');
+  };
 
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(true);
   const [simTime, setSimTime] = useState(0);
   const [simStates, setSimStates] = useState<Record<string, { voltage: number; current: number; on?: boolean }>>({});
+  const [wireCurrents, setWireCurrents] = useState<Record<string, number>>({});
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
 
   // Firmware & MCU State
@@ -83,23 +177,29 @@ export function EngineeringLabApp() {
   };
 
   // ----------------------------------------------------------------
-  // Real-Time Simulation Master Loop
+  // SECTION 12: DECOUPLED & THROTTLED SIMULATION LOOP
   // ----------------------------------------------------------------
   useEffect(() => {
     let animId: number;
+    let lastUiUpdate = Date.now();
 
     const loop = () => {
-
-      if (isSimulating) {
+      if (isSimulating && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
         // Step Circuit MNA Solver
         const solver = solverRef.current;
         const result: SolverStepResult = solver.step(project.components, project.wires, 0.001, 1.0);
 
-        setSimStates(result.componentStates);
-        setWaveformData(result.waveformData);
-        setSimTime((t) => t + 0.001);
+        const now = Date.now();
+        // Throttle UI commits to ~30 FPS to prevent memory churn and high CPU usage
+        if (now - lastUiUpdate >= 33) {
+          lastUiUpdate = now;
+          setSimStates(result.componentStates);
+          setWireCurrents(result.wireCurrents || {});
+          setWaveformData(result.waveformData);
+          setSimTime((t) => t + 0.033);
+        }
 
-        // Execute MCU slice if Arduino is running
+        // Execute MCU slice if MCU is running
         if (project.firmware.isRunning) {
           const mcuRes = mcuRef.current.executeCycle(project.firmware);
           if (mcuRes.serialLines.length > 0) {
@@ -249,41 +349,48 @@ export function EngineeringLabApp() {
   };
 
   const handleExportProject = (format: 'json' | 'gerber' | 'bom' | 'firmware') => {
-    const dateStr = new Date().toISOString().split('T')[0];
-
     if (format === 'json') {
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(project, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `${project.title.replace(/\s+/g, '_')}_${dateStr}.json`);
+      downloadAnchor.setAttribute('download', `${project.title.toLowerCase().replace(/\s+/g, '_')}.json`);
+      document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
-      toast.success('Project exported as JSON.');
+      downloadAnchor.remove();
+      toast.success('Project JSON exported');
     } else if (format === 'gerber') {
-      const gerberStr = PcbGenerator.exportGerberTopCopper(project.pcb);
-      const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(gerberStr);
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `${project.title.replace(/\s+/g, '_')}_TopCopper.gtl`);
-      downloadAnchor.click();
-      toast.success('RS-274X Gerber Top Copper exported.');
+      const gtl = PcbGenerator.exportGerberTopCopper(project.pcb);
+      const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(gtl);
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `${project.title.toLowerCase().replace(/\s+/g, '_')}_top.gtl`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success('RS-274X Gerber file generated');
     } else if (format === 'bom') {
-      let csv = 'Index,Designator,Component Type,Value,Footprint Package,Quantity\n';
-      project.components.forEach((c, idx) => {
-        csv += `${idx + 1},${c.label},${c.type},"${c.value}",${c.footprint},1\n`;
+      const bom = PcbGenerator.generateBom(project.components);
+      let csv = 'Designator,Component Type,Value,Footprint,Quantity\n';
+      bom.forEach((b) => {
+        csv += `"${b.designators.join(' ')}","${b.componentType}","${b.value}","${b.footprint}",${b.quantity}\n`;
       });
       const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `${project.title.replace(/\s+/g, '_')}_BOM.csv`);
-      downloadAnchor.click();
-      toast.success('Bill of Materials (BOM) exported.');
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `${project.title.toLowerCase().replace(/\s+/g, '_')}_BOM.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success('Bill of Materials exported');
     } else if (format === 'firmware') {
       const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(project.firmware.code);
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `${project.title.replace(/\s+/g, '_')}_firmware.ino`);
-      downloadAnchor.click();
-      toast.success('Arduino firmware exported.');
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `${project.title.toLowerCase().replace(/\s+/g, '_')}.ino`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success('Arduino firmware exported');
     }
   };
 
@@ -292,11 +399,12 @@ export function EngineeringLabApp() {
     setProject(exp.initialProject);
     setSelectedCompId(null);
     solverRef.current.reset();
-    toast.success(`Loaded Experiment: ${exp.title}`);
+    mcuRef.current.resetGpio();
+    toast.success(`Loaded Experiment: "${exp.title}"`);
   };
 
   // ----------------------------------------------------------------
-  // Firmware Compilation & Execution
+  // Firmware Actions
   // ----------------------------------------------------------------
   const handleFlashFirmware = () => {
     setIsFlashing(true);
@@ -310,18 +418,18 @@ export function EngineeringLabApp() {
           isRunning: true,
           serialLog: [
             ...prev.firmware.serialLog,
-            `[AVR-GCC] Compilation successful: 1,428 bytes flash used (4.4%)`,
-            `[AVR-DUDE] Flashing ATmega328P at 115200 baud... Verified 100% OK.`,
-            `[Core] Running firmware...`,
+            `[BUILD] Invoking compiler for ${prev.firmware.targetMcu}...`,
+            `[VERIFIED] 100% flashed to Virtual MCU runtime.`,
+            `[Core] Virtual MCU Online and executing instructions.`,
           ],
         },
       }));
-      toast.success('Firmware compiled & flashed to Virtual MCU!');
-    }, 900);
+      toast.success('Firmware compiled & running on Virtual MCU!');
+    }, 700);
   };
 
   // ----------------------------------------------------------------
-  // Global Keyboard Shortcuts
+  // SECTION 11: KEYBOARD SHORTCUTS
   // ----------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -331,8 +439,14 @@ export function EngineeringLabApp() {
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         setIsSimulating((s) => !s);
+      } else if (e.key === 'b' || e.key === 'B') {
+        setIsBrowserOpen((o) => !o);
+      } else if (e.key === 'i' || e.key === 'I') {
+        setIsInspectorOpen((o) => !o);
       } else if (e.key === 'r' || e.key === 'R') {
         if (selectedCompId) handleRotateComponent(selectedCompId);
+      } else if (e.key === 'm' || e.key === 'M') {
+        if (selectedCompId) handleMirrorComponent(selectedCompId);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedCompId) handleDeleteComponent(selectedCompId);
       } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -388,6 +502,11 @@ export function EngineeringLabApp() {
         canRedo={redoStack.length > 0}
         onUndo={handleUndo}
         onRedo={handleRedo}
+        isBrowserOpen={isBrowserOpen}
+        onToggleBrowser={() => setIsBrowserOpen((o) => !o)}
+        isInspectorOpen={isInspectorOpen}
+        onToggleInspector={() => setIsInspectorOpen((o) => !o)}
+        onResetLayout={handleResetLayout}
       />
 
       {/* Main Workspace Body */}
@@ -400,6 +519,8 @@ export function EngineeringLabApp() {
               existingComponents={project.components}
               isOpen={isBrowserOpen}
               onToggleOpen={() => setIsBrowserOpen(!isBrowserOpen)}
+              width={browserWidth}
+              onWidthChange={setBrowserWidth}
             />
 
             <main className="flex-1 h-full relative overflow-hidden">
@@ -416,20 +537,23 @@ export function EngineeringLabApp() {
                 onDeleteWire={handleDeleteWire}
                 isSimulating={isSimulating}
                 simulationStates={simStates}
+                wireCurrents={wireCurrents}
               />
             </main>
 
-            {isInspectorOpen && (
-              <PropertiesInspector
-                component={selectedComponent}
-                onUpdateComponent={handleUpdateComponent}
-                onRotateComponent={handleRotateComponent}
-                onMirrorComponent={handleMirrorComponent}
-                onDeleteComponent={handleDeleteComponent}
-                onClose={() => setIsInspectorOpen(false)}
-                simState={selectedCompId ? simStates[selectedCompId] : undefined}
-              />
-            )}
+            <PropertiesInspector
+              component={selectedComponent}
+              onUpdateComponent={handleUpdateComponent}
+              onRotateComponent={handleRotateComponent}
+              onMirrorComponent={handleMirrorComponent}
+              onDeleteComponent={handleDeleteComponent}
+              onClose={() => setIsInspectorOpen(false)}
+              isOpen={isInspectorOpen}
+              onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
+              width={inspectorWidth}
+              onWidthChange={setInspectorWidth}
+              simState={selectedCompId ? simStates[selectedCompId] : undefined}
+            />
           </>
         )}
 
@@ -448,6 +572,13 @@ export function EngineeringLabApp() {
           <PcbView
             pcb={project.pcb}
             onExportGerber={() => handleExportProject('gerber')}
+            onUpdateDimensions={(widthMm, heightMm) => {
+              setProject((p) => ({
+                ...p,
+                pcb: { ...p.pcb, widthMm, heightMm },
+              }));
+              toast.info(`Updated PCB dimensions to ${widthMm}x${heightMm} mm`);
+            }}
             is3DMode={false}
           />
         )}
@@ -457,6 +588,12 @@ export function EngineeringLabApp() {
           <PcbView
             pcb={project.pcb}
             onExportGerber={() => handleExportProject('gerber')}
+            onUpdateDimensions={(widthMm, heightMm) => {
+              setProject((p) => ({
+                ...p,
+                pcb: { ...p.pcb, widthMm, heightMm },
+              }));
+            }}
             is3DMode={true}
           />
         )}

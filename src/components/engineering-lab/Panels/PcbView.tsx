@@ -18,11 +18,16 @@ interface PcbViewProps {
   pcb: PcbLayout;
   onExportGerber: () => void;
   is3DMode?: boolean;
+  onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
 }
 
-export function PcbView({ pcb, onExportGerber, is3DMode = false }: PcbViewProps) {
+export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensions }: PcbViewProps) {
   const canvas2dRef = useRef<HTMLCanvasElement>(null);
   const canvas3dRef = useRef<HTMLCanvasElement>(null);
+
+  const [activeCopperLayer, setActiveCopperLayer] = useState<'top_copper' | 'bottom_copper'>('top_copper');
+  const [boardWidth, setBoardWidth] = useState(pcb.widthMm);
+  const [boardHeight, setBoardHeight] = useState(pcb.heightMm);
 
   const [visibleLayers, setVisibleLayers] = useState({
     topCopper: true,
@@ -619,9 +624,63 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false }: PcbViewProps)
             <span>{is3DMode ? '3D Photorealistic PCB Visualizer' : '2D Board Layout & Copper Traces'}</span>
           </div>
 
-          <span className="text-[11px] font-mono text-slate-500">
-            Dimensions: {pcb.widthMm} x {pcb.heightMm} mm | 2 Copper Layers | FR4 Substrate
-          </span>
+          {/* Dimension Controls */}
+          {onUpdateDimensions && (
+            <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+              <span>Size:</span>
+              <input
+                type="number"
+                value={boardWidth}
+                onChange={(e) => {
+                  const w = Math.max(30, Math.min(300, Number(e.target.value)));
+                  setBoardWidth(w);
+                  onUpdateDimensions(w, boardHeight);
+                }}
+                className="w-14 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-center text-emerald-400"
+                title="Board Width in mm"
+              />
+              <span>x</span>
+              <input
+                type="number"
+                value={boardHeight}
+                onChange={(e) => {
+                  const h = Math.max(30, Math.min(300, Number(e.target.value)));
+                  setBoardHeight(h);
+                  onUpdateDimensions(boardWidth, h);
+                }}
+                className="w-14 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-center text-emerald-400"
+                title="Board Height in mm"
+              />
+              <span>mm</span>
+            </div>
+          )}
+
+          {/* Active Copper Layer Switcher */}
+          {!is3DMode && (
+            <div className="flex items-center gap-1 text-[11px] font-mono pl-2 border-l border-slate-800">
+              <span className="text-slate-500">Active:</span>
+              <button
+                onClick={() => setActiveCopperLayer('top_copper')}
+                className={`px-2 py-0.5 rounded ${
+                  activeCopperLayer === 'top_copper'
+                    ? 'bg-red-950 border border-red-600 text-red-300 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                F.Cu (Top)
+              </button>
+              <button
+                onClick={() => setActiveCopperLayer('bottom_copper')}
+                className={`px-2 py-0.5 rounded ${
+                  activeCopperLayer === 'bottom_copper'
+                    ? 'bg-blue-950 border border-blue-600 text-blue-300 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                B.Cu (Bot)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Action Controls & Layer Toggles */}
@@ -635,7 +694,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false }: PcbViewProps)
                   onChange={(e) => setVisibleLayers({ ...visibleLayers, topCopper: e.target.checked })}
                   className="rounded accent-red-500"
                 />
-                Top (Red)
+                Top
               </label>
               <label className="flex items-center gap-1 text-blue-400 cursor-pointer">
                 <input
@@ -644,7 +703,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false }: PcbViewProps)
                   onChange={(e) => setVisibleLayers({ ...visibleLayers, bottomCopper: e.target.checked })}
                   className="rounded accent-blue-500"
                 />
-                Bottom (Blue)
+                Bottom
               </label>
               <label className="flex items-center gap-1 text-slate-300 cursor-pointer">
                 <input
@@ -653,7 +712,16 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false }: PcbViewProps)
                   onChange={(e) => setVisibleLayers({ ...visibleLayers, silkscreen: e.target.checked })}
                   className="rounded accent-emerald-500"
                 />
-                Silkscreen
+                Silk
+              </label>
+              <label className="flex items-center gap-1 text-amber-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.drillHoles}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, drillHoles: e.target.checked })}
+                  className="rounded accent-amber-500"
+                />
+                Drill
               </label>
             </div>
           ) : (

@@ -357,12 +357,102 @@ export function SchematicSymbol({
           </g>
         );
 
+      case 'METER_VOLTMETER': {
+        const measuredV = simState ? simState.voltage : 0;
+        return (
+          <g>
+            <circle cx="0" cy="0" r="24" stroke={isSelected ? '#34D399' : '#38BDF8'} strokeWidth="2.5" fill="#0B1E36" />
+            <line x1="0" y1="-28" x2="0" y2="-24" stroke="#38BDF8" strokeWidth="2" />
+            <line x1="0" y1="24" x2="0" y2="28" stroke="#38BDF8" strokeWidth="2" />
+            <text x="0" y="-7" fill="#38BDF8" fontSize="11" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              V (DC)
+            </text>
+            <rect x="-20" y="2" width="40" height="15" rx="3" fill="#030712" stroke="#1E293B" />
+            <text x="0" y="13" fill="#34D399" fontSize="9.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {measuredV.toFixed(2)}V
+            </text>
+          </g>
+        );
+      }
+
+      case 'METER_AMMETER': {
+        const measuredI = simState ? simState.current : 0;
+        const dispCurrent = Math.abs(measuredI) >= 1 ? `${measuredI.toFixed(2)}A` : `${(measuredI * 1000).toFixed(1)}mA`;
+        return (
+          <g>
+            <circle cx="0" cy="0" r="22" stroke={isSelected ? '#34D399' : '#F59E0B'} strokeWidth="2.5" fill="#1C1917" />
+            <line x1="-30" y1="0" x2="-22" y2="0" stroke="#F59E0B" strokeWidth="2" />
+            <line x1="22" y1="0" x2="30" y2="0" stroke="#F59E0B" strokeWidth="2" />
+            <text x="0" y="-6" fill="#F59E0B" fontSize="11" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              A (DC)
+            </text>
+            <rect x="-18" y="2" width="36" height="14" rx="2" fill="#0C0A09" stroke="#292524" />
+            <text x="0" y="12" fill="#FCD34D" fontSize="8.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {dispCurrent}
+            </text>
+          </g>
+        );
+      }
+
+      case 'METER_MULTIMETER': {
+        const measuredV = simState ? simState.voltage : 0;
+        return (
+          <g>
+            {/* DMM Body */}
+            <rect x="-35" y="-30" width="70" height="60" rx="6" stroke="#F59E0B" strokeWidth="2" fill="#1E293B" />
+            {/* LCD Display */}
+            <rect x="-28" y="-22" width="56" height="20" rx="2" fill="#020617" stroke="#334155" />
+            <text x="0" y="-8" fill="#38BDF8" fontSize="11" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {measuredV.toFixed(2)} V
+            </text>
+            {/* Mode Switch Dial */}
+            <circle cx="0" cy="10" r="8" fill="#0F172A" stroke="#F59E0B" strokeWidth="1.5" />
+            <line x1="0" y1="10" x2="0" y2="3" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" />
+            {/* Terminals */}
+            <circle cx="-15" cy="24" r="3" fill="#EF4444" />
+            <circle cx="15" cy="24" r="3" fill="#000000" stroke="#64748B" />
+          </g>
+        );
+      }
+
+      case 'OPAMP_LM358':
+        return (
+          <g>
+            {/* OpAmp Triangle */}
+            <polygon points="-30,-25 25,0 -30,25" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* Inverting (-) symbol */}
+            <line x1="-24" y1="-12" x2="-16" y2="-12" stroke="#94A3B8" strokeWidth="2" />
+            {/* Non-inverting (+) symbol */}
+            <line x1="-24" y1="12" x2="-16" y2="12" stroke="#94A3B8" strokeWidth="2" />
+            <line x1="-20" y1="8" x2="-20" y2="16" stroke="#94A3B8" strokeWidth="2" />
+            {/* Input / Output Leads */}
+            <line x1="-35" y1="-12" x2="-30" y2="-12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-35" y1="12" x2="-30" y2="12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="25" y1="0" x2="35" y2="0" stroke={strokeColor} strokeWidth="2" />
+            {/* Power rails VCC & VEE */}
+            <line x1="0" y1="-30" x2="0" y2="-14" stroke={strokeColor} strokeWidth="1.5" />
+            <line x1="0" y1="14" x2="0" y2="30" stroke={strokeColor} strokeWidth="1.5" />
+            <text x="5" y="-18" fill="#10B981" fontSize="7" fontFamily="monospace">V+</text>
+            <text x="5" y="24" fill="#64748B" fontSize="7" fontFamily="monospace">V-</text>
+          </g>
+        );
+
       case 'LOGIC_AND':
       case 'LOGIC_OR':
       case 'LOGIC_NOT':
+      case 'LOGIC_NAND':
+      case 'LOGIC_NOR':
+      case 'LOGIC_XOR':
+      case 'LOGIC_XNOR': {
+        const isNot = type === 'LOGIC_NOT';
+        const isAnd = type === 'LOGIC_AND' || type === 'LOGIC_NAND';
+        const isOr = type === 'LOGIC_OR' || type === 'LOGIC_NOR';
+        const isXor = type === 'LOGIC_XOR' || type === 'LOGIC_XNOR';
+        const hasBubble = type === 'LOGIC_NAND' || type === 'LOGIC_NOR' || type === 'LOGIC_XNOR' || isNot;
+
         return (
           <g>
-            {type === 'LOGIC_AND' && (
+            {isAnd && (
               <path
                 d="M -20,-16 L -2,-16 A 16,16 0 0,1 -2,16 L -20,16 Z"
                 stroke={strokeColor}
@@ -370,7 +460,7 @@ export function SchematicSymbol({
                 fill={fillColor}
               />
             )}
-            {type === 'LOGIC_OR' && (
+            {isOr && (
               <path
                 d="M -20,-16 Q -10,0 -20,16 Q 0,16 16,0 Q 0,-16 -20,-16 Z"
                 stroke={strokeColor}
@@ -378,22 +468,89 @@ export function SchematicSymbol({
                 fill={fillColor}
               />
             )}
-            {type === 'LOGIC_NOT' && (
+            {isXor && (
               <g>
-                <polygon points="-20,-14 8,0 -20,14" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
-                <circle cx="12" cy="0" r="3.5" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
+                <path d="M -25,-16 Q -15,0 -25,16" stroke={strokeColor} strokeWidth="2" fill="none" />
+                <path
+                  d="M -20,-16 Q -10,0 -20,16 Q 0,16 16,0 Q 0,-16 -20,-16 Z"
+                  stroke={strokeColor}
+                  strokeWidth="2"
+                  fill={fillColor}
+                />
               </g>
             )}
-            {/* Input & Output leads */}
-            <line x1="-30" y1="-8" x2="-20" y2="-8" stroke={strokeColor} strokeWidth="2" />
-            {type !== 'LOGIC_NOT' && (
-              <line x1="-30" y1="8" x2="-20" y2="8" stroke={strokeColor} strokeWidth="2" />
+            {isNot && (
+              <polygon points="-20,-14 8,0 -20,14" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
             )}
-            <line x1={type === 'LOGIC_NOT' ? 15.5 : 16} y1="0" x2="30" y2="0" stroke={strokeColor} strokeWidth="2" />
+            {/* Inversion Bubble if applicable */}
+            {hasBubble && (
+              <circle cx={isNot ? 12 : 19} cy="0" r="3" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
+            )}
+            {/* Input & Output leads */}
+            <line x1="-30" y1="-8" x2={isXor ? -25 : -20} y2="-8" stroke={strokeColor} strokeWidth="2" />
+            {!isNot && (
+              <line x1="-30" y1="8" x2={isXor ? -25 : -20} y2="8" stroke={strokeColor} strokeWidth="2" />
+            )}
+            <line x1={hasBubble ? (isNot ? 15 : 22) : 16} y1="0" x2="30" y2="0" stroke={strokeColor} strokeWidth="2" />
+          </g>
+        );
+      }
+
+      case 'SENSOR_ULTRASONIC':
+        return (
+          <g>
+            {/* Sensor PCB Body */}
+            <rect x="-35" y="-25" width="70" height="50" rx="4" stroke="#0284C7" strokeWidth="2" fill="#0C4A6E" />
+            {/* Left Transducer (TX) */}
+            <circle cx="-16" cy="0" r="12" stroke="#94A3B8" strokeWidth="2" fill="#020617" />
+            <circle cx="-16" cy="0" r="6" stroke="#38BDF8" strokeWidth="1" fill="#0369A1" />
+            {/* Right Transducer (RX) */}
+            <circle cx="16" cy="0" r="12" stroke="#94A3B8" strokeWidth="2" fill="#020617" />
+            <circle cx="16" cy="0" r="6" stroke="#38BDF8" strokeWidth="1" fill="#0369A1" />
+            <text x="0" y="-16" fill="#F8FAFC" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              HC-SR04
+            </text>
           </g>
         );
 
       case 'ARDUINO_UNO':
+      case 'ARDUINO_MEGA':
+      case 'ARDUINO_NANO':
+      case 'ESP32_DEVKIT':
+      case 'ESP32_S3':
+      case 'ESP32_C3':
+      case 'STM32F103':
+      case 'STM32_NUCLEO':
+      case 'RASPBERRY_PI_PICO':
+      case 'RASPBERRY_PI_PICO2': {
+        const boardTitle =
+          type === 'ARDUINO_MEGA'
+            ? 'MEGA 2560'
+            : type === 'ARDUINO_NANO'
+            ? 'NANO V3'
+            : type === 'ESP32_DEVKIT'
+            ? 'ESP32 WROOM'
+            : type === 'ESP32_S3'
+            ? 'ESP32-S3'
+            : type === 'ESP32_C3'
+            ? 'ESP32-C3 RISC-V'
+            : type === 'STM32F103'
+            ? 'STM32F103'
+            : type === 'STM32_NUCLEO'
+            ? 'NUCLEO-F401RE'
+            : type === 'RASPBERRY_PI_PICO2'
+            ? 'PICO 2 (RP2350)'
+            : type === 'RASPBERRY_PI_PICO'
+            ? 'PI PICO'
+            : 'ARDUINO UNO';
+        const boardColor =
+          type.includes('ESP')
+            ? '#BE185D'
+            : type.includes('STM')
+            ? '#2563EB'
+            : type.includes('PICO')
+            ? '#059669'
+            : '#0284C7';
         return (
           <g>
             {/* MCU Board Outline */}
@@ -403,23 +560,24 @@ export function SchematicSymbol({
               width="130"
               height="80"
               rx="5"
-              stroke="#0284C7"
+              stroke={boardColor}
               strokeWidth="2"
               fill="#082F49"
             />
             {/* USB & Power Jacks */}
             <rect x="-68" y="-30" width="12" height="18" rx="2" fill="#94A3B8" />
             <rect x="-68" y="10" width="16" height="14" rx="2" fill="#1E293B" />
-            {/* ATmega328P DIP chip */}
+            {/* Main Processor IC */}
             <rect x="-10" y="-12" width="50" height="24" rx="2" fill="#0F172A" stroke="#334155" />
             <text x="15" y="3" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">
-              ATMEGA328P
+              {component.value.split(' ')[0]}
             </text>
             <text x="0" y="-24" fill="#38BDF8" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              ARDUINO UNO
+              {boardTitle}
             </text>
           </g>
         );
+      }
 
       default:
         // Generic Integrated Circuit block

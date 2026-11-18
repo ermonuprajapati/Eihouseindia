@@ -22,6 +22,8 @@ import {
   ArrowLeft,
   ChevronDown,
   Calculator,
+  Sliders,
+  LayoutGrid,
 } from 'lucide-react';
 import { WorkspaceMode } from '@/modules/engineering-lab/types';
 
@@ -43,6 +45,11 @@ interface LabHeaderProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  isBrowserOpen?: boolean;
+  onToggleBrowser?: () => void;
+  isInspectorOpen?: boolean;
+  onToggleInspector?: () => void;
+  onResetLayout?: () => void;
 }
 
 export function LabHeader({
@@ -63,6 +70,11 @@ export function LabHeader({
   canRedo,
   onUndo,
   onRedo,
+  isBrowserOpen,
+  onToggleBrowser,
+  isInspectorOpen,
+  onToggleInspector,
+  onResetLayout,
 }: LabHeaderProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -192,8 +204,8 @@ export function LabHeader({
 
       {/* Primary Actions: Simulation Controls & File Operations */}
       <div className="flex items-center gap-2">
-        {/* Undo / Redo */}
-        <div className="hidden lg:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800">
+        {/* Undo / Redo & Workspace Layout Controls */}
+        <div className="hidden lg:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
           <button
             onClick={onUndo}
             disabled={!canUndo}
@@ -210,6 +222,47 @@ export function LabHeader({
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
+
+          <div className="w-[1px] h-4 bg-slate-700 mx-0.5" />
+
+          {/* Panel Visibility Toggles */}
+          {onToggleBrowser && (
+            <button
+              onClick={onToggleBrowser}
+              className={`p-1.5 rounded transition-colors ${
+                isBrowserOpen
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/50'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Toggle Component Library (B)"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onToggleInspector && (
+            <button
+              onClick={onToggleInspector}
+              className={`p-1.5 rounded transition-colors ${
+                isInspectorOpen
+                  ? 'bg-sky-950/80 text-sky-400 border border-sky-700/50'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Toggle Properties Inspector (I)"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onResetLayout && (
+            <button
+              onClick={onResetLayout}
+              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition-colors"
+              title="Reset Workspace Layout (Restore Default Panels)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Master Simulation Run / Stop Button */}
