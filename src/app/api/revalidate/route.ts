@@ -6,6 +6,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     revalidatePath('/');
     revalidatePath('/articles');
+    revalidatePath('/engineering-lab');
     if (body?.slug && typeof body.slug === 'string') {
       revalidatePath(`/blog/${body.slug}`);
     }
