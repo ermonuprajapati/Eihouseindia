@@ -62,7 +62,7 @@ export class VirtualMcuRuntime {
    */
   public executeCycle(
     firmware: FirmwareState,
-    sensorContext?: { distanceCm?: number; temperatureC?: number; humidityPercent?: number; lightLux?: number }
+    sensorContext?: { distanceCm?: number; temperatureC?: number; humidityPercent?: number; lightLux?: number; isPowered?: boolean }
   ): McuExecutionResult {
     // Check board executability
     const boardId = firmware.boardId || 'arduino-uno';
@@ -73,6 +73,14 @@ export class VirtualMcuRuntime {
         serialLines: [`[ERROR] Execution halted: ${boardSpec.name} is marked non-executable in browser.`],
         gpioUpdates: this.gpio,
         executionError: `Simulation is disabled for ${boardSpec.name}. Target does not have a verified in-browser cycle-accurate simulation engine. Use this board for code generation, syntax diagnostics, and downloadable ${boardSpec.buildFormat} firmware flashing.`,
+      };
+    }
+
+    // Wokwi-style MCU power verification: halt firmware if unpowered
+    if (sensorContext?.isPowered === false) {
+      return {
+        serialLines: ['[PWR] Board unpowered: Plug in USB Cable or DC Barrel Jack to start firmware execution.'],
+        gpioUpdates: this.gpio,
       };
     }
 

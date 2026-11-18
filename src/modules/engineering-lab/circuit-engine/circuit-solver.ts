@@ -134,26 +134,38 @@ export class CircuitSolver {
     }
 
     // Synthesize internal solderless breadboard spring-clip tie-strips
-    // Holes in Row N (cols A..E) tie together; holes in Row N (cols F..J) tie together;
-    // Continuous power rails (+ and -) tie together.
+    // Holes in Col/Row N (cols A..E) tie together; holes in Col/Row N (cols F..J) tie together;
+    // Continuous power rails (+ and -) tie together with strict electrical topology.
     const breadboardTies = new Map<string, string>();
     for (const wire of wires) {
       for (const end of [{ compId: wire.fromCompId, pinId: wire.fromPinId }, { compId: wire.toCompId, pinId: wire.toPinId }]) {
-        if (end.compId === 'BREADBOARD' || end.compId === 'bb') {
+        const cIdLower = (end.compId || '').toLowerCase();
+        if (cIdLower === 'breadboard' || cIdLower === 'bb' || cIdLower.includes('breadboard')) {
           const pinKey = `${end.compId}:${end.pinId}`;
           let tieGroup = end.pinId;
-          if (end.pinId.startsWith('bb_row_')) {
+
+          if (end.pinId.startsWith('bb_col_')) {
+            // MB-102 830-hole format: bb_col_{col}_{row}
+            const parts = end.pinId.split('_');
+            const col = parts[2];
+            const row = parts[3];
+            const isTop = ['A', 'B', 'C', 'D', 'E'].includes(row);
+            tieGroup = `bb_tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
+          } else if (end.pinId.startsWith('bb_row_')) {
+            // 400-hole format: bb_row_{row}_{col}
             const parts = end.pinId.split('_');
             const row = parts[2];
             const col = parts[3];
             const isTop = ['A', 'B', 'C', 'D', 'E'].includes(col);
             tieGroup = `bb_tie_row_${row}_${isTop ? 'top' : 'bot'}`;
           } else if (end.pinId.startsWith('bb_rail_')) {
+            // Power rail format: bb_rail_{section}_{polarity}_{index}
             const parts = end.pinId.split('_');
-            const section = parts[2]; // top or bot
+            const section = parts[2]; // top or bottom
             const polarity = parts[3]; // pos or neg
             tieGroup = `bb_tie_rail_${section}_${polarity}`;
           }
+
           if (breadboardTies.has(tieGroup)) {
             union(pinKey, breadboardTies.get(tieGroup)!);
           } else {
@@ -179,7 +191,41 @@ export class CircuitSolver {
       const gndPinKey = `${gndComp.id}:${gndComp.pins[0].id}`;
       this.gndNetId = this.netMap.get(gndPinKey) || 'GND';
     } else {
-      this.gndNetId = this.nets.values().next().value || 'GND';
+      // Look for MCU or power supply GND / negative pin
+      let foundGnd = false;
+      for (const c of components) {
+        if (
+          c.type.startsWith('ARDUINO_') ||
+          c.type.startsWith('ESP32') ||
+          c.type.startsWith('STM32') ||
+          c.type.startsWith('RASPBERRY_PI')
+        ) {
+          const gPin =
+            this.netMap.get(`${c.id}:GND`) ||
+            this.netMap.get(`${c.id}:GND_1`) ||
+            this.netMap.get(`${c.id}:GND_2`) ||
+            this.netMap.get(`${c.id}:GND_3`);
+          if (gPin) {
+            this.gndNetId = gPin;
+            foundGnd = true;
+            break;
+          }
+        } else if (c.type === 'DC_VOLTAGE' || c.type === 'BATTERY') {
+          const nPin =
+            this.netMap.get(`${c.id}:-`) ||
+            this.netMap.get(`${c.id}:n`) ||
+            this.netMap.get(`${c.id}:2`) ||
+            this.netMap.get(`${c.id}:neg`);
+          if (nPin) {
+            this.gndNetId = nPin;
+            foundGnd = true;
+            break;
+          }
+        }
+      }
+      if (!foundGnd) {
+        this.gndNetId = this.nets.values().next().value || 'GND';
+      }
     }
   }
 
@@ -208,8 +254,16 @@ export class CircuitSolver {
     // 1. Process Independent Fixed DC & AC Voltage Sources & MCU Output Pins
     for (const comp of components) {
       if (comp.type === 'DC_VOLTAGE' || comp.type === 'BATTERY') {
-        const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:pos`);
-        const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:neg`);
+        const pNet =
+          this.netMap.get(`${comp.id}:+`) ||
+          this.netMap.get(`${comp.id}:p`) ||
+          this.netMap.get(`${comp.id}:1`) ||
+          this.netMap.get(`${comp.id}:pos`);
+        const nNet =
+          this.netMap.get(`${comp.id}:-`) ||
+          this.netMap.get(`${comp.id}:n`) ||
+          this.netMap.get(`${comp.id}:2`) ||
+          this.netMap.get(`${comp.id}:neg`);
         const vVal = Number(comp.parameters?.voltage ?? parseFloat(comp.value) ?? 9.0);
 
         if (pNet && nNet) {
@@ -257,18 +311,49 @@ export class CircuitSolver {
         comp.type.startsWith('STM32') ||
         comp.type.startsWith('RASPBERRY_PI_PICO')
       ) {
-        // MCU 5V or 3.3V power rails & GND
-        const pwrPin = this.netMap.get(`${comp.id}:5V`) || this.netMap.get(`${comp.id}:3V3`);
-        const gndPin = this.netMap.get(`${comp.id}:GND`);
-        const vccVal = comp.type.includes('ESP') || comp.type.includes('STM') || comp.type.includes('PICO') ? 3.3 : 5.0;
+        // Wokwi-Style MCU Power Supply (defaults to active USB plug unless explicitly disabled)
+        const isUsbPowered = comp.parameters?.usbPlugged !== false;
+        if (isUsbPowered) {
+          const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
+          const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
 
-        if (pwrPin && !fixedNodes.has(pwrPin)) {
-          nodeVoltages[pwrPin] = vccVal;
-          fixedNodes.add(pwrPin);
-        }
-        if (gndPin && !fixedNodes.has(gndPin)) {
-          nodeVoltages[gndPin] = 0;
-          fixedNodes.add(gndPin);
+          // Support all GND pin designators: GND, GND_1, GND_2, GND_3
+          const gndPins = [
+            this.netMap.get(`${comp.id}:GND`),
+            this.netMap.get(`${comp.id}:GND_1`),
+            this.netMap.get(`${comp.id}:GND_2`),
+            this.netMap.get(`${comp.id}:GND_3`),
+          ].filter(Boolean) as string[];
+
+          // Anchor 0V GND nodes
+          for (const gNet of gndPins) {
+            if (!fixedNodes.has(gNet)) {
+              nodeVoltages[gNet] = 0;
+              fixedNodes.add(gNet);
+            }
+          }
+
+          // Anchor Regulated 5.0V / 3.3V nodes
+          if (pwr5VPin && !fixedNodes.has(pwr5VPin)) {
+            nodeVoltages[pwr5VPin] = 5.0;
+            fixedNodes.add(pwr5VPin);
+          }
+          if (pwr3V3Pin && !fixedNodes.has(pwr3V3Pin)) {
+            nodeVoltages[pwr3V3Pin] = 3.3;
+            fixedNodes.add(pwr3V3Pin);
+          }
+        } else {
+          // Unpowered MCU: USB unplugged and no external power -> 5V and 3.3V power rails output 0.0V
+          const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
+          const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
+          if (pwr5VPin && !fixedNodes.has(pwr5VPin)) {
+            nodeVoltages[pwr5VPin] = 0.0;
+            fixedNodes.add(pwr5VPin);
+          }
+          if (pwr3V3Pin && !fixedNodes.has(pwr3V3Pin)) {
+            nodeVoltages[pwr3V3Pin] = 0.0;
+            fixedNodes.add(pwr3V3Pin);
+          }
         }
       }
     }
@@ -1049,5 +1134,14 @@ export class CircuitSolver {
       waveformData: waveformDataObj,
       wireCurrents,
     };
+  }
+
+  public getNetForPin(compId: string, pinId: string): string | undefined {
+    return this.netMap.get(`${compId}:${pinId}`);
+  }
+
+  public getPinVoltage(compId: string, pinId: string, nodeVoltages: Record<string, number>): number {
+    const net = this.netMap.get(`${compId}:${pinId}`);
+    return net ? (nodeVoltages[net] || 0) : 0;
   }
 }

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Studio3DCanvas } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
-import { Box, FilePlus, RefreshCw, Save } from 'lucide-react';
+import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw } from 'lucide-react';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -28,6 +28,11 @@ interface Virtual3dStudioProps {
   gpioStates?: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
 }
 
+interface Studio3DHistoryState {
+  components: Component3D[];
+  wires: Wire3D[];
+}
+
 export function Virtual3dStudio({
   components,
   wires,
@@ -47,6 +52,26 @@ export function Virtual3dStudio({
   // Independent 3D Studio document state (Decoupled from 2D Schematic)
   const [independentComponents, setIndependentComponents] = useState<Component3D[] | null>(null);
   const [independentWires, setIndependentWires] = useState<Wire3D[] | null>(null);
+  const [undoStack3D, setUndoStack3D] = useState<Studio3DHistoryState[]>([]);
+  const [redoStack3D, setRedoStack3D] = useState<Studio3DHistoryState[]>([]);
+  const [hasBreadboard, setHasBreadboard] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ei_house_virtual3d_has_breadboard');
+      if (saved !== null) return saved === 'true';
+    }
+    return true;
+  });
+
+  const handleToggleBreadboard = useCallback(() => {
+    setHasBreadboard((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ei_house_virtual3d_has_breadboard', String(next));
+      } catch {}
+      toast.info(next ? 'Added 830-Point Solderless Breadboard.' : 'Removed Solderless Breadboard from workbench.');
+      return next;
+    });
+  }, []);
 
   // Restore saved 3D project from localStorage if available
   useEffect(() => {
@@ -64,15 +89,25 @@ export function Virtual3dStudio({
     }
   }, []);
 
-  // Convert 2D schematic components to 3D representation (used for initial state or explicit import)
+  // Convert 2D schematic components to 3D representation without placing any parts floating in air
   const schematicTo3DComponents = useCallback((): Component3D[] => {
-    return components.map((comp, idx) => {
-      const defaultX = (idx - (components.length - 1) / 2) * 22;
-      const defaultZ = -38;
+    let breadboardCol = 0;
+    let mcuIdx = 0;
+    let batteryIdx = 0;
+    let sensorIdx = 0;
 
+    return components.map((comp) => {
       let mappedType = comp.type;
-      if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO') {
+      if (comp.type.includes('ARDUINO_NANO')) {
+        mappedType = 'ARDUINO_NANO';
+      } else if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO') {
         mappedType = 'ARDUINO_UNO';
+      } else if (comp.type.includes('ESP32')) {
+        mappedType = 'ESP32_DEVKIT';
+      } else if (comp.type.includes('PICO')) {
+        mappedType = 'RASPBERRY_PI_PICO';
+      } else if (comp.type.includes('LED_RGB') || comp.type.includes('RGB')) {
+        mappedType = 'LED_RGB';
       } else if (comp.type.includes('LED')) {
         mappedType = 'LED';
       } else if (comp.type.includes('RESISTOR')) {
@@ -80,25 +115,128 @@ export function Virtual3dStudio({
       } else if (comp.type.includes('BATTERY') || comp.type === 'DC_VOLTAGE') {
         mappedType = 'BATTERY_9V';
       } else if (comp.type.includes('BUTTON') || comp.type.includes('SWITCH')) {
-        mappedType = 'PUSHBUTTON';
+        mappedType = comp.type.includes('SLIDE') ? 'SLIDE_SWITCH' : 'PUSHBUTTON';
       } else if (comp.type.includes('POTENTIOMETER')) {
         mappedType = 'POTENTIOMETER';
       } else if (comp.type.includes('TIMER') || comp.type.includes('555')) {
         mappedType = 'TIMER_555';
       } else if (comp.type.includes('CAPACITOR')) {
         mappedType = comp.type.includes('ELECTROLYTIC') ? 'CAPACITOR_ELECTROLYTIC' : 'CAPACITOR';
+      } else if (comp.type.includes('ULTRASONIC') || comp.type.includes('SR04')) {
+        mappedType = 'HC_SR04';
+      } else if (comp.type.includes('SERVO')) {
+        mappedType = 'SERVO_SG90';
+      } else if (comp.type.includes('LCD') || comp.type.includes('1602')) {
+        mappedType = 'LCD_1602';
+      } else if (comp.type.includes('BUZZER')) {
+        mappedType = 'BUZZER_ACTIVE';
+      } else if (comp.type.includes('DIODE')) {
+        mappedType = 'DIODE';
+      } else if (comp.type.includes('LDR')) {
+        mappedType = 'SENSOR_LDR';
       }
 
+      // Preserve previously saved 3D coordinates if valid
+      if (comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
+        return {
+          id: comp.id,
+          type: mappedType,
+          label: comp.label,
+          value: comp.value,
+          parameters: comp.parameters || {},
+          x3d: comp.x3d,
+          y3d: comp.y3d,
+          z3d: comp.z3d,
+          rotY: comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0),
+        };
+      }
+
+      // Grounding & Snapping Rules (Never floating in air)
+      // A. Main Microcontrollers: Place flat on workbench table (y = 0) in front of breadboard
+      if (['ARDUINO_UNO', 'ARDUINO_MEGA'].includes(mappedType)) {
+        const x3d = (mcuIdx % 2 === 0 ? 1 : -1) * Math.floor((mcuIdx + 1) / 2) * 85;
+        mcuIdx++;
+        return {
+          id: comp.id,
+          type: mappedType,
+          label: comp.label,
+          value: comp.value,
+          parameters: comp.parameters || {},
+          x3d,
+          y3d: 0, // Flat on workbench
+          z3d: 65, // In front of breadboard
+          rotY: 0,
+        };
+      }
+
+      // B. Batteries: Place flat on workbench table to the left (y = 0)
+      if (mappedType === 'BATTERY_9V') {
+        const x3d = -95 - batteryIdx * 35;
+        batteryIdx++;
+        return {
+          id: comp.id,
+          type: mappedType,
+          label: comp.label,
+          value: comp.value,
+          parameters: comp.parameters || {},
+          x3d,
+          y3d: 0, // Flat on workbench
+          z3d: 0,
+          rotY: 0,
+        };
+      }
+
+      // C. Heavy Modules / Displays: Place flat on workbench table to the right (y = 0)
+      if (['HC_SR04', 'SERVO_SG90', 'LCD_1602'].includes(mappedType)) {
+        const x3d = 95 + (sensorIdx % 2) * 35;
+        const z3d = -35 + Math.floor(sensorIdx / 2) * 45;
+        sensorIdx++;
+        return {
+          id: comp.id,
+          type: mappedType,
+          label: comp.label,
+          value: comp.value,
+          parameters: comp.parameters || {},
+          x3d,
+          y3d: 0,
+          z3d,
+          rotY: 0,
+        };
+      }
+
+      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, NE555):
+      // Straddle breadboard center isolation trench directly at y = 5.0
+      if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'TIMER_555'].includes(mappedType)) {
+        const colX = -50 + (breadboardCol % 4) * 30;
+        breadboardCol++;
+        return {
+          id: comp.id,
+          type: mappedType,
+          label: comp.label,
+          value: comp.value,
+          parameters: comp.parameters || {},
+          x3d: colX,
+          y3d: 5.0, // Placed firmly on breadboard
+          z3d: 0,   // Straddling center isolation trench
+          rotY: 0,
+        };
+      }
+
+      // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs):
+      // Snap directly into breadboard 5-hole terminal rows at y = 5.0
+      const colX = -65 + (breadboardCol * 12.7) % 130;
+      const isTopStrip = breadboardCol % 2 === 0;
+      breadboardCol++;
       return {
         id: comp.id,
         type: mappedType,
         label: comp.label,
         value: comp.value,
         parameters: comp.parameters || {},
-        x3d: comp.x3d !== undefined ? comp.x3d : defaultX,
-        y3d: comp.y3d !== undefined ? comp.y3d : 0,
-        z3d: comp.z3d !== undefined ? comp.z3d : defaultZ,
-        rotY: comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0),
+        x3d: colX,
+        y3d: 5.0, // Firmly plugged into breadboard holes
+        z3d: isTopStrip ? -3.34 : 3.34,
+        rotY: 0,
       };
     });
   }, [components]);
@@ -124,8 +262,61 @@ export function Virtual3dStudio({
     return schematicTo3DWires();
   }, [independentWires, schematicTo3DWires]);
 
+  // Record an immutable snapshot to 3D undo history
+  const record3DHistory = useCallback((currentComps: Component3D[], currentWires: Wire3D[]) => {
+    setUndoStack3D((prev) => [...prev.slice(-25), { components: currentComps, wires: currentWires }]);
+    setRedoStack3D([]);
+  }, []);
+
+  // 3D Undo Handler
+  const handleUndo3D = useCallback(() => {
+    if (undoStack3D.length === 0) return;
+    const previous = undoStack3D[undoStack3D.length - 1];
+    setUndoStack3D((prev) => prev.slice(0, -1));
+    setRedoStack3D((prev) => [...prev, { components: activeComponents3d, wires: activeWires3d }]);
+    setIndependentComponents(previous.components);
+    setIndependentWires(previous.wires);
+    onSelectComponent(null);
+    onSelectWire(null);
+    toast.info('Undo 3D Action');
+  }, [undoStack3D, activeComponents3d, activeWires3d, onSelectComponent, onSelectWire]);
+
+  // 3D Redo Handler
+  const handleRedo3D = useCallback(() => {
+    if (redoStack3D.length === 0) return;
+    const next = redoStack3D[redoStack3D.length - 1];
+    setRedoStack3D((prev) => prev.slice(0, -1));
+    setUndoStack3D((prev) => [...prev, { components: activeComponents3d, wires: activeWires3d }]);
+    setIndependentComponents(next.components);
+    setIndependentWires(next.wires);
+    onSelectComponent(null);
+    onSelectWire(null);
+    toast.info('Redo 3D Action');
+  }, [redoStack3D, activeComponents3d, activeWires3d, onSelectComponent, onSelectWire]);
+
+  // Global Keyboard Shortcuts for 3D Studio Undo / Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        handleUndo3D();
+      } else if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
+      ) {
+        e.preventDefault();
+        handleRedo3D();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo3D, handleRedo3D]);
+
   // Top Bar Action: New Blank 3D Workbench
   const handleNewBlank3D = () => {
+    record3DHistory(activeComponents3d, activeWires3d);
     setIndependentComponents([]);
     setIndependentWires([]);
     onSelectComponent(null);
@@ -135,6 +326,7 @@ export function Virtual3dStudio({
 
   // Top Bar Action: Import from 2D Schematic
   const handleImportFromSchematic = () => {
+    record3DHistory(activeComponents3d, activeWires3d);
     const comps = schematicTo3DComponents();
     const w = schematicTo3DWires();
     setIndependentComponents(comps);
@@ -167,25 +359,61 @@ export function Virtual3dStudio({
     toast.success('3D Project saved to local storage & exported as JSON.');
   };
 
+  // Toggle MCU USB Power Plug
+  const handleToggleMcuUsb = useCallback((compId: string) => {
+    setIndependentComponents((prev) => {
+      const current = prev !== null ? prev : activeComponents3d;
+      return current.map((c) => {
+        if (c.id === compId) {
+          const nextState = !(c.parameters?.usbPlugged !== false);
+          toast.success(
+            nextState
+              ? `🔌 Connected USB Power to ${c.label} (5.0V Active)`
+              : `⚡ Unplugged USB Cable from ${c.label}`
+          );
+          return {
+            ...c,
+            parameters: { ...c.parameters, usbPlugged: nextState },
+          };
+        }
+        return c;
+      });
+    });
+
+    const comp = components.find((c) => c.id === compId);
+    if (comp && onUpdateComponent) {
+      const nextState = !(comp.parameters?.usbPlugged !== false);
+      onUpdateComponent({
+        ...comp,
+        parameters: { ...comp.parameters, usbPlugged: nextState },
+      });
+    }
+  }, [activeComponents3d, components, onUpdateComponent]);
+
   // Add component handler from 3D Add Drawer
   const handleAddComponent3D = useCallback((c3d: Component3D) => {
+    record3DHistory(activeComponents3d, activeWires3d);
     // Correctly map 3D component types to catalog templates without falling back to Resistor
     let catalogType = c3d.type;
     if (c3d.type === 'ARDUINO_UNO') catalogType = 'ARDUINO_UNO';
     else if (c3d.type === 'ARDUINO_NANO') catalogType = 'ARDUINO_NANO';
     else if (c3d.type === 'ESP32_DEVKIT') catalogType = 'ESP32_DEVKIT';
     else if (c3d.type === 'LED') catalogType = 'LED';
-    else if (c3d.type === 'LED_RGB') catalogType = 'LED_RGB';
+    else if (c3d.type === 'LED_RGB') catalogType = 'ACTUATOR_RGB_LED';
     else if (c3d.type === 'RESISTOR') catalogType = 'RESISTOR';
     else if (c3d.type === 'POTENTIOMETER') catalogType = 'POTENTIOMETER';
     else if (c3d.type === 'CAPACITOR') catalogType = 'CAPACITOR';
-    else if (c3d.type === 'CAPACITOR_ELECTROLYTIC') catalogType = 'CAPACITOR_ELECTROLYTIC';
+    else if (c3d.type === 'CAPACITOR_ELECTROLYTIC') catalogType = 'CAPACITOR';
     else if (c3d.type === 'TIMER_555') catalogType = 'TIMER_555';
     else if (c3d.type === 'BATTERY_9V') catalogType = 'BATTERY';
-    else if (c3d.type === 'PUSHBUTTON') catalogType = 'SWITCH_PUSH';
+    else if (c3d.type === 'PUSHBUTTON') catalogType = 'PUSHBUTTON_NO';
     else if (c3d.type === 'HC_SR04') catalogType = 'SENSOR_ULTRASONIC';
-    else if (c3d.type === 'SERVO_SG90') catalogType = 'SERVO_MOTOR';
+    else if (c3d.type === 'SERVO_SG90') catalogType = 'ACTUATOR_SERVO_SG90';
     else if (c3d.type === 'LCD_1602') catalogType = 'DISPLAY_LCD1602';
+    else if (c3d.type === 'BUZZER_ACTIVE') catalogType = 'ACTUATOR_BUZZER_ACTIVE';
+    else if (c3d.type === 'DIODE') catalogType = 'DIODE';
+    else if (c3d.type === 'SENSOR_LDR') catalogType = 'SENSOR_LDR';
+    else if (c3d.type === 'SLIDE_SWITCH') catalogType = 'SWITCH_SPST';
 
     const tmpl =
       COMPONENT_CATALOG.find((t) => t.type === catalogType) ||
@@ -210,7 +438,7 @@ export function Virtual3dStudio({
 
     onAddComponent(newComp);
     toast.success(`Spawned ${c3d.label} in 3D workbench.`);
-  }, [components, activeComponents3d, onAddComponent]);
+  }, [components, activeComponents3d, activeWires3d, onAddComponent, record3DHistory]);
 
   // Update component position/rotation handler
   const handleUpdateComponent3D = useCallback((c3d: Component3D) => {
@@ -237,6 +465,7 @@ export function Virtual3dStudio({
 
   // Delete component from 3D studio
   const handleDeleteComponent3D = useCallback((id: string) => {
+    record3DHistory(activeComponents3d, activeWires3d);
     setIndependentComponents((prev) => {
       const current = prev !== null ? prev : activeComponents3d;
       return current.filter((c) => c.id !== id);
@@ -246,11 +475,13 @@ export function Virtual3dStudio({
       return current.filter((w) => w.fromPin.compId !== id && w.toPin.compId !== id);
     });
     onDeleteComponent(id);
-    toast.info('Deleted 3D component.');
-  }, [activeComponents3d, activeWires3d, onDeleteComponent]);
+    onSelectComponent(null);
+    toast.info('Deleted 3D component and attached wires.');
+  }, [activeComponents3d, activeWires3d, onDeleteComponent, onSelectComponent, record3DHistory]);
 
   // Add 3D Wire handler
   const handleAddWire3D = useCallback((w3d: Wire3D) => {
+    record3DHistory(activeComponents3d, activeWires3d);
     setIndependentWires((prev) => {
       const current = prev !== null ? prev : activeWires3d;
       return [...current, w3d];
@@ -264,19 +495,21 @@ export function Virtual3dStudio({
       color: w3d.color,
     });
     toast.success('Connected 3D Dupont jumper wire.');
-  }, [activeWires3d, onAddWire]);
+  }, [activeComponents3d, activeWires3d, onAddWire, record3DHistory]);
 
   // Delete 3D wire handler
   const handleDeleteWire3D = useCallback((wireId: string) => {
+    record3DHistory(activeComponents3d, activeWires3d);
     setIndependentWires((prev) => {
       const current = prev !== null ? prev : activeWires3d;
       return current.filter((w) => w.id !== wireId);
     });
     onDeleteWire(wireId);
-  }, [activeWires3d, onDeleteWire]);
+  }, [activeComponents3d, activeWires3d, onDeleteWire, record3DHistory]);
 
   // Update 3D Wire handler (e.g. color change)
   const handleUpdateWire3D = useCallback((w3d: Wire3D) => {
+    record3DHistory(activeComponents3d, activeWires3d);
     setIndependentWires((prev) => {
       const current = prev !== null ? prev : activeWires3d;
       return current.map((w) => (w.id === w3d.id ? w3d : w));
@@ -290,7 +523,7 @@ export function Virtual3dStudio({
       toPinId: w3d.toPin.pinId,
       color: w3d.color,
     });
-  }, [activeWires3d, onDeleteWire, onAddWire]);
+  }, [activeComponents3d, activeWires3d, onDeleteWire, onAddWire, record3DHistory]);
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#070D18] select-none overflow-hidden">
@@ -301,13 +534,52 @@ export function Virtual3dStudio({
           <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider">
             3D Virtual Studio
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400 font-mono">
-            830-Point Breadboard
-          </span>
+          <button
+            type="button"
+            onClick={handleToggleBreadboard}
+            className={`text-[10px] px-2 py-0.5 rounded border font-mono transition-colors cursor-pointer flex items-center gap-1 ${
+              hasBreadboard
+                ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-400 hover:bg-emerald-900/80'
+                : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+            title={hasBreadboard ? 'Click to Remove 830-Point Solderless Breadboard' : 'Click to Add 830-Point Breadboard to Workbench'}
+          >
+            <span>{hasBreadboard ? '✓ 830-Point Breadboard' : '+ Add Breadboard'}</span>
+          </button>
         </div>
 
         {/* Independent 3D Studio Action Controls */}
         <div className="flex items-center gap-2 font-mono text-xs">
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1 border-r border-slate-700/60 pr-2">
+            <button
+              type="button"
+              onClick={handleUndo3D}
+              disabled={undoStack3D.length === 0}
+              className={`p-1.5 rounded transition-colors ${
+                undoStack3D.length > 0
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer'
+                  : 'text-slate-600 cursor-not-allowed opacity-50'
+              }`}
+              title="Undo 3D Action (Ctrl+Z)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo3D}
+              disabled={redoStack3D.length === 0}
+              className={`p-1.5 rounded transition-colors ${
+                redoStack3D.length > 0
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer'
+                  : 'text-slate-600 cursor-not-allowed opacity-50'
+              }`}
+              title="Redo 3D Action (Ctrl+Y)"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={handleNewBlank3D}
@@ -343,7 +615,9 @@ export function Virtual3dStudio({
       {/* Main 3D Canvas Viewport */}
       <div className="flex-1 relative w-full h-full overflow-hidden">
         <Studio3DCanvas
-          hasBreadboard={true}
+          hasBreadboard={hasBreadboard}
+          onToggleBreadboard={handleToggleBreadboard}
+          onToggleMcuUsb={handleToggleMcuUsb}
           components3d={activeComponents3d}
           wires3d={activeWires3d}
           selectedCompId={selectedCompId}

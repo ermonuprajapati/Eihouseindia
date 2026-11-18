@@ -12,15 +12,29 @@ import {
   Compass,
   Search,
   Cpu,
+  Zap,
+  Layers,
+  RotateCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Breadboard3D } from './Breadboard3D';
 import { BreadboardHole3D, HOLE_BY_ID } from './breadboard-topology';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
+import { ArduinoNano3D, NANO_PINS } from './models/ArduinoNano3D';
+import { Esp32DevKit3D, ESP32_PINS } from './models/Esp32DevKit3D';
 import { Led3D } from './models/Led3D';
 import { Resistor3D } from './models/Resistor3D';
 import { Battery9V3D } from './models/Battery9V3D';
 import { Pushbutton3D } from './models/Pushbutton3D';
+import { ServoSG903D } from './models/ServoSG903D';
+import { Lcd1602_3D } from './models/Lcd1602_3D';
+import { RgbLed3D } from './models/RgbLed3D';
+import { Buzzer3D } from './models/Buzzer3D';
+import { Diode3D } from './models/Diode3D';
+import { Ldr3D } from './models/Ldr3D';
+import { SlideSwitch3D } from './models/SlideSwitch3D';
+import { DipPackage3D } from './models/DipPackage3D';
 import { Wire3DTube } from './Wire3DTube';
 
 interface Library3DItem {
@@ -176,10 +190,48 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     defaultPos: [0, 0, -100] as [number, number, number],
     params: { rows: 2, cols: 16, controller: 'HD44780' },
   },
+  {
+    type: 'BUZZER_ACTIVE',
+    label: 'Active Piezo Buzzer 5V',
+    category: 'sensors',
+    value: '5V Piezo',
+    desc: 'Continuous tone piezo sound transducer with top acoustic aperture',
+    defaultPos: [-60, 5, -3.34] as [number, number, number],
+    params: { frequencyHz: 2300, ratedVoltage: 5 },
+  },
+  {
+    type: 'DIODE',
+    label: '1N4007 Rectifier Diode',
+    category: 'semiconductors',
+    value: '1000V 1A',
+    desc: 'Standard silicon rectifier diode in DO-41 package with cathode band',
+    defaultPos: [15, 5, 8.42] as [number, number, number],
+    params: { forwardV: 0.7, maxCurrent: 1.0 },
+  },
+  {
+    type: 'SENSOR_LDR',
+    label: 'Photoresistor (LDR GL5528)',
+    category: 'sensors',
+    value: '10k-1MΩ',
+    desc: 'Light-dependent resistor with serpentine cadmium-sulfide photoconductive track',
+    defaultPos: [-20, 5, 8.42] as [number, number, number],
+    params: { darkResistance: 1000000, lightResistance: 10000 },
+  },
+  {
+    type: 'SLIDE_SWITCH',
+    label: 'Mini Slide Switch (SPDT)',
+    category: 'passive',
+    value: 'SPDT',
+    desc: '3-pin breadboard-friendly slide switch for DC power and signal routing',
+    defaultPos: [-5, 5, 8.42] as [number, number, number],
+    params: { closed: false },
+  },
 ];
 
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
+  onToggleBreadboard?: () => void;
+  onToggleMcuUsb?: (compId: string) => void;
   components3d: Component3D[];
   wires3d: Wire3D[];
   selectedCompId: string | null;
@@ -198,6 +250,8 @@ export interface Studio3DCanvasProps {
 
 export function Studio3DCanvas({
   hasBreadboard = true,
+  onToggleBreadboard,
+  onToggleMcuUsb,
   components3d,
   wires3d,
   selectedCompId,
@@ -225,6 +279,36 @@ export function Studio3DCanvas({
   const [activeWireColor, setActiveWireColor] = useState('#EF4444');
   const [hoveredHole, setHoveredHole] = useState<BreadboardHole3D | null>(null);
   const [hoveredPinInfo, setHoveredPinInfo] = useState<{ compId: string; pinName: string } | null>(null);
+
+  const toggleUsb = useCallback((compId: string) => {
+    if (onToggleMcuUsb) {
+      onToggleMcuUsb(compId);
+      return;
+    }
+    const comp = components3d.find((c) => c.id === compId);
+    if (!comp) return;
+    const isPlugged = comp.parameters?.usbPlugged !== false;
+    const nextState = !isPlugged;
+    const updated: Component3D = {
+      ...comp,
+      parameters: { ...comp.parameters, usbPlugged: nextState },
+    };
+    onUpdateComponent3D(updated);
+    toast.success(
+      nextState
+        ? `🔌 Connected USB Power to ${comp.label} (5.0V Active)`
+        : `⚡ Unplugged USB Cable from ${comp.label}`
+    );
+  }, [components3d, onToggleMcuUsb, onUpdateComponent3D]);
+
+  const anyMcu = useMemo(() => {
+    return components3d.find(
+      (c) =>
+        c.type === 'ARDUINO_UNO' ||
+        c.type === 'ARDUINO_NANO' ||
+        c.type === 'ESP32_DEVKIT'
+    );
+  }, [components3d]);
 
   const filteredLibrary = useMemo(() => {
     return LIBRARY_3D_COMPONENTS.filter((item) => {
@@ -322,29 +406,46 @@ export function Studio3DCanvas({
         lz = ap.localPos[2];
       }
     } else if (comp.type === 'ARDUINO_NANO') {
-      const pinNum = parseInt(pinId.replace(/\D/g, '')) || 1;
-      const isRightSide = pinNum > 15;
-      const idx = isRightSide ? 30 - pinNum : pinNum - 1;
-      lx = -17.78 + idx * 2.54;
-      lz = isRightSide ? 7.62 : -7.62;
-      ly = -4.0;
+      const np = NANO_PINS.find((p) => p.name === pinId);
+      if (np) {
+        lx = np.localPos[0];
+        ly = np.localPos[1] + 4.3;
+        lz = np.localPos[2];
+      }
     } else if (comp.type === 'ESP32_DEVKIT') {
-      const pinNum = parseInt(pinId.replace(/\D/g, '')) || 1;
-      const isRightSide = pinNum > 15;
-      const idx = isRightSide ? 30 - pinNum : pinNum - 1;
-      lx = -17.78 + idx * 2.54;
-      lz = isRightSide ? 11.43 : -11.43;
-      ly = -4.0;
+      const ep = ESP32_PINS.find((p) => p.name === pinId);
+      if (ep) {
+        lx = ep.localPos[0];
+        ly = ep.localPos[1] + 4.3;
+        lz = ep.localPos[2];
+      }
     } else if (comp.type === 'LED') {
-      if (pinId === 'anode') lx = -1.27;
+      if (pinId === 'anode' || pinId === '1') lx = -1.27;
       else lx = 1.27;
       ly = -5;
     } else if (comp.type === 'LED_RGB') {
-      if (pinId === 'R') lx = -3.81;
-      else if (pinId === 'C') lx = -1.27;
-      else if (pinId === 'G') lx = 1.27;
+      if (pinId === 'R' || pinId === '1') lx = -3.81;
+      else if (pinId === 'C' || pinId === 'GND' || pinId === '2') lx = -1.27;
+      else if (pinId === 'G' || pinId === '3') lx = 1.27;
       else lx = 3.81;
-      ly = -5;
+      ly = -3.8;
+    } else if (comp.type === 'BUZZER_ACTIVE') {
+      if (pinId === '+' || pinId === '1') lx = -2.54;
+      else lx = 2.54;
+      ly = -3.8;
+    } else if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
+      if (pinId === '1' || pinId === 'anode') lx = -5.08;
+      else lx = 5.08;
+      ly = -1.0;
+    } else if (comp.type === 'SENSOR_LDR') {
+      if (pinId === '1') lx = -2.54;
+      else lx = 2.54;
+      ly = -1.0;
+    } else if (comp.type === 'SLIDE_SWITCH') {
+      if (pinId === '1') lx = -2.54;
+      else if (pinId === '2') lx = 0;
+      else lx = 2.54;
+      ly = -1.0;
     } else if (comp.type === 'RESISTOR') {
       if (pinId === '1') lx = -5.08;
       else lx = 5.08;
@@ -373,9 +474,9 @@ export function Studio3DCanvas({
       else lx = 6.5;
       ly = 27;
     } else if (comp.type === 'PUSHBUTTON') {
-      if (pinId === '1A') { lx = -2.54; lz = -2.54; }
-      else if (pinId === '1B') { lx = 2.54; lz = -2.54; }
-      else if (pinId === '2A') { lx = -2.54; lz = 2.54; }
+      if (pinId === '1A' || pinId === '1') { lx = -2.54; lz = -2.54; }
+      else if (pinId === '1B' || pinId === '2') { lx = 2.54; lz = -2.54; }
+      else if (pinId === '2A' || pinId === '3') { lx = -2.54; lz = 2.54; }
       else { lx = 2.54; lz = 2.54; }
       ly = -4;
     } else if (comp.type === 'HC_SR04') {
@@ -385,14 +486,15 @@ export function Studio3DCanvas({
       else lx = 3.81;
       ly = -8;
     } else if (comp.type === 'SERVO_SG90') {
-      if (pinId === 'GND') lx = -2.54;
-      else if (pinId === 'VCC') lx = 0;
-      else lx = 2.54;
-      ly = -10;
+      if (pinId === 'GND') lx = -16.0;
+      else if (pinId === 'VCC') lx = -16.0;
+      else lx = -16.0;
+      ly = 5;
+      lz = pinId === 'GND' ? -2.54 : pinId === 'VCC' ? 0 : 2.54;
     } else if (comp.type === 'LCD_1602') {
       const pIdx = parseInt(pinId.replace(/\D/g, '')) || 1;
-      lx = -19.05 + (pIdx - 1) * 2.54;
-      ly = 15;
+      lx = -25.0 + (-19.05 + (pIdx - 1) * 2.54);
+      ly = 34.0;
       lz = 0;
     }
 
@@ -428,6 +530,7 @@ export function Studio3DCanvas({
   };
 
   const selectedWire = wires3d.find((w) => w.id === selectedWireId);
+  const selectedComp = components3d.find((c) => c.id === selectedCompId);
 
   return (
     <div className="relative w-full h-full bg-[#050B14] select-none overflow-hidden">
@@ -511,6 +614,9 @@ export function Studio3DCanvas({
                   position={pos}
                   rotation={rot}
                   isSelected={isSelected}
+                  isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  onToggleUsb={() => toggleUsb(comp.id)}
+                  isPowered={comp.parameters?.usbPlugged !== false}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -752,62 +858,28 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'TIMER_555') {
+          if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
             return (
               <group
                 key={comp.id}
-                position={pos}
-                rotation={rot}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
                   onSelectWire(null);
                 }}
               >
-                {/* Black DIP-8 package */}
-                <mesh position={[0, 2.5, 0]}>
-                  <boxGeometry args={[9.5, 3.8, 6.4]} />
-                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#18181B'} roughness={0.5} />
-                </mesh>
-                {/* Pin 1 notch */}
-                <mesh position={[-4.5, 3.8, 0]}>
-                  <cylinderGeometry args={[0.8, 0.8, 0.8, 16]} />
-                  <meshBasicMaterial color="#0A0A0A" />
-                </mesh>
-                {/* 8 Pins */}
-                {Array.from({ length: 4 }).map((_, i) => {
-                  const px = -3.81 + i * 2.54;
-                  return (
-                    <group key={i}>
-                      {/* Pins 1..4 on Row E (Z = -3.81) */}
-                      <mesh
-                        position={[px, -0.5, -3.81]}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const pinId = String(i + 1);
-                          const pPos = getPinWorld3D(comp.id, pinId);
-                          handlePinClick(comp.id, pinId, pPos);
-                        }}
-                      >
-                        <boxGeometry args={[0.6, 2.8, 0.4]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
-                      </mesh>
-                      {/* Pins 8..5 on Row F (Z = 3.81) */}
-                      <mesh
-                        position={[px, -0.5, 3.81]}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const pinId = String(8 - i);
-                          const pPos = getPinWorld3D(comp.id, pinId);
-                          handlePinClick(comp.id, pinId, pPos);
-                        }}
-                      >
-                        <boxGeometry args={[0.6, 2.8, 0.4]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
-                      </mesh>
-                    </group>
-                  );
-                })}
+                <DipPackage3D
+                  position={pos}
+                  rotation={rot}
+                  pinCount={8}
+                  partName={String(comp.parameters?.ic || comp.value || 'NE555P')}
+                  isSelected={isSelected}
+                  onPinClick={(pinId, wPos) => handlePinClick(comp.id, pinId, wPos)}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                />
               </group>
             );
           }
@@ -853,6 +925,245 @@ export function Studio3DCanvas({
                     <meshStandardMaterial color="#EAB308" metalness={0.9} />
                   </mesh>
                 ))}
+              </group>
+            );
+          }
+
+          if (comp.type === 'ARDUINO_NANO') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <ArduinoNano3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  onToggleUsb={() => toggleUsb(comp.id)}
+                  isPowered={comp.parameters?.usbPlugged !== false}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'ESP32_DEVKIT') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <Esp32DevKit3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  onToggleUsb={() => toggleUsb(comp.id)}
+                  isPowered={comp.parameters?.usbPlugged !== false}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'SERVO_SG90') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <ServoSG903D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  angle={Number(comp.parameters?.currentAngle ?? 90)}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'LCD_1602') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <Lcd1602_3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isPowered={isSimulating}
+                  displayText={String(comp.parameters?.text || 'EI HOUSE LAB 16x2\nSYSTEM READY OK')}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'LED_RGB') {
+            const isPowered = Boolean(simState?.on || isSimulating);
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <RgbLed3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isPowered={isPowered}
+                  color={String(comp.parameters?.color || '#EC4899')}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'BUZZER_ACTIVE') {
+            const isSounding = Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <Buzzer3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isSounding={isSounding}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <Diode3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'SENSOR_LDR') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <Ldr3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'SLIDE_SWITCH') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <SlideSwitch3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isOn={comp.parameters?.closed === true}
+                  onToggle={() => {
+                    const nextClosed = !comp.parameters?.closed;
+                    onUpdateComponent3D({
+                      ...comp,
+                      parameters: { ...comp.parameters, closed: nextClosed },
+                    });
+                    toast.info(`Switched ${comp.label} ${nextClosed ? 'ON (Closed)' : 'OFF (Open)'}`);
+                  }}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
               </group>
             );
           }
@@ -942,6 +1253,40 @@ export function Studio3DCanvas({
             />
           ))}
         </div>
+
+        <div className="h-4 w-px bg-slate-700 mx-1" />
+
+        {/* Breadboard Workbench Presence Toggle */}
+        {onToggleBreadboard && (
+          <button
+            onClick={onToggleBreadboard}
+            className={`px-2 py-0.5 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-colors ${
+              hasBreadboard
+                ? 'bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
+                : 'bg-slate-800 border border-slate-600 text-slate-400 hover:text-white'
+            }`}
+            title={hasBreadboard ? 'Click to Remove Breadboard' : 'Click to Add 830-Point Breadboard'}
+          >
+            <Layers className="w-3 h-3 text-cyan-400" />
+            <span>{hasBreadboard ? 'Breadboard' : '+ Breadboard'}</span>
+          </button>
+        )}
+
+        {/* Prominent Wokwi-Style MCU USB Power Plug Quick Control */}
+        {anyMcu && (
+          <button
+            onClick={() => toggleUsb(anyMcu.id)}
+            className={`px-3 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all ${
+              anyMcu.parameters?.usbPlugged !== false
+                ? 'bg-emerald-950/90 border border-emerald-400 text-emerald-300 hover:bg-emerald-900'
+                : 'bg-rose-950/90 border border-rose-500 text-rose-300 hover:bg-rose-900 animate-pulse'
+            }`}
+            title={anyMcu.parameters?.usbPlugged !== false ? "Wokwi-Style USB Power: Click to Unplug USB Cable" : "Wokwi-Style USB Power: Click to Plug In USB Cable"}
+          >
+            <Zap className={`w-3.5 h-3.5 ${anyMcu.parameters?.usbPlugged !== false ? 'text-emerald-400' : 'text-rose-400'}`} />
+            <span>{anyMcu.parameters?.usbPlugged !== false ? '🔌 USB: 5V Active' : '🔌 Plug USB Power (Board OFF)'}</span>
+          </button>
+        )}
       </div>
 
       {/* Top Right Add Component Drawer Trigger */}
@@ -1009,15 +1354,18 @@ export function Studio3DCanvas({
               <button
                 key={item.type}
                 onClick={() => {
+                  const countOfType = components3d.filter((c) => c.type === item.type).length;
+                  const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 40 : -countOfType * 40) : 0;
+                  const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
                   const newComp: Component3D = {
                     id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
                     type: item.type,
-                    label: item.label,
+                    label: countOfType > 0 ? `${item.label} #${countOfType + 1}` : item.label,
                     value: item.value,
-                    parameters: item.params || {},
-                    x3d: item.defaultPos[0],
+                    parameters: item.params ? { ...item.params } : {},
+                    x3d: item.defaultPos[0] + offsetX,
                     y3d: item.defaultPos[1],
-                    z3d: item.defaultPos[2],
+                    z3d: item.defaultPos[2] + offsetZ,
                     rotY: 0,
                   };
                   onAddComponent3D(newComp);
@@ -1116,6 +1464,66 @@ export function Studio3DCanvas({
             }}
             className="flex items-center gap-1 text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
             title="Delete this jumper wire [Delete]"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete [Del]</span>
+          </button>
+        </div>
+      )}
+
+      {/* Floating Component Action Bar when a component is selected */}
+      {selectedComp && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2">
+            <span className="text-cyan-400 font-bold uppercase text-[10px]">Part:</span>
+            <span className="text-white font-semibold">{selectedComp.label}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
+              {selectedComp.value || selectedComp.type}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          {/* Rotate 90 deg */}
+          <button
+            onClick={() => {
+              onUpdateComponent3D({
+                ...selectedComp,
+                rotY: ((selectedComp.rotY || 0) + 90) % 360,
+              });
+            }}
+            className="flex items-center gap-1.5 text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
+            title="Rotate 90° Clockwise [R]"
+          >
+            <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Rotate [R]</span>
+          </button>
+
+          {/* USB Power Toggle (if MCU) */}
+          {(selectedComp.type.startsWith('ARDUINO_') || selectedComp.type.startsWith('ESP32') || selectedComp.type.startsWith('STM32') || selectedComp.type.startsWith('RASPBERRY_PI')) && onToggleMcuUsb && (
+            <button
+              onClick={() => onToggleMcuUsb(selectedComp.id)}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-colors ${
+                selectedComp.parameters?.usbPlugged !== false
+                  ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-600/60'
+              }`}
+              title="Toggle USB 5.0V Power Cable"
+            >
+              <span>{selectedComp.parameters?.usbPlugged !== false ? '🔌 USB: 5V ON' : '⚡ Plug USB'}</span>
+            </button>
+          )}
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          {/* Delete Component Button */}
+          <button
+            onClick={() => {
+              onDeleteComponent3D(selectedComp.id);
+              onSelectComponent(null);
+            }}
+            className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 font-semibold cursor-pointer transition-colors"
+            title="Delete this component and attached wires [Delete]"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Delete [Del]</span>

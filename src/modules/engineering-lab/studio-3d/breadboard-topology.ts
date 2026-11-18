@@ -154,6 +154,17 @@ export const HOLE_BY_ID = new Map<string, BreadboardHole3D>(
   ALL_830_HOLES.map((h) => [h.id, h])
 );
 
+// Map of holes grouped by strict internal spring-clip tieGroup
+export const HOLES_BY_TIE_GROUP = new Map<string, BreadboardHole3D[]>();
+ALL_830_HOLES.forEach((h) => {
+  const existing = HOLES_BY_TIE_GROUP.get(h.tieGroup);
+  if (existing) {
+    existing.push(h);
+  } else {
+    HOLES_BY_TIE_GROUP.set(h.tieGroup, [h]);
+  }
+});
+
 /**
  * Fast spatial snap lookup for breadboard holes within snap radius
  */

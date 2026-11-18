@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Menu, X, PenLine, LayoutDashboard, ShieldCheck, LogOut, User } from 'lucide-react';
+import { Menu, X, PenLine, LayoutDashboard, ShieldCheck, LogOut, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/modules/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,98 +53,124 @@ export function SiteHeader() {
           </div>
         </Link>
 
-        {/* Zone 2: Ecosystem Nav Links */}
+        {/* Zone 2: Ecosystem Nav Links (Clean, Uniform Information Architecture) */}
         <nav
           aria-label="Primary navigation"
-          className="hidden lg:flex items-center gap-3.5 xl:gap-5 text-xs xl:text-sm font-medium text-slate-600"
+          className="hidden lg:flex items-center gap-5 xl:gap-6 text-sm font-medium text-slate-600"
         >
           <Link
             href="/learn"
             prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0"
           >
             Learn
           </Link>
+
           <Link
             href="/projects"
             prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0"
           >
             Projects
           </Link>
+
           <Link
             href="/products"
             prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0"
           >
             Store
           </Link>
-          <Link
-            href="/tools"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D] flex items-center gap-1"
-          >
-            <span>Engineering Tools</span>
-            <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-1 py-0.2 rounded">
-              New
-            </span>
-          </Link>
+
+          {/* Virtual Lab with Subtle Refined Indicator */}
           <Link
             href="/engineering-lab"
             prefetch={false}
-            className="hover:text-blue-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-blue-700 flex items-center gap-1"
+            className="hover:text-blue-700 transition-colors whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 text-blue-700 font-semibold"
           >
-            <span>Virtual Lab</span>
-            <span className="text-[9px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-800 px-1 py-0.2 rounded border border-blue-200">
-              2D/3D
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
             </span>
+            <span>Virtual Lab</span>
           </Link>
-          <Link
-            href="/library"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
-          >
-            Library
-          </Link>
-          <Link
-            href="/datasheets"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 font-semibold text-[#172D4D]"
-          >
-            Datasheets
-          </Link>
-          <Link
-            href="/services"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            Services
-          </Link>
-          <Link
-            href="/articles"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            Blog
-          </Link>
-          <Link
-            href="/community"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            Community
-          </Link>
-          <Link
-            href="/partnerships"
-            prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 text-slate-600"
-          >
-            Labs & Franchise
-          </Link>
+
+          {/* Platform / Labs Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-1 hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0 outline-none cursor-pointer">
+              <span>Platform</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform duration-200" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64 p-2 shadow-xl border-slate-200">
+              <DropdownMenuItem asChild>
+                <Link href="/engineering-lab" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <div className="flex items-center gap-1.5 font-semibold text-blue-700 text-xs">
+                    <span>Universal Engineering Lab</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-normal">2D/3D Circuit Sim, PCB CAD &amp; Firmware IDE</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/tools" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Engineering Tools</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Calculators, RF solvers &amp; design utilities</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/library" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Component Library</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Reference symbols, footprints &amp; modules</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/datasheets" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Datasheet Finder</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Search millions of verified component sheets</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/services" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Engineering Services</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Custom hardware R&amp;D, PCB prototyping</span>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Resources Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-1 hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0 outline-none cursor-pointer">
+              <span>Resources</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform duration-200" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56 p-2 shadow-xl border-slate-200">
+              <DropdownMenuItem asChild>
+                <Link href="/articles" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Technical Blog</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Electronics tutorials &amp; deep-dives</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/community" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Community Hub</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Discussions, projects &amp; mentorship</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/partnerships" className="flex flex-col items-start gap-0.5 p-2 rounded-md hover:bg-slate-50">
+                  <span className="font-semibold text-slate-900 text-xs">Labs &amp; Franchise</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Institutional labs &amp; incubation hubs</span>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Link
             href="/about"
             prefetch={false}
-            className="hover:text-[#0B1528] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-[#0B1528] transition-colors whitespace-nowrap shrink-0"
           >
             About
           </Link>
@@ -245,55 +271,127 @@ export function SiteHeader() {
 
       {/* Mobile Navigation Drawer */}
       {mobileOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3">
-          <nav className="flex flex-col space-y-2 text-sm font-medium text-slate-700">
-            <Link href="/" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#0B1528]">
+        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
+          {/* Main Navigation Links */}
+          <div className="space-y-1">
+            <Link
+              href="/"
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-sm font-semibold text-[#0B1528] hover:text-blue-700 transition-colors"
+            >
               Home
             </Link>
-            <Link href="/learn" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Learn (Courses & Training)
+            <Link
+              href="/learn"
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Learn (Courses &amp; Training)
             </Link>
-            <Link href="/projects" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Projects & Prototyping
+            <Link
+              href="/projects"
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Projects &amp; Prototyping
             </Link>
-            <Link href="/products" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Store & Components
+            <Link
+              href="/products"
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Store &amp; Components
             </Link>
-            <Link href="/tools" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
-              <span>Engineering Tools &amp; Software Directory</span>
-              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">New</span>
+            <Link
+              href="/engineering-lab"
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2 py-2 text-sm font-semibold text-blue-700 hover:text-blue-800 transition-colors"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
+              </span>
+              <span>Universal Engineering Lab</span>
             </Link>
-            <Link href="/engineering-lab" onClick={() => setMobileOpen(false)} className="py-1.5 font-bold text-blue-700 flex items-center justify-between">
-              <span>Universal Engineering Lab (2D/3D Sim &amp; PCB)</span>
-              <span className="text-[10px] bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-bold">Free</span>
+          </div>
+
+          {/* Platform & Tools Section */}
+          <div className="border-t border-slate-100 pt-3 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1 mb-1">
+              Platform &amp; Tools
+            </p>
+            <Link
+              href="/tools"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Engineering Tools &amp; Utilities
             </Link>
-            <Link href="/library" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
-              <span>Engineering Library (Datasheets &amp; Code)</span>
-              <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-bold">New</span>
+            <Link
+              href="/library"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Component Library &amp; Pinouts
             </Link>
-            <Link href="/datasheets" onClick={() => setMobileOpen(false)} className="py-1.5 font-semibold text-[#172D4D] flex items-center justify-between">
-              <span>Component Datasheet Finder</span>
-              <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">New</span>
+            <Link
+              href="/datasheets"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Datasheet Finder
             </Link>
-            <Link href="/services" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Engineering Services & R&D
+            <Link
+              href="/services"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Engineering Services &amp; R&amp;D
             </Link>
-            <Link href="/articles" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Technical Blog & Articles
+          </div>
+
+          {/* Resources & Community Section */}
+          <div className="border-t border-slate-100 pt-3 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1 mb-1">
+              Resources &amp; Network
+            </p>
+            <Link
+              href="/articles"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Technical Blog &amp; Articles
             </Link>
-            <Link href="/community" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Community & Network
+            <Link
+              href="/community"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Community Hub
             </Link>
-            <Link href="/partnerships" onClick={() => setMobileOpen(false)} className="py-1.5">
-              Franchise & College Labs
+            <Link
+              href="/partnerships"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
+              Labs &amp; Franchise
             </Link>
-            <Link href="/about" onClick={() => setMobileOpen(false)} className="py-1.5">
+            <Link
+              href="/about"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-700 hover:text-[#0B1528] transition-colors"
+            >
               About EI House
             </Link>
-            <Link href="/search" onClick={() => setMobileOpen(false)} className="py-1.5 text-slate-500">
+            <Link
+              href="/search"
+              onClick={() => setMobileOpen(false)}
+              className="block py-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
+            >
               Universal Search
             </Link>
-          </nav>
+          </div>
+
           <div className="border-t border-slate-200 pt-3 flex flex-col gap-2">
             {firebaseUser ? (
               <>

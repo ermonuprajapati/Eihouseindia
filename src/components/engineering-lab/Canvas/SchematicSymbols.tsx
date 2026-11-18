@@ -568,6 +568,68 @@ export function SchematicSymbol({
           </g>
         );
 
+      case 'SENSOR_MQ2':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="22" stroke="#0284C7" strokeWidth="2" fill="#0F172A" />
+            <circle cx="0" cy="0" r="14" stroke="#94A3B8" strokeWidth="1.5" fill="#334155" strokeDasharray="3,2" />
+            <text x="0" y="3" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              MQ-2
+            </text>
+            <text x="0" y="11" fill="#94A3B8" fontSize="6" fontFamily="monospace" textAnchor="middle">
+              GAS
+            </text>
+          </g>
+        );
+
+      case 'SENSOR_IR_OBSTACLE':
+        return (
+          <g>
+            <rect x="-25" y="-18" width="50" height="36" rx="4" stroke="#475569" strokeWidth="2" fill="#1E293B" />
+            <circle cx="-10" cy="-4" r="5" fill="#38BDF8" />
+            <circle cx="10" cy="-4" r="5" fill="#18181B" stroke="#64748B" strokeWidth="1" />
+            <text x="0" y="10" fill="#E2E8F0" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              IR PROX
+            </text>
+          </g>
+        );
+
+      case 'SENSOR_SOIL':
+        return (
+          <g>
+            <path d="M -20,-15 L 20,-15 L 20,5 L 10,25 L -10,25 L -20,5 Z" stroke="#059669" strokeWidth="2" fill="#064E3B" />
+            <line x1="0" y1="-10" x2="0" y2="18" stroke="#10B981" strokeWidth="2" />
+            <text x="0" y="-3" fill="#6EE7B7" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              SOIL
+            </text>
+          </g>
+        );
+
+      case 'KEYPAD_4X4':
+        return (
+          <g>
+            <rect x="-35" y="-30" width="70" height="60" rx="4" stroke="#475569" strokeWidth="2" fill="#0F172A" />
+            {[-20, -7, 6, 19].map((kx, ci) =>
+              [-18, -6, 6, 18].map((ky, ri) => (
+                <rect
+                  key={`${ci}-${ri}`}
+                  x={kx - 4}
+                  y={ky - 4}
+                  width="8"
+                  height="8"
+                  rx="1.5"
+                  fill="#1E293B"
+                  stroke="#334155"
+                  strokeWidth="0.8"
+                />
+              ))
+            )}
+            <text x="0" y="27" fill="#38BDF8" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              4x4 KEYPAD
+            </text>
+          </g>
+        );
+
       case 'DISPLAY_LCD1602':
         return (
           <g>
@@ -751,67 +813,97 @@ export function SchematicSymbol({
 
       case 'ARDUINO_UNO': {
         const pin13High = isSimulating && simState && (simState.on || simState.voltage > 2.5);
+        const leftPins = [
+          { label: 'RESET', y: -80 },
+          { label: '3.3V', y: -70 },
+          { label: '5V', y: -60 },
+          { label: 'GND', y: -50 },
+          { label: 'GND', y: -40 },
+          { label: 'VIN', y: -30 },
+          { label: 'A0', y: 0 },
+          { label: 'A1', y: 10 },
+          { label: 'A2', y: 20 },
+          { label: 'A3', y: 30 },
+          { label: 'A4/SDA', y: 40 },
+          { label: 'A5/SCL', y: 50 },
+        ];
+        const rightPins = [
+          { label: 'AREF', y: -80 },
+          { label: 'GND', y: -70 },
+          { label: '13', y: -60 },
+          { label: '12', y: -50 },
+          { label: '~11', y: -40 },
+          { label: '~10', y: -30 },
+          { label: '~9', y: -20 },
+          { label: '8', y: -10 },
+          { label: '7', y: 0 },
+          { label: '~6', y: 10 },
+          { label: '~5', y: 20 },
+          { label: '4', y: 30 },
+          { label: '~3', y: 40 },
+          { label: '2', y: 50 },
+          { label: 'TX>1', y: 60 },
+          { label: 'RX<0', y: 70 },
+        ];
         return (
           <g>
             {/* Real Arduino Uno R3 Italian Turquoise Blue PCB */}
-            <rect x="-55" y="-55" width="110" height="110" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
-            <rect x="-51" y="-51" width="102" height="102" rx="6" fill="none" stroke="#00979C" strokeWidth="1" opacity="0.6" />
+            <rect x="-65" y="-90" width="130" height="180" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
+            <rect x="-61" y="-86" width="122" height="172" rx="6" fill="none" stroke="#00979C" strokeWidth="1" opacity="0.6" />
 
             {/* Silver Metallic USB-B Socket */}
-            <rect x="-58" y="-45" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1.5" />
-            <rect x="-56" y="-39" width="10" height="12" rx="1" fill="#334155" />
+            <rect x="-68" y="-70" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1.5" />
+            <rect x="-66" y="-64" width="10" height="12" rx="1" fill="#334155" />
 
             {/* Black DC Power Barrel Jack */}
-            <rect x="-58" y="18" width="18" height="22" rx="3" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-            <circle cx="-48" cy="29" r="3.5" fill="#F59E0B" />
+            <rect x="-68" y="-15" width="18" height="22" rx="3" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
+            <circle cx="-58" cy="-4" r="3.5" fill="#F59E0B" />
 
             {/* ATmega328P DIP-28 IC Socket & Microcontroller Chip */}
-            <rect x="-18" y="-24" width="36" height="48" rx="2" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
-            <path d="M -4,-24 C -4,-20 4,-20 4,-24" fill="#1E293B" stroke="#334155" />
-            {/* IC Pins Silver */}
-            {[-18, -10, -2, 6, 14, 22].map((py, idx) => (
-              <g key={idx}>
-                <rect x="-21" y={py - 2} width="3" height="4" fill="#94A3B8" />
-                <rect x="18" y={py - 2} width="3" height="4" fill="#94A3B8" />
-              </g>
-            ))}
-            <text x="0" y="3" fill="#E2E8F0" fontSize="6" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+            <rect x="-18" y="-20" width="36" height="52" rx="2" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
+            <path d="M -4,-20 C -4,-16 4,-16 4,-20" fill="#1E293B" stroke="#334155" />
+            <text x="0" y="8" fill="#E2E8F0" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
               ATmega328P
             </text>
 
             {/* 16MHz Crystal Resonator */}
-            <rect x="-28" y="-8" width="7" height="18" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
-            <text x="-24.5" y="4" fill="#1E293B" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">16.0</text>
+            <rect x="-28" y="-6" width="7" height="18" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
+            <text x="-24.5" y="6" fill="#1E293B" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">16.0</text>
 
-            {/* Reset Tactile Pushbutton (Red Cap) */}
-            <rect x="-42" y="-42" width="10" height="10" rx="2" fill="#334155" />
-            <circle cx="-37" cy="-37" r="3" fill="#EA580C" stroke="#C2410C" strokeWidth="1" />
-
-            {/* Female Header Strips (Black with Gold Contacts) */}
             {/* Left Header Strip (Power & Analog) */}
-            <rect x="-54" y="-52" width="8" height="104" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
-            {[-45, -35, -25, -5, 5, 15, 25, 35, 45].map((hy, idx) => (
-              <circle key={idx} cx="-50" cy={hy} r="1.8" fill="#F59E0B" />
+            <rect x="-64" y="-86" width="10" height="145" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {leftPins.map((lp, idx) => (
+              <g key={idx}>
+                <circle cx="-59" cy={lp.y} r="2" fill="#F59E0B" />
+                <text x="-52" y={lp.y + 2} fill="#FFFFFF" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="start">
+                  {lp.label}
+                </text>
+              </g>
             ))}
 
             {/* Right Header Strip (Digital PWM) */}
-            <rect x="46" y="-52" width="8" height="104" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
-            {[-45, -35, -25, -15, 5, 15, 25, 35, 45].map((hy, idx) => (
-              <circle key={idx} cx="50" cy={hy} r="1.8" fill="#F59E0B" />
+            <rect x="54" y="-86" width="10" height="165" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {rightPins.map((rp, idx) => (
+              <g key={idx}>
+                <circle cx="59" cy={rp.y} r="2" fill="#F59E0B" />
+                <text x="52" y={rp.y + 2} fill="#FFFFFF" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                  {rp.label}
+                </text>
+              </g>
             ))}
 
             {/* Active Pin 13 LED (L) & Power LED (ON) */}
-            <circle cx="2" cy="-32" r="2.5" fill="#10B981" />
-            <circle cx="10" cy="-32" r="2.5" fill={pin13High ? '#F59E0B' : '#78350F'} />
-            {pin13High && <circle cx="10" cy="-32" r="7" fill="rgba(245,158,11,0.4)" />}
-            <text x="2" y="-36" fill="#A7F3D0" fontSize="4" fontFamily="monospace" textAnchor="middle">ON</text>
-            <text x="10" y="-36" fill="#FDE68A" fontSize="4" fontFamily="monospace" textAnchor="middle">L</text>
+            <circle cx="2" cy="-45" r="2.5" fill="#10B981" />
+            <circle cx="10" cy="-45" r="2.5" fill={pin13High ? '#F59E0B' : '#78350F'} />
+            {pin13High && <circle cx="10" cy="-45" r="7" fill="rgba(245,158,11,0.4)" />}
+            <text x="2" y="-49" fill="#A7F3D0" fontSize="4" fontFamily="monospace" textAnchor="middle">ON</text>
+            <text x="10" y="-49" fill="#FDE68A" fontSize="4" fontFamily="monospace" textAnchor="middle">L</text>
 
             {/* Arduino White Silkscreen Branding */}
-            <text x="0" y="-42" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
+            <text x="0" y="-60" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
               ARDUINO
             </text>
-            <text x="0" y="38" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+            <text x="0" y="55" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
               UNO R3
             </text>
           </g>
@@ -819,27 +911,49 @@ export function SchematicSymbol({
       }
 
       case 'ARDUINO_NANO': {
+        const leftNano = [
+          { label: 'TX1', y: -70 }, { label: 'RX0', y: -60 }, { label: 'RST', y: -50 }, { label: 'GND', y: -40 },
+          { label: 'D2', y: -30 }, { label: 'D3~', y: -20 }, { label: 'D4', y: -10 }, { label: 'D5~', y: 0 },
+          { label: 'D6~', y: 10 }, { label: 'D7', y: 20 }, { label: 'D8', y: 30 }, { label: 'D9~', y: 40 },
+          { label: 'D10~', y: 50 }, { label: 'D11~', y: 60 }, { label: 'D12', y: 70 },
+        ];
+        const rightNano = [
+          { label: 'VIN', y: -70 }, { label: 'GND', y: -60 }, { label: 'RST', y: -50 }, { label: '5V', y: -40 },
+          { label: 'A7', y: -30 }, { label: 'A6', y: -20 }, { label: 'A5', y: -10 }, { label: 'A4', y: 0 },
+          { label: 'A3', y: 10 }, { label: 'A2', y: 20 }, { label: 'A1', y: 30 }, { label: 'A0', y: 40 },
+          { label: 'REF', y: 50 }, { label: '3V3', y: 60 }, { label: 'D13', y: 70 },
+        ];
         return (
           <g>
-            <rect x="-25" y="-50" width="50" height="100" rx="4" fill="#0284C7" stroke="#0369A1" strokeWidth="2" />
+            <rect x="-45" y="-80" width="90" height="160" rx="5" fill="#0284C7" stroke="#0369A1" strokeWidth="2" />
             {/* Mini-USB on Top */}
-            <rect x="-9" y="-53" width="18" height="10" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
+            <rect x="-10" y="-83" width="20" height="10" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
             {/* ATmega328P TQFP Square Chip rotated 45 deg */}
             <g transform="translate(0, -6) rotate(45)">
-              <rect x="-9" y="-9" width="18" height="18" rx="1" fill="#0F172A" stroke="#334155" />
-              <circle cx="-5" cy="-5" r="1" fill="#94A3B8" />
+              <rect x="-10" y="-10" width="20" height="20" rx="1" fill="#0F172A" stroke="#334155" />
+              <circle cx="-6" cy="-6" r="1.5" fill="#94A3B8" />
             </g>
-            {/* ICSP Header 2x3 */}
-            <rect x="-6" y="22" width="12" height="16" fill="#0F172A" />
-            {[-3, 3].map((px, ix) => (
-              [26, 30, 34].map((py, iy) => (
-                <circle key={`${ix}-${iy}`} cx={px} cy={py} r="1" fill="#F59E0B" />
-              ))
+            {/* Left Header Strip & Silkscreen text */}
+            <rect x="-44" y="-76" width="8" height="152" fill="#0F172A" />
+            {leftNano.map((lp, idx) => (
+              <g key={idx}>
+                <circle cx="-40" cy={lp.y} r="1.8" fill="#F59E0B" />
+                <text x="-34" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
+                  {lp.label}
+                </text>
+              </g>
             ))}
-            {/* Pin header strips along both sides */}
-            <rect x="-24" y="-45" width="4" height="90" fill="#0F172A" />
-            <rect x="20" y="-45" width="4" height="90" fill="#0F172A" />
-            <text x="0" y="45" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+            {/* Right Header Strip & Silkscreen text */}
+            <rect x="36" y="-76" width="8" height="152" fill="#0F172A" />
+            {rightNano.map((rp, idx) => (
+              <g key={idx}>
+                <circle cx="40" cy={rp.y} r="1.8" fill="#F59E0B" />
+                <text x="34" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                  {rp.label}
+                </text>
+              </g>
+            ))}
+            <text x="0" y="38" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
               NANO V3
             </text>
           </g>
@@ -849,17 +963,17 @@ export function SchematicSymbol({
       case 'ARDUINO_MEGA': {
         return (
           <g>
-            <rect x="-60" y="-60" width="120" height="120" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
-            <rect x="-63" y="-50" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" />
-            <rect x="-63" y="15" width="18" height="22" rx="3" fill="#1E293B" />
+            <rect x="-70" y="-80" width="140" height="160" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
+            <rect x="-73" y="-70" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" />
+            <rect x="-73" y="-15" width="18" height="22" rx="3" fill="#1E293B" />
             {/* ATmega2560 Square TQFP in center */}
             <g transform="translate(0, -6) rotate(45)">
               <rect x="-14" y="-14" width="28" height="28" rx="2" fill="#0F172A" stroke="#334155" />
             </g>
             <text x="0" y="3" fill="#94A3B8" fontSize="6" fontFamily="monospace" fontWeight="bold" textAnchor="middle">ATmega2560</text>
-            {/* Extended Double-row Digital Header on Bottom */}
-            <rect x="-50" y="44" width="100" height="10" rx="2" fill="#0F172A" stroke="#1E293B" />
-            <text x="0" y="-44" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
+            <rect x="-69" y="-60" width="8" height="120" fill="#0F172A" />
+            <rect x="61" y="-60" width="8" height="120" fill="#0F172A" />
+            <text x="0" y="-64" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
               MEGA 2560
             </text>
           </g>
@@ -869,33 +983,46 @@ export function SchematicSymbol({
       case 'ESP32_DEVKIT':
       case 'ESP32_S3':
       case 'ESP32_C3': {
+        const leftEsp = [
+          { label: 'EN', y: -70 }, { label: 'VP', y: -60 }, { label: 'VN', y: -50 }, { label: '34', y: -40 },
+          { label: '35', y: -30 }, { label: '32', y: -20 }, { label: '33', y: -10 }, { label: '25', y: 0 },
+          { label: '26', y: 10 }, { label: '27', y: 20 }, { label: '14', y: 30 }, { label: '12', y: 40 },
+          { label: '13', y: 50 }, { label: 'GND', y: 60 }, { label: 'VIN', y: 70 },
+        ];
+        const rightEsp = [
+          { label: '3V3', y: -70 }, { label: 'GND', y: -60 }, { label: '15', y: -50 }, { label: 'D2', y: -40 },
+          { label: 'D4', y: -30 }, { label: 'RX2', y: -20 }, { label: 'TX2', y: -10 }, { label: 'D5', y: 0 },
+          { label: '18', y: 10 }, { label: '19', y: 20 }, { label: '21', y: 30 }, { label: 'RX0', y: 40 },
+          { label: 'TX0', y: 50 }, { label: '22', y: 60 }, { label: '23', y: 70 },
+        ];
         return (
           <g>
-            {/* Matte Black PCB with Gold Headers */}
-            <rect x="-35" y="-50" width="70" height="100" rx="5" fill="#0F172A" stroke="#1E293B" strokeWidth="2" />
-            {/* Perforated Metal RF Can Shield */}
-            <rect x="-24" y="-30" width="48" height="42" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" />
-            {/* Serpentine PCB Antenna in Copper */}
-            <path d="M -18,-42 L 18,-42 L 18,-36 L -12,-36 L -12,-32 L 18,-32" fill="none" stroke="#F59E0B" strokeWidth="1.8" />
-            {/* Text on Shield */}
-            <text x="0" y="-14" fill="#1E293B" fontSize="6" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">
+            <rect x="-55" y="-80" width="110" height="160" rx="5" fill="#0F172A" stroke="#1E293B" strokeWidth="2" />
+            <rect x="-26" y="-35" width="52" height="45" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" />
+            <path d="M -18,-45 L 18,-45 L 18,-40 L -12,-40 L -12,-37 L 18,-37" fill="none" stroke="#F59E0B" strokeWidth="1.8" />
+            <text x="0" y="-18" fill="#1E293B" fontSize="5.5" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">
               ESP-WROOM-32
             </text>
-            <text x="0" y="-5" fill="#334155" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
-              Wi-Fi + BLE
-            </text>
-            {/* Micro-USB on Bottom */}
-            <rect x="-8" y="44" width="16" height="8" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
-            {/* Boot and EN Buttons */}
-            <circle cx="-16" cy="36" r="3" fill="#334155" stroke="#64748B" />
-            <circle cx="16" cy="36" r="3" fill="#334155" stroke="#64748B" />
-            <text x="-16" y="32" fill="#64748B" fontSize="4" fontFamily="monospace" textAnchor="middle">EN</text>
-            <text x="16" y="32" fill="#64748B" fontSize="4" fontFamily="monospace" textAnchor="middle">IO0</text>
-            {/* Header Pins on Both Edges */}
-            <rect x="-34" y="-45" width="4" height="90" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
-            <rect x="30" y="-45" width="4" height="90" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
-            <text x="0" y="24" fill="#38BDF8" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              {type === 'ESP32_S3' ? 'ESP32-S3' : type === 'ESP32_C3' ? 'ESP32-C3' : 'ESP32 DEVKIT'}
+            <rect x="-54" y="-76" width="8" height="152" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+            {leftEsp.map((lp, idx) => (
+              <g key={idx}>
+                <circle cx="-50" cy={lp.y} r="1.8" fill="#F59E0B" />
+                <text x="-44" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
+                  {lp.label}
+                </text>
+              </g>
+            ))}
+            <rect x="46" y="-76" width="8" height="152" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+            {rightEsp.map((rp, idx) => (
+              <g key={idx}>
+                <circle cx="50" cy={rp.y} r="1.8" fill="#F59E0B" />
+                <text x="44" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                  {rp.label}
+                </text>
+              </g>
+            ))}
+            <text x="0" y="45" fill="#38BDF8" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              ESP32 DEVKIT
             </text>
           </g>
         );
@@ -903,32 +1030,50 @@ export function SchematicSymbol({
 
       case 'RASPBERRY_PI_PICO':
       case 'RASPBERRY_PI_PICO2': {
+        const leftPico = [
+          'GP0', 'GP1', 'GND', 'GP2', 'GP3', 'GP4', 'GP5', 'GND', 'GP6', 'GP7',
+          'GP8', 'GP9', 'GND', 'GP10', 'GP11', 'GP12', 'GP13', 'GND', 'GP14', 'GP15'
+        ];
+        const rightPico = [
+          'VBUS', 'VSYS', 'GND', '3V3E', '3V3', 'VREF', 'GP28', 'GND', 'GP27', 'GP26',
+          'RUN', 'GP22', 'GND', 'GP21', 'GP20', 'GP19', 'GP18', 'GND', 'GP17', 'GP16'
+        ];
         return (
           <g>
-            {/* British Racing Green PCB */}
-            <rect x="-30" y="-50" width="60" height="100" rx="4" fill="#005930" stroke="#004324" strokeWidth="2" />
-            {/* Micro-USB on Top */}
-            <rect x="-9" y="-53" width="18" height="9" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
-            {/* RP2040 Chip Rotated 45 deg */}
-            <g transform="translate(0, -4) rotate(45)">
+            <rect x="-50" y="-85" width="100" height="172" rx="5" fill="#005930" stroke="#004324" strokeWidth="2" />
+            <rect x="-9" y="-88" width="18" height="9" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
+            <g transform="translate(0, -6) rotate(45)">
               <rect x="-10" y="-10" width="20" height="20" rx="1" fill="#0F172A" stroke="#334155" />
             </g>
             <text x="0" y="2" fill="#FFFFFF" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
               {type === 'RASPBERRY_PI_PICO2' ? 'RP2350' : 'RP2040'}
             </text>
-            {/* BOOTSEL Button */}
-            <rect x="-6" y="20" width="12" height="7" rx="1" fill="#CBD5E1" />
-            <circle cx="0" cy="23.5" r="2" fill="#F59E0B" />
-            <text x="0" y="17" fill="#A7F3D0" fontSize="4.5" fontFamily="monospace" textAnchor="middle">BOOTSEL</text>
-            {/* Castellated Edge Pads */}
-            {[-40, -30, -20, -10, 0, 10, 20, 30, 40].map((py, idx) => (
-              <g key={idx}>
-                <circle cx="-30" cy={py} r="1.5" fill="#F59E0B" />
-                <circle cx="30" cy={py} r="1.5" fill="#F59E0B" />
-              </g>
-            ))}
-            <text x="0" y="42" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
-              Raspberry Pi
+            <rect x="-49" y="-80" width="8" height="162" fill="#004324" />
+            {leftPico.map((label, idx) => {
+              const py = -75 + idx * 8;
+              return (
+                <g key={idx}>
+                  <circle cx="-45" cy={py} r="1.5" fill="#F59E0B" />
+                  <text x="-40" y={py + 1.8} fill="#FFFFFF" fontSize="3.5" fontFamily="monospace" fontWeight="bold">
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
+            <rect x="41" y="-80" width="8" height="162" fill="#004324" />
+            {rightPico.map((label, idx) => {
+              const py = -75 + idx * 8;
+              return (
+                <g key={idx}>
+                  <circle cx="45" cy={py} r="1.5" fill="#F59E0B" />
+                  <text x="40" y={py + 1.8} fill="#FFFFFF" fontSize="3.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
+            <text x="0" y="45" fill="#A7F3D0" fontSize="5" fontFamily="monospace" textAnchor="middle">
+              PICO RP2040
             </text>
           </g>
         );
@@ -1456,10 +1601,26 @@ export function SchematicSymbol({
     }
   };
 
-  const compW = component.width ? Math.max(110, component.width + 24) : 110;
-  const compH = component.height ? Math.max(90, component.height + 24) : 90;
+  const isMcu = [
+    'ARDUINO_UNO',
+    'ARDUINO_NANO',
+    'ARDUINO_MEGA',
+    'ESP32_DEVKIT',
+    'ESP32_S3',
+    'ESP32_C3',
+    'RASPBERRY_PI_PICO',
+    'RASPBERRY_PI_PICO2',
+    'STM32F103',
+    'STM32_NUCLEO',
+  ].includes(type) || component.category === 'microcontrollers';
+
+  const compW = component.width ? Math.max(isMcu ? 130 : 60, component.width + 10) : (isMcu ? 130 : 60);
+  const compH = component.height ? Math.max(isMcu ? 180 : 40, component.height + 10) : (isMcu ? 180 : 40);
   const halfW = compW / 2;
   const halfH = compH / 2;
+
+  // Tight label offset right next to the component body without floating into empty space
+  const labelOffsetY = isMcu ? -(halfH + 8) : -(Math.min(halfH, 22) + 6);
 
   return (
     <div
@@ -1494,17 +1655,17 @@ export function SchematicSymbol({
         {renderSymbolGraphic()}
       </svg>
 
-      {/* Standard Reference Designator & Nominal Value Labels (Counter-rotated to stay readable) */}
+      {/* Standard Reference Designator & Nominal Value Labels (Tight to body, counter-rotated to stay readable) */}
       <div
-        className="absolute left-1/2 -top-5 -translate-x-1/2 flex flex-col items-center pointer-events-none whitespace-nowrap z-20"
+        className="absolute left-1/2 top-1/2 flex flex-col items-center pointer-events-none whitespace-nowrap z-20"
         style={{
-          transform: `translate(-50%, -100%) rotate(${-rotation}deg)`,
+          transform: `translate(-50%, calc(-50% + ${labelOffsetY}px)) rotate(${-rotation}deg)`,
         }}
       >
-        <span className="font-mono text-[11px] font-bold text-emerald-400 tracking-wide drop-shadow-sm">
+        <span className="font-mono text-[11px] font-bold text-emerald-400 tracking-wide drop-shadow-sm leading-tight">
           {designator}
         </span>
-        <span className="font-mono text-[10px] text-slate-200 font-semibold bg-slate-950/80 px-1 py-0.2 rounded border border-slate-800">
+        <span className="font-mono text-[10px] text-slate-200 font-semibold bg-slate-950/85 px-1 py-0.5 rounded border border-slate-800 leading-tight">
           {value}
         </span>
       </div>
@@ -1512,9 +1673,9 @@ export function SchematicSymbol({
       {/* Live Electrical Telemetry Badge (Displayed when actively simulating) */}
       {isSimulating && simState && (
         <div
-          className="absolute left-1/2 -bottom-5 -translate-x-1/2 flex items-center gap-1 font-mono text-[9px] font-bold text-cyan-300 bg-slate-950/90 px-1.5 py-0.5 rounded border border-cyan-800/60 shadow-lg pointer-events-none whitespace-nowrap z-20"
+          className="absolute left-1/2 top-1/2 flex items-center gap-1 font-mono text-[9px] font-bold text-cyan-300 bg-slate-950/90 px-1.5 py-0.5 rounded border border-cyan-800/60 shadow-lg pointer-events-none whitespace-nowrap z-20"
           style={{
-            transform: `translate(-50%, 100%) rotate(${-rotation}deg)`,
+            transform: `translate(-50%, calc(-50% + ${Math.abs(labelOffsetY)}px)) rotate(${-rotation}deg)`,
           }}
         >
           <span>{simState.voltage.toFixed(2)}V</span>

@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check, Unplug } from 'lucide-react';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check, Unplug, Cpu } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
@@ -1259,6 +1259,342 @@ export function PropertiesInspector({
               >
                 {parameters.energized ? 'Coil Active (Click to De-energize)' : 'Coil Relaxed (Click to Energize)'}
               </button>
+            </div>
+          )}
+
+          {/* HARDWARE SPECIFICATION CARD FOR MICROCONTROLLERS */}
+          {(type.startsWith('ARDUINO_') || type.startsWith('ESP32') || type.startsWith('STM32') || type.startsWith('RASPBERRY_PI') || component.category === 'microcontrollers') && (() => {
+            const getSpecs = () => {
+              if (type === 'ARDUINO_UNO') {
+                return {
+                  chip: 'ATmega328P (8-bit AVR RISC)',
+                  clock: '16.0 MHz (Crystal)',
+                  memory: '32 KB Flash, 2 KB SRAM, 1 KB EEPROM',
+                  voltage: '5.0V Logic (7–12V VIN Barrel)',
+                  pinout: '14 Digital I/O (6 PWM ~), 6 Analog (10-bit ADC), 1 UART, 1 I2C, 1 SPI',
+                };
+              }
+              if (type === 'ARDUINO_NANO') {
+                return {
+                  chip: 'ATmega328P (8-bit AVR RISC, TQFP-32)',
+                  clock: '16.0 MHz (Crystal)',
+                  memory: '32 KB Flash, 2 KB SRAM, 1 KB EEPROM',
+                  voltage: '5.0V Logic (7–12V VIN)',
+                  pinout: '14 Digital I/O (6 PWM ~), 8 Analog (A0–A7), 1 UART, 1 I2C, 1 SPI (30 DIP)',
+                };
+              }
+              if (type === 'ARDUINO_MEGA') {
+                return {
+                  chip: 'ATmega2560 (8-bit AVR RISC, TQFP-100)',
+                  clock: '16.0 MHz (Crystal)',
+                  memory: '256 KB Flash, 8 KB SRAM, 4 KB EEPROM',
+                  voltage: '5.0V Logic (7–12V VIN)',
+                  pinout: '54 Digital I/O (15 PWM ~), 16 Analog (A0–A15), 4 UARTs, 1 I2C, 1 SPI',
+                };
+              }
+              if (type.startsWith('ESP32')) {
+                return {
+                  chip: 'ESP32-WROOM-32 (Tensilica 32-bit Dual Xtensa LX6)',
+                  clock: '240.0 MHz',
+                  memory: '4 MB SPI Flash, 520 KB SRAM, Wi-Fi 802.11 b/g/n + BLE 4.2',
+                  voltage: '3.3V Logic (5V VBUS/VIN via AMS1117-3.3)',
+                  pinout: '30 Pins: 18 ADC channels (12-bit), 2 DAC, 3 UART, 2 I2C, 3 SPI, capacitive touch',
+                };
+              }
+              if (type.startsWith('RASPBERRY_PI')) {
+                return {
+                  chip: 'RP2040 (Dual-Core ARM Cortex-M0+)',
+                  clock: '133.0 MHz (Overclockable to 250MHz)',
+                  memory: '2 MB QSPI Flash, 264 KB on-chip SRAM in 6 banks',
+                  voltage: '3.3V Logic (1.8–5.5V VSYS via buck-boost)',
+                  pinout: '40 Pins: 26 Multi-function GPIO, 3 Analog ADC (12-bit), 2 UART, 2 I2C, 2 SPI, 8 PIO State Machines',
+                };
+              }
+              if (type.startsWith('STM32')) {
+                return {
+                  chip: 'STM32F103C8T6 (ARM 32-bit Cortex-M3)',
+                  clock: '72.0 MHz',
+                  memory: '64 KB Flash, 20 KB SRAM',
+                  voltage: '3.3V Logic (5V Tolerant I/O, 5V VIN)',
+                  pinout: '40 DIP Pins: 32 GPIO, 2x 12-bit ADC (10 ch), 3 USART, 2 I2C, 2 SPI, USB 2.0 FS',
+                };
+              }
+              return {
+                chip: 'Custom Microcontroller SoC',
+                clock: '16.0 MHz',
+                memory: 'Integrated Flash / SRAM',
+                voltage: '5.0V / 3.3V',
+                pinout: 'Configurable General Purpose I/O Headers',
+              };
+            };
+            const specs = getSpecs();
+            return (
+              <div className="space-y-2.5 p-3 rounded-lg bg-slate-950/90 border border-cyan-800/60 shadow-lg">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Cpu className="w-4 h-4 text-cyan-400" />
+                    <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">Hardware Spec</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 font-mono font-bold border border-cyan-700/50">
+                    {type.replace('ARDUINO_', '').replace('RASPBERRY_PI_', '')}
+                  </span>
+                </div>
+                <div className="space-y-1.5 font-mono text-[11px]">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-slate-500 shrink-0">Processor:</span>
+                    <span className="text-slate-200 text-right font-semibold">{specs.chip}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-500 shrink-0">Clock Speed:</span>
+                    <span className="text-amber-400 font-bold">{specs.clock}</span>
+                  </div>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-slate-500 shrink-0">Memory:</span>
+                    <span className="text-slate-300 text-right">{specs.memory}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-500 shrink-0">Logic Voltage:</span>
+                    <span className="text-emerald-400 font-bold">{specs.voltage}</span>
+                  </div>
+                  <div className="pt-1 border-t border-slate-800/80">
+                    <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Pinout Summary:</div>
+                    <div className="text-[10px] text-slate-300 leading-relaxed bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                      {specs.pinout}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* WOKWI-STYLE MCU POWER PLUG (USB CABLE & DC JACK) */}
+          {(type.startsWith('ARDUINO_') || type.startsWith('ESP32') || type.startsWith('STM32') || type.startsWith('RASPBERRY_PI')) && (
+            <div className="space-y-3 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400 font-bold uppercase">
+                <span>Wokwi-Style Power Supply</span>
+                <span className={parameters.usbPlugged !== false || parameters.dcJackPlugged ? 'text-emerald-400' : 'text-amber-400'}>
+                  {parameters.usbPlugged !== false || parameters.dcJackPlugged ? '5.0V Active' : 'Unpowered (0V)'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateParameter('usbPlugged', !(parameters.usbPlugged !== false))}
+                  className={`py-1.5 px-2 rounded font-mono text-[11px] font-bold border transition-all cursor-pointer ${
+                    parameters.usbPlugged !== false
+                      ? 'bg-cyan-950/70 border-cyan-500 text-cyan-300'
+                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {parameters.usbPlugged !== false ? '🔌 USB: Plugged' : '⚡ Plug USB (5V)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateParameter('dcJackPlugged', !parameters.dcJackPlugged)}
+                  className={`py-1.5 px-2 rounded font-mono text-[11px] font-bold border transition-all cursor-pointer ${
+                    parameters.dcJackPlugged
+                      ? 'bg-emerald-950/70 border-emerald-500 text-emerald-300'
+                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {parameters.dcJackPlugged ? '🔋 DC Jack: 9V' : '🔌 DC Barrel Jack'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* SENSORS INTERACTIVE SIMULATION SLIDERS */}
+          {/* HC-SR04 Ultrasonic Sensor */}
+          {(type === 'SENSOR_ULTRASONIC' || type === 'HC_SR04') && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Obstacle Distance</span>
+                <span className="text-cyan-400 font-bold">{Number(parameters.distanceCm ?? 50)} cm</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="400"
+                value={Number(parameters.distanceCm ?? 50)}
+                onChange={(e) => updateParameter('distanceCm', Number(e.target.value), `${e.target.value} cm`)}
+                className="w-full accent-cyan-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                <span>2 cm</span>
+                <span>Echo: {Math.round(Number(parameters.distanceCm ?? 50) * 58.82)} µs</span>
+                <span>400 cm</span>
+              </div>
+            </div>
+          )}
+
+          {/* DHT11 / DHT22 Temp & Humidity Sensor */}
+          {(type === 'SENSOR_DHT11' || type.includes('DHT')) && (
+            <div className="space-y-3 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                  <span className="font-semibold uppercase">Temperature</span>
+                  <span className="text-amber-400 font-bold">{Number(parameters.temperatureC ?? 25)} °C</span>
+                </div>
+                <input
+                  type="range"
+                  min="-20"
+                  max="60"
+                  value={Number(parameters.temperatureC ?? 25)}
+                  onChange={(e) => updateParameter('temperatureC', Number(e.target.value), `${e.target.value}°C`)}
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                  <span className="font-semibold uppercase">Relative Humidity</span>
+                  <span className="text-cyan-400 font-bold">{Number(parameters.humidityPercent ?? 50)} %</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="95"
+                  value={Number(parameters.humidityPercent ?? 50)}
+                  onChange={(e) => updateParameter('humidityPercent', Number(e.target.value), `${e.target.value}%`)}
+                  className="w-full accent-cyan-500 cursor-pointer"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* PIR Motion Sensor */}
+          {type === 'SENSOR_PIR' && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Motion Event</span>
+                <span className={parameters.motionDetected ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                  {parameters.motionDetected ? 'MOTION DETECTED (HIGH)' : 'IDLE (LOW)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateParameter('motionDetected', !parameters.motionDetected)}
+                className={`w-full py-1.5 px-3 rounded font-mono text-xs font-bold border transition-all cursor-pointer ${
+                  parameters.motionDetected
+                    ? 'bg-emerald-950/70 border-emerald-500 text-emerald-300'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+              >
+                {parameters.motionDetected ? 'Trigger: Motion Active' : 'Click to Simulate Motion'}
+              </button>
+            </div>
+          )}
+
+          {/* LDR Photoresistor */}
+          {type === 'SENSOR_LDR' && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Ambient Light Level</span>
+                <span className="text-amber-400 font-bold">{Number(parameters.lux ?? 500)} Lux</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="5000"
+                value={Number(parameters.lux ?? 500)}
+                onChange={(e) => {
+                  const lux = Number(e.target.value);
+                  // R_ldr approx 500k at 10 lux, down to 1k at 5000 lux
+                  const r = Math.round(500000 / Math.pow(lux / 10, 0.7));
+                  updateParameter('lux', lux);
+                  updateParameter('resistance', r, `${r >= 1000 ? (r / 1000).toFixed(1) + 'kΩ' : r + 'Ω'}`);
+                }}
+                className="w-full accent-amber-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                <span>Dark (10 Lux)</span>
+                <span>Direct Sun (5000 Lux)</span>
+              </div>
+            </div>
+          )}
+
+          {/* MQ-2 Gas Sensor */}
+          {(type === 'SENSOR_MQ2' || type.includes('GAS')) && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Gas Concentration</span>
+                <span className="text-rose-400 font-bold">{Number(parameters.gasPpm ?? 300)} PPM</span>
+              </div>
+              <input
+                type="range"
+                min="200"
+                max="5000"
+                value={Number(parameters.gasPpm ?? 300)}
+                onChange={(e) => updateParameter('gasPpm', Number(e.target.value), `${e.target.value} PPM`)}
+                className="w-full accent-rose-500 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {/* IR Obstacle Sensor */}
+          {type === 'SENSOR_IR_OBSTACLE' && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Obstacle Detection</span>
+                <span className={parameters.obstacleDetected ? 'text-rose-400 font-bold' : 'text-slate-500'}>
+                  {parameters.obstacleDetected ? 'OBSTACLE DETECTED (LOW)' : 'CLEAR (HIGH)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateParameter('obstacleDetected', !parameters.obstacleDetected)}
+                className={`w-full py-1.5 px-3 rounded font-mono text-xs font-bold border transition-all cursor-pointer ${
+                  parameters.obstacleDetected
+                    ? 'bg-rose-950/70 border-rose-500 text-rose-300'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+              >
+                {parameters.obstacleDetected ? 'Obstacle In Front' : 'Click to Block IR Beam'}
+              </button>
+            </div>
+          )}
+
+          {/* Soil Moisture Sensor */}
+          {type === 'SENSOR_SOIL' && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Soil Moisture</span>
+                <span className="text-cyan-400 font-bold">{Number(parameters.moisturePercent ?? 45)} %</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Number(parameters.moisturePercent ?? 45)}
+                onChange={(e) => updateParameter('moisturePercent', Number(e.target.value), `${e.target.value}%`)}
+                className="w-full accent-cyan-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                <span>Bone Dry (0%)</span>
+                <span>Waterlogged (100%)</span>
+              </div>
+            </div>
+          )}
+
+          {/* SG90 Servo Horn Angle Control */}
+          {(type === 'ACTUATOR_SERVO_SG90' || type === 'SERVO_SG90' || type.includes('SERVO')) && (
+            <div className="space-y-2 p-2.5 rounded bg-slate-950 border border-slate-800">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300">
+                <span className="font-semibold uppercase">Servo Horn Angle</span>
+                <span className="text-amber-400 font-bold">{Number(parameters.currentAngle ?? 90)}°</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="180"
+                value={Number(parameters.currentAngle ?? 90)}
+                onChange={(e) => updateParameter('currentAngle', Number(e.target.value), `${e.target.value}°`)}
+                className="w-full accent-amber-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                <span>0°</span>
+                <span>Center (90°)</span>
+                <span>180°</span>
+              </div>
             </div>
           )}
         </div>

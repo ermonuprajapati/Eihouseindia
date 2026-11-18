@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import * as THREE from 'three';
 
 export interface ArduinoUno3DProps {
   position?: [number, number, number];
   rotation?: [number, number, number];
   isSelected?: boolean;
+  isUsbPlugged?: boolean;
+  onToggleUsb?: () => void;
+  isPowered?: boolean;
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
@@ -50,10 +53,15 @@ export function ArduinoUno3D({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   isSelected = false,
+  isUsbPlugged = true,
+  onToggleUsb,
+  isPowered = true,
   onPinClick,
   hoveredPin,
   onHoverPin,
 }: ArduinoUno3DProps) {
+  const [usbHovered, setUsbHovered] = useState(false);
+
   // Common materials
   const materials = useMemo(() => {
     return {
@@ -66,6 +74,15 @@ export function ArduinoUno3D({
         color: '#D1D5DB',
         metalness: 0.85,
         roughness: 0.2,
+      }),
+      usbPlugMetal: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.9,
+        roughness: 0.15,
+      }),
+      usbCablePvc: new THREE.MeshStandardMaterial({
+        color: usbHovered ? '#38BDF8' : '#0284C7', // Arduino blue cable jacket
+        roughness: 0.4,
       }),
       barrelPlastic: new THREE.MeshStandardMaterial({
         color: '#111827',
@@ -87,8 +104,100 @@ export function ArduinoUno3D({
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
       }),
+      ledOnActive: new THREE.MeshStandardMaterial({
+        color: '#22C55E',
+        emissive: new THREE.Color('#22C55E'),
+        emissiveIntensity: 0.9,
+      }),
+      ledOnInactive: new THREE.MeshStandardMaterial({
+        color: '#14532D',
+        roughness: 0.8,
+      }),
+      ledLActive: new THREE.MeshStandardMaterial({
+        color: '#F59E0B',
+        emissive: new THREE.Color('#F59E0B'),
+        emissiveIntensity: 0.8,
+      }),
+      ledLInactive: new THREE.MeshStandardMaterial({
+        color: '#78350F',
+        roughness: 0.8,
+      }),
     };
-  }, [isSelected]);
+  }, [isSelected, usbHovered]);
+
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 768;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 1024, 768);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Board branding
+    ctx.font = 'bold 38px sans-serif';
+    ctx.fillText('ARDUINO', 512, 280);
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText('UNO R3', 512, 330);
+
+    // Top Header Labels (AREF..RX<0)
+    ctx.font = 'bold 22px monospace';
+    const topPins = [
+      { text: 'SCL', x: 235 },
+      { text: 'SDA', x: 275 },
+      { text: 'AREF', x: 315 },
+      { text: 'GND', x: 355 },
+      { text: '13', x: 395 },
+      { text: '12', x: 435 },
+      { text: '~11', x: 475 },
+      { text: '~10', x: 515 },
+      { text: '~9', x: 555 },
+      { text: '8', x: 595 },
+      { text: '7', x: 655 },
+      { text: '~6', x: 695 },
+      { text: '~5', x: 735 },
+      { text: '4', x: 775 },
+      { text: '~3', x: 815 },
+      { text: '2', x: 855 },
+      { text: 'TX>1', x: 895 },
+      { text: 'RX<0', x: 940 },
+    ];
+    topPins.forEach((p) => ctx.fillText(p.text, p.x, 85));
+
+    // Bottom Header Labels (IOREF..A5)
+    const btmPins = [
+      { text: 'IOREF', x: 235 },
+      { text: 'RESET', x: 285 },
+      { text: '3.3V', x: 335 },
+      { text: '5V', x: 385 },
+      { text: 'GND', x: 435 },
+      { text: 'GND', x: 485 },
+      { text: 'VIN', x: 535 },
+      { text: 'A0', x: 645 },
+      { text: 'A1', x: 695 },
+      { text: 'A2', x: 745 },
+      { text: 'A3', x: 795 },
+      { text: 'A4', x: 845 },
+      { text: 'A5', x: 895 },
+    ];
+    btmPins.forEach((p) => ctx.fillText(p.text, p.x, 680));
+
+    // Pin header box outlines
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(210, 45, 750, 75);
+    ctx.strokeRect(210, 645, 710, 75);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  const activePowered = isUsbPlugged || isPowered;
 
   return (
     <group position={position} rotation={rotation}>
@@ -105,10 +214,85 @@ export function ArduinoUno3D({
         <boxGeometry args={[68.6, 1.6, 53.4]} />
       </mesh>
 
-      {/* USB Type-B Port (Metallic silver block) */}
-      <mesh position={[-28, 5.5, -14]} material={materials.usbMetal} castShadow>
+      {/* High-Resolution White Silkscreen Face Overlay */}
+      {silkscreenTexture && (
+        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[68.0, 52.8]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+        </mesh>
+      )}
+
+      {/* USB Type-B Port on Board (Metallic silver block) */}
+      <mesh
+        position={[-28, 5.5, -14]}
+        material={materials.usbMetal}
+        castShadow
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleUsb?.();
+        }}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setUsbHovered(true);
+        }}
+        onPointerOut={() => setUsbHovered(false)}
+      >
         <boxGeometry args={[14, 11, 12]} />
       </mesh>
+
+      {/* Wokwi-Style Interactive USB Type-B Cable Plug */}
+      {isUsbPlugged ? (
+        <group
+          position={[-28, 5.5, -14]}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleUsb?.();
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
+        >
+          {/* Nickel Shroud Plug entering socket */}
+          <mesh position={[-8, 0, 0]} material={materials.usbPlugMetal}>
+            <boxGeometry args={[6, 9.5, 10.5]} />
+          </mesh>
+          {/* Molded Blue PVC Plug Body */}
+          <mesh position={[-19, 0, 0]} material={materials.usbCablePvc} castShadow>
+            <boxGeometry args={[16, 12, 13]} />
+          </mesh>
+          {/* Strain Relief Boot Collar */}
+          <mesh position={[-29, 0, 0]} material={materials.usbCablePvc}>
+            <cylinderGeometry args={[4, 5, 6, 16]} />
+          </mesh>
+          {/* Flexible Blue Cable extending towards power supply */}
+          <mesh position={[-42, -2.5, -3]} rotation={[0, 0.2, Math.PI / 2]} material={materials.usbCablePvc}>
+            <cylinderGeometry args={[2.5, 2.5, 22, 16]} />
+          </mesh>
+        </group>
+      ) : (
+        /* Unplugged USB cable resting near socket - click to plug in */
+        <group
+          position={[-50, 2.5, -14]}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleUsb?.();
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
+        >
+          <mesh position={[0, 0, 0]} material={materials.usbPlugMetal}>
+            <boxGeometry args={[6, 9.5, 10.5]} />
+          </mesh>
+          <mesh position={[-9, 0, 0]} material={materials.usbCablePvc}>
+            <boxGeometry args={[12, 11, 12]} />
+          </mesh>
+        </group>
+      )}
 
       {/* DC Barrel Jack */}
       <mesh position={[-27, 5.5, 15]} material={materials.barrelPlastic} castShadow>
@@ -123,6 +307,31 @@ export function ArduinoUno3D({
       {/* 16MHz Quartz Crystal Oscillator */}
       <mesh position={[-10, 2.5, -5]} rotation={[0, 0, Math.PI / 2]} material={materials.usbMetal}>
         <cylinderGeometry args={[2.5, 2.5, 8, 16]} />
+      </mesh>
+
+      {/* Surface Mount LEDs */}
+      {/* 1. ON (Power) LED at [-14, 2.0, -8] */}
+      <mesh position={[-14, 1.8, -8]} material={activePowered ? materials.ledOnActive : materials.ledOnInactive}>
+        <boxGeometry args={[1.6, 0.6, 0.8]} />
+      </mesh>
+      {activePowered && (
+        <pointLight position={[-14, 3.0, -8]} color="#22C55E" intensity={0.6} distance={25} />
+      )}
+
+      {/* 2. L (Pin 13) Builtin Amber LED at [12, 1.8, -16] */}
+      <mesh position={[12, 1.8, -16]} material={activePowered ? materials.ledLActive : materials.ledLInactive}>
+        <boxGeometry args={[1.6, 0.6, 0.8]} />
+      </mesh>
+      {activePowered && (
+        <pointLight position={[12, 3.0, -16]} color="#F59E0B" intensity={0.4} distance={20} />
+      )}
+
+      {/* TX / RX SMD LEDs */}
+      <mesh position={[-14, 1.8, -13]} material={materials.ledLInactive}>
+        <boxGeometry args={[1.2, 0.5, 0.8]} />
+      </mesh>
+      <mesh position={[-14, 1.8, -15]} material={materials.ledLInactive}>
+        <boxGeometry args={[1.2, 0.5, 0.8]} />
       </mesh>
 
       {/* Reset Pushbutton */}
@@ -173,6 +382,14 @@ export function ArduinoUno3D({
             >
               <sphereGeometry args={[isHovered ? 1.6 : 1.0, 12, 12]} />
             </mesh>
+
+            {/* Live Hover Tooltip Badge above pin */}
+            {isHovered && (
+              <mesh position={[0, 9, 0]}>
+                <boxGeometry args={[Math.max(10, pin.name.length * 2.4 + 4), 3.2, 0.4]} />
+                <meshBasicMaterial color="#0284C7" />
+              </mesh>
+            )}
           </group>
         );
       })}

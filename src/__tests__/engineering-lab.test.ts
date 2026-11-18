@@ -2549,4 +2549,188 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(bundle['Bill_of_Materials.csv']).toContain('Item,Designator,Quantity');
     expect(bundle['Bill_of_Materials.csv']).toContain('MFR-25FBF52-10K');
   });
+
+  // --------------------------------------------------------------------------
+  // TEST AL - Solderless Breadboard Strict Topology (830-Point Tie Groups)
+  // --------------------------------------------------------------------------
+  it('TEST AL: verifies strict solderless breadboard spring clip electrical topology in solver', () => {
+    const testSolver = new CircuitSolver();
+
+    const comps: CircuitComponent[] = [
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1kΩ',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'R_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 1000 },
+      },
+      {
+        id: 'r2',
+        type: 'RESISTOR',
+        label: 'R2',
+        value: '2kΩ',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'R_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 2000 },
+      },
+      {
+        id: 'v1',
+        type: 'DC_VOLTAGE',
+        label: 'V1',
+        value: '5V',
+        x: -50,
+        y: 0,
+        rotation: 0,
+        footprint: 'SOURCE',
+        category: 'power',
+        pins: [
+          { id: '+', name: '+', x: 0, y: -10, pinType: 'output' },
+          { id: '-', name: '-', x: 0, y: 10, pinType: 'output' },
+        ],
+        parameters: { voltage: 5 },
+      },
+      {
+        id: 'gnd1',
+        type: 'GND',
+        label: 'GND',
+        value: '0V',
+        x: -50,
+        y: 50,
+        rotation: 0,
+        footprint: 'GND',
+        category: 'power',
+        pins: [
+          { id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' },
+        ],
+        parameters: {},
+      },
+    ];
+
+    // Jumper wires:
+    // V1(+) to top power rail hole 1: bb_rail_top_pos_1
+    // R1(1) to top power rail hole 10: bb_rail_top_pos_10 (connected via strict top positive rail!)
+    // R1(2) to terminal column 15 row A: bb_col_15_A
+    // R2(1) to terminal column 15 row D: bb_col_15_D (connected via strict column 15 top clip!)
+    // R2(2) to V1(-) and GND
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: 'v1', fromPinId: '+', toCompId: 'breadboard', toPinId: 'bb_rail_top_pos_1' },
+      { id: 'w2', fromCompId: 'breadboard', fromPinId: 'bb_rail_top_pos_10', toCompId: 'r1', toPinId: '1' },
+      { id: 'w3', fromCompId: 'r1', fromPinId: '2', toCompId: 'breadboard', toPinId: 'bb_col_15_A' },
+      { id: 'w4', fromCompId: 'breadboard', fromPinId: 'bb_col_15_D', toCompId: 'r2', toPinId: '1' },
+      { id: 'w5', fromCompId: 'r2', fromPinId: '2', toCompId: 'v1', toPinId: '-' },
+      { id: 'w6', fromCompId: 'v1', fromPinId: '-', toCompId: 'gnd1', toPinId: '1' },
+    ];
+
+    const result = testSolver.step(comps, wires, 0.001);
+
+    // Node between R1 and R2 formed by column 15 spring clip:
+    // Voltage divider: 5V across R1 (1k) and R2 (2k) -> V(col 15) = 5 * (2000 / (1000 + 2000)) = 3.333V
+    const r1Pin2 = testSolver.getPinVoltage('r1', '2', result.nodeVoltages);
+    const r2Pin1 = testSolver.getPinVoltage('r2', '1', result.nodeVoltages);
+
+    expect(r1Pin2).toBeCloseTo(3.333, 1);
+    expect(r2Pin1).toBeCloseTo(3.333, 1);
+    expect(r1Pin2).toEqual(r2Pin1); // Identical node potential via column 15 spring clip!
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AM - Wokwi-Style MCU USB Power Plug Simulation
+  // --------------------------------------------------------------------------
+  it('TEST AM: verifies Wokwi-style MCU USB power plug provides 5V/3.3V and anchors GND', () => {
+    const testSolver = new CircuitSolver();
+
+    const mcuUno: CircuitComponent = {
+      id: 'uno1',
+      type: 'ARDUINO_UNO',
+      label: 'Arduino Uno R3',
+      value: 'ATmega328P',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      footprint: 'MODULE',
+      category: 'microcontrollers',
+      pins: [
+        { id: '5V', name: '5V', x: 0, y: 10, pinType: 'power' },
+        { id: '3V3', name: '3V3', x: 0, y: 20, pinType: 'power' },
+        { id: 'GND_1', name: 'GND_1', x: 0, y: 30, pinType: 'power' },
+        { id: 'GND_2', name: 'GND_2', x: 0, y: 40, pinType: 'power' },
+      ],
+      parameters: { usbPlugged: true }, // USB cable plugged in
+    };
+
+    const led: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      value: 'Red',
+      x: 50,
+      y: 0,
+      rotation: 0,
+      footprint: 'LED_5MM',
+      category: 'semiconductors',
+      pins: [
+        { id: '1', name: 'anode', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: 'cathode', x: 10, y: 0, pinType: 'passive' },
+      ],
+      parameters: { color: '#EF4444' },
+    };
+
+    const resistor: CircuitComponent = {
+      id: 'r_limit',
+      type: 'RESISTOR',
+      label: 'R_LIMIT',
+      value: '220Ω',
+      x: 100,
+      y: 0,
+      rotation: 0,
+      footprint: 'R_AXIAL',
+      category: 'passive',
+      pins: [
+        { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+      ],
+      parameters: { resistance: 220 },
+    };
+
+    // Arduino 5V -> LED Anode; LED Cathode -> Resistor(1); Resistor(2) -> Arduino GND_2
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: 'uno1', fromPinId: '5V', toCompId: 'led1', toPinId: '1' },
+      { id: 'w2', fromCompId: 'led1', fromPinId: '2', toCompId: 'r_limit', toPinId: '1' },
+      { id: 'w3', fromCompId: 'r_limit', fromPinId: '2', toCompId: 'uno1', toPinId: 'GND_2' },
+    ];
+
+    // Case 1: USB Plugged In
+    const resPowered = testSolver.step([mcuUno, led, resistor], wires, 0.001);
+    const v5V = testSolver.getPinVoltage('uno1', '5V', resPowered.nodeVoltages);
+    const vGnd = testSolver.getPinVoltage('uno1', 'GND_2', resPowered.nodeVoltages);
+    const iLed = resPowered.componentStates['led1']?.current || 0;
+
+    expect(v5V).toBeCloseTo(5.0, 1);
+    expect(vGnd).toBeCloseTo(0.0, 1);
+    expect(iLed).toBeGreaterThan(0.005); // > 5mA current flowing through LED
+    expect(resPowered.componentStates['led1']?.on).toBe(true);
+
+    // Case 2: USB Cable Unplugged
+    mcuUno.parameters = { usbPlugged: false };
+    const resUnplugged = testSolver.step([mcuUno, led, resistor], wires, 0.001);
+    const v5VUnplugged = testSolver.getPinVoltage('uno1', '5V', resUnplugged.nodeVoltages);
+    expect(v5VUnplugged).toBeCloseTo(0.0, 1);
+    expect(resUnplugged.componentStates['led1']?.on).toBe(false);
+  });
 });

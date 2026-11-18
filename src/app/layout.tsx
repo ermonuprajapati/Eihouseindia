@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
@@ -6,6 +7,7 @@ import { AuthProvider } from '@/modules/auth/auth-context';
 import { SITE_CONFIG } from '@/config/site';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { SiteTrafficTracker } from '@/components/analytics/SiteTrafficTracker';
+import { RouteProgressBar } from '@/components/layout/RouteProgressBar';
 import { buildOrganizationJsonLd, buildWebsiteJsonLd } from '@/lib/seo';
 import './globals.css';
 
@@ -54,8 +56,11 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [
+      { url: '/favicon.ico', sizes: '48x48', type: 'image/x-icon' },
       { url: '/favicon-48x48.png', sizes: '48x48', type: 'image/png' },
       { url: '/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
       { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
       { url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
@@ -162,6 +167,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Script>
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-[#FAFBFD] text-[#0B1528] antialiased">
+        <Suspense fallback={null}>
+          <RouteProgressBar />
+        </Suspense>
         <noscript>
           <iframe
             src="https://www.googletagmanager.com/ns.html?id=GTM-NGT8B6V8"

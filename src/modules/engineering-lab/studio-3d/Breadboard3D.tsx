@@ -9,6 +9,7 @@ import {
   BB830_HEIGHT,
   BreadboardHole3D,
   findNearestHole830,
+  HOLES_BY_TIE_GROUP,
 } from './breadboard-topology';
 
 export interface Breadboard3DProps {
@@ -65,6 +66,12 @@ export function Breadboard3D({
       }),
       snapRing: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
+        side: THREE.DoubleSide,
+      }),
+      tieGroupAura: new THREE.MeshBasicMaterial({
+        color: '#06B6D4',
+        transparent: true,
+        opacity: 0.45,
         side: THREE.DoubleSide,
       }),
     };
@@ -140,12 +147,21 @@ export function Breadboard3D({
         <boxGeometry args={[1.1, 0.6, 1.1]} />
       </instancedMesh>
 
-      {/* Hover Snap Indicator Ring */}
+      {/* Strict Internal Spring-Clip Tie Group Aura & Active Snap Ring */}
       {hoveredHole && (
-        <group position={[hoveredHole.x, 0.6, hoveredHole.z]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} material={materials.snapRing}>
-            <ringGeometry args={[0.9, 1.4, 16]} />
-          </mesh>
+        <group>
+          {/* Subtle connected strip highlight for all tieGroup holes */}
+          {(HOLES_BY_TIE_GROUP.get(hoveredHole.tieGroup) || []).map((th) => (
+            <mesh key={th.id} position={[th.x, 0.56, th.z]} rotation={[-Math.PI / 2, 0, 0]} material={materials.tieGroupAura}>
+              <circleGeometry args={[0.9, 12]} />
+            </mesh>
+          ))}
+          {/* Active Hover Snap Indicator Ring */}
+          <group position={[hoveredHole.x, 0.6, hoveredHole.z]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} material={materials.snapRing}>
+              <ringGeometry args={[0.9, 1.4, 16]} />
+            </mesh>
+          </group>
         </group>
       )}
     </group>
