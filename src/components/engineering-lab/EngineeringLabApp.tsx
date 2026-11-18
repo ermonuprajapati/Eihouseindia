@@ -76,6 +76,19 @@ const CalculatorsPanel = dynamic(
   }
 );
 
+const Virtual3dStudio = dynamic(
+  () => import('./Panels/Virtual3dStudio').then((m) => m.Virtual3dStudio),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#060B14] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-emerald-400" />
+        Launching 3D Virtual Electronics Studio...
+      </div>
+    ),
+  }
+);
+
 const LabExperimentsModal = dynamic(
   () => import('./Panels/LabExperimentsModal').then((m) => m.LabExperimentsModal),
   { ssr: false }
@@ -555,6 +568,42 @@ export function EngineeringLabApp() {
               simState={selectedCompId ? simStates[selectedCompId] : undefined}
             />
           </>
+        )}
+
+        {/* 3D Virtual Electronics Studio (Direct 3D-First Electronics Design) */}
+        {activeMode === 'virtual3d' && (
+          <div className="flex-1 flex overflow-hidden relative w-full h-full">
+            <Virtual3dStudio
+              components={project.components}
+              wires={project.wires}
+              selectedCompId={selectedCompId}
+              onSelectComponent={setSelectedCompId}
+              onAddComponent={handleAddComponent}
+              onUpdateComponent={handleUpdateComponent}
+              onUpdateComponentPosition={handleUpdateComponentPosition}
+              onDeleteComponent={handleDeleteComponent}
+              onAddWire={handleAddWire}
+              onDeleteWire={handleDeleteWire}
+              isSimulating={isSimulating}
+              simulationStates={simStates}
+              wireCurrents={wireCurrents}
+              gpioStates={project.firmware.gpioStates}
+            />
+
+            <PropertiesInspector
+              component={selectedComponent}
+              onUpdateComponent={handleUpdateComponent}
+              onRotateComponent={handleRotateComponent}
+              onMirrorComponent={handleMirrorComponent}
+              onDeleteComponent={handleDeleteComponent}
+              onClose={() => setIsInspectorOpen(false)}
+              isOpen={isInspectorOpen}
+              onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
+              width={inspectorWidth}
+              onWidthChange={setInspectorWidth}
+              simState={selectedCompId ? simStates[selectedCompId] : undefined}
+            />
+          </div>
         )}
 
         {/* Virtual Instruments Mode */}

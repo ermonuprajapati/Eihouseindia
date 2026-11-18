@@ -415,6 +415,19 @@ export class CircuitSolver {
           const outPin = this.netMap.get(`${comp.id}:out`);
           const outV = outPin ? (nodeVoltages[outPin] || 0) : 0;
           on = outV > 2.0;
+        } else if (comp.type === 'ACTUATOR_DC_MOTOR') {
+          current = Math.abs(vDiff) > 1.0 ? vDiff / 25 : 0; // 25 ohm armature coil resistance
+          on = Math.abs(vDiff) > 1.5;
+        } else if (comp.type === 'ACTUATOR_BUZZER_ACTIVE') {
+          current = Math.abs(vDiff) > 2.0 ? vDiff / 80 : 0;
+          on = Math.abs(vDiff) > 2.5;
+        } else if (comp.type === 'ACTUATOR_RELAY_5V') {
+          current = Math.abs(vDiff) > 3.0 ? 0.07 : 0; // 70mA coil current
+          on = Math.abs(vDiff) > 3.5;
+        } else if (comp.type === 'SENSOR_LDR') {
+          const rLdr = Math.max(Number(comp.parameters?.lightResistance ?? 500), 10);
+          current = vDiff / rLdr;
+          on = true;
         } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
           current = Math.abs(vDiff) / 1000;
         }

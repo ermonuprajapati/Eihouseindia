@@ -513,6 +513,113 @@ export function SchematicSymbol({
           </g>
         );
 
+      case 'SENSOR_DHT11':
+        return (
+          <g>
+            <rect x="-25" y="-22" width="50" height="44" rx="4" stroke="#0284C7" strokeWidth="2" fill="#0C4A6E" />
+            <rect x="-18" y="-14" width="36" height="12" rx="2" fill="#0369A1" />
+            <text x="0" y="-5" fill="#38BDF8" fontSize="7.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              DHT11
+            </text>
+            <text x="0" y="10" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">
+              T/H%
+            </text>
+          </g>
+        );
+
+      case 'SENSOR_PIR':
+        return (
+          <g>
+            <rect x="-25" y="-20" width="50" height="40" rx="4" stroke="#E2E8F0" strokeWidth="2" fill="#F8FAFC" />
+            <circle cx="0" cy="0" r="12" stroke="#94A3B8" strokeWidth="1.5" fill="#E2E8F0" />
+            <text x="0" y="3" fill="#0F172A" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              PIR
+            </text>
+          </g>
+        );
+
+      case 'SENSOR_LDR':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <path d="M -12,0 L -8,-4 L -4,4 L 0,-4 L 4,4 L 8,-4 L 12,0" stroke={strokeColor} strokeWidth="2" fill="none" />
+            <path d="M -12,-18 L -6,-10 M -8,-10 L -6,-10 L -6,-12" stroke="#F59E0B" strokeWidth="1.5" fill="none" />
+            <path d="M -6,-18 L 0,-10 M -2,-10 L 0,-10 L 0,-12" stroke="#F59E0B" strokeWidth="1.5" fill="none" />
+          </g>
+        );
+
+      case 'DISPLAY_LCD1602':
+        return (
+          <g>
+            <rect x="-45" y="-25" width="90" height="50" rx="3" stroke="#047857" strokeWidth="2" fill="#064E3B" />
+            <rect x="-38" y="-16" width="76" height="26" rx="2" fill="#022C22" stroke="#059669" />
+            <text x="0" y="-2" fill="#34D399" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              EI HOUSE LAB
+            </text>
+            <text x="0" y="7" fill="#6EE7B7" fontSize="7" fontFamily="monospace" textAnchor="middle">
+              LCD 16x2 I2C
+            </text>
+          </g>
+        );
+
+      case 'DISPLAY_OLED_SSD1306':
+        return (
+          <g>
+            <rect x="-30" y="-25" width="60" height="50" rx="3" stroke="#1E293B" strokeWidth="2" fill="#0F172A" />
+            <rect x="-24" y="-18" width="48" height="32" rx="1" fill="#020617" stroke="#38BDF8" />
+            <text x="0" y="2" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              OLED 0.96
+            </text>
+          </g>
+        );
+
+      case 'ACTUATOR_SERVO_SG90':
+        return (
+          <g>
+            <rect x="-30" y="-22" width="60" height="44" rx="4" stroke="#0284C7" strokeWidth="2" fill="#0284C7" />
+            <circle cx="12" cy="0" r="10" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1.5" />
+            <line x1="12" y1="-14" x2="12" y2="14" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
+            <text x="-12" y="3" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace">
+              SG90
+            </text>
+          </g>
+        );
+
+      case 'ACTUATOR_DC_MOTOR':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="22" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="0" y="5" fill="#38BDF8" fontSize="12" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              M
+            </text>
+            <path d="M 0,-26 L 0,-22 M 0,22 L 0,26" stroke={strokeColor} strokeWidth="2" />
+          </g>
+        );
+
+      case 'ACTUATOR_RELAY_5V':
+        return (
+          <g>
+            <rect x="-35" y="-25" width="70" height="50" rx="3" stroke="#1D4ED8" strokeWidth="2" fill="#1E40AF" />
+            <text x="0" y="-5" fill="#FFFFFF" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              RELAY 5V
+            </text>
+            <text x="0" y="10" fill="#93C5FD" fontSize="7" fontFamily="monospace" textAnchor="middle">
+              10A 250VAC
+            </text>
+          </g>
+        );
+
+      case 'ACTUATOR_BUZZER_ACTIVE':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill="#0F172A" />
+            <circle cx="0" cy="0" r="5" fill="#334155" />
+            <text x="0" y="-8" fill="#F59E0B" fontSize="6.5" fontFamily="monospace" textAnchor="middle">
+              BUZZER
+            </text>
+          </g>
+        );
+
       case 'ARDUINO_UNO':
       case 'ARDUINO_MEGA':
       case 'ARDUINO_NANO':

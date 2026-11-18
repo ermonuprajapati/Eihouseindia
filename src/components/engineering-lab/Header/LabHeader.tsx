@@ -134,6 +134,19 @@ export function LabHeader({
         </button>
 
         <button
+          onClick={() => onModeChange('virtual3d')}
+          className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all ${
+            activeMode === 'virtual3d'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+          title="Direct 3D-First Virtual Electronics Studio (Breadboard, Wiring & Boards)"
+        >
+          <Box className="w-3.5 h-3.5 text-amber-400" />
+          3D Virtual Studio
+        </button>
+
+        <button
           onClick={() => onModeChange('instruments')}
           className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all ${
             activeMode === 'instruments'

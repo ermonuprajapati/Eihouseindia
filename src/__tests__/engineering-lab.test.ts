@@ -891,4 +891,75 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(gerber).toContain('G04 Layer: Top Copper*');
     expect(gerber).toContain('M02*');
   });
+
+  // --------------------------------------------------------------------------
+  // TEST L - 3D VIRTUAL ELECTRONICS STUDIO & JUMPER WIRING
+  // --------------------------------------------------------------------------
+  it('TEST L - 3D Virtual Electronics Studio: validates 3D jumper wiring, color retention, and breadboard connectivity', () => {
+    const uno = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_UNO')!;
+    const led = COMPONENT_CATALOG.find((c) => c.type === 'LED')!;
+    const r220 = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+
+    const unoInst = createComponentInstance(uno, 100, 100);
+    const ledInst = createComponentInstance(led, 200, 100);
+    const rInst = createComponentInstance(r220, 150, 100);
+
+    // 3D jumper wires with explicit color coding
+    const wires: CircuitWire[] = [
+      { id: 'w_3d_1', fromCompId: unoInst.id, fromPinId: 'D13', toCompId: rInst.id, toPinId: '1', color: '#EF4444' }, // Red
+      { id: 'w_3d_2', fromCompId: rInst.id, fromPinId: '2', toCompId: ledInst.id, toPinId: 'a', color: '#F59E0B' },   // Yellow
+      { id: 'w_3d_3', fromCompId: ledInst.id, fromPinId: 'k', toCompId: unoInst.id, toPinId: 'GND', color: '#1E293B' }, // Black
+    ];
+
+    expect(wires[0].color).toBe('#EF4444');
+    expect(wires[1].color).toBe('#F59E0B');
+    expect(wires[2].color).toBe('#1E293B');
+
+    // Solve connected circuit through MNA
+    const step = solver.step([unoInst, rInst, ledInst], wires, 0.001);
+    expect(step.componentStates).toBeDefined();
+    expect(step.wireCurrents).toBeDefined();
+    expect(Object.keys(step.wireCurrents!).length).toBe(3);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST M - EXPANDED DEVICE & SENSOR COVERAGE
+  // --------------------------------------------------------------------------
+  it('TEST M - Expanded Device & Sensor Library: verifies coverage across all mandatory categories', () => {
+    const requiredDeviceTypes = [
+      'ARDUINO_UNO',
+      'ARDUINO_MEGA',
+      'ARDUINO_NANO',
+      'ESP32_DEVKIT',
+      'ESP32_S3',
+      'ESP32_C3',
+      'STM32F103',
+      'STM32_NUCLEO',
+      'RASPBERRY_PI_PICO',
+      'RASPBERRY_PI_PICO2',
+      'SENSOR_ULTRASONIC',
+      'SENSOR_DHT11',
+      'SENSOR_PIR',
+      'SENSOR_LDR',
+      'SENSOR_MPU6050',
+      'DISPLAY_LCD1602',
+      'DISPLAY_OLED_SSD1306',
+      'DISPLAY_7SEG',
+      'ACTUATOR_SERVO_SG90',
+      'ACTUATOR_DC_MOTOR',
+      'ACTUATOR_RELAY_5V',
+      'ACTUATOR_BUZZER_ACTIVE',
+      'ACTUATOR_RGB_LED',
+    ];
+
+    for (const dType of requiredDeviceTypes) {
+      const template = COMPONENT_CATALOG.find((c) => c.type === dType);
+      expect(template, `Expected ${dType} to exist in COMPONENT_CATALOG`).toBeDefined();
+      expect(template!.pins.length).toBeGreaterThan(0);
+      expect(template!.category).toBeDefined();
+
+      const instance = createComponentInstance(template!, 0, 0);
+      expect(instance.id).toBeDefined();
+    }
+  });
 });

@@ -1,5 +1,6 @@
 export type WorkspaceMode =
   | 'schematic'
+  | 'virtual3d'
   | 'simulation'
   | 'pcb2d'
   | 'pcb3d'
@@ -16,6 +17,8 @@ export type ComponentCategory =
   | 'microcontrollers'
   | 'sensors'
   | 'displays'
+  | 'actuators'
+  | 'modules'
   | 'instruments';
 
 export interface ComponentPin {
@@ -45,6 +48,10 @@ export interface CircuitComponent {
   internalResistance?: number;
   model?: string;
   initialCondition?: number;
+  x3d?: number;
+  y3d?: number;
+  z3d?: number;
+  rot3d?: number;
   state?: {
     voltage?: number;
     current?: number;
@@ -61,6 +68,7 @@ export interface CircuitWire {
   toPinId: string;
   points?: { x: number; y: number }[];
   current?: number;
+  color?: string; // Virtual 3D wire jumper color (e.g. #EF4444, #10B981, #3B82F6)
 }
 
 export interface CircuitProbe {
