@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
+import { CircuitSolver, getLedForwardVoltage } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { CircuitComponent, CircuitWire, EngineeringProject, PcbTrack } from '@/modules/engineering-lab/types';
@@ -1778,5 +1778,131 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(via).toBeDefined();
     expect(via?.diameterMm).toBe(0.8);
     expect(via?.layer).toBe('all');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AE - Wire Routing Geometry Styles (Straight & 45-Degree Chamfer)
+  // --------------------------------------------------------------------------
+  it('TEST AE: computes straight and 45-degree chamfered wire routing paths', () => {
+    const p1 = { x: 10, y: 10 };
+    const p2 = { x: 50, y: 30 };
+
+    // 1. Straight direct pin-to-pin vector
+    const straightPath = computeWireSvgPath(p1, p2, undefined, 'straight');
+    expect(straightPath).toBe('M 10 10 L 50 30');
+
+    // 2. 45-degree chamfered corner (|dx|=40 >= |dy|=20 -> horizontal segment to 30, then diagonal to 50,30)
+    const chamferPath = computeWireSvgPath(p1, p2, undefined, 'diagonal45');
+    expect(chamferPath).toBe('M 10 10 L 30 10 L 50 30');
+
+    // 3. Multi-waypoint straight path
+    const waypoints = [{ x: 20, y: 10 }, { x: 30, y: 25 }];
+    const multiStraight = computeWireSvgPath(p1, p2, waypoints, 'straight');
+    expect(multiStraight).toBe('M 10 10 L 20 10 L 30 25 L 50 30');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AF - Dynamic LED Forward Voltage by Color and Parameters
+  // --------------------------------------------------------------------------
+  it('TEST AF: correctly derives dynamic LED forward voltage across color spectrum and custom parameters', () => {
+    const makeLed = (color: string, customVf?: number): CircuitComponent => ({
+      id: 'led_test',
+      type: 'LED',
+      label: 'LED1',
+      category: 'actuators',
+      pins: [
+        { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+      ],
+      parameters: {
+        color,
+        ...(customVf ? { forwardVoltage: customVf } : {}),
+      },
+    });
+
+    expect(getLedForwardVoltage(makeLed('Red'))).toBe(1.9);
+    expect(getLedForwardVoltage(makeLed('Amber'))).toBe(2.1);
+    expect(getLedForwardVoltage(makeLed('Yellow'))).toBe(2.1);
+    expect(getLedForwardVoltage(makeLed('Green'))).toBe(2.3);
+    expect(getLedForwardVoltage(makeLed('Blue'))).toBe(3.1);
+    expect(getLedForwardVoltage(makeLed('White'))).toBe(3.1);
+    expect(getLedForwardVoltage(makeLed('Cyan'))).toBe(3.0);
+    expect(getLedForwardVoltage(makeLed('Purple'))).toBe(3.2);
+
+    // Custom forward voltage override
+    expect(getLedForwardVoltage(makeLed('Infrared', 1.45))).toBe(1.45);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AG - ACTUATOR_RGB_LED Tri-Color Multi-Channel Simulation
+  // --------------------------------------------------------------------------
+  it('TEST AG: accurately simulates individual Red, Green, and Blue channels for ACTUATOR_RGB_LED', () => {
+    // 5V DC Voltage Source powering Red channel through 220 ohm resistor, Common Cathode tied to GND
+    const components: CircuitComponent[] = [
+      {
+        id: 'dc1',
+        type: 'DC_VOLTAGE',
+        label: 'VCC',
+        category: 'sources',
+        pins: [
+          { id: 'pos', name: '+', x: 0, y: -20, pinType: 'power' },
+          { id: 'neg', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        parameters: { voltage: 5.0 },
+      },
+      {
+        id: 'gnd',
+        type: 'GROUND',
+        label: 'GND',
+        category: 'sources',
+        pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+      },
+      {
+        id: 'r_lim',
+        type: 'RESISTOR',
+        label: 'R1',
+        category: 'passives',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      },
+      {
+        id: 'rgb1',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB1',
+        category: 'actuators',
+        pins: [
+          { id: 'r', name: 'R', x: -30, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'COM', x: -10, y: 20, pinType: 'passive' },
+          { id: 'g', name: 'G', x: 10, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 30, y: -20, pinType: 'passive' },
+        ],
+        parameters: { commonType: 'cathode', redVf: 2.0, greenVf: 3.2, blueVf: 3.2 },
+      },
+    ];
+
+    const wires: CircuitWire[] = [
+      // Ground ties DC neg and RGB Common Cathode
+      { id: 'w_gnd1', fromCompId: 'dc1', fromPinId: 'neg', toCompId: 'gnd', toPinId: '1' },
+      { id: 'w_gnd2', fromCompId: 'rgb1', fromPinId: 'cc', toCompId: 'gnd', toPinId: '1' },
+      // VCC powers Resistor
+      { id: 'w_vcc', fromCompId: 'dc1', fromPinId: 'pos', toCompId: 'r_lim', toPinId: '1' },
+      // Resistor powers ONLY Red channel
+      { id: 'w_red', fromCompId: 'r_lim', fromPinId: '2', toCompId: 'rgb1', toPinId: 'r' },
+    ];
+
+    const res = solver.step(components, wires, 0.001, 1.0);
+    const rgbState = res.componentStates['rgb1'];
+
+    expect(rgbState).toBeDefined();
+    // Red channel should be forward biased and conducting
+    expect(rgbState.onRed).toBe(true);
+    // Green and Blue channels are unconnected (0V drop) -> should be OFF
+    expect(rgbState.onGreen).toBe(false);
+    expect(rgbState.onBlue).toBe(false);
+    expect(rgbState.on).toBe(true);
+    expect(rgbState.current).toBeGreaterThan(0.005); // ~13.6mA forward current
   });
 });

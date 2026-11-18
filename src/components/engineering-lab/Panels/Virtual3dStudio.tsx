@@ -33,7 +33,7 @@ interface Virtual3dStudioProps {
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire?: (wireId: string) => void;
   isSimulating: boolean;
-  simulationStates: Record<string, { voltage: number; current: number; on?: boolean }>;
+  simulationStates: Record<string, { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean }>;
   wireCurrents?: Record<string, number>;
   gpioStates?: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
 }
@@ -1138,6 +1138,54 @@ export function Virtual3dStudio({
         ctx.moveTo(pLed.px + 3, pLed.py + 6);
         ctx.lineTo(leadR.px, leadR.py);
         ctx.stroke();
+      } else if (comp.type === 'ACTUATOR_RGB_LED') {
+        // 3D 5mm Tri-Color 4-Lead Diffused RGB LED
+        const pLed = project3D(compX, compY - 14, compZ, width, height);
+        const onR = isSimulating && Boolean(simState?.onRed);
+        const onG = isSimulating && Boolean(simState?.onGreen);
+        const onB = isSimulating && Boolean(simState?.onBlue);
+        const isGlowing = onR || onG || onB;
+
+        let glowColor = '#38BDF8';
+        if (onR && onG && onB) glowColor = '#FFFFFF';
+        else if (onR && onG) glowColor = '#FBBF24';
+        else if (onR && onB) glowColor = '#EC4899';
+        else if (onG && onB) glowColor = '#06B6D4';
+        else if (onR) glowColor = '#EF4444';
+        else if (onG) glowColor = '#10B981';
+        else if (onB) glowColor = '#3B82F6';
+
+        // Outer Aura Glow during simulation
+        if (isGlowing) {
+          const glowGrad = ctx.createRadialGradient(pLed.px, pLed.py, 4, pLed.px, pLed.py, 32);
+          glowGrad.addColorStop(0, glowColor);
+          glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = glowGrad;
+          ctx.beginPath();
+          ctx.arc(pLed.px, pLed.py, 32, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Domed Milky Diffused Bulb
+        ctx.fillStyle = isGlowing ? glowColor : '#E2E8F0';
+        ctx.strokeStyle = isGlowing ? '#FFFFFF' : '#94A3B8';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(pLed.px, pLed.py, 8.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // 4 Metallic Leads (R, COM, G, B) down to breadboard
+        const offsets = [-6, -2, 2, 6];
+        ctx.strokeStyle = '#94A3B8';
+        ctx.lineWidth = 1.4;
+        offsets.forEach((off) => {
+          const lPos = project3D(compX + off, compY, compZ, width, height);
+          ctx.beginPath();
+          ctx.moveTo(pLed.px + off * 0.7, pLed.py + 7);
+          ctx.lineTo(lPos.px, lPos.py);
+          ctx.stroke();
+        });
       } else if (comp.type === 'RESISTOR') {
         // 3D Axial Resistor with Color Bands
         const r1 = project3D(compX - 16, compY - 8, compZ, width, height);

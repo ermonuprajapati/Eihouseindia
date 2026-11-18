@@ -44,6 +44,7 @@ export class PcbGenerator {
         x: normX,
         y: normY,
         rotation: comp.rotation || 0,
+        parameters: comp.parameters,
       });
 
       comp.pins.forEach((pin, idx) => {

@@ -7,7 +7,7 @@ interface SchematicSymbolProps {
   component: CircuitComponent;
   isSelected: boolean;
   isSimulating: boolean;
-  simState?: { voltage: number; current: number; on?: boolean; digitalOut?: number };
+  simState?: { voltage: number; current: number; on?: boolean; digitalOut?: number; onRed?: boolean; onGreen?: boolean; onBlue?: boolean };
 }
 
 /**
@@ -218,26 +218,27 @@ export function SchematicSymbol({
           <g>
             {/* Active Luminescence Glow Aura */}
             {isSimulating && isConducting && (
-              <circle cx="0" cy="0" r="24" fill={ledHex} opacity="0.45" filter="blur(3px)" />
+              <circle cx="0" cy="0" r="24" fill={ledHex} opacity="0.5" filter="blur(3px)" />
             )}
             {/* Anode lead */}
             <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
-            {/* Diode Triangle */}
+            {/* Diode Triangle - dynamically displays selected color at all times */}
             <polygon
               points="-10,-10 10,0 -10,10"
-              fill={isConducting ? ledHex : fillColor}
-              stroke={isConducting ? ledHex : strokeColor}
+              fill={ledHex}
+              fillOpacity={isConducting ? 1.0 : 0.35}
+              stroke={ledHex}
               strokeWidth="2"
               strokeLinejoin="round"
             />
             {/* Cathode Bar */}
-            <line x1="10" y1="-10" x2="10" y2="10" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="10" y1="-10" x2="10" y2="10" stroke={ledHex} strokeWidth="2.5" strokeLinecap="round" />
             {/* Cathode lead */}
             <line x1="10" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
             {/* Emitted Photon Arrows in active LED color */}
             <path
               d="M 2,-8 L 10,-16 M 8,-16 L 10,-16 L 10,-14 M 8,-4 L 16,-12 M 14,-12 L 16,-12 L 16,-10"
-              stroke={isConducting ? ledHex : '#F59E0B'}
+              stroke={ledHex}
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -639,18 +640,80 @@ export function SchematicSymbol({
           </g>
         );
 
-      case 'ACTUATOR_RGB_LED':
+      case 'ACTUATOR_RGB_LED': {
+        const onR = Boolean(simState?.onRed);
+        const onG = Boolean(simState?.onGreen);
+        const onB = Boolean(simState?.onBlue);
+        const anyOn = onR || onG || onB;
+
+        // Compute blended synthesized color
+        let glowColor = '#38BDF8';
+        if (onR && onG && onB) glowColor = '#F8FAFC'; // White
+        else if (onR && onG) glowColor = '#FBBF24'; // Yellow
+        else if (onR && onB) glowColor = '#F472B6'; // Magenta
+        else if (onG && onB) glowColor = '#22D3EE'; // Cyan
+        else if (onR) glowColor = '#EF4444'; // Red
+        else if (onG) glowColor = '#10B981'; // Green
+        else if (onB) glowColor = '#3B82F6'; // Blue
+
         return (
           <g>
-            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
-            <circle cx="-6" cy="-4" r="3.5" fill="#EF4444" />
-            <circle cx="6" cy="-4" r="3.5" fill="#10B981" />
-            <circle cx="0" cy="6" r="3.5" fill="#3B82F6" />
-            <text x="0" y="-12" fill="#94A3B8" fontSize="6.5" fontFamily="monospace" textAnchor="middle">
-              RGB LED
-            </text>
+            {/* Active Blended Optical Glow */}
+            {isSimulating && anyOn && (
+              <circle cx="0" cy="-2" r="26" fill={glowColor} opacity="0.45" filter="blur(4px)" />
+            )}
+
+            {/* Diffused Lens Boundary */}
+            <circle cx="0" cy="-2" r="22" stroke={strokeColor} strokeWidth="1.8" fill="#070E1B" />
+
+            {/* Channel Leads */}
+            <line x1="-30" y1="-20" x2="-14" y2="-10" stroke={strokeColor} strokeWidth="1.5" />
+            <line x1="10" y1="-20" x2="0" y2="-10" stroke={strokeColor} strokeWidth="1.5" />
+            <line x1="30" y1="-20" x2="14" y2="-10" stroke={strokeColor} strokeWidth="1.5" />
+            <line x1="-10" y1="20" x2="-10" y2="4" stroke={strokeColor} strokeWidth="1.5" />
+
+            {/* Red Channel Diode */}
+            <polygon
+              points="-18,-9 -10,-9 -14,-2"
+              fill={onR ? '#EF4444' : '#7F1D1D'}
+              fillOpacity={onR ? 1 : 0.4}
+              stroke="#EF4444"
+              strokeWidth="1.2"
+            />
+            {onR && <circle cx="-14" cy="-5" r="7" fill="#EF4444" opacity="0.6" />}
+
+            {/* Green Channel Diode */}
+            <polygon
+              points="-4,-9 4,-9 0,-2"
+              fill={onG ? '#10B981' : '#064E3B'}
+              fillOpacity={onG ? 1 : 0.4}
+              stroke="#10B981"
+              strokeWidth="1.2"
+            />
+            {onG && <circle cx="0" cy="-5" r="7" fill="#10B981" opacity="0.6" />}
+
+            {/* Blue Channel Diode */}
+            <polygon
+              points="10,-9 18,-9 14,-2"
+              fill={onB ? '#3B82F6' : '#1E3A8A'}
+              fillOpacity={onB ? 1 : 0.4}
+              stroke="#3B82F6"
+              strokeWidth="1.2"
+            />
+            {onB && <circle cx="14" cy="-5" r="7" fill="#3B82F6" opacity="0.6" />}
+
+            {/* Common Cathode/Anode Bus Bar */}
+            <line x1="-16" y1="-2" x2="16" y2="-2" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="0" y1="-2" x2="-10" y2="4" stroke={strokeColor} strokeWidth="1.5" />
+
+            {/* Pin Identification Labels */}
+            <text x="-26" y="-22" fill="#EF4444" fontSize="6.5" fontWeight="bold" fontFamily="monospace">R</text>
+            <text x="7" y="-22" fill="#10B981" fontSize="6.5" fontWeight="bold" fontFamily="monospace">G</text>
+            <text x="24" y="-22" fill="#3B82F6" fontSize="6.5" fontWeight="bold" fontFamily="monospace">B</text>
+            <text x="-16" y="24" fill="#94A3B8" fontSize="6.5" fontWeight="bold" fontFamily="monospace">COM</text>
           </g>
         );
+      }
 
       case 'DISPLAY_7SEG':
         return (

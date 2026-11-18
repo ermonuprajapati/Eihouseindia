@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
 import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check } from 'lucide-react';
 
 interface PropertiesInspectorProps {
@@ -17,7 +17,7 @@ interface PropertiesInspectorProps {
   onDisconnectWire?: (wireId: string) => void;
   onDuplicateComponent?: (id: string) => void;
   onClose: () => void;
-  simState?: { voltage: number; current: number; on?: boolean };
+  simState?: { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean };
   wireCurrent?: number;
   isOpen?: boolean;
   onToggleOpen?: () => void;
@@ -41,6 +41,11 @@ const FOOTPRINT_OPTIONS = [
   { value: 'Package_TO_SOT_THT:TO-220-3_Vertical', label: 'TO-220 Power Package (7805/MOSFET)' },
   { value: 'LED_THT:LED_D5.0mm', label: 'LED 5mm Through-Hole' },
   { value: 'LED_THT:LED_D5.0mm-4', label: 'RGB LED 4-Pin Through-Hole' },
+  { value: 'Package_DIP:DIP-14_W7.62mm', label: 'DIP-14 Logic IC (74HC/CD4000)' },
+  { value: 'Package_DIP:DIP-16_W7.62mm', label: 'DIP-16 Driver/Logic IC' },
+  { value: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', label: 'SOIC-8 SMD Package' },
+  { value: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', label: 'Tactile Pushbutton 6mm' },
+  { value: 'Switch_THT:SW_Slide_1P2T_SS12D00', label: 'Slide Switch SPDT' },
   { value: 'Relay_THT:Relay_SPDT_Songle_SRD-Series', label: 'Songle SRD SPDT Relay' },
   { value: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical', label: 'Pin Header 1x02 (2.54mm)' },
   { value: 'TerminalBlock:TerminalBlock_bornier-2_P5.08mm', label: 'Terminal Block 2-Pin 5.08mm' },
@@ -54,9 +59,14 @@ const MODEL_3D_OPTIONS = [
   { value: 'capacitor_disc_ceramic', label: 'Capacitor Disc Ceramic' },
   { value: 'capacitor_radial_can', label: 'Capacitor Radial Can' },
   { value: 'dip8_integrated_circuit', label: 'DIP-8 IC Package' },
+  { value: 'dip14_logic_ic', label: 'DIP-14 Logic Package' },
+  { value: 'dip16_logic_ic', label: 'DIP-16 Integrated Circuit' },
+  { value: 'soic8_smd_ic', label: 'SOIC-8 Surface Mount IC' },
   { value: 'to92_transistor', label: 'TO-92 Small Signal BJT' },
   { value: 'to220_mosfet', label: 'TO-220 Power FET' },
   { value: 'led_5mm_diffused', label: 'LED 5mm Diffused' },
+  { value: 'pushbutton_tactile_6mm', label: 'Tactile Pushbutton 6mm' },
+  { value: 'relay_songle_srd', label: 'Songle SRD Relay 5V' },
   { value: 'battery_9v_block', label: 'Battery 9V Alkaline Block' },
   { value: 'header_2pin_2.54mm', label: 'Header 2-Pin Terminal' },
 ];
@@ -216,6 +226,51 @@ export function PropertiesInspector({
             </div>
           </div>
 
+          {/* Wire Routing Style */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <span>Routing Style</span>
+              <span className="font-mono text-[10px] text-amber-400 font-bold">
+                {selectedWire.style === 'diagonal45' ? '45° Chamfer' : selectedWire.style === 'straight' ? 'Straight Direct' : '90° Orthogonal'}
+              </span>
+            </label>
+            <div className="grid grid-cols-3 gap-1">
+              {[
+                { id: 'orthogonal', label: '90° Ortho' },
+                { id: 'diagonal45', label: '45° Chamfer' },
+                { id: 'straight', label: 'Straight' },
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => onUpdateWire?.({ ...selectedWire, style: st.id as WireRoutingStyle })}
+                  className={`py-1.5 px-2 rounded text-[10px] font-mono font-semibold border transition-all cursor-pointer ${
+                    (selectedWire.style || 'orthogonal') === st.id
+                      ? 'bg-amber-600/30 border-amber-500 text-amber-300 shadow-sm'
+                      : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Net Name / Label */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <span>Net Name / Label</span>
+              <span className="text-[10px] text-slate-500">e.g. VCC, GND, CLK</span>
+            </label>
+            <input
+              type="text"
+              value={selectedWire.netName || ''}
+              onChange={(e) => onUpdateWire?.({ ...selectedWire, netName: e.target.value })}
+              placeholder="Assign Net Label (optional)"
+              className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 uppercase"
+            />
+          </div>
+
           {/* Wire Color Chooser */}
           <div className="space-y-2">
             <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
@@ -311,6 +366,17 @@ export function PropertiesInspector({
   // Helper to update specific parameter and value
   const updateParameter = (key: string, val: number | string | boolean, formattedValue?: string) => {
     const updatedParams = { ...component.parameters, [key]: val };
+    if (key === 'color' && component.type === 'LED') {
+      const colorStr = String(val).toLowerCase();
+      let vf = 1.9;
+      if (colorStr.includes('blue') || colorStr.includes('white')) vf = 3.1;
+      else if (colorStr.includes('cyan')) vf = 3.0;
+      else if (colorStr.includes('purple') || colorStr.includes('violet')) vf = 3.2;
+      else if (colorStr.includes('green')) vf = 2.3;
+      else if (colorStr.includes('amber') || colorStr.includes('yellow') || colorStr.includes('orange')) vf = 2.1;
+      updatedParams.forwardVoltage = vf;
+      updatedParams.forwardVoltageV = vf;
+    }
     const nextComp: CircuitComponent = {
       ...component,
       parameters: updatedParams,
@@ -778,6 +844,79 @@ export function PropertiesInspector({
                         title={`Select ${chip.name} (${chip.hex})`}
                       />
                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ACTUATOR_RGB_LED */}
+          {type === 'ACTUATOR_RGB_LED' && (
+            <div className="space-y-3 p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">RGB LED Parameters</span>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold">Polarity Configuration</label>
+                <select
+                  value={String(parameters.commonType ?? 'cathode')}
+                  onChange={(e) => updateParameter('commonType', e.target.value, `RGB ${e.target.value === 'cathode' ? 'CC' : 'CA'}`)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-xs"
+                >
+                  <option value="cathode">Common Cathode (GND common terminal)</option>
+                  <option value="anode">Common Anode (+VCC common terminal)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-rose-400 font-bold">Red Vf (V)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1.0"
+                    max="4.0"
+                    value={Number(parameters.redVf ?? 2.0)}
+                    onChange={(e) => updateParameter('redVf', parseFloat(e.target.value) || 2.0)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-emerald-400 font-bold">Green Vf (V)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1.0"
+                    max="4.0"
+                    value={Number(parameters.greenVf ?? 3.2)}
+                    onChange={(e) => updateParameter('greenVf', parseFloat(e.target.value) || 3.2)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-sky-400 font-bold">Blue Vf (V)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1.0"
+                    max="4.0"
+                    value={Number(parameters.blueVf ?? 3.2)}
+                    onChange={(e) => updateParameter('blueVf', parseFloat(e.target.value) || 3.2)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Real-time channel telemetry */}
+              {simState && (
+                <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] font-mono text-center">
+                  <div className={`p-1 rounded border ${simState.onRed ? 'bg-rose-950 border-rose-600 text-rose-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                    R: {simState.onRed ? 'ON' : 'OFF'}
+                  </div>
+                  <div className={`p-1 rounded border ${simState.onGreen ? 'bg-emerald-950 border-emerald-600 text-emerald-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                    G: {simState.onGreen ? 'ON' : 'OFF'}
+                  </div>
+                  <div className={`p-1 rounded border ${simState.onBlue ? 'bg-sky-950 border-sky-600 text-sky-300 font-bold' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                    B: {simState.onBlue ? 'ON' : 'OFF'}
                   </div>
                 </div>
               )}

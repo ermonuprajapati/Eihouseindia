@@ -876,7 +876,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
           // Negative Stripe
           ctx.fillStyle = '#F8FAFC';
           ctx.fillRect(cTop.px - cRadius, cTop.py + 1, 1.8 * zoom3D, cBase.py - cTop.py);
-        } else if (comp.type === 'LED' || comp.type === 'DIODE') {
+        } else if (comp.type === 'LED' || comp.type === 'DIODE' || comp.type === 'ACTUATOR_RGB_LED') {
           // --- 5MM THT OPTICAL DOME LED ---
           const ledBase = project3D(cx, -1.8, cy);
           const ledDome = project3D(cx, -6.5, cy);
@@ -890,11 +890,48 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
           ctx.lineTo(ledBase.px, ledBase.py);
           ctx.stroke();
 
-          // Optical Epoxy Dome (Red with Active Luminescence)
+          // Resolve dynamic LED color from parameters
+          const rawColor = String(comp.parameters?.color || (comp.type === 'ACTUATOR_RGB_LED' ? '#38BDF8' : 'Red'));
+          const colorLower = rawColor.toLowerCase();
+          let primaryHex = '#EF4444';
+          let lightHex = '#FCA5A5';
+          let darkHex = '#991B1B';
+
+          if (rawColor.startsWith('#')) {
+            primaryHex = rawColor;
+            lightHex = rawColor;
+            darkHex = '#1E293B';
+          } else if (colorLower.includes('blue')) {
+            primaryHex = '#3B82F6';
+            lightHex = '#93C5FD';
+            darkHex = '#1E3A8A';
+          } else if (colorLower.includes('green')) {
+            primaryHex = '#10B981';
+            lightHex = '#6EE7B7';
+            darkHex = '#064E3B';
+          } else if (colorLower.includes('amber') || colorLower.includes('yellow')) {
+            primaryHex = '#F59E0B';
+            lightHex = '#FDE68A';
+            darkHex = '#78350F';
+          } else if (colorLower.includes('white')) {
+            primaryHex = '#F8FAFC';
+            lightHex = '#FFFFFF';
+            darkHex = '#64748B';
+          } else if (colorLower.includes('cyan')) {
+            primaryHex = '#06B6D4';
+            lightHex = '#67E8F9';
+            darkHex = '#164E63';
+          } else if (colorLower.includes('purple') || colorLower.includes('violet')) {
+            primaryHex = '#A855F7';
+            lightHex = '#D8B4FE';
+            darkHex = '#581C87';
+          }
+
+          // Optical Epoxy Dome
           const ledGrad = ctx.createRadialGradient(ledDome.px, ledDome.py, 1, ledDome.px, ledDome.py, ledRadius * 1.5);
-          ledGrad.addColorStop(0, '#FCA5A5');
-          ledGrad.addColorStop(0.4, '#EF4444');
-          ledGrad.addColorStop(1, '#991B1B');
+          ledGrad.addColorStop(0, lightHex);
+          ledGrad.addColorStop(0.4, primaryHex);
+          ledGrad.addColorStop(1, darkHex);
 
           ctx.fillStyle = ledGrad;
           ctx.beginPath();
@@ -903,8 +940,8 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
           // Active Glow Halo
           const glowGrad = ctx.createRadialGradient(ledDome.px, ledDome.py, 2, ledDome.px, ledDome.py, ledRadius * 3);
-          glowGrad.addColorStop(0, 'rgba(239, 68, 68, 0.45)');
-          glowGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+          glowGrad.addColorStop(0, primaryHex + '80');
+          glowGrad.addColorStop(1, primaryHex + '00');
           ctx.fillStyle = glowGrad;
           ctx.beginPath();
           ctx.arc(ledDome.px, ledDome.py, ledRadius * 3, 0, Math.PI * 2);

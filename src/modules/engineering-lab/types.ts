@@ -35,11 +35,15 @@ export type ComponentCategory =
 
 export type WireInteractionMode =
   | 'select'
+  | 'place'
   | 'wire'
+  | 'edit_wire'
   | 'pan'
   | 'measure'
   | 'net_highlight'
   | 'delete';
+
+export type WireRoutingStyle = 'orthogonal' | 'diagonal45' | 'straight';
 
 export type SimulationSupportStatus =
   | 'full_mna'
@@ -102,6 +106,18 @@ export interface CircuitWire {
   points?: { x: number; y: number }[];
   current?: number;
   color?: string; // Virtual 3D wire jumper color (e.g. #EF4444, #10B981, #3B82F6)
+  style?: WireRoutingStyle;
+  netName?: string;
+}
+
+export interface ComponentSimTelemetry {
+  voltage: number;
+  current: number;
+  on?: boolean;
+  digitalOut?: number;
+  onRed?: boolean;
+  onGreen?: boolean;
+  onBlue?: boolean;
 }
 
 export interface CircuitProbe {
@@ -226,6 +242,7 @@ export interface PcbComponentPlacement {
   x: number; // in mm
   y: number; // in mm
   rotation: number;
+  parameters?: Record<string, unknown>;
 }
 
 export interface PcbLayout {

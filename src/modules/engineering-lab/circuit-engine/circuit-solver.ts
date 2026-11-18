@@ -2,9 +2,35 @@ import { CircuitComponent, CircuitWire, SimulationWaveformPoint } from '../types
 
 export interface SolverStepResult {
   nodeVoltages: Record<string, number>;
-  componentStates: Record<string, { voltage: number; current: number; on?: boolean; digitalOut?: number }>;
+  componentStates: Record<string, {
+    voltage: number;
+    current: number;
+    on?: boolean;
+    digitalOut?: number;
+    onRed?: boolean;
+    onGreen?: boolean;
+    onBlue?: boolean;
+  }>;
   waveformData: Record<string, SimulationWaveformPoint[]>;
   wireCurrents?: Record<string, number>;
+}
+
+export function getLedForwardVoltage(comp: CircuitComponent): number {
+  if (comp.parameters?.forwardVoltage) {
+    const val = parseFloat(String(comp.parameters.forwardVoltage));
+    if (!isNaN(val) && val > 0) return val;
+  }
+  if (comp.parameters?.forwardVoltageV) {
+    const val = parseFloat(String(comp.parameters.forwardVoltageV));
+    if (!isNaN(val) && val > 0) return val;
+  }
+  const colorStr = String(comp.parameters?.color || comp.value || 'Red').toLowerCase();
+  if (colorStr.includes('blue') || colorStr.includes('white')) return 3.1;
+  if (colorStr.includes('cyan')) return 3.0;
+  if (colorStr.includes('purple') || colorStr.includes('violet')) return 3.2;
+  if (colorStr.includes('green')) return 2.3;
+  if (colorStr.includes('amber') || colorStr.includes('yellow') || colorStr.includes('orange')) return 2.1;
+  return 1.9; // Standard Red LED forward drop
 }
 
 export class CircuitSolver {
@@ -559,9 +585,9 @@ export class CircuitSolver {
             this.capacitorVoltages.set(comp.id, newVc);
           }
         } else if (comp.type === 'DIODE' || comp.type === 'LED') {
-          const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:1`);
-          const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:2`);
-          const vf = comp.type === 'LED' ? 2.0 : 0.7;
+          const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:anode`);
+          const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:cathode`);
+          const vf = comp.type === 'LED' ? getLedForwardVoltage(comp) : 0.7;
           if (aPin && kPin && aPin !== kPin) {
             const va = nodeVoltages[aPin] || 0;
             const vk = nodeVoltages[kPin] || 0;
@@ -573,6 +599,42 @@ export class CircuitSolver {
 
             sumGV[kPin] += gDiode * (va - vf);
             sumG[kPin] += gDiode;
+          }
+        } else if (comp.type === 'ACTUATOR_RGB_LED') {
+          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:3`);
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:4`);
+          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:k`);
+          const isCommonAnode = comp.parameters?.commonType === 'anode';
+
+          const channels = [
+            { pin: rPin, vf: Number(comp.parameters?.redVf) || 2.0 },
+            { pin: gPin, vf: Number(comp.parameters?.greenVf) || 3.2 },
+            { pin: bPin, vf: Number(comp.parameters?.blueVf) || 3.2 },
+          ];
+
+          if (comPin) {
+            const vCom = nodeVoltages[comPin] || 0;
+            for (const ch of channels) {
+              if (ch.pin && ch.pin !== comPin) {
+                const vCh = nodeVoltages[ch.pin] || 0;
+                const vDrop = isCommonAnode ? (vCom - vCh) : (vCh - vCom);
+                const isConducting = vDrop > ch.vf;
+                const gCh = isConducting ? 0.05 : 1e-6;
+
+                if (isCommonAnode) {
+                  sumGV[comPin] += gCh * (vCh + ch.vf);
+                  sumG[comPin] += gCh;
+                  sumGV[ch.pin] += gCh * (vCom - ch.vf);
+                  sumG[ch.pin] += gCh;
+                } else {
+                  sumGV[ch.pin] += gCh * (vCom + ch.vf);
+                  sumG[ch.pin] += gCh;
+                  sumGV[comPin] += gCh * (vCh - ch.vf);
+                  sumG[comPin] += gCh;
+                }
+              }
+            }
           }
         } else if (comp.type.startsWith('OPAMP_')) {
           // Operational Amplifier (Inverting / Non-inverting / Comparator)
@@ -689,7 +751,7 @@ export class CircuitSolver {
     }
 
     // 3. Compute Detailed Component Telemetry
-    const componentStates: Record<string, { voltage: number; current: number; on?: boolean; digitalOut?: number }> = {};
+    const componentStates: SolverStepResult['componentStates'] = {};
 
     for (const comp of components) {
       if (comp.pins.length >= 2) {
@@ -731,11 +793,56 @@ export class CircuitSolver {
           current = vDiff / 0.001;
           on = Math.abs(current) > 0.0001;
         } else if (comp.type === 'LED') {
-          const vf = 2.0;
+          const vf = getLedForwardVoltage(comp);
           if (vDiff > vf) {
             current = (vDiff - vf) / 20; // 20 ohm diode forward dynamic resistance
             on = current > 0.001; // illuminated when forward current > 1mA
           }
+        } else if (comp.type === 'ACTUATOR_RGB_LED') {
+          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:3`);
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:4`);
+          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:k`);
+          const isCommonAnode = comp.parameters?.commonType === 'anode';
+          const vCom = comPin ? (nodeVoltages[comPin] || 0) : 0;
+          const vR = rPin ? (nodeVoltages[rPin] || 0) : 0;
+          const vG = gPin ? (nodeVoltages[gPin] || 0) : 0;
+          const vB = bPin ? (nodeVoltages[bPin] || 0) : 0;
+
+          const rDrop = isCommonAnode ? (vCom - vR) : (vR - vCom);
+          const gDrop = isCommonAnode ? (vCom - vG) : (vG - vCom);
+          const bDrop = isCommonAnode ? (vCom - vB) : (vB - vCom);
+
+          const rVf = Number(comp.parameters?.redVf) || 2.0;
+          const gVf = Number(comp.parameters?.greenVf) || 3.2;
+          const bVf = Number(comp.parameters?.blueVf) || 3.2;
+
+          const rCur = rDrop > rVf ? (rDrop - rVf) / 20 : 0;
+          const gCur = gDrop > gVf ? (gDrop - gVf) / 20 : 0;
+          const bCur = bDrop > bVf ? (bDrop - bVf) / 20 : 0;
+
+          const onRed = rCur > 0.001;
+          const onGreen = gCur > 0.001;
+          const onBlue = bCur > 0.001;
+          on = onRed || onGreen || onBlue;
+          current = rCur + gCur + bCur;
+          vDiff = Math.max(rDrop, gDrop, bDrop, 0);
+
+          componentStates[comp.id] = {
+            voltage: Math.round(vDiff * 1000) / 1000,
+            current: Math.round(current * 1000000) / 1000000,
+            on,
+            onRed,
+            onGreen,
+            onBlue,
+          };
+          let waveHist = this.waveformHistory.get(comp.id);
+          if (!waveHist) {
+            waveHist = [];
+            this.waveformHistory.set(comp.id, waveHist);
+          }
+          waveHist.push({ time: this.currentTime, value: vDiff });
+          continue;
         } else if (comp.type === 'DIODE') {
           current = vDiff > 0.7 ? (vDiff - 0.7) / 10 : 0;
           on = current > 0.001;
