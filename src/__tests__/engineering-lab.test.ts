@@ -962,4 +962,95 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(instance.id).toBeDefined();
     }
   });
+
+  // --------------------------------------------------------------------------
+  // SECTION 13 - TEST 3: SENSOR VIRTUAL DISTANCE & HC-SR04 ECHO PULSE SIMULATION
+  // --------------------------------------------------------------------------
+  it('SECTION 13 - TEST 3: HC-SR04 sensor simulates virtual echo timing and firmware distance calculation', () => {
+    const firmwareCode = `
+      int trigPin = 9;
+      int echoPin = 10;
+      long duration;
+      int distance;
+
+      void setup() {
+        Serial.begin(9600);
+      }
+
+      void loop() {
+        duration = pulseIn(echoPin, HIGH);
+        distance = duration * 0.034 / 2;
+        Serial.print("Target Distance: ");
+        Serial.println(distance);
+      }
+    `;
+
+    // 1. Test at 45cm distance
+    const res1 = mcu.executeCycle(
+      {
+        code: firmwareCode,
+        language: 'arduino',
+        targetMcu: 'ATmega328P',
+        serialLog: [],
+        isRunning: true,
+        gpioStates: {},
+      },
+      { distanceCm: 45.0 }
+    );
+
+    expect(res1.executionError).toBeUndefined();
+    expect(res1.serialLines.some((l) => l.includes('45') || l.includes('Target Distance'))).toBe(true);
+
+    // 2. Change distance to 120cm
+    const res2 = mcu.executeCycle(
+      {
+        code: firmwareCode,
+        language: 'arduino',
+        targetMcu: 'ATmega328P',
+        serialLog: [],
+        isRunning: true,
+        gpioStates: {},
+      },
+      { distanceCm: 120.0 }
+    );
+
+    expect(res2.executionError).toBeUndefined();
+    expect(res2.serialLines.some((l) => l.includes('120') || l.includes('Target Distance'))).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // SECTION 13 - TEST 4: COMPONENT EDITING (220Ω to 330Ω)
+  // --------------------------------------------------------------------------
+  it('SECTION 13 - TEST 4: updates circuit model and current when resistor value changes from 220Ω to 330Ω', () => {
+    const rTemplate = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const bat = createComponentInstance(batTemplate, 100, 100);
+    bat.parameters.voltage = 5.0;
+
+    const gnd = createComponentInstance(gndTemplate, 100, 200);
+
+    const r = createComponentInstance(rTemplate, 200, 100);
+    r.parameters.resistance = 220; // 220 ohms
+
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: bat.id, fromPinId: 'p', toCompId: r.id, toPinId: '1' },
+      { id: 'w2', fromCompId: r.id, fromPinId: '2', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w3', fromCompId: bat.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+    ];
+
+    // Initial 220Ω: I = 5 / 220 = 22.7mA
+    const step1 = solver.step([bat, r, gnd], wires, 0.001);
+    const i1 = step1.componentStates[r.id].current;
+    expect(i1).toBeCloseTo(0.0227, 3);
+
+    // Edit to 330Ω: I = 5 / 330 = 15.1mA
+    r.parameters.resistance = 330;
+    r.value = '330Ω';
+    const step2 = solver.step([bat, r, gnd], wires, 0.001);
+    const i2 = step2.componentStates[r.id].current;
+    expect(i2).toBeCloseTo(0.0151, 3);
+    expect(i2).toBeLessThan(i1);
+  });
 });

@@ -214,7 +214,16 @@ export function EngineeringLabApp() {
 
         // Execute MCU slice if MCU is running
         if (project.firmware.isRunning) {
-          const mcuRes = mcuRef.current.executeCycle(project.firmware);
+          const sonarComp = project.components.find((c) => c.type === 'SENSOR_ULTRASONIC');
+          const dhtComp = project.components.find((c) => c.type === 'SENSOR_DHT11');
+          const ldrComp = project.components.find((c) => c.type === 'SENSOR_LDR');
+
+          const mcuRes = mcuRef.current.executeCycle(project.firmware, {
+            distanceCm: Number(sonarComp?.parameters?.distanceCm ?? 45.0),
+            temperatureC: Number(dhtComp?.parameters?.temperatureC ?? 24.0),
+            humidityPercent: Number(dhtComp?.parameters?.humidityPercent ?? 45.0),
+            lightLux: Number(ldrComp?.parameters?.lightLux ?? 350.0),
+          });
           if (mcuRes.serialLines.length > 0) {
             setProject((prev) => ({
               ...prev,

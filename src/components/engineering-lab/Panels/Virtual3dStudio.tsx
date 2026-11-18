@@ -49,7 +49,9 @@ export function Virtual3dStudio({
   components,
   wires,
   selectedCompId,
+  onSelectComponent,
   onAddComponent,
+  onUpdateComponent,
   onAddWire,
   isSimulating,
   simulationStates,
@@ -258,6 +260,28 @@ export function Virtual3dStudio({
           setActiveWireStart(null);
         }
         return;
+      }
+
+      // Check if clicked on a component body to select it
+      const canvas = canvasRef.current;
+      if (canvas && onSelectComponent) {
+        let clickedCompId: string | null = null;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        for (const comp of components) {
+          const cx = (comp.x - 400) * 0.7;
+          const cz = (comp.y - 300) * 0.7;
+          const proj = project3D(cx, 0, cz, canvas.width, canvas.height);
+          if (Math.hypot(proj.px - mx, proj.py - my) < 35) {
+            clickedCompId = comp.id;
+            break;
+          }
+        }
+        if (clickedCompId) {
+          onSelectComponent(clickedCompId);
+          return;
+        }
       }
 
       // If clicked on canvas background, start 3D Orbit
@@ -1026,6 +1050,201 @@ export function Virtual3dStudio({
           <strong className="text-emerald-400">{hoveredPin.pinName}</strong>
         </div>
       )}
+
+      {/* Interactive Virtual Hardware Floating HUD */}
+      {selectedCompId && (() => {
+        const selComp = components.find((c) => c.id === selectedCompId);
+        if (!selComp || !onUpdateComponent) return null;
+
+        const isSensor = selComp.category === 'sensors';
+        const isActuator = selComp.category === 'actuators';
+        const isPassive = selComp.type === 'POTENTIOMETER' || selComp.type === 'PUSHBUTTON' || selComp.type === 'SWITCH_SPST' || selComp.type === 'RESISTOR';
+
+        if (!isSensor && !isActuator && !isPassive) return null;
+
+        return (
+          <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 bg-[#0B1528]/95 backdrop-blur-xl border border-emerald-500/50 p-3 rounded-xl shadow-2xl z-20 flex items-center gap-4 text-xs font-mono">
+            <div className="border-r border-slate-700 pr-3">
+              <span className="text-[10px] text-emerald-400 block uppercase font-bold">Interactive Hardware</span>
+              <strong className="text-white text-xs">{selComp.label}</strong>
+            </div>
+
+            {/* Ultrasonic Distance Slider */}
+            {selComp.type === 'SENSOR_ULTRASONIC' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Target Obstacle:</span>
+                <input
+                  type="range"
+                  min="2"
+                  max="400"
+                  value={Number(selComp.parameters?.distanceCm ?? 45)}
+                  onChange={(e) => {
+                    const dist = Number(e.target.value);
+                    onUpdateComponent({
+                      ...selComp,
+                      parameters: { ...selComp.parameters, distanceCm: dist },
+                    });
+                  }}
+                  className="w-36 accent-emerald-500 cursor-pointer"
+                />
+                <span className="text-emerald-400 font-bold min-w-[55px]">
+                  {Number(selComp.parameters?.distanceCm ?? 45)} cm
+                </span>
+              </div>
+            )}
+
+            {/* DHT11 Temperature Slider */}
+            {selComp.type === 'SENSOR_DHT11' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Temp:</span>
+                <input
+                  type="range"
+                  min="-10"
+                  max="60"
+                  value={Number(selComp.parameters?.temperatureC ?? 24)}
+                  onChange={(e) => {
+                    const temp = Number(e.target.value);
+                    onUpdateComponent({
+                      ...selComp,
+                      parameters: { ...selComp.parameters, temperatureC: temp },
+                    });
+                  }}
+                  className="w-24 accent-sky-500 cursor-pointer"
+                />
+                <span className="text-sky-400 font-bold">{Number(selComp.parameters?.temperatureC ?? 24)}°C</span>
+              </div>
+            )}
+
+            {/* LDR Light Level Slider */}
+            {selComp.type === 'SENSOR_LDR' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Ambient Light:</span>
+                <input
+                  type="range"
+                  min="10"
+                  max="2000"
+                  value={Number(selComp.parameters?.lightLux ?? 350)}
+                  onChange={(e) => {
+                    const lux = Number(e.target.value);
+                    const rCalc = Math.round(500000 / Math.max(lux, 1));
+                    onUpdateComponent({
+                      ...selComp,
+                      parameters: { ...selComp.parameters, lightLux: lux, lightResistance: rCalc },
+                    });
+                  }}
+                  className="w-28 accent-amber-500 cursor-pointer"
+                />
+                <span className="text-amber-400 font-bold">{Number(selComp.parameters?.lightLux ?? 350)} Lux</span>
+              </div>
+            )}
+
+            {/* Potentiometer Wiper Dial */}
+            {selComp.type === 'POTENTIOMETER' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Wiper Position:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(Number(selComp.parameters?.wiperPosition ?? 0.5) * 100)}
+                  onChange={(e) => {
+                    const pos = Number(e.target.value) / 100;
+                    onUpdateComponent({
+                      ...selComp,
+                      parameters: { ...selComp.parameters, wiperPosition: pos, resistance: Math.round(pos * 10000) },
+                    });
+                  }}
+                  className="w-28 accent-purple-500 cursor-pointer"
+                />
+                <span className="text-purple-400 font-bold">
+                  {Math.round(Number(selComp.parameters?.wiperPosition ?? 0.5) * 100)}%
+                </span>
+              </div>
+            )}
+
+            {/* Tactile Pushbutton */}
+            {selComp.type === 'PUSHBUTTON' && (
+              <button
+                onClick={() => {
+                  const isClosed = Boolean(selComp.parameters?.closed);
+                  onUpdateComponent({
+                    ...selComp,
+                    parameters: { ...selComp.parameters, closed: !isClosed },
+                  });
+                }}
+                className={`px-3 py-1 rounded font-bold transition-all cursor-pointer ${
+                  selComp.parameters?.closed ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-800 text-slate-300 hover:text-white'
+                }`}
+              >
+                {selComp.parameters?.closed ? 'PRESSED [CLOSED]' : 'RELEASED [OPEN]'}
+              </button>
+            )}
+
+            {/* Toggle Switch */}
+            {selComp.type === 'SWITCH_SPST' && (
+              <button
+                onClick={() => {
+                  const isClosed = Boolean(selComp.parameters?.closed);
+                  onUpdateComponent({
+                    ...selComp,
+                    parameters: { ...selComp.parameters, closed: !isClosed },
+                  });
+                }}
+                className={`px-3 py-1 rounded font-bold transition-all cursor-pointer ${
+                  selComp.parameters?.closed ? 'bg-emerald-600 text-white' : 'bg-rose-900/60 text-rose-300'
+                }`}
+              >
+                Switch: {selComp.parameters?.closed ? 'ON (CLOSED)' : 'OFF (OPEN)'}
+              </button>
+            )}
+
+            {/* Servo Angle */}
+            {selComp.type === 'ACTUATOR_SERVO_SG90' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Servo Angle:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="180"
+                  value={Number(selComp.parameters?.angleDeg ?? 90)}
+                  onChange={(e) => {
+                    const ang = Number(e.target.value);
+                    onUpdateComponent({
+                      ...selComp,
+                      parameters: { ...selComp.parameters, angleDeg: ang },
+                    });
+                  }}
+                  className="w-28 accent-sky-500 cursor-pointer"
+                />
+                <span className="text-sky-400 font-bold">{Number(selComp.parameters?.angleDeg ?? 90)}°</span>
+              </div>
+            )}
+
+            {/* Resistor Value update (Test 4) */}
+            {selComp.type === 'RESISTOR' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-300">Resistance:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000000"
+                  value={Number(selComp.parameters?.resistance ?? 1000)}
+                  onChange={(e) => {
+                    const r = Number(e.target.value);
+                    onUpdateComponent({
+                      ...selComp,
+                      value: `${r}Ω`,
+                      parameters: { ...selComp.parameters, resistance: r },
+                    });
+                  }}
+                  className="w-24 px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-400 font-bold"
+                />
+                <span className="text-slate-400">Ω</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Footer Instructions Badge */}
       <div className="absolute bottom-3 left-3 bg-[#0B1528]/80 backdrop-blur-sm border border-slate-800 px-3 py-1.5 rounded-lg text-slate-400 font-mono text-[11px] flex items-center gap-4 pointer-events-none z-10">

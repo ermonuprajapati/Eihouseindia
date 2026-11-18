@@ -60,7 +60,10 @@ export class VirtualMcuRuntime {
   /**
    * Executes a single evaluation cycle of the firmware code.
    */
-  public executeCycle(firmware: FirmwareState): McuExecutionResult {
+  public executeCycle(
+    firmware: FirmwareState,
+    sensorContext?: { distanceCm?: number; temperatureC?: number; humidityPercent?: number; lightLux?: number }
+  ): McuExecutionResult {
     // Check board executability
     const boardId = firmware.boardId || 'arduino-uno';
     const boardSpec = TARGET_BOARDS.find((b) => b.id === boardId);
@@ -81,6 +84,7 @@ export class VirtualMcuRuntime {
 
     const serialOut: string[] = [];
     const pendingGpio = { ...this.gpio };
+    const currentDistance = sensorContext?.distanceCm ?? 45.0;
 
     // Built-in sandboxed Arduino / C++ execution context
     const sandbox = {
@@ -128,6 +132,16 @@ export class VirtualMcuRuntime {
         pendingGpio[key].analogVal = Math.max(0, Math.min(255, val));
         pendingGpio[key].value = val > 127 ? 1 : 0;
       },
+      pulseIn: () => {
+        // HC-SR04 ultrasonic echo timing: duration (µs) = distance (cm) * 58.82
+        return Math.round(currentDistance * 58.82);
+      },
+      map: (x: number, in_min: number, in_max: number, out_min: number, out_max: number) => {
+        return Math.round(((x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min);
+      },
+      constrain: (amt: number, low: number, high: number) => {
+        return Math.max(low, Math.min(high, amt));
+      },
       Serial: {
         begin: (baud: number) => {
           serialOut.push(`[UART] Initialized Serial at ${baud} baud`);
@@ -147,13 +161,13 @@ export class VirtualMcuRuntime {
     try {
       const jsCode = firmware.code;
 
-      const setupMatch = jsCode.match(/void\s+setup\s*\(\s*\)\s*\{([\s\S]*?)\n\}/);
-      const loopMatch = jsCode.match(/void\s+loop\s*\(\s*\)\s*\{([\s\S]*?)\n\}/);
+      const setupMatch = jsCode.match(/void\s+setup\s*\(\s*\)\s*\{([\s\S]*?)\n\s*\}/);
+      const loopMatch = jsCode.match(/void\s+loop\s*\(\s*\)\s*\{([\s\S]*?)\n\s*\}/);
 
       if (setupMatch || loopMatch) {
         let globalsCode = jsCode
-          .replace(/void\s+setup\s*\(\s*\)\s*\{[\s\S]*?\n\}/g, '')
-          .replace(/void\s+loop\s*\(\s*\)\s*\{[\s\S]*?\n\}/g, '');
+          .replace(/void\s+setup\s*\(\s*\)\s*\{[\s\S]*?\n\s*\}/g, '')
+          .replace(/void\s+loop\s*\(\s*\)\s*\{[\s\S]*?\n\s*\}/g, '');
         globalsCode = this.transpileArduinoToJs(globalsCode);
 
         const setupBody = setupMatch ? this.transpileArduinoToJs(setupMatch[1]) : '';
@@ -168,7 +182,7 @@ export class VirtualMcuRuntime {
         `;
 
         const runnerFn = new Function(
-          'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite',
+          'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite', 'pulseIn', 'map', 'constrain',
           'delay', 'delayMicroseconds', 'millis', 'micros', 'Serial', 'HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP',
           'LED_BUILTIN', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'Math',
           '__isSetupDone',
@@ -176,7 +190,7 @@ export class VirtualMcuRuntime {
         );
 
         runnerFn(
-          sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite,
+          sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite, sandbox.pulseIn, sandbox.map, sandbox.constrain,
           sandbox.delay, sandbox.delayMicroseconds, sandbox.millis, sandbox.micros, sandbox.Serial,
           sandbox.HIGH, sandbox.LOW, sandbox.INPUT, sandbox.OUTPUT, sandbox.INPUT_PULLUP,
           sandbox.LED_BUILTIN, sandbox.A0, sandbox.A1, sandbox.A2, sandbox.A3, sandbox.A4, sandbox.A5, sandbox.Math,
@@ -186,13 +200,13 @@ export class VirtualMcuRuntime {
       } else {
         const transCode = this.transpileArduinoToJs(jsCode);
         const scriptFn = new Function(
-          'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite',
+          'pinMode', 'digitalWrite', 'digitalRead', 'analogRead', 'analogWrite', 'pulseIn', 'map', 'constrain',
           'delay', 'delayMicroseconds', 'millis', 'micros', 'Serial', 'HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP',
           'LED_BUILTIN', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'Math',
           transCode
         );
         scriptFn(
-          sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite,
+          sandbox.pinMode, sandbox.digitalWrite, sandbox.digitalRead, sandbox.analogRead, sandbox.analogWrite, sandbox.pulseIn, sandbox.map, sandbox.constrain,
           sandbox.delay, sandbox.delayMicroseconds, sandbox.millis, sandbox.micros, sandbox.Serial,
           sandbox.HIGH, sandbox.LOW, sandbox.INPUT, sandbox.OUTPUT, sandbox.INPUT_PULLUP,
           sandbox.LED_BUILTIN, sandbox.A0, sandbox.A1, sandbox.A2, sandbox.A3, sandbox.A4, sandbox.A5, sandbox.Math
