@@ -1,8 +1,20 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
-import { RotateCw, Trash2, ZoomIn, ZoomOut, Maximize2, FlipHorizontal } from 'lucide-react';
+import { CircuitComponent, CircuitWire, WireInteractionMode } from '@/modules/engineering-lab/types';
+import {
+  RotateCw,
+  Trash2,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  FlipHorizontal,
+  MousePointer,
+  Spline,
+  Hand,
+  Sparkles,
+  AlertOctagon,
+} from 'lucide-react';
 import { SchematicSymbol } from './SchematicSymbols';
 
 interface SchematicCanvasProps {
@@ -16,6 +28,8 @@ interface SchematicCanvasProps {
   onDeleteComponent: (id: string) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire: (wireId: string) => void;
+  onUpdateWire?: (wire: CircuitWire) => void;
+  onClearSheet?: () => void;
   isSimulating: boolean;
   simulationStates: Record<string, { voltage: number; current: number; on?: boolean }>;
   wireCurrents?: Record<string, number>;
@@ -41,6 +55,27 @@ export function getPinWorldCoord(
   return { x: comp.x + rx, y: comp.y + ry };
 }
 
+/**
+ * Calculates polyline SVG path with optional intermediate waypoints.
+ */
+export function computeWireSvgPath(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  waypoints?: { x: number; y: number }[]
+): string {
+  if (waypoints && waypoints.length > 0) {
+    let d = `M ${p1.x} ${p1.y}`;
+    for (const pt of waypoints) {
+      d += ` L ${pt.x} ${pt.y}`;
+    }
+    d += ` L ${p2.x} ${p2.y}`;
+    return d;
+  }
+  // Standard Manhattan orthogonal path
+  const midX = (p1.x + p2.x) / 2;
+  return `M ${p1.x} ${p1.y} L ${midX} ${p1.y} L ${midX} ${p2.y} L ${p2.x} ${p2.y}`;
+}
+
 export function SchematicCanvas({
   components,
   wires,
@@ -52,11 +87,16 @@ export function SchematicCanvas({
   onDeleteComponent,
   onAddWire,
   onDeleteWire,
+  onUpdateWire,
+  onClearSheet,
   isSimulating,
   simulationStates,
   wireCurrents,
 }: SchematicCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Active Tool Mode
+  const [toolMode, setToolMode] = useState<WireInteractionMode>('select');
 
   // Zoom & Pan transforms
   const [zoom, setZoom] = useState(1.0);
@@ -68,29 +108,59 @@ export function SchematicCanvas({
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Wiring in progress
+  // Wiring in progress with intermediate waypoints
   const [activeWireStart, setActiveWireStart] = useState<{ compId: string; pinId: string; x: number; y: number } | null>(null);
+  const [activeWaypoints, setActiveWaypoints] = useState<{ x: number; y: number }[]>([]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   // Current flow animation tick
   const [animOffset, setAnimOffset] = useState(0);
 
-  // Selected Wire State for professional wiring editor
+  // Selected Wire State & Context Menu
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
+  const [wireContextMenu, setWireContextMenu] = useState<{
+    x: number;
+    y: number;
+    wireId: string;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
 
+  // Net Highlight state
+  const [highlightedNetId, setHighlightedNetId] = useState<string | null>(null);
+
+  // Clear Sheet confirmation modal
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWireId) {
           onDeleteWire(selectedWireId);
           setSelectedWireId(null);
+          setWireContextMenu(null);
         } else if (selectedCompId) {
           onDeleteComponent(selectedCompId);
         }
       } else if (e.key === 'Escape') {
         setSelectedWireId(null);
         setActiveWireStart(null);
+        setActiveWaypoints([]);
+        setWireContextMenu(null);
+        setHighlightedNetId(null);
+      } else if (e.key === 'v' || e.key === 'V') {
+        setToolMode('select');
+      } else if (e.key === 'w' || e.key === 'W') {
+        setToolMode('wire');
+      } else if (e.key === 'h' || e.key === 'H') {
+        setToolMode('pan');
+      } else if (e.key === 'n' || e.key === 'N') {
+        setToolMode('net_highlight');
+      } else if (e.key === 'd' || e.key === 'D') {
+        setToolMode('delete');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -108,15 +178,50 @@ export function SchematicCanvas({
     return () => cancelAnimationFrame(animId);
   }, [isSimulating]);
 
-  // Handle Pan start
+  // Handle Mouse Down on Canvas Background
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.target === containerRef.current || (e.target as HTMLElement).tagName === 'svg') {
-      if (e.button === 0 || e.button === 1 || e.shiftKey) {
+    // If context menu is open, close it
+    if (wireContextMenu) setWireContextMenu(null);
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const curX = (e.clientX - rect.left - pan.x) / zoom;
+    const curY = (e.clientY - rect.top - pan.y) / zoom;
+
+    // Right click cancels active wire drawing
+    if (e.button === 2) {
+      if (activeWireStart) {
+        e.preventDefault();
+        setActiveWireStart(null);
+        setActiveWaypoints([]);
+        return;
+      }
+    }
+
+    if (e.button === 0) {
+      // If we are drawing a wire and user clicks on empty canvas -> insert a waypoint!
+      if (activeWireStart) {
+        const snapX = Math.round(curX / 10) * 10;
+        const snapY = Math.round(curY / 10) * 10;
+        setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+        return;
+      }
+
+      // Pan canvas
+      if (toolMode === 'pan' || e.shiftKey || e.target === containerRef.current || (e.target as HTMLElement).tagName === 'svg') {
         setIsPanning(true);
         setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         onSelectComponent(null);
         setSelectedWireId(null);
+        setHighlightedNetId(null);
       }
+    } else if (e.button === 1) {
+      // Middle click pan
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      onSelectComponent(null);
+      setSelectedWireId(null);
+      setHighlightedNetId(null);
     }
   };
 
@@ -124,7 +229,7 @@ export function SchematicCanvas({
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    // Track mouse in canvas coordinates
+    // Track mouse in canvas coordinates (snapped to 10px grid)
     const curCanvasX = (e.clientX - rect.left - pan.x) / zoom;
     const curCanvasY = (e.clientY - rect.top - pan.y) / zoom;
     setMousePos({ x: curCanvasX, y: curCanvasY });
@@ -162,6 +267,7 @@ export function SchematicCanvas({
     if (!activeWireStart) {
       // Start wire
       setActiveWireStart({ compId, pinId, x: pinX, y: pinY });
+      setActiveWaypoints([]);
     } else {
       // Complete wire
       if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
@@ -170,10 +276,49 @@ export function SchematicCanvas({
           fromPinId: activeWireStart.pinId,
           toCompId: compId,
           toPinId: pinId,
+          points: activeWaypoints.length > 0 ? activeWaypoints : undefined,
         });
       }
       setActiveWireStart(null);
+      setActiveWaypoints([]);
     }
+  };
+
+  // Wire right-click context menu trigger
+  const handleWireContextMenu = (e: React.MouseEvent, wireId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = containerRef.current?.getBoundingClientRect();
+    const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
+    const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
+
+    setSelectedWireId(wireId);
+    setWireContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      wireId,
+      canvasX: Math.round(curX / 10) * 10,
+      canvasY: Math.round(curY / 10) * 10,
+    });
+  };
+
+  // Add waypoint to existing wire
+  const handleAddWaypointToWire = (wireId: string, x: number, y: number) => {
+    if (!onUpdateWire) return;
+    const wire = wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    const nextPoints = wire.points ? [...wire.points, { x, y }] : [{ x, y }];
+    onUpdateWire({ ...wire, points: nextPoints });
+    setWireContextMenu(null);
+  };
+
+  // Change wire color
+  const handleChangeWireColor = (wireId: string, color: string) => {
+    if (!onUpdateWire) return;
+    const wire = wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    onUpdateWire({ ...wire, color });
+    setWireContextMenu(null);
   };
 
   // Calculate Solder Junction Dots (Points where 3 or more wire connections meet)
@@ -221,8 +366,100 @@ export function SchematicCanvas({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
-      className="relative w-full h-full bg-[#070D18] overflow-hidden cursor-crosshair select-none"
+      onContextMenu={(e) => {
+        // Prevent default browser menu on canvas background
+        if (activeWireStart) {
+          e.preventDefault();
+          setActiveWireStart(null);
+          setActiveWaypoints([]);
+        }
+      }}
+      className={`relative w-full h-full bg-[#070D18] overflow-hidden select-none ${
+        toolMode === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
+      }`}
     >
+      {/* Top Floating CAD Interaction Mode Bar */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 border border-slate-700/80 rounded-lg p-1 shadow-2xl z-40 backdrop-blur">
+        <button
+          onClick={() => setToolMode('select')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-semibold transition-all ${
+            toolMode === 'select'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Select Tool (V) — Select components & wires without deleting"
+        >
+          <MousePointer className="w-3.5 h-3.5" />
+          <span>Select (V)</span>
+        </button>
+
+        <button
+          onClick={() => setToolMode('wire')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-semibold transition-all ${
+            toolMode === 'wire'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Wire Tool (W) — Click pins to connect, click canvas to add waypoints"
+        >
+          <Spline className="w-3.5 h-3.5" />
+          <span>Wire (W)</span>
+        </button>
+
+        <button
+          onClick={() => setToolMode('pan')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-semibold transition-all ${
+            toolMode === 'pan'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Pan Tool (H) — Drag to move view"
+        >
+          <Hand className="w-3.5 h-3.5" />
+          <span>Pan (H)</span>
+        </button>
+
+        <button
+          onClick={() => setToolMode('net_highlight')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-semibold transition-all ${
+            toolMode === 'net_highlight'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title="Net Highlight Tool (N) — Click any wire or pin to illuminate entire electrical net"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Net (N)</span>
+        </button>
+
+        <button
+          onClick={() => setToolMode('delete')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-semibold transition-all ${
+            toolMode === 'delete'
+              ? 'bg-rose-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+          }`}
+          title="Delete Tool (D) — Click any wire or component to delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          <span>Delete (D)</span>
+        </button>
+
+        <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+
+        {/* Clear Sheet Action */}
+        {onClearSheet && (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono text-rose-400 hover:text-white hover:bg-rose-950 transition-colors"
+            title="Clear Schematic Sheet"
+          >
+            <AlertOctagon className="w-3.5 h-3.5" />
+            <span>Clear Sheet</span>
+          </button>
+        )}
+      </div>
+
       {/* Canvas Grid Background */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
@@ -268,18 +505,21 @@ export function SchematicCanvas({
             if (!fromPin || !toPin) return null;
 
             // Rotated World Coordinates of Pins
-            const { x: x1, y: y1 } = getPinWorldCoord(fromComp, fromPin);
-            const { x: x2, y: y2 } = getPinWorldCoord(toComp, toPin);
+            const p1 = getPinWorldCoord(fromComp, fromPin);
+            const p2 = getPinWorldCoord(toComp, toPin);
 
-            // Manhattan orthogonal wire path: horizontal then vertical
-            const midX = (x1 + x2) / 2;
-            const midY = (y1 + y2) / 2;
-            const pathData = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+            const pathData = computeWireSvgPath(p1, p2, wire.points);
             const isWireSelected = selectedWireId === wire.id;
+            const isHighlighted = highlightedNetId === wire.id;
+            const wireBaseColor = wire.color || (isWireSelected ? '#F59E0B' : isHighlighted ? '#A855F7' : '#10B981');
+
+            const midPoint = wire.points && wire.points.length > 0
+              ? wire.points[Math.floor(wire.points.length / 2)]
+              : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
 
             return (
               <g key={wire.id} className="group">
-                {/* Invisible wide hit area for easy wire selection */}
+                {/* Invisible wide hit area for easy wire selection (tolerance ~16px) */}
                 <path
                   d={pathData}
                   fill="none"
@@ -288,25 +528,35 @@ export function SchematicCanvas({
                   className="cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedWireId(wire.id);
-                    onSelectComponent(null);
+                    if (toolMode === 'delete') {
+                      onDeleteWire(wire.id);
+                    } else if (toolMode === 'net_highlight') {
+                      setHighlightedNetId(wire.id);
+                    } else {
+                      // Standard Select: SELECTS the wire, does NOT delete!
+                      setSelectedWireId(wire.id);
+                      onSelectComponent(null);
+                    }
                   }}
+                  onContextMenu={(e) => handleWireContextMenu(e, wire.id)}
                 />
+
                 {/* Visual Wire with Selection Halo */}
-                {isWireSelected && (
+                {(isWireSelected || isHighlighted) && (
                   <path
                     d={pathData}
                     fill="none"
-                    stroke="#F59E0B"
-                    strokeWidth={5}
-                    opacity={0.4}
+                    stroke={isHighlighted ? '#C084FC' : '#F59E0B'}
+                    strokeWidth={6}
+                    opacity={0.45}
                   />
                 )}
+
                 <path
                   d={pathData}
                   fill="none"
-                  stroke={isWireSelected ? '#F59E0B' : '#10B981'}
-                  strokeWidth={isWireSelected ? 2.5 : 2}
+                  stroke={wireBaseColor}
+                  strokeWidth={isWireSelected ? 2.8 : 2}
                   className="transition-colors group-hover:stroke-amber-400"
                 />
 
@@ -332,9 +582,22 @@ export function SchematicCanvas({
                   })()
                 )}
 
+                {/* Intermediate Waypoint Knots */}
+                {wire.points?.map((pt, pIdx) => (
+                  <circle
+                    key={pIdx}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={3}
+                    fill={wireBaseColor}
+                    stroke="#0B1528"
+                    strokeWidth={1}
+                  />
+                ))}
+
                 {/* Pin Terminal End Dots */}
-                <circle cx={x1} cy={y1} r={3} fill={isWireSelected ? '#F59E0B' : '#10B981'} />
-                <circle cx={x2} cy={y2} r={3} fill={isWireSelected ? '#F59E0B' : '#10B981'} />
+                <circle cx={p1.x} cy={p1.y} r={3} fill={wireBaseColor} />
+                <circle cx={p2.x} cy={p2.y} r={3} fill={wireBaseColor} />
 
                 {/* Wire Deletion Badge when Wire is Selected */}
                 {isWireSelected && (
@@ -346,8 +609,8 @@ export function SchematicCanvas({
                       setSelectedWireId(null);
                     }}
                   >
-                    <circle cx={midX} cy={midY} r={10} fill="#E11D48" stroke="#FFFFFF" strokeWidth={1.5} />
-                    <text x={midX} y={midY + 3.5} fill="#FFFFFF" fontSize="10" fontWeight="bold" textAnchor="middle">✕</text>
+                    <circle cx={midPoint.x} cy={midPoint.y} r={10} fill="#E11D48" stroke="#FFFFFF" strokeWidth={1.5} />
+                    <text x={midPoint.x} y={midPoint.y + 3.5} fill="#FFFFFF" fontSize="10" fontWeight="bold" textAnchor="middle">✕</text>
                   </g>
                 )}
               </g>
@@ -369,15 +632,29 @@ export function SchematicCanvas({
             </circle>
           ))}
 
-          {/* Active Wire being drawn */}
+          {/* Active Wire being drawn with live waypoints preview */}
           {activeWireStart && (
-            <path
-              d={`M ${activeWireStart.x} ${activeWireStart.y} L ${(activeWireStart.x + mousePos.x) / 2} ${activeWireStart.y} L ${(activeWireStart.x + mousePos.x) / 2} ${mousePos.y} L ${mousePos.x} ${mousePos.y}`}
-              fill="none"
-              stroke="#F59E0B"
-              strokeWidth={2}
-              strokeDasharray="4, 4"
-            />
+            <g>
+              <path
+                d={(() => {
+                  let d = `M ${activeWireStart.x} ${activeWireStart.y}`;
+                  for (const wp of activeWaypoints) {
+                    d += ` L ${wp.x} ${wp.y}`;
+                  }
+                  const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+                  const midX = (lastPt.x + mousePos.x) / 2;
+                  d += ` L ${midX} ${lastPt.y} L ${midX} ${mousePos.y} L ${mousePos.x} ${mousePos.y}`;
+                  return d;
+                })()}
+                fill="none"
+                stroke="#F59E0B"
+                strokeWidth={2}
+                strokeDasharray="4, 4"
+              />
+              {activeWaypoints.map((wp, i) => (
+                <circle key={i} cx={wp.x} cy={wp.y} r={4} fill="#F59E0B" stroke="#FFFFFF" strokeWidth={1} />
+              ))}
+            </g>
           )}
         </svg>
 
@@ -391,10 +668,14 @@ export function SchematicCanvas({
               key={comp.id}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelectComponent(comp.id);
+                if (toolMode === 'delete') {
+                  onDeleteComponent(comp.id);
+                } else {
+                  onSelectComponent(comp.id);
+                }
               }}
               onMouseDown={(e) => {
-                if (e.button === 0) {
+                if (e.button === 0 && toolMode !== 'wire') {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
                   setDraggingCompId(comp.id);
@@ -483,6 +764,112 @@ export function SchematicCanvas({
         })}
       </div>
 
+      {/* Wire Right-Click Context Menu */}
+      {wireContextMenu && (
+        <div
+          className="fixed bg-[#0B1528] border border-slate-700 rounded-lg shadow-2xl p-1.5 z-50 font-mono text-xs text-slate-200 space-y-1 w-44 backdrop-blur-md"
+          style={{ left: `${wireContextMenu.x}px`, top: `${wireContextMenu.y}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2 py-1 text-[10px] text-slate-400 uppercase border-b border-slate-800 font-bold">
+            Wire Options
+          </div>
+          <button
+            onClick={() => {
+              setSelectedWireId(wireContextMenu.wireId);
+              setWireContextMenu(null);
+            }}
+            className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded flex items-center gap-2"
+          >
+            <MousePointer className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Select Wire</span>
+          </button>
+          <button
+            onClick={() =>
+              handleAddWaypointToWire(wireContextMenu.wireId, wireContextMenu.canvasX, wireContextMenu.canvasY)
+            }
+            className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded flex items-center gap-2"
+          >
+            <Spline className="w-3.5 h-3.5 text-amber-400" />
+            <span>Add Waypoint</span>
+          </button>
+          <button
+            onClick={() => {
+              setHighlightedNetId(wireContextMenu.wireId);
+              setWireContextMenu(null);
+            }}
+            className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded flex items-center gap-2"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>Highlight Net</span>
+          </button>
+          {/* Wire Colors */}
+          <div className="px-2 py-1 text-[10px] text-slate-400 uppercase border-t border-slate-800">
+            Wire Color
+          </div>
+          <div className="flex items-center gap-1 px-2 py-1">
+            {[
+              { label: 'Green', hex: '#10B981' },
+              { label: 'Red', hex: '#EF4444' },
+              { label: 'Blue', hex: '#3B82F6' },
+              { label: 'Yellow', hex: '#FBBF24' },
+              { label: 'Black', hex: '#64748B' },
+            ].map((c) => (
+              <button
+                key={c.hex}
+                onClick={() => handleChangeWireColor(wireContextMenu.wireId, c.hex)}
+                className="w-4 h-4 rounded-full border border-slate-600 hover:scale-125 transition-transform"
+                style={{ backgroundColor: c.hex }}
+                title={`Set color: ${c.label}`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              onDeleteWire(wireContextMenu.wireId);
+              setWireContextMenu(null);
+              setSelectedWireId(null);
+            }}
+            className="w-full text-left px-2 py-1.5 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded flex items-center gap-2 border-t border-slate-800"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Wire</span>
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Clear Schematic Sheet */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0B1528] border border-slate-700 rounded-xl p-5 max-w-sm w-full font-mono text-xs text-slate-200 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+              <AlertOctagon className="w-5 h-5" />
+              <span>Clear Schematic Sheet?</span>
+            </div>
+            <p className="text-slate-400 leading-relaxed">
+              All components and connecting wires on this current schematic will be removed. Your PCB layout and firmware files will remain intact. This action can be undone with Undo (Ctrl+Z).
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onClearSheet) onClearSheet();
+                  setShowClearConfirm(false);
+                }}
+                className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold transition-colors"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Floating Canvas Zoom Controls */}
       <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-1 text-slate-300 shadow-xl z-20 backdrop-blur">
         <button
@@ -515,11 +902,11 @@ export function SchematicCanvas({
       {/* Engineering Canvas Status Hint */}
       <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg text-[11px] font-mono text-slate-400 pointer-events-none backdrop-blur">
         <span className="w-2 h-2 rounded-full bg-emerald-400" />
-        <span>Grid: 10px snap</span>
+        <span>Mode: {toolMode.toUpperCase()}</span>
         <span className="text-slate-600">|</span>
         <span>Click pin to wire</span>
         <span className="text-slate-600">|</span>
-        <span>Scroll to zoom</span>
+        <span>Right-click wire for menu</span>
       </div>
     </div>
   );

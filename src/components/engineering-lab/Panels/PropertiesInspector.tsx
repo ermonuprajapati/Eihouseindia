@@ -629,25 +629,111 @@ export function PropertiesInspector({
           )}
 
           {/* SWITCHES & BUTTONS */}
-          {(type === 'SWITCH_SPST' || type === 'SWITCH_PUSHBUTTON' || type === 'INDUSTRIAL_ESTOP') && (
+          {(type.startsWith('SWITCH_') || type.startsWith('PUSHBUTTON_') || type === 'EMERGENCY_STOP') && (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[10px] text-slate-400">
                 <span className="font-semibold uppercase font-mono">Contact State</span>
-                <span className={`font-mono font-bold ${parameters.closed ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {parameters.closed ? 'CLOSED (Conducting)' : 'OPEN (Isolated)'}
+                <span className={`font-mono font-bold ${
+                  type === 'PUSHBUTTON_NO'
+                    ? (parameters.closed ? 'text-emerald-400' : 'text-amber-400')
+                    : (parameters.closed !== false ? 'text-emerald-400' : 'text-amber-400')
+                }`}>
+                  {type === 'PUSHBUTTON_NO'
+                    ? (parameters.closed ? 'PRESSED (Conducting)' : 'RELEASED (Open NO)')
+                    : (parameters.closed !== false ? 'CLOSED (Conducting)' : 'OPEN (Interrupted)')}
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => updateParameter('closed', !parameters.closed, parameters.closed ? 'Open' : 'Closed')}
+                onClick={() => {
+                  const nextState = type === 'PUSHBUTTON_NO' ? !parameters.closed : !(parameters.closed !== false);
+                  updateParameter('closed', nextState, nextState ? 'Closed' : 'Open');
+                }}
                 className={`w-full py-2 px-3 rounded font-mono text-xs font-bold transition-all border ${
-                  parameters.closed
+                  (type === 'PUSHBUTTON_NO' ? parameters.closed : parameters.closed !== false)
                     ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300 hover:bg-emerald-900/80'
                     : 'bg-amber-950/60 border-amber-600 text-amber-300 hover:bg-amber-900/80'
                 }`}
               >
-                {parameters.closed ? 'Switch is CLOSED (Click to Open)' : 'Switch is OPEN (Click to Close)'}
+                {type === 'PUSHBUTTON_NO'
+                  ? (parameters.closed ? 'Button is PRESSED (Click to Release)' : 'Button is RELEASED (Click to Press)')
+                  : type === 'EMERGENCY_STOP'
+                  ? (parameters.closed !== false ? 'ESTOP Armed (Click to Trigger Emergency Stop)' : 'ESTOP TRIGGERED (Click to Twist Reset)')
+                  : (parameters.closed !== false ? 'Contact CLOSED (Click to Open)' : 'Contact OPEN (Click to Close)')}
               </button>
+            </div>
+          )}
+
+          {/* CIRCUIT BREAKERS & PROTECTION */}
+          {type.startsWith('PROTECTION_') && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Rated Breaker Current</span>
+                  <span className="font-mono text-cyan-400 font-bold">{Number(parameters.ratedCurrentA ?? 16)} A</span>
+                </div>
+                <select
+                  value={Number(parameters.ratedCurrentA ?? 16)}
+                  onChange={(e) => updateParameter('ratedCurrentA', Number(e.target.value), `${e.target.value}A`)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-200 font-mono text-xs"
+                >
+                  <option value={6}>6 A (Lighting / Low-Power)</option>
+                  <option value={10}>10 A (General Control)</option>
+                  <option value={16}>16 A (Standard Branch)</option>
+                  <option value={25}>25 A (Small Motors)</option>
+                  <option value={32}>32 A (Main Feed / 3-Phase)</option>
+                  <option value={63}>63 A (Distribution Panel)</option>
+                  <option value={100}>100 A (Main MCCB Incomer)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span className="font-semibold uppercase font-mono">Breaker Mechanism</span>
+                <span className={`font-mono font-bold ${parameters.tripped ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {parameters.tripped ? 'TRIPPED (Fault)' : 'ENGAGED (Armed)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateParameter('tripped', !parameters.tripped, parameters.tripped ? 'Normal' : 'Tripped')}
+                className={`w-full py-2 px-3 rounded font-mono text-xs font-bold transition-all border ${
+                  parameters.tripped
+                    ? 'bg-rose-950/80 border-rose-600 text-rose-300 hover:bg-rose-900'
+                    : 'bg-emerald-950/60 border-emerald-600 text-emerald-300 hover:bg-emerald-900/80'
+                }`}
+              >
+                {parameters.tripped ? 'Breaker Tripped (Click to Reset Lever)' : 'Breaker Normal (Click to Test Trip)'}
+              </button>
+            </div>
+          )}
+
+          {/* VFD DRIVE */}
+          {type === 'VFD_DRIVE' && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Output Frequency</span>
+                  <span className="font-mono text-cyan-400 font-bold">{Number(parameters.targetFreqHz ?? 50.0).toFixed(1)} Hz</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="0.5"
+                  value={Number(parameters.targetFreqHz ?? 50.0)}
+                  onChange={(e) => updateParameter('targetFreqHz', parseFloat(e.target.value), `${e.target.value} Hz`)}
+                  className="w-full accent-cyan-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Estimated Motor Speed</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    {Math.round((Number(parameters.targetFreqHz ?? 50.0) / 50.0) * 1440)} RPM
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 

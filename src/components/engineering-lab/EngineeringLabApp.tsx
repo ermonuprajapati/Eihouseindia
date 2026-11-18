@@ -557,6 +557,23 @@ export function EngineeringLabApp() {
                 onDeleteComponent={handleDeleteComponent}
                 onAddWire={handleAddWire}
                 onDeleteWire={handleDeleteWire}
+                onUpdateWire={(updatedWire) => {
+                  recordHistory();
+                  setProject((prev) => ({
+                    ...prev,
+                    wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
+                  }));
+                }}
+                onClearSheet={() => {
+                  recordHistory();
+                  setProject((prev) => ({
+                    ...prev,
+                    components: [],
+                    wires: [],
+                  }));
+                  setSelectedCompId(null);
+                  toast.success('Schematic sheet cleared (Undo with Ctrl+Z)');
+                }}
                 isSimulating={isSimulating}
                 simulationStates={simStates}
                 wireCurrents={wireCurrents}

@@ -43,7 +43,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
   // Layer Stackup & Fab Specs Modal
   const [showStackupModal, setShowStackupModal] = useState(false);
-  const [copperLayers, setCopperLayers] = useState<2 | 4>(pcb.copperLayers || 2);
+  const [copperLayers, setCopperLayers] = useState<2 | 4 | 6 | 8>(pcb.copperLayers || 2);
   const [boardThicknessMm, setBoardThicknessMm] = useState<number>(pcb.boardThicknessMm || 1.6);
   const [copperWeightOz, setCopperWeightOz] = useState<number>(1);
 
@@ -1165,28 +1165,39 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
               {/* Copper Layer Count */}
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-slate-400">Copper Layer Count</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setCopperLayers(2)}
-                    className={`py-2 px-3 rounded border text-center font-bold transition-all ${
+                    className={`py-2 px-2 rounded border text-center font-bold text-[11px] transition-all ${
                       copperLayers === 2
                         ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
                         : 'bg-slate-900 border-slate-800 text-slate-400'
                     }`}
                   >
-                    2 Layers (Top / Bot)
+                    2 Layers
                   </button>
                   <button
                     type="button"
                     onClick={() => setCopperLayers(4)}
-                    className={`py-2 px-3 rounded border text-center font-bold transition-all ${
+                    className={`py-2 px-2 rounded border text-center font-bold text-[11px] transition-all ${
                       copperLayers === 4
                         ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
                         : 'bg-slate-900 border-slate-800 text-slate-400'
                     }`}
                   >
-                    4 Layers (Internal GND/PWR)
+                    4 Layers
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCopperLayers(6)}
+                    className={`py-2 px-2 rounded border text-center font-bold text-[11px] transition-all ${
+                      copperLayers === 6
+                        ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    6 Layers
                   </button>
                 </div>
               </div>

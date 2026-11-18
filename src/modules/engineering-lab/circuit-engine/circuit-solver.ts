@@ -109,8 +109,8 @@ export class CircuitSolver {
     // 1. Process Independent Fixed DC & AC Voltage Sources & MCU Output Pins
     for (const comp of components) {
       if (comp.type === 'DC_VOLTAGE' || comp.type === 'BATTERY') {
-        const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`);
-        const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`);
+        const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:pos`);
+        const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:neg`);
         const vVal = Number(comp.parameters?.voltage ?? parseFloat(comp.value) ?? 9.0);
 
         if (pNet && nNet) {
@@ -257,6 +257,166 @@ export class CircuitSolver {
             sumG[pin1] += g;
             sumGV[pin2] += g * v1;
             sumG[pin2] += g;
+          }
+        } else if (
+          comp.type === 'PUSHBUTTON_NO' ||
+          comp.type === 'PUSHBUTTON_NC' ||
+          comp.type === 'EMERGENCY_STOP' ||
+          comp.type === 'SWITCH_DPST' ||
+          comp.type === 'SWITCH_DPDT' ||
+          comp.type === 'SWITCH_LIMIT' ||
+          comp.type === 'SWITCH_ISOLATOR' ||
+          comp.type === 'SWITCH_KEY' ||
+          comp.type === 'SWITCH_MICRO' ||
+          comp.type === 'SWITCH_FOOT'
+        ) {
+          let isClosed = false;
+          if (comp.type === 'PUSHBUTTON_NO') {
+            isClosed = comp.parameters?.closed === true;
+          } else if (comp.type === 'PUSHBUTTON_NC' || comp.type === 'EMERGENCY_STOP') {
+            isClosed = comp.parameters?.closed !== false && !comp.parameters?.latched;
+          } else if (comp.type === 'SWITCH_ISOLATOR') {
+            isClosed = comp.parameters?.closed !== false;
+          } else {
+            isClosed = comp.parameters?.closed === true;
+          }
+
+          const g = isClosed ? 100.0 : 1e-9;
+          const switchPairs = [
+            ['1', '2'],
+            ['3', '4'],
+            ['5', '6'],
+            ['13', '14'],
+            ['com1', 'no1'],
+            ['com2', 'no2'],
+            ['com', 'no'],
+          ];
+          for (const [pA, pB] of switchPairs) {
+            const pinA = this.netMap.get(`${comp.id}:${pA}`);
+            const pinB = this.netMap.get(`${comp.id}:${pB}`);
+            if (pinA && pinB && pinA !== pinB) {
+              const vA = nodeVoltages[pinA] || 0;
+              const vB = nodeVoltages[pinB] || 0;
+              sumGV[pinA] += g * vB;
+              sumG[pinA] += g;
+              sumGV[pinB] += g * vA;
+              sumG[pinB] += g;
+            }
+          }
+        } else if (
+          comp.type === 'CONTACTOR_MAIN' ||
+          comp.type === 'INDUSTRIAL_RELAY_24V' ||
+          comp.type === 'ACTUATOR_RELAY_5V' ||
+          comp.type === 'RELAY_ELECTROMECHANICAL' ||
+          comp.type === 'RELAY_TIMER' ||
+          comp.type === 'AUXILIARY_CONTACT_BLOCK'
+        ) {
+          // Coil pins A1 and A2 (or 13/14 for DPDT relay)
+          const a1Pin = this.netMap.get(`${comp.id}:a1`) || this.netMap.get(`${comp.id}:13`);
+          const a2Pin = this.netMap.get(`${comp.id}:a2`) || this.netMap.get(`${comp.id}:14`);
+          let isEnergized = comp.parameters?.energized === true;
+
+          if (a1Pin && a2Pin && a1Pin !== a2Pin) {
+            const v1 = nodeVoltages[a1Pin] || 0;
+            const v2 = nodeVoltages[a2Pin] || 0;
+            const vCoil = Math.abs(v1 - v2);
+            const rCoil = Math.max(Number(comp.parameters?.coilResistance ?? 360.0), 10.0);
+            const gCoil = 1.0 / rCoil;
+            sumGV[a1Pin] += gCoil * v2;
+            sumG[a1Pin] += gCoil;
+            sumGV[a2Pin] += gCoil * v1;
+            sumG[a2Pin] += gCoil;
+
+            const ratedV = Number(comp.parameters?.coilVoltageV ?? (comp.type === 'ACTUATOR_RELAY_5V' ? 5.0 : 24.0));
+            const pickupV = ratedV * 0.7; // Standard 70% coil pickup threshold
+            if (vCoil >= pickupV) {
+              isEnergized = true;
+            }
+          }
+
+          // Main 3-Phase Power Poles and NO Auxiliary Contacts
+          const noPairs = [
+            ['1', '2'],
+            ['3', '4'],
+            ['5', '6'],
+            ['13', '14'], // NO aux latching contact on contactor or relay
+            ['53', '54'], // NO on auxiliary contact block
+            ['5', '9'],   // NO1 on DPDT relay
+            ['8', '12'],  // NO2 on DPDT relay
+            ['no', 'com'],
+          ];
+
+          const noConductance = isEnergized ? 100.0 : 1e-9;
+          for (const [pA, pB] of noPairs) {
+            const pinA = this.netMap.get(`${comp.id}:${pA}`);
+            const pinB = this.netMap.get(`${comp.id}:${pB}`);
+            if (pinA && pinB && pinA !== pinB) {
+              const vA = nodeVoltages[pinA] || 0;
+              const vB = nodeVoltages[pinB] || 0;
+              sumGV[pinA] += noConductance * vB;
+              sumG[pinA] += noConductance;
+              sumGV[pinB] += noConductance * vA;
+              sumG[pinB] += noConductance;
+            }
+          }
+
+          // NC Auxiliary Contacts (open when energized, closed when de-energized)
+          const ncPairs = [
+            ['21', '22'],
+            ['61', '62'],
+            ['1', '9'],
+            ['4', '12'],
+            ['16', '15'],
+            ['nc', 'com'],
+          ];
+          const ncConductance = isEnergized ? 1e-9 : 100.0;
+          for (const [pA, pB] of ncPairs) {
+            const pinA = this.netMap.get(`${comp.id}:${pA}`);
+            const pinB = this.netMap.get(`${comp.id}:${pB}`);
+            if (pinA && pinB && pinA !== pinB) {
+              const vA = nodeVoltages[pinA] || 0;
+              const vB = nodeVoltages[pinB] || 0;
+              sumGV[pinA] += ncConductance * vB;
+              sumG[pinA] += ncConductance;
+              sumGV[pinB] += ncConductance * vA;
+              sumG[pinB] += ncConductance;
+            }
+          }
+        } else if (
+          comp.type.startsWith('PROTECTION_') ||
+          comp.type === 'DIN_RAIL_TERMINAL' ||
+          comp.type === 'TERMINAL_PE_N'
+        ) {
+          const isTripped = comp.parameters?.tripped === true;
+          const isClosed = !isTripped && comp.parameters?.closed !== false;
+          const g = isClosed ? 100.0 : 1e-9;
+          const breakerPairs = [
+            ['1', '2'],
+            ['3', '4'],
+            ['5', '6'],
+            ['n_in', 'n_out'],
+            ['pe1', 'pe2'],
+            ['n1', 'n2'],
+          ];
+          for (const [pA, pB] of breakerPairs) {
+            const pinA = this.netMap.get(`${comp.id}:${pA}`);
+            const pinB = this.netMap.get(`${comp.id}:${pB}`);
+            if (pinA && pinB && pinA !== pinB) {
+              const vA = nodeVoltages[pinA] || 0;
+              const vB = nodeVoltages[pinB] || 0;
+              sumGV[pinA] += g * vB;
+              sumG[pinA] += g;
+              sumGV[pinB] += g * vA;
+              sumG[pinB] += g;
+            }
+          }
+        } else if (comp.type === 'POWER_SUPPLY_24V') {
+          const vPosPin = this.netMap.get(`${comp.id}:v_pos`);
+          const vNegPin = this.netMap.get(`${comp.id}:v_neg`);
+          const vNeg = vNegPin ? (nodeVoltages[vNegPin] || 0) : 0;
+          if (vPosPin) {
+            nodeVoltages[vPosPin] = vNeg + 24.0;
+            fixedNodes.add(vPosPin);
           }
         } else if (comp.type === 'BJT_NPN') {
           const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:1`);
@@ -567,9 +727,18 @@ export class CircuitSolver {
         } else if (comp.type === 'ACTUATOR_BUZZER_ACTIVE') {
           current = Math.abs(vDiff) > 2.0 ? vDiff / 80 : 0;
           on = Math.abs(vDiff) > 2.5;
-        } else if (comp.type === 'ACTUATOR_RELAY_5V') {
-          current = Math.abs(vDiff) > 3.0 ? 0.07 : 0; // 70mA coil current
-          on = Math.abs(vDiff) > 3.5;
+        } else if (comp.type === 'ACTUATOR_RELAY_5V' || comp.type === 'CONTACTOR_MAIN' || comp.type === 'INDUSTRIAL_RELAY_24V' || comp.type === 'RELAY_ELECTROMECHANICAL') {
+          const ratedV = Number(comp.parameters?.coilVoltageV ?? (comp.type === 'ACTUATOR_RELAY_5V' ? 5.0 : 24.0));
+          const isCoilEnergized = Math.abs(vDiff) >= ratedV * 0.7 || comp.parameters?.energized === true;
+          current = isCoilEnergized ? Math.abs(vDiff) / Math.max(Number(comp.parameters?.coilResistance ?? 360), 10) : 0;
+          on = isCoilEnergized;
+        } else if (comp.type.startsWith('PUSHBUTTON_') || comp.type === 'EMERGENCY_STOP' || comp.type.startsWith('SWITCH_')) {
+          on = comp.type === 'PUSHBUTTON_NO' ? comp.parameters?.closed === true : comp.parameters?.closed !== false;
+          current = on ? vDiff / 0.01 : 0;
+        } else if (comp.type.startsWith('PROTECTION_')) {
+          const isClosed = !comp.parameters?.tripped && comp.parameters?.closed !== false;
+          on = isClosed;
+          current = isClosed ? vDiff / 0.01 : 0;
         } else if (comp.type === 'SENSOR_LDR') {
           const rLdr = Math.max(Number(comp.parameters?.lightResistance ?? 500), 10);
           current = vDiff / rLdr;

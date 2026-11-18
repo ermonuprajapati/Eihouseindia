@@ -2104,6 +2104,11 @@ export default function AdminPanelPage() {
                         <option value="sensors">Sensors</option>
                         <option value="displays">Displays</option>
                         <option value="actuators">Actuators</option>
+                        <option value="switches">Industrial Switches</option>
+                        <option value="relays_contactors">Relays & Contactors</option>
+                        <option value="protection">Circuit Protection</option>
+                        <option value="motor_control">Motor Control & VFD</option>
+                        <option value="plc_automation">PLC Automation</option>
                         <option value="instruments">Virtual Instruments</option>
                         <option value="industrial">Industrial Electrical</option>
                       </select>

@@ -733,6 +733,80 @@ export function SchematicSymbol({
         );
       }
 
+      case 'CONTACTOR_MAIN':
+        return (
+          <g>
+            <rect x="-40" y="-30" width="80" height="60" rx="4" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* Coil A1-A2 block */}
+            <rect x="-35" y="-12" width="16" height="24" stroke="#F59E0B" strokeWidth="1.5" fill="#1E293B" />
+            <text x="-27" y="3" fill="#F59E0B" fontSize="8" fontFamily="monospace" textAnchor="middle" fontWeight="bold">A1/A2</text>
+            {/* 3 Main Power Contacts */}
+            <path d="M -15,-20 L -15,-8 M -15,8 L -15,20 M -18,-8 L -12,4" stroke="#34D399" strokeWidth="1.8" />
+            <path d="M 5,-20 L 5,-8 M 5,8 L 5,20 M 2,-8 L 8,4" stroke="#34D399" strokeWidth="1.8" />
+            <path d="M 25,-20 L 25,-8 M 25,8 L 25,20 M 22,-8 L 28,4" stroke="#34D399" strokeWidth="1.8" />
+            <text x="5" y="-2" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">KM 3P</text>
+          </g>
+        );
+
+      case 'PUSHBUTTON_NO':
+        return (
+          <g>
+            <path d="M -25,0 L -10,0 M 10,0 L 25,0" stroke={strokeColor} strokeWidth="2" />
+            <circle cx="-10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            <circle cx="10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            {/* Disconnected Open Plate */}
+            <path d="M -10,-8 L 10,-8 M 0,-8 L 0,-15 M -6,-15 L 6,-15" stroke="#10B981" strokeWidth="2.5" />
+            <text x="0" y="14" fill="#10B981" fontSize="8" fontFamily="monospace" textAnchor="middle" fontWeight="bold">START (NO)</text>
+          </g>
+        );
+
+      case 'PUSHBUTTON_NC':
+        return (
+          <g>
+            <path d="M -25,0 L -10,0 M 10,0 L 25,0" stroke={strokeColor} strokeWidth="2" />
+            <circle cx="-10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            <circle cx="10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            {/* Bridged Closed Plate */}
+            <path d="M -10,0 L 10,0 M 0,0 L 0,-10 M -6,-10 L 6,-10" stroke="#EF4444" strokeWidth="2.5" />
+            <text x="0" y="14" fill="#EF4444" fontSize="8" fontFamily="monospace" textAnchor="middle" fontWeight="bold">STOP (NC)</text>
+          </g>
+        );
+
+      case 'EMERGENCY_STOP':
+        return (
+          <g>
+            <path d="M -25,0 L -10,0 M 10,0 L 25,0" stroke={strokeColor} strokeWidth="2" />
+            <circle cx="-10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            <circle cx="10" cy="0" r="2.5" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+            {/* Mushroom Head Cap */}
+            <path d="M -10,0 L 10,0 M 0,0 L 0,-10" stroke="#EF4444" strokeWidth="2" />
+            <path d="M -12,-10 C -12,-18 12,-18 12,-10 Z" fill="#EF4444" stroke="#DC2626" strokeWidth="1.5" />
+            <text x="0" y="14" fill="#EF4444" fontSize="8" fontFamily="monospace" textAnchor="middle" fontWeight="bold">E-STOP</text>
+          </g>
+        );
+
+      case 'PROTECTION_MCB_1P':
+      case 'PROTECTION_MCB_3P':
+        return (
+          <g>
+            <rect x="-22" y="-28" width="44" height="56" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <path d="M 0,-25 L 0,-10 M 0,10 L 0,25" stroke={strokeColor} strokeWidth="2" />
+            {/* Bimetal Thermal & Magnetic Symbol */}
+            <rect x="-5" y="-10" width="10" height="8" stroke="#F59E0B" strokeWidth="1.5" fill="none" />
+            <path d="M 0,-2 L -4,4 M -4,4 L -2,8" stroke="#38BDF8" strokeWidth="1.5" fill="none" />
+            <text x="0" y="2" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">MCB</text>
+          </g>
+        );
+
+      case 'MOTOR_3PHASE':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="26" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="0" y="2" fill="#38BDF8" fontSize="13" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">M</text>
+            <text x="0" y="14" fill="#94A3B8" fontSize="9" fontFamily="monospace" textAnchor="middle">3 ~</text>
+          </g>
+        );
+
       default:
         // Generic Integrated Circuit block
         return (

@@ -26,7 +26,20 @@ export type ComponentCategory =
   | 'connectors'
   | 'instruments'
   | 'industrial'
+  | 'protection'
+  | 'relays_contactors'
+  | 'switches'
+  | 'motor_control'
+  | 'plc_automation'
   | 'modules';
+
+export type WireInteractionMode =
+  | 'select'
+  | 'wire'
+  | 'pan'
+  | 'measure'
+  | 'net_highlight'
+  | 'delete';
 
 export type SimulationSupportStatus =
   | 'full_mna'
@@ -217,7 +230,12 @@ export interface PcbLayout {
   widthMm: number;
   heightMm: number;
   boardThicknessMm: number;
-  copperLayers: 2 | 4;
+  copperLayers: 2 | 4 | 6 | 8;
+  units?: 'mm' | 'mil';
+  gridSizeMm?: number;
+  cornerRoundingMm?: number;
+  mountingHoles?: { x: number; y: number; diameterMm: number }[];
+  edgeClearanceMm?: number;
   tracks: PcbTrack[];
   pads: PcbPad[];
   components?: PcbComponentPlacement[];

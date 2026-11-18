@@ -6,17 +6,22 @@ import {
   ComponentTemplate,
   createComponentInstance,
 } from '@/modules/engineering-lab/circuit-engine/component-catalog';
-import { CircuitComponent, ComponentCategory, SimulationSupportStatus } from '@/modules/engineering-lab/types';
+import {
+  CircuitComponent,
+  ComponentCategory,
+  SimulationSupportStatus,
+} from '@/modules/engineering-lab/types';
 import {
   Search,
   Plus,
-  ChevronRight,
-  Sparkles,
   Box,
+  Layers,
+  Sparkles,
   Download,
   Upload,
-  Cpu,
-  SlidersHorizontal,
+  FileText,
+  Filter,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,13 +39,21 @@ export function ComponentBrowser({
   existingComponents,
   isOpen,
   onToggleOpen,
-  width = 300,
+  width = 320,
   onWidthChange,
 }: ComponentBrowserProps) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ComponentCategory | 'all'>('all');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<SimulationSupportStatus | 'all'>('all');
+  const [selectedPackage, setSelectedPackage] = useState<'all' | 'THT' | 'SMD' | 'Module' | 'Chassis'>('all');
+  const [selectedPinCount, setSelectedPinCount] = useState<'all' | '2' | '3' | '4-8' | '9+'>('all');
+  const [filterOnly3D, setFilterOnly3D] = useState(false);
+  const [filterOnlyDatasheet, setFilterOnlyDatasheet] = useState(false);
+  const [filterOnlyCustom, setFilterOnlyCustom] = useState(false);
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'mpn' | 'pins'>('name_asc');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
   const [customCatalog, setCustomCatalog] = useState<ComponentTemplate[]>([]);
   const [isAddCustomOpen, setIsAddCustomOpen] = useState(false);
 
@@ -50,8 +63,10 @@ export function ComponentBrowser({
   const [customCategory, setCustomCategory] = useState<ComponentCategory>('passive');
   const [customSubCategory, setCustomSubCategory] = useState('');
   const [customPinCount, setCustomPinCount] = useState(2);
-  const [customPackage, setCustomPackage] = useState<'THT' | 'SMD' | 'Module'>('THT');
+  const [customPackage, setCustomPackage] = useState<'THT' | 'SMD' | 'Module' | 'Chassis'>('THT');
   const [customStatus, setCustomStatus] = useState<SimulationSupportStatus>('full_mna');
+  const [customPartNumber, setCustomPartNumber] = useState('');
+  const [customDatasheet, setCustomDatasheet] = useState('');
 
   // Drag-to-resize panel
   const isResizingRef = useRef(false);
@@ -80,7 +95,7 @@ export function ComponentBrowser({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current || !onWidthChange) return;
-      const newWidth = Math.max(240, Math.min(550, e.clientX));
+      const newWidth = Math.max(260, Math.min(600, e.clientX));
       onWidthChange(newWidth);
     };
 
@@ -108,21 +123,82 @@ export function ComponentBrowser({
     )
   );
 
-  const filteredComponents = allTemplates.filter((item) => {
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    const matchesSubCategory = selectedSubCategory === 'all' || item.subCategory === selectedSubCategory;
-    const matchesStatus = selectedStatus === 'all' || item.simulationStatus === selectedStatus;
-    const q = search.toLowerCase();
-    const matchesSearch =
-      item.name.toLowerCase().includes(q) ||
-      item.type.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q) ||
-      item.defaultValue.toLowerCase().includes(q) ||
-      (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
-      (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q));
+  // Reset all filters to default
+  const handleResetFilters = () => {
+    setSearch('');
+    setSelectedCategory('all');
+    setSelectedSubCategory('all');
+    setSelectedStatus('all');
+    setSelectedPackage('all');
+    setSelectedPinCount('all');
+    setFilterOnly3D(false);
+    setFilterOnlyDatasheet(false);
+    setFilterOnlyCustom(false);
+    setSortBy('name_asc');
+  };
 
-    return matchesCategory && matchesSubCategory && matchesStatus && matchesSearch;
-  });
+  // Filter presets
+  const applyPreset = (preset: 'all' | 'industrial' | 'mcu' | 'semiconductors' | 'protection') => {
+    handleResetFilters();
+    if (preset === 'industrial') {
+      setSelectedCategory('industrial');
+    } else if (preset === 'mcu') {
+      setSelectedCategory('microcontrollers');
+    } else if (preset === 'semiconductors') {
+      setSelectedCategory('semiconductors');
+    } else if (preset === 'protection') {
+      setSelectedCategory('protection');
+    }
+  };
+
+  const filteredComponents = allTemplates
+    .filter((item) => {
+      const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
+      const matchesSubCategory = selectedSubCategory === 'all' || item.subCategory === selectedSubCategory;
+      const matchesStatus = selectedStatus === 'all' || item.simulationStatus === selectedStatus;
+      const matchesPackage = selectedPackage === 'all' || item.packageType === selectedPackage;
+
+      const pinLen = item.pins.length;
+      let matchesPins = true;
+      if (selectedPinCount === '2') matchesPins = pinLen === 2;
+      else if (selectedPinCount === '3') matchesPins = pinLen === 3;
+      else if (selectedPinCount === '4-8') matchesPins = pinLen >= 4 && pinLen <= 8;
+      else if (selectedPinCount === '9+') matchesPins = pinLen >= 9;
+
+      const matches3D = !filterOnly3D || Boolean(item.model3d);
+      const matchesDatasheet = !filterOnlyDatasheet || Boolean(item.datasheetUrl);
+      const isCustomPart = item.type.startsWith('CUSTOM_');
+      const matchesCustom = !filterOnlyCustom || isCustomPart;
+
+      const q = search.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.defaultValue.toLowerCase().includes(q) ||
+        (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
+        (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q));
+
+      return (
+        matchesCategory &&
+        matchesSubCategory &&
+        matchesStatus &&
+        matchesPackage &&
+        matchesPins &&
+        matches3D &&
+        matchesDatasheet &&
+        matchesCustom &&
+        matchesSearch
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'mpn') return (a.manufacturerPartNumber || '').localeCompare(b.manufacturerPartNumber || '');
+      if (sortBy === 'pins') return a.pins.length - b.pins.length;
+      return 0;
+    });
 
   const handleAdd = (template: ComponentTemplate) => {
     const randomOffset = () => Math.floor(Math.random() * 80) - 40;
@@ -143,7 +219,7 @@ export function ComponentBrowser({
       pins.push({
         id: String(i),
         name: `P${i}`,
-        x: i === 1 ? -30 : i === 2 ? 30 : (i % 2 === 0 ? 30 : -30),
+        x: i === 1 ? -30 : i === 2 ? 30 : i % 2 === 0 ? 30 : -30,
         y: (Math.floor((i - 1) / 2) - 1) * 20,
         pinType: 'passive' as const,
       });
@@ -166,12 +242,14 @@ export function ComponentBrowser({
       height: 50,
       symbolSvg: 'generic_ic',
       description: `User-defined custom component: ${customName}.`,
+      manufacturerPartNumber: customPartNumber.trim() || undefined,
+      datasheetUrl: customDatasheet.trim() || undefined,
     };
 
     saveCustomCatalog([...customCatalog, newTemplate]);
     setIsAddCustomOpen(false);
     setCustomName('');
-    toast.success(`Registered & saved custom component: ${newTemplate.name}`);
+    toast.success(`Registered custom part: ${newTemplate.name}`);
   };
 
   const handleExportCustomLibrary = () => {
@@ -179,72 +257,60 @@ export function ComponentBrowser({
       toast.info('No custom components to export');
       return;
     }
-    const blob = new Blob([JSON.stringify(customCatalog, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(customCatalog, null, 2));
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `ei_house_custom_library_${Date.now()}.json`;
+    a.href = dataStr;
+    a.download = `ei_lab_custom_components_${Date.now()}.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Custom library exported to JSON');
+    a.remove();
+    toast.success(`Exported ${customCatalog.length} custom components`);
   };
 
   const handleImportCustomLibrary = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(evt.target?.result as string);
-        if (Array.isArray(parsed)) {
-          saveCustomCatalog([...customCatalog, ...parsed]);
-          toast.success(`Imported ${parsed.length} custom components`);
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
+          const valid = imported.filter((item) => item.type && item.name && Array.isArray(item.pins));
+          if (valid.length > 0) {
+            const merged = [...customCatalog, ...valid];
+            const deduped = merged.filter((item, idx, arr) => arr.findIndex((x) => x.type === item.type) === idx);
+            saveCustomCatalog(deduped);
+            toast.success(`Successfully imported ${valid.length} custom components`);
+          } else {
+            toast.error('No valid components found in JSON file');
+          }
         }
       } catch {
-        toast.error('Invalid custom library JSON file');
+        toast.error('Invalid component library JSON file');
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
   };
 
-  // COLLAPSED DOCK TAB
-  if (!isOpen) {
-    return (
-      <div className="relative z-30 shrink-0">
-        <button
-          onClick={onToggleOpen}
-          className="absolute left-0 top-1/2 -translate-y-1/2 bg-[#0B1528] hover:bg-slate-800 border-y border-r border-slate-700 text-slate-300 hover:text-white py-3 px-2 rounded-r-lg shadow-2xl transition-all flex flex-col items-center gap-2 group cursor-pointer"
-          title="Open Component Library (Shortcut: B)"
-        >
-          <ChevronRight className="w-4 h-4 text-emerald-400 group-hover:scale-125 transition-transform" />
-          <span className="[writing-mode:vertical-lr] font-mono tracking-widest text-[11px] font-bold uppercase text-slate-300 group-hover:text-emerald-400">
-            Components [B]
-          </span>
-          <Cpu className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400" />
-        </button>
-      </div>
-    );
-  }
+  if (!isOpen) return null;
 
   return (
     <aside
-      style={{ width: `${width}px` }}
-      className="bg-[#0B1528] border-r border-slate-800 flex flex-col h-full z-20 select-none shadow-2xl text-slate-200 relative shrink-0 transition-[width] duration-75"
+      style={{ width }}
+      className="h-full bg-[#08101E] border-r border-slate-800 flex flex-col relative select-none z-20 shrink-0 text-slate-200"
     >
-      {/* Panel Header */}
-      <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+      {/* Header with Title and Import/Export Actions */}
+      <div className="h-10 border-b border-slate-800/80 px-3 flex items-center justify-between bg-slate-900/60">
         <div className="flex items-center gap-2">
-          <Cpu className="w-4 h-4 text-emerald-400" />
-          <div>
-            <h3 className="font-semibold text-xs tracking-wider text-slate-100 uppercase font-mono">
-              Component Library
-            </h3>
-            <p className="text-[10px] text-slate-400 font-mono">
-              {filteredComponents.length} of {allTemplates.length} verified devices
-            </p>
-          </div>
+          <Layers className="w-4 h-4 text-emerald-400" />
+          <span className="font-mono text-xs font-bold tracking-tight text-white uppercase">
+            Component Ecosystem
+          </span>
+          <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 text-[10px] px-1.5 py-0.2 rounded font-mono font-semibold">
+            {allTemplates.length}
+          </span>
         </div>
+
         <div className="flex items-center gap-1">
           <button
             onClick={handleExportCustomLibrary}
@@ -253,7 +319,10 @@ export function ComponentBrowser({
           >
             <Download className="w-3.5 h-3.5" />
           </button>
-          <label className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer" title="Import Custom Library JSON">
+          <label
+            className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Import Custom Library JSON"
+          >
             <Upload className="w-3.5 h-3.5" />
             <input type="file" accept=".json" onChange={handleImportCustomLibrary} className="hidden" />
           </label>
@@ -267,42 +336,153 @@ export function ComponentBrowser({
         </div>
       </div>
 
-      {/* Search Input */}
-      <div className="p-2.5 border-b border-slate-800/80 bg-slate-900/30 space-y-2">
+      {/* Search Input & Advanced Filter Bar */}
+      <div className="p-2 border-b border-slate-800/80 bg-slate-900/30 space-y-2">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search parts, values, MPN, specs..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+            placeholder="Search Arduino, contactor, MCB, LM358..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-16 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
           />
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded flex items-center gap-1 text-[10px] font-mono transition-colors ${
+              showAdvancedFilters || filterOnly3D || filterOnlyDatasheet || selectedPackage !== 'all'
+                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/60'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Toggle Advanced Filters"
+          >
+            <Filter className="w-3 h-3" />
+            <span>Filter</span>
+          </button>
         </div>
 
-        {/* Simulation Status Filter */}
+        {/* Quick Filter Presets */}
         <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-mono scrollbar-none pb-0.5">
-          <SlidersHorizontal className="w-3 h-3 text-slate-500 shrink-0 mr-1" />
-          {[
-            { id: 'all', label: 'All Status' },
-            { id: 'full_mna', label: 'SPICE MNA' },
-            { id: 'transpiled_mcu', label: 'MCU VM' },
-            { id: 'behavioral', label: 'Behavioral' },
-            { id: 'design_only', label: 'CAD Only' },
-          ].map((st) => (
-            <button
-              key={st.id}
-              onClick={() => setSelectedStatus(st.id as SimulationSupportStatus | 'all')}
-              className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
-                selectedStatus === st.id
-                  ? 'bg-cyan-900/80 text-cyan-200 border border-cyan-700/60 font-bold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              {st.label}
-            </button>
-          ))}
+          <button
+            onClick={() => applyPreset('all')}
+            className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
+              selectedCategory === 'all' && !filterOnly3D && selectedPackage === 'all'
+                ? 'bg-slate-700 text-white font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            All Parts
+          </button>
+          <button
+            onClick={() => applyPreset('industrial')}
+            className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
+              selectedCategory === 'industrial' ? 'bg-amber-900/80 text-amber-200 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Industrial & Power
+          </button>
+          <button
+            onClick={() => applyPreset('mcu')}
+            className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
+              selectedCategory === 'microcontrollers' ? 'bg-blue-900/80 text-blue-200 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            MCUs & Boards
+          </button>
+          <button
+            onClick={() => applyPreset('semiconductors')}
+            className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
+              selectedCategory === 'semiconductors' ? 'bg-emerald-900/80 text-emerald-200 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Semiconductors
+          </button>
+          <button
+            onClick={() => applyPreset('protection')}
+            className={`px-1.5 py-0.5 rounded whitespace-nowrap transition-colors ${
+              selectedCategory === 'protection' ? 'bg-rose-900/80 text-rose-200 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Protection Breakers
+          </button>
         </div>
+
+        {/* Advanced Filters Expandable Drawer */}
+        {showAdvancedFilters && (
+          <div className="p-2 bg-slate-950/80 border border-slate-800 rounded-md space-y-2 text-[10px] font-mono">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-slate-400 block mb-0.5">Package Type:</label>
+                <select
+                  value={selectedPackage}
+                  onChange={(e) => setSelectedPackage(e.target.value as 'all' | 'THT' | 'SMD' | 'Module' | 'Chassis')}
+                  className="w-full bg-slate-900 border border-slate-800 rounded p-1 text-slate-200"
+                >
+                  <option value="all">All Packages</option>
+                  <option value="THT">THT Through-Hole</option>
+                  <option value="SMD">SMD Surface-Mount</option>
+                  <option value="Module">Dev Module</option>
+                  <option value="Chassis">DIN Rail / Chassis</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-0.5">Pin Count:</label>
+                <select
+                  value={selectedPinCount}
+                  onChange={(e) => setSelectedPinCount(e.target.value as 'all' | '2' | '3' | '4-8' | '9+')}
+                  className="w-full bg-slate-900 border border-slate-800 rounded p-1 text-slate-200"
+                >
+                  <option value="all">Any Pins</option>
+                  <option value="2">2 Pins (Passives, Diodes)</option>
+                  <option value="3">3 Pins (BJTs, Sensors)</option>
+                  <option value="4-8">4 - 8 Pins (ICs, Relays)</option>
+                  <option value="9+">9+ Pins (MCUs, PLCs)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1 flex-wrap">
+              <label className="flex items-center gap-1 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterOnly3D}
+                  onChange={(e) => setFilterOnly3D(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500"
+                />
+                <span>3D Model</span>
+              </label>
+
+              <label className="flex items-center gap-1 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterOnlyDatasheet}
+                  onChange={(e) => setFilterOnlyDatasheet(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500"
+                />
+                <span>Datasheet</span>
+              </label>
+
+              <label className="flex items-center gap-1 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterOnlyCustom}
+                  onChange={(e) => setFilterOnlyCustom(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500"
+                />
+                <span>Custom Parts</span>
+              </label>
+
+              <button
+                onClick={handleResetFilters}
+                className="text-amber-400 hover:text-amber-300 flex items-center gap-1 ml-auto"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Primary Category Filter Tabs */}
@@ -311,15 +491,20 @@ export function ComponentBrowser({
           { id: 'all', label: 'All' },
           { id: 'passive', label: 'Passives' },
           { id: 'sources', label: 'Power' },
-          { id: 'active', label: 'Semiconductors' },
-          { id: 'logic', label: 'Digital Logic' },
+          { id: 'semiconductors', label: 'Semiconductors' },
+          { id: 'analog_ics', label: 'Analog ICs' },
+          { id: 'digital_logic', label: 'Logic' },
           { id: 'microcontrollers', label: 'MCUs' },
           { id: 'sensors', label: 'Sensors' },
           { id: 'displays', label: 'Displays' },
           { id: 'actuators', label: 'Actuators' },
+          { id: 'switches', label: 'Switches' },
+          { id: 'relays_contactors', label: 'Contactors/Relays' },
+          { id: 'protection', label: 'Protection' },
+          { id: 'motor_control', label: 'Motors & VFD' },
+          { id: 'plc_automation', label: 'PLC Automation' },
           { id: 'connectors', label: 'Connectors' },
           { id: 'instruments', label: 'Instruments' },
-          { id: 'industrial', label: 'Industrial' },
         ].map((cat) => (
           <button
             key={cat.id}
@@ -370,8 +555,14 @@ export function ComponentBrowser({
       {/* Component Cards List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-800">
         {filteredComponents.length === 0 ? (
-          <div className="text-center py-12 text-xs text-slate-500 font-mono">
-            No components matching &quot;{search}&quot;.
+          <div className="text-center py-12 text-xs text-slate-500 font-mono space-y-2">
+            <div>No components matching active search & filters.</div>
+            <button
+              onClick={handleResetFilters}
+              className="text-emerald-400 hover:underline text-[11px]"
+            >
+              Reset all filters
+            </button>
           </div>
         ) : (
           filteredComponents.map((item) => (
@@ -396,15 +587,15 @@ export function ComponentBrowser({
                           ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
                           : 'bg-purple-950/80 text-purple-300 border-purple-800/60'
                       }`}
-                      title={`Simulation Engine: ${item.simulationStatus || 'full_mna'}`}
+                      title={`Simulation Support Status: ${item.simulationStatus || 'full_mna'}`}
                     >
                       {item.simulationStatus === 'full_mna'
                         ? 'SPICE'
                         : item.simulationStatus === 'transpiled_mcu'
-                        ? 'MCU'
+                        ? 'MCU VM'
                         : item.simulationStatus === 'behavioral'
-                        ? 'BEH'
-                        : 'CAD'}
+                        ? 'BEHAVIORAL'
+                        : 'CAD ONLY'}
                     </span>
                   </div>
 
@@ -420,6 +611,28 @@ export function ComponentBrowser({
                     <span className="text-[9px] font-mono text-slate-500 uppercase">
                       {item.packageType || 'THT'}
                     </span>
+                    <span className="text-[9px] font-mono text-slate-500">
+                      {item.pins.length}P
+                    </span>
+
+                    {/* 3D and Datasheet indicator icons */}
+                    {item.model3d && (
+                      <span title="3D CAD Model Included">
+                        <Box className="w-3 h-3 text-amber-400" />
+                      </span>
+                    )}
+                    {item.datasheetUrl && (
+                      <a
+                        href={item.datasheetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-400 hover:text-cyan-400 transition-colors"
+                        title="View Official Datasheet"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <FileText className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -442,7 +655,7 @@ export function ComponentBrowser({
 
       {/* Footer Status Bar with Custom Component Action */}
       <div className="p-2.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between text-[11px] text-slate-400">
-        <span className="font-mono">{filteredComponents.length} parts</span>
+        <span className="font-mono">{filteredComponents.length} verified parts</span>
         <button
           onClick={() => setIsAddCustomOpen(true)}
           className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 text-[11px] bg-slate-800/80 px-2 py-1 rounded border border-slate-700 hover:border-emerald-500/50 transition-colors cursor-pointer"
@@ -497,104 +710,128 @@ export function ComponentBrowser({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
+                <label className="text-slate-400 block mb-1">Manufacturer Part Number:</label>
+                <input
+                  type="text"
+                  value={customPartNumber}
+                  onChange={(e) => setCustomPartNumber(e.target.value)}
+                  placeholder="e.g. MCP4725A0T-E/CH"
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
                 <label className="text-slate-400 block mb-1">Category:</label>
                 <select
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value as ComponentCategory)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="passive">Passive</option>
-                  <option value="sources">Power & Sources</option>
-                  <option value="active">Semiconductors</option>
-                  <option value="logic">Digital Logic</option>
-                  <option value="sensors">Sensors</option>
-                  <option value="actuators">Actuators</option>
+                  <option value="semiconductors">Semiconductors</option>
+                  <option value="analog_ics">Analog ICs</option>
+                  <option value="digital_logic">Digital Logic</option>
                   <option value="microcontrollers">Microcontrollers</option>
+                  <option value="sensors">Sensors</option>
                   <option value="industrial">Industrial</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Subcategory:</label>
-                <input
-                  type="text"
-                  value={customSubCategory}
-                  onChange={(e) => setCustomSubCategory(e.target.value)}
-                  placeholder="e.g. dac_i2c, motor_hbridge"
-                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-slate-400 block mb-1">Pin Count:</label>
-                <select
-                  value={customPinCount}
-                  onChange={(e) => setCustomPinCount(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
-                >
-                  <option value={2}>2 Pins</option>
-                  <option value={3}>3 Pins</option>
-                  <option value={4}>4 Pins</option>
-                  <option value={6}>6 Pins</option>
-                  <option value={8}>8 Pins (DIP-8)</option>
-                  <option value={14}>14 Pins (DIP-14)</option>
-                  <option value={16}>16 Pins (DIP-16)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Package:</label>
-                <select
-                  value={customPackage}
-                  onChange={(e) => setCustomPackage(e.target.value as 'THT' | 'SMD' | 'Module')}
-                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
-                >
-                  <option value="THT">THT</option>
-                  <option value="SMD">SMD</option>
-                  <option value="Module">Module</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-400 block mb-1">Simulation:</label>
-                <select
-                  value={customStatus}
-                  onChange={(e) => setCustomStatus(e.target.value as SimulationSupportStatus)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
-                >
-                  <option value="full_mna">SPICE MNA</option>
-                  <option value="behavioral">Behavioral</option>
-                  <option value="design_only">Design Only</option>
+                  <option value="switches">Switches</option>
+                  <option value="relays_contactors">Relays & Contactors</option>
+                  <option value="protection">Protection</option>
+                  <option value="motor_control">Motor Control</option>
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-slate-400 block mb-1">Default Nominal Value / Part Number:</label>
+              <label className="text-slate-400 block mb-1">Subcategory (optional):</label>
               <input
                 type="text"
-                value={customValue}
-                onChange={(e) => setCustomValue(e.target.value)}
-                placeholder="e.g. 10k, 5V, I2C 0x60"
-                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none"
+                value={customSubCategory}
+                onChange={(e) => setCustomSubCategory(e.target.value)}
+                placeholder="e.g. optocouplers, motor_drivers, rfid"
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-slate-400 block mb-1">Pin Count:</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="64"
+                  value={customPinCount}
+                  onChange={(e) => setCustomPinCount(parseInt(e.target.value) || 2)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Package Type:</label>
+                <select
+                  value={customPackage}
+                  onChange={(e) => setCustomPackage(e.target.value as 'THT' | 'SMD' | 'Module' | 'Chassis')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="THT">THT (Through-Hole)</option>
+                  <option value="SMD">SMD (Surface-Mount)</option>
+                  <option value="Module">Module Breakout</option>
+                  <option value="Chassis">DIN Rail / Chassis</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-slate-400 block mb-1">Simulation Tier:</label>
+                <select
+                  value={customStatus}
+                  onChange={(e) => setCustomStatus(e.target.value as SimulationSupportStatus)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="full_mna">SPICE MNA Nodal Solver</option>
+                  <option value="behavioral">Behavioral Logic</option>
+                  <option value="transpiled_mcu">Virtual MCU Sandbox</option>
+                  <option value="design_only">CAD / Layout Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Default Value:</label>
+                <input
+                  type="text"
+                  value={customValue}
+                  onChange={(e) => setCustomValue(e.target.value)}
+                  placeholder="e.g. 10k, 24V, 5A"
+                  className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-slate-400 block mb-1">Datasheet URL (optional):</label>
+              <input
+                type="url"
+                value={customDatasheet}
+                onChange={(e) => setCustomDatasheet(e.target.value)}
+                placeholder="https://..."
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsAddCustomOpen(false)}
-                className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+                className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold cursor-pointer"
+                className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors"
               >
-                Save Part to Library
+                Save & Register
               </button>
             </div>
           </form>

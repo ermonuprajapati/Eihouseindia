@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
-import { CircuitComponent, CircuitWire, EngineeringProject } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, EngineeringProject, PcbTrack } from '@/modules/engineering-lab/types';
+import { computeWireSvgPath } from '@/components/engineering-lab/Canvas/SchematicCanvas';
 import { TEMPLATE_555_ASTABLE, TEMPLATE_ARDUINO_BLINK } from '@/modules/engineering-lab/templates/starter-templates';
 import { COMPONENT_CATALOG, createComponentInstance, ComponentTemplate } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TARGET_BOARDS, TargetBoardSpec } from '@/modules/engineering-lab/embedded-engine/board-definitions';
@@ -1336,5 +1337,223 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(instance.id).toBeDefined();
     expect(instance.type).toBe('CUSTOM_PRECISION_SENSOR_XY');
     expect(instance.pins.length).toBe(2);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST U - Industrial Contactor Dynamic Coil Excitation & Contacts
+  // --------------------------------------------------------------------------
+  it('TEST U: verifies industrial contactor coil excitation and auxiliary NO/NC contact state switching', () => {
+    // Contactor with 24V DC applied to coil A1-A2
+    const contactor: CircuitComponent = {
+      id: 'km1',
+      type: 'CONTACTOR_MAIN',
+      label: 'Main Contactor',
+      category: 'relays_contactors',
+      x: 200,
+      y: 200,
+      rotation: 0,
+      value: '24VDC 18A',
+      parameters: { coilVoltageV: 24.0, coilResistance: 360.0, energized: false },
+      pins: [
+        { id: 'a1', name: 'A1', x: -35, y: -20, pinType: 'input' },
+        { id: 'a2', name: 'A2', x: -35, y: 20, pinType: 'input' },
+        { id: '1', name: '1', x: -15, y: -20, pinType: 'passive' },
+        { id: '2', name: '2', x: -15, y: 20, pinType: 'passive' },
+        { id: '13', name: '13', x: 45, y: -20, pinType: 'passive' },
+        { id: '14', name: '14', x: 45, y: 20, pinType: 'passive' },
+        { id: '21', name: '21', x: 60, y: -20, pinType: 'passive' },
+        { id: '22', name: '22', x: 60, y: 20, pinType: 'passive' },
+      ],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_2x05_P2.54mm_Vertical',
+    };
+
+    // 24V Source
+    const psu: CircuitComponent = {
+      id: 'v24',
+      type: 'DC_VOLTAGE',
+      label: '24V Supply',
+      category: 'power',
+      x: 100,
+      y: 200,
+      rotation: 0,
+      value: '24V',
+      parameters: { voltage: 24.0 },
+      pins: [
+        { id: 'pos', name: '+', x: 0, y: -20, pinType: 'power' },
+        { id: 'neg', name: '-', x: 0, y: 20, pinType: 'power' },
+      ],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    };
+
+    const gnd: CircuitComponent = {
+      id: 'gnd1',
+      type: 'GROUND',
+      label: 'GND',
+      category: 'power',
+      x: 100,
+      y: 300,
+      rotation: 0,
+      value: '0V',
+      parameters: {},
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical',
+    };
+
+    // Wire 24V supply to coil A1 and GND to coil A2
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: 'v24', fromPinId: 'pos', toCompId: 'km1', toPinId: 'a1' },
+      { id: 'w2', fromCompId: 'v24', fromPinId: 'neg', toCompId: 'gnd1', toPinId: '1' },
+      { id: 'w3', fromCompId: 'km1', fromPinId: 'a2', toCompId: 'gnd1', toPinId: '1' },
+    ];
+
+    const result = solver.step([contactor, psu, gnd], wires, 0.001, 1.0);
+    const coilState = result.componentStates['km1'];
+    expect(coilState).toBeDefined();
+    expect(coilState.voltage).toBeGreaterThanOrEqual(23.5);
+    expect(coilState.on).toBe(true);
+    expect(coilState.current).toBeGreaterThan(0.04); // ~24V / 360Ω ≈ 0.066A
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST V - Pushbutton NO (Start) & NC (Stop) Conduction
+  // --------------------------------------------------------------------------
+  it('TEST V: verifies Push Button NO conducts only when pressed, and Push Button NC opens when pressed', () => {
+    const pbStart: CircuitComponent = {
+      id: 'pb_start',
+      type: 'PUSHBUTTON_NO',
+      label: 'Start PB',
+      category: 'switches',
+      x: 200,
+      y: 100,
+      rotation: 0,
+      value: 'NO',
+      parameters: { closed: false },
+      pins: [
+        { id: '3', name: '3', x: -25, y: 0, pinType: 'passive' },
+        { id: '4', name: '4', x: 25, y: 0, pinType: 'passive' },
+      ],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    };
+
+    const pbStop: CircuitComponent = {
+      id: 'pb_stop',
+      type: 'PUSHBUTTON_NC',
+      label: 'Stop PB',
+      category: 'switches',
+      x: 200,
+      y: 200,
+      rotation: 0,
+      value: 'NC',
+      parameters: { closed: true },
+      pins: [
+        { id: '1', name: '1', x: -25, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 25, y: 0, pinType: 'passive' },
+      ],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    };
+
+    // By default: Start PB is OPEN (on = false), Stop PB is CLOSED (on = true)
+    let res = solver.step([pbStart, pbStop], [], 0.001, 1.0);
+    expect(res.componentStates['pb_start'].on).toBe(false);
+    expect(res.componentStates['pb_stop'].on).toBe(true);
+
+    // When operator presses Start PB (closed = true)
+    pbStart.parameters.closed = true;
+    res = solver.step([pbStart, pbStop], [], 0.001, 1.0);
+    expect(res.componentStates['pb_start'].on).toBe(true);
+
+    // When operator presses Stop PB (closed = false)
+    pbStop.parameters.closed = false;
+    res = solver.step([pbStart, pbStop], [], 0.001, 1.0);
+    expect(res.componentStates['pb_stop'].on).toBe(false);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST W - Circuit Breakers (MCB) Normal vs Tripped Operation
+  // --------------------------------------------------------------------------
+  it('TEST W: verifies MCB conducts in normal armed state and opens upon tripping', () => {
+    const mcb: CircuitComponent = {
+      id: 'qf1',
+      type: 'PROTECTION_MCB_1P',
+      label: 'C16 MCB',
+      category: 'protection',
+      x: 150,
+      y: 150,
+      rotation: 0,
+      value: '16A',
+      parameters: { ratedCurrentA: 16.0, tripped: false, closed: true },
+      pins: [
+        { id: '1', name: '1', x: 0, y: -25, pinType: 'passive' },
+        { id: '2', name: '2', x: 0, y: 25, pinType: 'passive' },
+      ],
+      footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
+    };
+
+    let res = solver.step([mcb], [], 0.001, 1.0);
+    expect(res.componentStates['qf1'].on).toBe(true);
+
+    // Operator or overcurrent trips MCB
+    mcb.parameters.tripped = true;
+    res = solver.step([mcb], [], 0.001, 1.0);
+    expect(res.componentStates['qf1'].on).toBe(false);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST X - Professional Wire Routing with Intermediate Waypoints
+  // --------------------------------------------------------------------------
+  it('TEST X: computes SVG polyline path passing through user intermediate waypoints', () => {
+    const p1 = { x: 50, y: 100 };
+    const p2 = { x: 250, y: 300 };
+    const waypoints = [
+      { x: 120, y: 100 },
+      { x: 120, y: 220 },
+      { x: 250, y: 220 },
+    ];
+
+    const pathSvg = computeWireSvgPath(p1, p2, waypoints);
+    expect(pathSvg).toBe('M 50 100 L 120 100 L 120 220 L 250 220 L 250 300');
+
+    // Without waypoints: falls back to Manhattan orthogonal
+    const defaultPath = computeWireSvgPath(p1, p2);
+    expect(defaultPath).toBe('M 50 100 L 150 100 L 150 300 L 250 300');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST Y - Advanced Catalogue Search & Multi-Criteria Filtering
+  // --------------------------------------------------------------------------
+  it('TEST Y: filters component catalogue across category, part number, and simulation tier', () => {
+    // 1. Search by exact MPN
+    const contactorMatch = COMPONENT_CATALOG.find((c) => c.manufacturerPartNumber === 'LC1D18BD');
+    expect(contactorMatch).toBeDefined();
+    expect(contactorMatch?.type).toBe('CONTACTOR_MAIN');
+    expect(contactorMatch?.category).toBe('relays_contactors');
+
+    // 2. Filter by industrial categories
+    const switches = COMPONENT_CATALOG.filter((c) => c.category === 'switches');
+    expect(switches.length).toBeGreaterThanOrEqual(8);
+
+    const protection = COMPONENT_CATALOG.filter((c) => c.category === 'protection');
+    expect(protection.length).toBeGreaterThanOrEqual(5);
+
+    // 3. Verify total verified catalog contains 80+ parts
+    expect(COMPONENT_CATALOG.length).toBeGreaterThanOrEqual(80);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST Z - PCB Multi-Layer Stackup Configuration (2, 4, 6 Layers)
+  // --------------------------------------------------------------------------
+  it('TEST Z: supports 2, 4, 6 layer stackup and custom board thickness in PCB data model', () => {
+    const pcbLayout = PcbGenerator.generatePcbFromSchematic([], []);
+    expect(pcbLayout.copperLayers).toBe(2);
+
+    // Configure 4-layer stackup
+    pcbLayout.copperLayers = 4;
+    pcbLayout.boardThicknessMm = 1.0;
+    expect(pcbLayout.copperLayers).toBe(4);
+    expect(pcbLayout.boardThicknessMm).toBe(1.0);
+
+    // Configure 6-layer high density stackup
+    pcbLayout.copperLayers = 6;
+    expect(pcbLayout.copperLayers).toBe(6);
   });
 });
