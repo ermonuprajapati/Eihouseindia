@@ -1,26 +1,123 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calculator, Zap, Cpu, Activity, Sliders, Waves, Layers } from 'lucide-react';
+import { Calculator, Zap, Cpu, Activity, Sliders, Waves, Layers, AlertTriangle } from 'lucide-react';
 
 type CalcTab = 'ohm' | 'divider' | '555' | 'led' | 'rc' | 'lc' | 'pcb';
+type OhmMode = 'VR' | 'VI' | 'VP' | 'IR' | 'IP' | 'RP';
+
+// Standard E12 values [1.0 .. 8.2]
+const E12_SERIES = [1.0, 1.2, 1.5, 1.8, 2.2, 2.7, 3.3, 3.9, 4.7, 5.6, 6.8, 8.2];
+
+function findNearestE12(rOhms: number): number {
+  if (rOhms <= 0 || !isFinite(rOhms)) return 0;
+  const exponent = Math.floor(Math.log10(rOhms));
+  const mantissa = rOhms / Math.pow(10, exponent);
+  let best = E12_SERIES[0];
+  let minDiff = Infinity;
+  for (const val of E12_SERIES) {
+    const diff = Math.abs(val - mantissa);
+    if (diff < minDiff) {
+      minDiff = diff;
+      best = val;
+    }
+  }
+  // Check if next decade's first item (10.0) is closer
+  if (Math.abs(10.0 - mantissa) < minDiff) {
+    return 10.0 * Math.pow(10, exponent);
+  }
+  return Math.round(best * Math.pow(10, exponent) * 100) / 100;
+}
+
+function formatResistance(r: number): string {
+  if (r <= 0 || !isFinite(r)) return '0 Ω';
+  if (r >= 1e6) return `${(r / 1e6).toFixed(2)} MΩ`;
+  if (r >= 1e3) return `${(r / 1e3).toFixed(2)} kΩ`;
+  if (r < 1) return `${(r * 1000).toFixed(2)} mΩ`;
+  return `${r.toFixed(2)} Ω`;
+}
 
 export function CalculatorsPanel() {
   const [activeTab, setActiveTab] = useState<CalcTab>('555');
 
-  // 1. Ohm's Law State
-  const [ohmV, setOhmV] = useState<string>('9');
-  const [ohmR, setOhmR] = useState<string>('1000');
-  const calcOhm = () => {
-    const v = parseFloat(ohmV) || 0;
-    const r = Math.max(parseFloat(ohmR) || 0, 0.0001);
-    const i = v / r;
-    const p = v * i;
+  // 1. Ohm's Law Multi-Variable Solver State
+  const [ohmMode, setOhmMode] = useState<OhmMode>('VR');
+  const [ohmVVal, setOhmVVal] = useState<string>('9');
+  const [ohmVUnit, setOhmVUnit] = useState<'mV' | 'V' | 'kV'>('V');
+
+  const [ohmIVal, setOhmIVal] = useState<string>('9');
+  const [ohmIUnit, setOhmIUnit] = useState<'uA' | 'mA' | 'A'>('mA');
+
+  const [ohmRVal, setOhmRVal] = useState<string>('1000');
+  const [ohmRUnit, setOhmRUnit] = useState<'mOhm' | 'Ohm' | 'kOhm' | 'MOhm'>('Ohm');
+
+  const [ohmPVal, setOhmPVal] = useState<string>('81');
+  const [ohmPUnit, setOhmPUnit] = useState<'uW' | 'mW' | 'W' | 'kW'>('mW');
+
+  const calcOhmMulti = () => {
+    // Multipliers to standard SI units (V, A, Ohm, W)
+    const multV = ohmVUnit === 'mV' ? 1e-3 : ohmVUnit === 'kV' ? 1e3 : 1;
+    const multI = ohmIUnit === 'uA' ? 1e-6 : ohmIUnit === 'mA' ? 1e-3 : 1;
+    const multR = ohmRUnit === 'mOhm' ? 1e-3 : ohmRUnit === 'kOhm' ? 1e3 : ohmRUnit === 'MOhm' ? 1e6 : 1;
+    const multP = ohmPUnit === 'uW' ? 1e-6 : ohmPUnit === 'mW' ? 1e-3 : ohmPUnit === 'kW' ? 1e3 : 1;
+
+    let v = 0;
+    let i = 0;
+    let r = 0;
+    let p = 0;
+
+    switch (ohmMode) {
+      case 'VR': {
+        v = (parseFloat(ohmVVal) || 0) * multV;
+        r = Math.max((parseFloat(ohmRVal) || 0) * multR, 1e-9);
+        i = v / r;
+        p = v * i;
+        break;
+      }
+      case 'VI': {
+        v = (parseFloat(ohmVVal) || 0) * multV;
+        i = (parseFloat(ohmIVal) || 0) * multI;
+        r = i !== 0 ? Math.abs(v / i) : 0;
+        p = Math.abs(v * i);
+        break;
+      }
+      case 'VP': {
+        v = (parseFloat(ohmVVal) || 0) * multV;
+        p = Math.max((parseFloat(ohmPVal) || 0) * multP, 0);
+        i = v !== 0 ? p / v : 0;
+        r = p > 0 ? (v * v) / p : 0;
+        break;
+      }
+      case 'IR': {
+        i = (parseFloat(ohmIVal) || 0) * multI;
+        r = Math.max((parseFloat(ohmRVal) || 0) * multR, 0);
+        v = i * r;
+        p = i * i * r;
+        break;
+      }
+      case 'IP': {
+        i = (parseFloat(ohmIVal) || 0) * multI;
+        p = Math.max((parseFloat(ohmPVal) || 0) * multP, 0);
+        v = i !== 0 ? p / i : 0;
+        r = i !== 0 ? p / (i * i) : 0;
+        break;
+      }
+      case 'RP': {
+        r = Math.max((parseFloat(ohmRVal) || 0) * multR, 1e-9);
+        p = Math.max((parseFloat(ohmPVal) || 0) * multP, 0);
+        v = Math.sqrt(p * r);
+        i = Math.sqrt(p / r);
+        break;
+      }
+    }
+
     return {
-      currentA: i,
-      currentMa: i * 1000,
-      powerW: p,
-      powerMw: p * 1000,
+      v,
+      i,
+      r,
+      p,
+      nearestE12: findNearestE12(r),
+      isOverheating: p > 0.25, // > 250mW standard resistor dissipation rating
     };
   };
 
@@ -326,53 +423,233 @@ export function CalculatorsPanel() {
           </div>
         )}
 
-        {/* 2. OHM'S LAW CALCULATOR */}
+        {/* 2. OHM'S LAW CALCULATOR (MULTI-VARIABLE SOLVER) */}
         {activeTab === 'ohm' && (
-          <div className="max-w-xl space-y-6">
+          <div className="max-w-2xl space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-white">Ohm&apos;s Law & Electrical Power</h3>
-              <p className="text-xs text-slate-400 mt-1">Calculates branch current and electrical power dissipation.</p>
+              <h3 className="text-lg font-bold text-white">Ohm&apos;s Law & Electrical Power Solver</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Multi-variable solver: Select any two known variables to dynamically calculate the remaining parameters.
+              </p>
             </div>
 
-            <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-yellow-300">
-              V = I · R &nbsp;|&nbsp; P = V · I = I² · R = V² / R
+            {/* Formula Banner */}
+            <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-yellow-300 flex flex-wrap gap-x-4 gap-y-1">
+              <span>V = I · R</span>
+              <span className="text-slate-600">|</span>
+              <span>P = V · I</span>
+              <span className="text-slate-600">|</span>
+              <span>P = I² · R</span>
+              <span className="text-slate-600">|</span>
+              <span>P = V² / R</span>
+              <span className="text-slate-600">|</span>
+              <span>R = V² / P</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-mono text-slate-400 block mb-1">Voltage (V)</label>
-                <input
-                  type="number"
-                  value={ohmV}
-                  onChange={(e) => setOhmV(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-mono text-slate-400 block mb-1">Resistance (Ω)</label>
-                <input
-                  type="number"
-                  value={ohmR}
-                  onChange={(e) => setOhmR(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
+            {/* Mode Selector */}
+            <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl space-y-3">
+              <label className="text-xs font-mono font-bold text-slate-300 block">
+                Select Known Variables (Solve Mode):
+              </label>
+              <select
+                value={ohmMode}
+                onChange={(e) => setOhmMode(e.target.value as OhmMode)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-emerald-400 focus:border-emerald-500 focus:outline-none"
+              >
+                <option value="VR">Known: Voltage (V) &amp; Resistance (R) → Solve Current &amp; Power</option>
+                <option value="VI">Known: Voltage (V) &amp; Current (I) → Solve Resistance &amp; Power</option>
+                <option value="VP">Known: Voltage (V) &amp; Power (P) → Solve Current &amp; Resistance</option>
+                <option value="IR">Known: Current (I) &amp; Resistance (R) → Solve Voltage &amp; Power</option>
+                <option value="IP">Known: Current (I) &amp; Power (P) → Solve Voltage &amp; Resistance</option>
+                <option value="RP">Known: Resistance (R) &amp; Power (P) → Solve Voltage &amp; Current</option>
+              </select>
             </div>
 
+            {/* Variable Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Voltage Input (when mode is VR, VI, VP) */}
+              {(ohmMode === 'VR' || ohmMode === 'VI' || ohmMode === 'VP') && (
+                <div>
+                  <label className="text-xs font-mono text-slate-400 block mb-1">Voltage (V)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      value={ohmVVal}
+                      onChange={(e) => setOhmVVal(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <select
+                      value={ohmVUnit}
+                      onChange={(e) => setOhmVUnit(e.target.value as 'mV' | 'V' | 'kV')}
+                      className="bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-xs font-mono text-slate-300 focus:border-emerald-500 focus:outline-none"
+                    >
+                      <option value="mV">mV</option>
+                      <option value="V">V</option>
+                      <option value="kV">kV</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Input (when mode is VI, IR, IP) */}
+              {(ohmMode === 'VI' || ohmMode === 'IR' || ohmMode === 'IP') && (
+                <div>
+                  <label className="text-xs font-mono text-slate-400 block mb-1">Current (I)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      value={ohmIVal}
+                      onChange={(e) => setOhmIVal(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <select
+                      value={ohmIUnit}
+                      onChange={(e) => setOhmIUnit(e.target.value as 'uA' | 'mA' | 'A')}
+                      className="bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-xs font-mono text-slate-300 focus:border-emerald-500 focus:outline-none"
+                    >
+                      <option value="uA">µA</option>
+                      <option value="mA">mA</option>
+                      <option value="A">A</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Resistance Input (when mode is VR, IR, RP) */}
+              {(ohmMode === 'VR' || ohmMode === 'IR' || ohmMode === 'RP') && (
+                <div>
+                  <label className="text-xs font-mono text-slate-400 block mb-1">Resistance (R)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      value={ohmRVal}
+                      onChange={(e) => setOhmRVal(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <select
+                      value={ohmRUnit}
+                      onChange={(e) => setOhmRUnit(e.target.value as 'mOhm' | 'Ohm' | 'kOhm' | 'MOhm')}
+                      className="bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-xs font-mono text-slate-300 focus:border-emerald-500 focus:outline-none"
+                    >
+                      <option value="mOhm">mΩ</option>
+                      <option value="Ohm">Ω</option>
+                      <option value="kOhm">kΩ</option>
+                      <option value="MOhm">MΩ</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Power Input (when mode is VP, IP, RP) */}
+              {(ohmMode === 'VP' || ohmMode === 'IP' || ohmMode === 'RP') && (
+                <div>
+                  <label className="text-xs font-mono text-slate-400 block mb-1">Power (P)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      value={ohmPVal}
+                      onChange={(e) => setOhmPVal(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm font-mono text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <select
+                      value={ohmPUnit}
+                      onChange={(e) => setOhmPUnit(e.target.value as 'uW' | 'mW' | 'W' | 'kW')}
+                      className="bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-xs font-mono text-slate-300 focus:border-emerald-500 focus:outline-none"
+                    >
+                      <option value="uW">µW</option>
+                      <option value="mW">mW</option>
+                      <option value="W">W</option>
+                      <option value="kW">kW</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Results Grid */}
             {(() => {
-              const res = calcOhm();
+              const res = calcOhmMulti();
               return (
-                <div className="grid grid-cols-2 gap-3 bg-slate-900/80 border border-slate-800 p-4 rounded-xl">
-                  <div className="p-3 bg-slate-950 rounded-lg">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">Current (I)</span>
-                    <span className="text-xl font-bold font-mono text-cyan-400">{res.currentMa.toFixed(3)} mA</span>
-                    <span className="text-xs font-mono text-slate-500 block mt-1">({res.currentA.toFixed(5)} A)</span>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/80 border border-slate-800 p-4 rounded-xl">
+                    {/* Voltage */}
+                    <div className="p-3 bg-slate-950 rounded-lg">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Voltage (V)</span>
+                      <span className="text-lg font-bold font-mono text-emerald-400">
+                        {res.v >= 1000
+                          ? `${(res.v / 1000).toFixed(3)} kV`
+                          : res.v >= 1
+                          ? `${res.v.toFixed(3)} V`
+                          : `${(res.v * 1000).toFixed(2)} mV`}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                        {res.v.toFixed(4)} V
+                      </span>
+                    </div>
+
+                    {/* Current */}
+                    <div className="p-3 bg-slate-950 rounded-lg">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Current (I)</span>
+                      <span className="text-lg font-bold font-mono text-cyan-400">
+                        {res.i >= 1
+                          ? `${res.i.toFixed(3)} A`
+                          : res.i >= 1e-3
+                          ? `${(res.i * 1e3).toFixed(3)} mA`
+                          : `${(res.i * 1e6).toFixed(2)} µA`}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                        {(res.i * 1e3).toFixed(4)} mA
+                      </span>
+                    </div>
+
+                    {/* Resistance */}
+                    <div className="p-3 bg-slate-950 rounded-lg">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Resistance (R)</span>
+                      <span className="text-lg font-bold font-mono text-purple-400">
+                        {formatResistance(res.r)}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                        {res.r.toFixed(2)} Ω
+                      </span>
+                    </div>
+
+                    {/* Power */}
+                    <div className="p-3 bg-slate-950 rounded-lg">
+                      <span className="text-[10px] text-slate-400 uppercase font-mono block">Power (P)</span>
+                      <span className="text-lg font-bold font-mono text-yellow-400">
+                        {res.p >= 1
+                          ? `${res.p.toFixed(3)} W`
+                          : res.p >= 1e-3
+                          ? `${(res.p * 1e3).toFixed(2)} mW`
+                          : `${(res.p * 1e6).toFixed(1)} µW`}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                        {res.p.toFixed(4)} W
+                      </span>
+                    </div>
                   </div>
-                  <div className="p-3 bg-slate-950 rounded-lg">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">Power Dissipation (P)</span>
-                    <span className="text-xl font-bold font-mono text-yellow-400">{res.powerMw.toFixed(2)} mW</span>
-                    <span className="text-xs font-mono text-slate-500 block mt-1">({res.powerW.toFixed(4)} W)</span>
+
+                  {/* Standard E12 Resistor Suggestion */}
+                  <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs font-mono gap-2">
+                    <span className="text-slate-400">Nearest Standard E12 Resistor:</span>
+                    <span className="text-emerald-400 font-bold bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                      {formatResistance(res.nearestE12)} (±10% standard tolerance)
+                    </span>
                   </div>
+
+                  {/* Thermal Dissipation Warning */}
+                  {res.isOverheating && (
+                    <div className="p-3 bg-amber-950/40 border border-amber-600/50 rounded-xl text-amber-200 text-xs flex items-center gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>
+                        <strong>Thermal Dissipation Warning:</strong> Power dissipation ({res.p >= 1 ? `${res.p.toFixed(2)}W` : `${(res.p * 1000).toFixed(1)}mW`}) exceeds standard 1/4-Watt (250mW) through-hole resistor ratings. Use a 1/2W, 1W or ceramic power resistor with thermal relief.
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })()}

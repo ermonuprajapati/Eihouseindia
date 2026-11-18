@@ -432,6 +432,18 @@ export function EngineeringLabApp() {
     toast.info('Wire disconnected');
   };
 
+  const handleDisconnectWireEndpoint = (wireId: string, endpoint: 'start' | 'end') => {
+    recordHistory();
+    setProject((prev) => ({
+      ...prev,
+      wires: prev.wires.filter((w) => w.id !== wireId),
+    }));
+    if (selectedWireId === wireId) {
+      setSelectedWireId(null);
+    }
+    toast.info(`Wire ${endpoint === 'start' ? 'Start' : 'End'} pin disconnected`);
+  };
+
   // ----------------------------------------------------------------
   // Project & File Operations
   // ----------------------------------------------------------------
@@ -749,6 +761,7 @@ export function EngineeringLabApp() {
               onDeleteComponent={handleDeleteComponent}
               onDeleteWire={handleDeleteWire}
               onDisconnectWire={handleDisconnectWire}
+              onDisconnectWireEndpoint={handleDisconnectWireEndpoint}
               onDuplicateComponent={handleDuplicateComponent}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}
@@ -808,6 +821,7 @@ export function EngineeringLabApp() {
               onDeleteComponent={handleDeleteComponent}
               onDeleteWire={handleDeleteWire}
               onDisconnectWire={handleDisconnectWire}
+              onDisconnectWireEndpoint={handleDisconnectWireEndpoint}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}
               onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}

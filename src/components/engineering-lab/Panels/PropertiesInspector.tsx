@@ -15,6 +15,7 @@ interface PropertiesInspectorProps {
   onDeleteComponent: (id: string) => void;
   onDeleteWire?: (wireId: string) => void;
   onDisconnectWire?: (wireId: string) => void;
+  onDisconnectWireEndpoint?: (wireId: string, endpoint: 'start' | 'end') => void;
   onDuplicateComponent?: (id: string) => void;
   onClose: () => void;
   simState?: { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean };
@@ -26,8 +27,8 @@ interface PropertiesInspectorProps {
 }
 
 const FOOTPRINT_OPTIONS = [
-  { value: 'Resistor_SMD:R_0805_2012Metric', label: 'SMD 0805 (2012 Metric)' },
-  { value: 'Resistor_SMD:R_1206_3216Metric', label: 'SMD 1206 (3216 Metric)' },
+  { value: 'Resistor_SMD:R_0805_2012Metric', label: 'Resistor SMD 0805 (2012 Metric)' },
+  { value: 'Resistor_SMD:R_1206_3216Metric', label: 'Resistor SMD 1206 (3216 Metric)' },
   { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial Resistor (1/4W, 7.62mm)' },
   { value: 'Inductor_THT:L_Axial_L7.0mm_D3.3mm_P10.16mm_Horizontal', label: 'Through-Hole Axial Inductor (10.16mm)' },
   { value: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', label: 'Through-Hole Diode DO-35 (1N4148)' },
@@ -51,6 +52,16 @@ const FOOTPRINT_OPTIONS = [
   { value: 'TerminalBlock:TerminalBlock_bornier-2_P5.08mm', label: 'Terminal Block 2-Pin 5.08mm' },
   { value: 'BatteryHolder_Keystone_2460_1xAA', label: 'Battery Clip / Holder 9V' },
   { value: 'TestPoint_Pad_D1.0mm', label: 'GND Test Point Pad (1.0mm)' },
+  { value: 'Module:Arduino_Uno_R3', label: 'Arduino Uno R3 Dev Board' },
+  { value: 'Module:Arduino_Mega_2560', label: 'Arduino Mega 2560 R3 Board' },
+  { value: 'Module:Arduino_Nano', label: 'Arduino Nano V3 DIP-30' },
+  { value: 'Module:ESP32-WROOM-32', label: 'ESP32-WROOM-32 DevKit' },
+  { value: 'Module:ESP32-S3-DevKitC-1', label: 'ESP32-S3 DevKitC-1' },
+  { value: 'Module:ESP32-C3-DevKitM-1', label: 'ESP32-C3 DevKitM-1' },
+  { value: 'Module:STM32_BluePill', label: 'STM32 Blue Pill Board' },
+  { value: 'Module:STM32_Nucleo_64', label: 'STM32 Nucleo-64' },
+  { value: 'Module:RP2040_Pico', label: 'Raspberry Pi Pico (RP2040)' },
+  { value: 'Module:RP2350_Pico2', label: 'Raspberry Pi Pico 2 (RP2350)' },
 ];
 
 const MODEL_3D_OPTIONS = [
@@ -69,6 +80,38 @@ const MODEL_3D_OPTIONS = [
   { value: 'relay_songle_srd', label: 'Songle SRD Relay 5V' },
   { value: 'battery_9v_block', label: 'Battery 9V Alkaline Block' },
   { value: 'header_2pin_2.54mm', label: 'Header 2-Pin Terminal' },
+  { value: 'arduino_uno_r3', label: 'Arduino Uno R3 (3D Board)' },
+  { value: 'arduino_mega_2560', label: 'Arduino Mega 2560 (3D Board)' },
+  { value: 'arduino_nano_v3', label: 'Arduino Nano V3 (3D Module)' },
+  { value: 'esp32_wroom_32', label: 'ESP32-WROOM-32 (3D Module)' },
+  { value: 'esp32_s3_devkit', label: 'ESP32-S3 DevKit (3D Module)' },
+  { value: 'esp32_c3_devkit', label: 'ESP32-C3 DevKit (3D Module)' },
+  { value: 'stm32_bluepill', label: 'STM32 Blue Pill (3D Board)' },
+  { value: 'stm32_nucleo', label: 'STM32 Nucleo-64 (3D Board)' },
+  { value: 'raspberry_pi_pico', label: 'Raspberry Pi Pico (3D Board)' },
+];
+
+const PHYSICAL_PACKAGES = [
+  { id: 'res_tht_axial', label: 'Through-Hole Axial (1/4W 7.62mm)', footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', model3d: 'resistor_axial_horiz' },
+  { id: 'res_smd_0805', label: 'Surface Mount SMD 0805 (2012 Metric)', footprint: 'Resistor_SMD:R_0805_2012Metric', model3d: 'resistor_smd_0805' },
+  { id: 'res_smd_1206', label: 'Surface Mount SMD 1206 (3216 Metric)', footprint: 'Resistor_SMD:R_1206_3216Metric', model3d: 'resistor_smd_0805' },
+  { id: 'cap_tht_disc', label: 'Through-Hole Ceramic Disc (5.0mm)', footprint: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', model3d: 'capacitor_disc_ceramic' },
+  { id: 'cap_tht_radial', label: 'Through-Hole Radial Can (Electrolytic)', footprint: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', model3d: 'capacitor_radial_can' },
+  { id: 'cap_smd_0805', label: 'Surface Mount SMD 0805 Capacitor', footprint: 'Capacitor_SMD:C_0805_2012Metric', model3d: 'capacitor_disc_ceramic' },
+  { id: 'led_tht_5mm', label: 'Through-Hole LED 5mm Round', footprint: 'LED_THT:LED_D5.0mm', model3d: 'led_5mm_diffused' },
+  { id: 'ic_dip8', label: 'Through-Hole DIP-8 (7.62mm pitch)', footprint: 'Package_DIP:DIP-8_W7.62mm', model3d: 'dip8_integrated_circuit' },
+  { id: 'ic_soic8', label: 'Surface Mount SOIC-8 (1.27mm pitch)', footprint: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', model3d: 'soic8_smd_ic' },
+  { id: 'ic_dip14', label: 'Through-Hole DIP-14 Logic (7.62mm)', footprint: 'Package_DIP:DIP-14_W7.62mm', model3d: 'dip14_logic_ic' },
+  { id: 'ic_dip16', label: 'Through-Hole DIP-16 Driver (7.62mm)', footprint: 'Package_DIP:DIP-16_W7.62mm', model3d: 'dip16_logic_ic' },
+  { id: 'to92_inline', label: 'Through-Hole TO-92 Transistor Inline', footprint: 'Package_TO_SOT_THT:TO-92_Inline', model3d: 'to92_transistor' },
+  { id: 'to220_power', label: 'Through-Hole TO-220 Power Package', footprint: 'Package_TO_SOT_THT:TO-220-3_Vertical', model3d: 'to220_mosfet' },
+  { id: 'sw_push_6mm', label: 'Tactile Pushbutton 6mm', footprint: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', model3d: 'pushbutton_tactile_6mm' },
+  { id: 'battery_9v', label: '9V Battery Clip / Holder', footprint: 'BatteryHolder_Keystone_2460_1xAA', model3d: 'battery_9v_block' },
+  { id: 'mcu_uno', label: 'Arduino Uno R3 Dev Board', footprint: 'Module:Arduino_Uno_R3', model3d: 'arduino_uno_r3' },
+  { id: 'mcu_nano', label: 'Arduino Nano V3 Compact DIP-30', footprint: 'Module:Arduino_Nano', model3d: 'arduino_nano_v3' },
+  { id: 'mcu_mega', label: 'Arduino Mega 2560 R3 Board', footprint: 'Module:Arduino_Mega_2560', model3d: 'arduino_mega_2560' },
+  { id: 'mcu_esp32', label: 'ESP32-WROOM-32 DevKit Board', footprint: 'Module:ESP32-WROOM-32', model3d: 'esp32_wroom_32' },
+  { id: 'mcu_pico', label: 'Raspberry Pi Pico RP2040 Board', footprint: 'Module:RP2040_Pico', model3d: 'raspberry_pi_pico' },
 ];
 
 export function PropertiesInspector({
@@ -82,6 +125,7 @@ export function PropertiesInspector({
   onDeleteComponent,
   onDeleteWire,
   onDisconnectWire,
+  onDisconnectWireEndpoint,
   onDuplicateComponent,
   onClose,
   simState,
@@ -299,8 +343,42 @@ export function PropertiesInspector({
           <div className="space-y-2 pt-2 border-t border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Wire Actions</span>
 
-            {/* Disconnect and Reconnect Buttons */}
-            {onDisconnectWire && (
+            {/* Disconnect Endpoints and Reconnect */}
+            {onDisconnectWireEndpoint ? (
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onDisconnectWireEndpoint(selectedWire.id, 'start')}
+                    className="py-1.5 px-2 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    title="Disconnect start pin and re-route from end pin"
+                  >
+                    <Scissors className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Disconnect Start</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDisconnectWireEndpoint(selectedWire.id, 'end')}
+                    className="py-1.5 px-2 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    title="Disconnect end pin and re-route from start pin"
+                  >
+                    <Scissors className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Disconnect End</span>
+                  </button>
+                </div>
+                {onDisconnectWire && (
+                  <button
+                    type="button"
+                    onClick={() => onDisconnectWire(selectedWire.id)}
+                    className="w-full py-1.5 px-3 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/60 text-amber-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    title="Detach wire completely"
+                  >
+                    <Unplug className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Disconnect Wire (Unplug)</span>
+                  </button>
+                )}
+              </div>
+            ) : onDisconnectWire && (
               <div className="space-y-1.5">
                 <button
                   type="button"
@@ -311,7 +389,6 @@ export function PropertiesInspector({
                   <Scissors className="w-3.5 h-3.5 text-sky-400" />
                   <span>Disconnect &amp; Re-route</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => onDisconnectWire(selectedWire.id)}
@@ -1219,6 +1296,35 @@ export function PropertiesInspector({
           <div className="text-[10px] uppercase font-mono text-purple-400 font-bold tracking-wider flex items-center justify-between">
             <span>Physical Representation</span>
             <span className="text-slate-500 font-normal">IPC-7351</span>
+          </div>
+
+          {/* Unified Physical Representation Package Selector */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-mono text-slate-300 font-semibold flex items-center justify-between">
+              <span>Physical Package Preset</span>
+              <span className="text-purple-400 font-bold">Auto 2D &amp; 3D Sync</span>
+            </label>
+            <select
+              value={PHYSICAL_PACKAGES.find((p) => p.footprint === component.footprint && p.model3d === component.model3d)?.id || 'custom'}
+              onChange={(e) => {
+                const pkg = PHYSICAL_PACKAGES.find((p) => p.id === e.target.value);
+                if (pkg) {
+                  onUpdateComponent({
+                    ...component,
+                    footprint: pkg.footprint,
+                    model3d: pkg.model3d,
+                  });
+                }
+              }}
+              className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-purple-200 font-mono text-[11px] font-semibold focus:outline-none focus:border-purple-500 cursor-pointer"
+            >
+              <option value="custom">-- Custom / Manual Configuration --</option>
+              {PHYSICAL_PACKAGES.map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>
+                  {pkg.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* PCB Footprint Selection */}

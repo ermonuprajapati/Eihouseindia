@@ -175,13 +175,18 @@ export function ComponentBrowser({
         !q ||
         item.name.toLowerCase().includes(q) ||
         item.type.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q) ||
         item.defaultValue.toLowerCase().includes(q) ||
         (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
-        (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q));
+        (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q)) ||
+        (item.footprint && item.footprint.toLowerCase().includes(q));
+
+      // If active search query matches across categories, allow search to discover components across categories
+      const categoryMatch = selectedCategory === 'all' || (q ? (matchesCategory || item.category.toLowerCase().includes(q)) : matchesCategory);
 
       return (
-        matchesCategory &&
+        categoryMatch &&
         matchesSubCategory &&
         matchesStatus &&
         matchesPackage &&
@@ -344,22 +349,46 @@ export function ComponentBrowser({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search Arduino, contactor, MCB, LM358..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-16 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+            placeholder="Search parts, MPN, MCU, category..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-20 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
           />
-          <button
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded flex items-center gap-1 text-[10px] font-mono transition-colors ${
-              showAdvancedFilters || filterOnly3D || filterOnlyDatasheet || selectedPackage !== 'all'
-                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/60'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Toggle Advanced Filters"
-          >
-            <Filter className="w-3 h-3" />
-            <span>Filter</span>
-          </button>
+          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="p-1 text-slate-400 hover:text-white rounded text-[11px] font-mono leading-none"
+                title="Clear Search"
+              >
+                ✕
+              </button>
+            )}
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`p-1 rounded flex items-center gap-1 text-[10px] font-mono transition-colors ${
+                showAdvancedFilters || filterOnly3D || filterOnlyDatasheet || selectedPackage !== 'all'
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/60'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Toggle Advanced Filters"
+            >
+              <Filter className="w-3 h-3" />
+              <span>Filter</span>
+            </button>
+          </div>
         </div>
+        {search && (
+          <div className="text-[10px] font-mono text-emerald-400 px-1 flex items-center justify-between">
+            <span>Found {filteredComponents.length} matching component{filteredComponents.length === 1 ? '' : 's'}</span>
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="text-slate-400 hover:text-white underline cursor-pointer"
+            >
+              Reset Search
+            </button>
+          </div>
+        )}
 
         {/* Quick Filter Presets */}
         <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-mono scrollbar-none pb-0.5">

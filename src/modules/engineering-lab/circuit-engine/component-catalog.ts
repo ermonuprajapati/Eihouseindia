@@ -940,7 +940,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ARDUINO_UNO',
     name: 'Arduino Uno R3 (ATmega328P)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_arduino',
     simulationStatus: 'transpiled_mcu',
@@ -976,7 +976,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'A5', name: 'A5 (SCL)', x: -60, y: 50, pinType: 'bidirectional' },
     ],
     footprint: 'Module:Arduino_Uno_R3',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'arduino_uno_r3',
     width: 120,
     height: 120,
     symbolSvg: 'mcu_board',
@@ -985,7 +985,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ARDUINO_MEGA',
     name: 'Arduino Mega 2560 R3 (ATmega2560)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_arduino',
     simulationStatus: 'transpiled_mcu',
@@ -1009,7 +1009,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'A3', name: 'A3', x: -70, y: 30, pinType: 'input' },
     ],
     footprint: 'Module:Arduino_Mega_2560',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'arduino_mega_2560',
     width: 140,
     height: 140,
     symbolSvg: 'mcu_board',
@@ -1018,7 +1018,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ARDUINO_NANO',
     name: 'Arduino Nano V3 (ATmega328P)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_arduino',
     simulationStatus: 'transpiled_mcu',
@@ -1033,7 +1033,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'A0', name: 'A0', x: -45, y: 10, pinType: 'input' },
     ],
     footprint: 'Module:Arduino_Nano',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'arduino_nano_v3',
     width: 90,
     height: 70,
     symbolSvg: 'mcu_board',
@@ -1042,7 +1042,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ESP32_DEVKIT',
     name: 'ESP32 DevKit V1 (Dual-Core Wi-Fi/BLE)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_esp',
     simulationStatus: 'transpiled_mcu',
@@ -1058,7 +1058,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'D22', name: 'SCL (D22)', x: 50, y: 30, pinType: 'bidirectional' },
     ],
     footprint: 'Module:ESP32-WROOM-32',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'esp32_wroom_32',
     width: 100,
     height: 100,
     symbolSvg: 'mcu_board',
@@ -1067,7 +1067,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ESP32_S3',
     name: 'ESP32-S3 DevKitC-1 (Dual-Core LX7 + AI/Vector)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_esp',
     simulationStatus: 'transpiled_mcu',
@@ -1083,7 +1083,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'GPIO20', name: 'USB D+', x: 50, y: 30, pinType: 'bidirectional' },
     ],
     footprint: 'Module:ESP32-S3-DevKitC-1',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'esp32_s3_devkit',
     width: 100,
     height: 100,
     symbolSvg: 'mcu_board',
@@ -1092,7 +1092,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'ESP32_C3',
     name: 'ESP32-C3 DevKitM-1 (RISC-V 32-bit Single-Core)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_esp',
     simulationStatus: 'transpiled_mcu',
@@ -1106,7 +1106,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'GPIO9', name: 'IO9 (BOOT)', x: 50, y: 20, pinType: 'bidirectional' },
     ],
     footprint: 'Module:ESP32-C3-DevKitM-1',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'esp32_c3_devkit',
     width: 90,
     height: 90,
     symbolSvg: 'mcu_board',
@@ -1115,7 +1115,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'STM32F103',
     name: 'STM32F103C8T6 ARM Cortex-M3 (Blue Pill)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_stm32',
     simulationStatus: 'transpiled_mcu',
@@ -1129,7 +1129,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'PC13', name: 'PC13 (LED)', x: 45, y: 35, pinType: 'bidirectional' },
     ],
     footprint: 'Module:STM32_BluePill',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'stm32_bluepill',
     width: 90,
     height: 80,
     symbolSvg: 'mcu_board',
@@ -1138,7 +1138,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'STM32_NUCLEO',
     name: 'STM32 Nucleo-64 (STM32F401RE / F411RE)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_stm32',
     simulationStatus: 'transpiled_mcu',
@@ -1153,7 +1153,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'A0', name: 'A0', x: -55, y: 25, pinType: 'input' },
     ],
     footprint: 'Module:STM32_Nucleo_64',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'stm32_nucleo',
     width: 120,
     height: 120,
     symbolSvg: 'mcu_board',
@@ -1162,7 +1162,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'RASPBERRY_PI_PICO',
     name: 'Raspberry Pi Pico (RP2040 Dual M0+)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_rp2040',
     simulationStatus: 'transpiled_mcu',
@@ -1175,7 +1175,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'GP25', name: 'GP25 (LED)', x: 45, y: 35, pinType: 'bidirectional' },
     ],
     footprint: 'Module:RP2040_Pico',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'raspberry_pi_pico',
     width: 90,
     height: 80,
     symbolSvg: 'mcu_board',
@@ -1184,20 +1184,20 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   {
     type: 'RASPBERRY_PI_PICO2',
     name: 'Raspberry Pi Pico 2 (RP2350 Dual Hazard3 RISC-V / Cortex-M33)',
-    designatorPrefix: 'MCU',
+    designatorPrefix: 'U',
     category: 'microcontrollers',
     subCategory: 'mcu_rp2040',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
     defaultValue: 'RP2350',
-    defaultParams: { clockMhz: 150, flashMb: 4, ramKb: 520 },
+    defaultParams: { clockMhz: 150, flashMb: 4, sramKb: 520 },
     pins: [
       { id: '3V3', name: '3V3 (OUT)', x: -45, y: -35, pinType: 'power' },
       { id: 'GND', name: 'GND', x: -45, y: -25, pinType: 'power' },
       { id: 'GP25', name: 'GP25 (LED)', x: 45, y: 35, pinType: 'bidirectional' },
     ],
     footprint: 'Module:RP2350_Pico2',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'raspberry_pi_pico',
     width: 90,
     height: 80,
     symbolSvg: 'mcu_board',
@@ -2623,13 +2623,18 @@ export function createComponentInstance(
   y: number,
   existingComponents?: CircuitComponent[]
 ): CircuitComponent {
-  const prefix = template.designatorPrefix || template.type.slice(0, 3);
+  const prefix =
+    template.designatorPrefix ||
+    (template.category === 'microcontrollers' || template.category === 'analog_ics' || template.category === 'digital_logic'
+      ? 'U'
+      : template.type.slice(0, 3));
   let count = 0;
   if (existingComponents && Array.isArray(existingComponents)) {
-    count = existingComponents.filter((c) => (c.designator || c.label).startsWith(prefix)).length;
+    const prefixRegex = new RegExp(`^${prefix}\\d+$`, 'i');
+    count = existingComponents.filter((c) => prefixRegex.test(c.designator || '')).length;
   }
   const designator = `${prefix}${count + 1}`;
-  const uniqueId = `${prefix.toLowerCase()}_${Math.random().toString(36).substring(2, 9)}`;
+  const uniqueId = `${prefix.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   return {
     id: uniqueId,
@@ -2647,7 +2652,7 @@ export function createComponentInstance(
     rotation: 0,
     mirrored: false,
     value: template.defaultValue,
-    parameters: { ...template.defaultParams },
+    parameters: JSON.parse(JSON.stringify(template.defaultParams || {})),
     pins: template.pins.map((p) => ({ ...p })),
     footprint: template.footprint,
     model3d: template.model3d,

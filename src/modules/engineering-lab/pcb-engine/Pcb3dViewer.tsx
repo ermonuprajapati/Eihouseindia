@@ -1,43 +1,151 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { PcbLayout } from '../types';
-import { Compass } from 'lucide-react';
 
 export interface Pcb3dViewerProps {
   pcb: PcbLayout;
   solderMaskColor?: string; // e.g. '#065F46' (Green), '#0F172A' (Black), '#1E40AF' (Blue), '#991B1B' (Red)
+  cameraPreset?: 'iso' | 'top' | 'bot' | 'front' | 'reset' | null;
 }
 
 export function Pcb3dViewer({
   pcb,
   solderMaskColor = '#065F46',
+  cameraPreset,
 }: Pcb3dViewerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const thickness = pcb.boardThicknessMm || 1.6;
   const halfW = pcb.widthMm / 2;
   const halfH = pcb.heightMm / 2;
 
+  // Camera preset handler triggered from toolbar
+  useEffect(() => {
+    if (!cameraPreset || !controlsRef.current) return;
+    const ctrl = controlsRef.current;
+    if (cameraPreset === 'iso' || cameraPreset === 'reset') {
+      ctrl.object.position.set(0, 80, 100);
+      ctrl.target.set(0, 0, 0);
+    } else if (cameraPreset === 'top') {
+      ctrl.object.position.set(0, 130, 0.1);
+      ctrl.target.set(0, 0, 0);
+    } else if (cameraPreset === 'bot') {
+      ctrl.object.position.set(0, -130, 0.1);
+      ctrl.target.set(0, 0, 0);
+    } else if (cameraPreset === 'front') {
+      ctrl.object.position.set(0, 0, 120);
+      ctrl.target.set(0, 0, 0);
+    }
+    ctrl.update();
+  }, [cameraPreset]);
+
+  // High-Resolution Crisp Silkscreen Texture Decal
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = Math.round((1024 * pcb.heightMm) / pcb.widthMm);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = canvas.width / pcb.widthMm;
+
+    // Outer border silkscreen
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+
+    // Board branding & metadata
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('EI HOUSE ENG LAB', 18, 28);
+    ctx.font = '13px monospace';
+    ctx.fillText(`REV 1.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 16);
+
+    // Component Silkscreen reference designators & outlines
+    pcb.components?.forEach((comp) => {
+      const cx = comp.x * scale;
+      const cy = comp.y * scale;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (comp.rotation) {
+        ctx.rotate(((comp.rotation || 0) * Math.PI) / 180);
+      }
+
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.font = 'bold 15px monospace';
+
+      if (comp.type.includes('LED') || comp.type === 'DIODE') {
+        // LED circular rim with cathode flat bar
+        ctx.beginPath();
+        ctx.arc(0, 0, 4.0 * scale, -0.6 * Math.PI, 0.6 * Math.PI);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(4.0 * scale * Math.cos(0.6 * Math.PI), 4.0 * scale * Math.sin(0.6 * Math.PI));
+        ctx.lineTo(4.0 * scale * Math.cos(-0.6 * Math.PI), 4.0 * scale * Math.sin(-0.6 * Math.PI));
+        ctx.stroke();
+        ctx.fillText(comp.designator, -12, 6 * scale);
+      } else if (comp.type.includes('RESISTOR')) {
+        // Axial resistor bounding box
+        ctx.strokeRect(-6 * scale, -2.5 * scale, 12 * scale, 5 * scale);
+        ctx.fillText(comp.designator, -12, -4 * scale);
+      } else if (comp.type.includes('CAPACITOR')) {
+        // Polarized capacitor circle with + indicator
+        ctx.beginPath();
+        ctx.arc(0, 0, 4.5 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillText('+', -7 * scale, -1 * scale);
+        ctx.fillText(comp.designator, -10, 7 * scale);
+      } else if (comp.type.includes('IC') || comp.type.includes('TIMER') || comp.footprint?.includes('DIP')) {
+        // DIP package outline with Pin 1 notch and dot
+        ctx.strokeRect(-6 * scale, -9 * scale, 12 * scale, 18 * scale);
+        ctx.beginPath();
+        ctx.arc(0, -9 * scale, 2.5 * scale, 0, Math.PI);
+        ctx.stroke();
+        // Pin 1 dot
+        ctx.beginPath();
+        ctx.arc(-4 * scale, -6 * scale, 1.5 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillText(comp.designator, -10, 2);
+      } else if (comp.type.includes('BATTERY') || comp.type.includes('VOLTAGE')) {
+        ctx.strokeRect(-8 * scale, -5 * scale, 16 * scale, 10 * scale);
+        ctx.fillText(comp.designator, -12, -7 * scale);
+      } else {
+        ctx.strokeRect(-5 * scale, -5 * scale, 10 * scale, 10 * scale);
+        ctx.fillText(comp.designator, -12, -7 * scale);
+      }
+      ctx.restore();
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, [pcb]);
+
   const materials = useMemo(() => {
     return {
       fr4Core: new THREE.MeshStandardMaterial({
         color: solderMaskColor,
-        roughness: 0.4,
+        roughness: 0.35,
         metalness: 0.1,
       }),
       copperTop: new THREE.MeshStandardMaterial({
-        color: '#F59E0B',
-        metalness: 0.85,
-        roughness: 0.25,
+        color: '#EF4444',
+        metalness: 0.8,
+        roughness: 0.3,
       }),
       copperBottom: new THREE.MeshStandardMaterial({
         color: '#3B82F6',
-        metalness: 0.85,
-        roughness: 0.25,
+        metalness: 0.8,
+        roughness: 0.3,
       }),
       goldPad: new THREE.MeshStandardMaterial({
         color: '#EAB308',
@@ -45,15 +153,54 @@ export function Pcb3dViewer({
         roughness: 0.2,
       }),
       drillHole: new THREE.MeshBasicMaterial({
-        color: '#0A0F1D',
+        color: '#050D1A',
       }),
       icPlastic: new THREE.MeshStandardMaterial({
-        color: '#1E293B',
-        roughness: 0.4,
+        color: '#18181B',
+        roughness: 0.5,
+        metalness: 0.1,
+      }),
+      icLead: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.15,
       }),
       resistorBody: new THREE.MeshStandardMaterial({
         color: '#D4A373',
-        roughness: 0.5,
+        roughness: 0.45,
+      }),
+      resistorBandBrown: new THREE.MeshStandardMaterial({ color: '#78350F' }),
+      resistorBandBlack: new THREE.MeshStandardMaterial({ color: '#09090B' }),
+      resistorBandRed: new THREE.MeshStandardMaterial({ color: '#DC2626' }),
+      resistorBandGold: new THREE.MeshStandardMaterial({ color: '#F59E0B', metalness: 0.8 }),
+      capRadialBlue: new THREE.MeshStandardMaterial({
+        color: '#1E3A8A',
+        roughness: 0.3,
+      }),
+      capCeramicTan: new THREE.MeshStandardMaterial({
+        color: '#D97706',
+        roughness: 0.6,
+      }),
+      capStripeWhite: new THREE.MeshStandardMaterial({
+        color: '#F8FAFC',
+      }),
+      terminalGreen: new THREE.MeshStandardMaterial({
+        color: '#15803D',
+        roughness: 0.4,
+      }),
+      screwBrass: new THREE.MeshStandardMaterial({
+        color: '#EAB308',
+        metalness: 0.9,
+        roughness: 0.2,
+      }),
+      mcuBoardBlue: new THREE.MeshStandardMaterial({
+        color: '#005C8A',
+        roughness: 0.4,
+      }),
+      usbMetal: new THREE.MeshStandardMaterial({
+        color: '#CBD5E1',
+        metalness: 0.95,
+        roughness: 0.15,
       }),
       leadMetal: new THREE.MeshStandardMaterial({
         color: '#CBD5E1',
@@ -63,38 +210,18 @@ export function Pcb3dViewer({
     };
   }, [solderMaskColor]);
 
-  // Camera presets
-  const setCameraView = (view: 'iso' | 'top' | 'bot' | 'side') => {
-    if (!controlsRef.current) return;
-    const ctrl = controlsRef.current;
-    if (view === 'iso') {
-      ctrl.object.position.set(0, 80, 100);
-      ctrl.target.set(0, 0, 0);
-    } else if (view === 'top') {
-      ctrl.object.position.set(0, 120, 0.1);
-      ctrl.target.set(0, 0, 0);
-    } else if (view === 'bot') {
-      ctrl.object.position.set(0, -120, 0.1);
-      ctrl.target.set(0, 0, 0);
-    } else if (view === 'side') {
-      ctrl.object.position.set(120, 10, 0);
-      ctrl.target.set(0, 0, 0);
-    }
-    ctrl.update();
-  };
-
   return (
     <div className="relative w-full h-full bg-[#070D18] select-none overflow-hidden">
       {/* Three.js Canvas */}
       <Canvas
         shadows
-        camera={{ position: [0, 90, 110], fov: 40, near: 0.1, far: 2000 }}
+        camera={{ position: [0, 80, 100], fov: 40, near: 0.1, far: 2000 }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
       >
         <color attach="background" args={['#070E1A']} />
 
-        <ambientLight intensity={1.2} />
-        <directionalLight position={[60, 120, 80]} intensity={2.0} castShadow />
+        <ambientLight intensity={1.3} />
+        <directionalLight position={[60, 120, 80]} intensity={2.2} castShadow />
         <directionalLight position={[-60, -80, -60]} intensity={1.0} color="#93C5FD" />
 
         <Grid
@@ -120,6 +247,14 @@ export function Pcb3dViewer({
         <mesh position={[0, 0, 0]} material={materials.fr4Core} castShadow receiveShadow>
           <boxGeometry args={[pcb.widthMm, thickness, pcb.heightMm]} />
         </mesh>
+
+        {/* Crisp Visible Silkscreen Layer Overlay Decal */}
+        {silkscreenTexture && (
+          <mesh position={[0, thickness / 2 + 0.022, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
+            <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.95} depthWrite={false} />
+          </mesh>
+        )}
 
         {/* Copper Pads */}
         {pcb.pads.map((pad) => {
@@ -173,78 +308,228 @@ export function Pcb3dViewer({
           );
         })}
 
-        {/* 3D Component Footprint Bodies */}
+        {/* Authentic 3D Component Models (NO Generic Black Boxes) */}
         {pcb.components?.map((pComp) => {
           const cx = pComp.x - halfW;
           const cz = pComp.y - halfH;
-          const rotY = (pComp.rotation * Math.PI) / 180;
+          const rotY = ((pComp.rotation || 0) * Math.PI) / 180;
 
-          // Render package representation
-          if (pComp.type.includes('RESISTOR')) {
+          // 1. LED (5mm Translucent Domed Lens with Metallic Leads)
+          if (pComp.type.includes('LED') || pComp.footprint?.includes('LED')) {
+            const ledParamColor = (pComp.parameters?.color as string) || '';
+            const ledColor =
+              ledParamColor.startsWith('#')
+                ? ledParamColor
+                : pComp.label?.toLowerCase().includes('green')
+                ? '#10B981'
+                : pComp.label?.toLowerCase().includes('blue')
+                ? '#3B82F6'
+                : pComp.label?.toLowerCase().includes('yellow')
+                ? '#F59E0B'
+                : pComp.label?.toLowerCase().includes('white')
+                ? '#F8FAFC'
+                : '#EF4444';
+
+            const ledMaterial = new THREE.MeshPhysicalMaterial({
+              color: ledColor,
+              transmission: 0.55,
+              opacity: 0.88,
+              transparent: true,
+              roughness: 0.15,
+              emissive: ledColor,
+              emissiveIntensity: 0.25,
+            });
+
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2 + 2, cz]} rotation={[0, -rotY, 0]}>
-                <mesh material={materials.resistorBody} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[1.2, 1.2, 5.5, 16]} />
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Silver Anode / Cathode leads entering pads */}
+                <mesh position={[-1.27, 1.5, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.25, 0.25, 3.0, 8]} />
+                </mesh>
+                <mesh position={[1.27, 1.5, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.25, 0.25, 3.0, 8]} />
+                </mesh>
+                {/* Base rim collar */}
+                <mesh position={[0, 3.2, 0]} material={ledMaterial}>
+                  <cylinderGeometry args={[2.8, 2.8, 0.8, 24]} />
+                </mesh>
+                {/* Main cylinder body */}
+                <mesh position={[0, 5.5, 0]} material={ledMaterial}>
+                  <cylinderGeometry args={[2.5, 2.5, 4.0, 24]} />
+                </mesh>
+                {/* Hemisphere dome top */}
+                <mesh position={[0, 7.5, 0]} material={ledMaterial}>
+                  <sphereGeometry args={[2.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
                 </mesh>
               </group>
             );
           }
 
-          if (pComp.type.includes('IC') || pComp.type.includes('DIP') || pComp.footprint.includes('DIP')) {
+          // 2. Axial Through-Hole Resistor with Color Bands and Bent Leads
+          if (pComp.type.includes('RESISTOR') || pComp.footprint?.includes('Axial')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2 + 2.5, cz]} rotation={[0, -rotY, 0]}>
-                <mesh material={materials.icPlastic}>
-                  <boxGeometry args={[12, 3.5, 7.6]} />
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Leads bending down into PCB pads at +/- 3.81mm */}
+                <mesh position={[-3.81, 1.0, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.3, 0.3, 2.0, 8]} />
+                </mesh>
+                <mesh position={[3.81, 1.0, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.3, 0.3, 2.0, 8]} />
+                </mesh>
+                <mesh position={[0, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.3, 0.3, 7.6, 8]} />
+                </mesh>
+                {/* Resistor ceramic body */}
+                <mesh position={[0, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.resistorBody}>
+                  <cylinderGeometry args={[1.2, 1.2, 4.8, 16]} />
+                </mesh>
+                {/* 4 Standard Color Bands */}
+                <mesh position={[-1.4, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.resistorBandBrown}>
+                  <cylinderGeometry args={[1.22, 1.22, 0.4, 16]} />
+                </mesh>
+                <mesh position={[-0.5, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.resistorBandBlack}>
+                  <cylinderGeometry args={[1.22, 1.22, 0.4, 16]} />
+                </mesh>
+                <mesh position={[0.4, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.resistorBandRed}>
+                  <cylinderGeometry args={[1.22, 1.22, 0.4, 16]} />
+                </mesh>
+                <mesh position={[1.4, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.resistorBandGold}>
+                  <cylinderGeometry args={[1.22, 1.22, 0.4, 16]} />
                 </mesh>
               </group>
             );
           }
 
-          // Default surface/through-hole block
+          // 3. Radial Electrolytic Capacitor (Aluminum Can with Negative Stripe)
+          if (pComp.type.includes('CAPACITOR') && (pComp.footprint?.includes('Radial') || pComp.footprint?.includes('CP_'))) {
+            return (
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Two leads */}
+                <mesh position={[-1.25, 1.0, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.3, 0.3, 2.0, 8]} />
+                </mesh>
+                <mesh position={[1.25, 1.0, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.3, 0.3, 2.0, 8]} />
+                </mesh>
+                {/* Blue PVC body */}
+                <mesh position={[0, 5.5, 0]} material={materials.capRadialBlue}>
+                  <cylinderGeometry args={[3.0, 3.0, 7.5, 24]} />
+                </mesh>
+                {/* Polarity stripe */}
+                <mesh position={[-2.95, 5.5, 0]} material={materials.capStripeWhite}>
+                  <boxGeometry args={[0.2, 7.5, 1.2]} />
+                </mesh>
+                {/* Top silver vent cap */}
+                <mesh position={[0, 9.3, 0]} material={materials.usbMetal}>
+                  <cylinderGeometry args={[2.9, 2.9, 0.2, 24]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 4. Ceramic Disc Capacitor
+          if (pComp.type.includes('CAPACITOR')) {
+            return (
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                <mesh position={[-1.25, 1.2, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.25, 0.25, 2.4, 8]} />
+                </mesh>
+                <mesh position={[1.25, 1.2, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.25, 0.25, 2.4, 8]} />
+                </mesh>
+                <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.capCeramicTan}>
+                  <cylinderGeometry args={[2.5, 2.5, 1.2, 24]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 5. DIP IC (NE555, ATmega, DIP-8, DIP-14, DIP-16) with Pin 1 Notch & Silver Legs
+          if (pComp.type.includes('IC') || pComp.type.includes('TIMER') || pComp.footprint?.includes('DIP')) {
+            const isDip14Or16 = pComp.footprint?.includes('DIP-14') || pComp.footprint?.includes('DIP-16');
+            const bodyLen = isDip14Or16 ? 19.0 : 9.5;
+            const pinCount = isDip14Or16 ? 14 : 8;
+            const pinsPerSide = pinCount / 2;
+
+            return (
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Black Epoxy Plastic Package */}
+                <mesh position={[0, 2.4, 0]} material={materials.icPlastic}>
+                  <boxGeometry args={[bodyLen, 3.2, 6.2]} />
+                </mesh>
+                {/* Pin 1 semicircular notch on top left */}
+                <mesh position={[-bodyLen / 2 + 0.2, 3.4, 0]} material={materials.drillHole}>
+                  <cylinderGeometry args={[1.0, 1.0, 0.8, 16]} />
+                </mesh>
+                {/* Silver IC Pins extending from sides into pads */}
+                {Array.from({ length: pinsPerSide }).map((_, i) => {
+                  const px = -((pinsPerSide - 1) * 2.54) / 2 + i * 2.54;
+                  return (
+                    <group key={i}>
+                      {/* Top row pin */}
+                      <mesh position={[px, 1.2, -3.81]} material={materials.icLead}>
+                        <boxGeometry args={[0.5, 2.4, 0.4]} />
+                      </mesh>
+                      {/* Bottom row pin */}
+                      <mesh position={[px, 1.2, 3.81]} material={materials.icLead}>
+                        <boxGeometry args={[0.5, 2.4, 0.4]} />
+                      </mesh>
+                    </group>
+                  );
+                })}
+              </group>
+            );
+          }
+
+          // 6. Terminal Block / Battery Connector
+          if (pComp.type.includes('BATTERY') || pComp.type.includes('VOLTAGE') || pComp.footprint?.includes('TerminalBlock')) {
+            return (
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Green terminal block plastic housing */}
+                <mesh position={[0, 4.5, 0]} material={materials.terminalGreen}>
+                  <boxGeometry args={[10.0, 9.0, 8.0]} />
+                </mesh>
+                {/* Two brass screws on top */}
+                <mesh position={[-2.54, 9.05, 0]} material={materials.screwBrass}>
+                  <cylinderGeometry args={[1.2, 1.2, 0.4, 16]} />
+                </mesh>
+                <mesh position={[2.54, 9.05, 0]} material={materials.screwBrass}>
+                  <cylinderGeometry args={[1.2, 1.2, 0.4, 16]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 7. Microcontroller Dev Board (Arduino Uno / Nano / ESP32)
+          if (pComp.type.includes('MCU') || pComp.footprint?.includes('Arduino') || pComp.footprint?.includes('ESP32')) {
+            return (
+              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+                {/* Dev board blue substrate */}
+                <mesh position={[0, 1.0, 0]} material={materials.mcuBoardBlue}>
+                  <boxGeometry args={[26.0, 1.6, 18.0]} />
+                </mesh>
+                {/* USB Connector (Metallic Box) */}
+                <mesh position={[-12.0, 3.0, 0]} material={materials.usbMetal}>
+                  <boxGeometry args={[6.0, 4.0, 7.0]} />
+                </mesh>
+                {/* Main MCU IC on board */}
+                <mesh position={[2.0, 2.2, 0]} material={materials.icPlastic}>
+                  <boxGeometry args={[7.0, 1.2, 7.0]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // Default SMD/Through-hole component body
           return (
-            <group key={pComp.componentId} position={[cx, thickness / 2 + 1.5, cz]} rotation={[0, -rotY, 0]}>
+            <group key={pComp.componentId} position={[cx, thickness / 2 + 1.2, cz]} rotation={[0, -rotY, 0]}>
               <mesh material={materials.icPlastic}>
-                <boxGeometry args={[6, 2.5, 6]} />
+                <boxGeometry args={[5.0, 2.2, 5.0]} />
               </mesh>
             </group>
           );
         })}
       </Canvas>
-
-      {/* Top Floating View HUD */}
-      <div className="absolute top-3 left-4 flex items-center gap-1.5 bg-slate-900/90 border border-slate-700 rounded-lg p-1.5 shadow-xl backdrop-blur font-mono text-xs z-20">
-        <button
-          onClick={() => setCameraView('iso')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded flex items-center gap-1 cursor-pointer"
-        >
-          <Compass className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Iso</span>
-        </button>
-        <button
-          onClick={() => setCameraView('top')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer"
-        >
-          Top (F.Cu)
-        </button>
-        <button
-          onClick={() => setCameraView('bot')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer"
-        >
-          Bottom (B.Cu)
-        </button>
-        <button
-          onClick={() => setCameraView('side')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer"
-        >
-          Edge
-        </button>
-
-        <div className="h-4 w-px bg-slate-700 mx-1" />
-
-        <div className="text-[10px] text-slate-400">
-          Board: <span className="text-cyan-400 font-bold">{pcb.widthMm}x{pcb.heightMm} mm</span> ({thickness}mm FR-4)
-        </div>
-      </div>
     </div>
   );
 }

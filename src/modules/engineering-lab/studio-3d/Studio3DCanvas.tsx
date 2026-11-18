@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -10,6 +10,8 @@ import {
   Plus,
   X,
   Compass,
+  Search,
+  Cpu,
 } from 'lucide-react';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Breadboard3D } from './Breadboard3D';
@@ -20,6 +22,161 @@ import { Resistor3D } from './models/Resistor3D';
 import { Battery9V3D } from './models/Battery9V3D';
 import { Pushbutton3D } from './models/Pushbutton3D';
 import { Wire3DTube } from './Wire3DTube';
+
+interface Library3DItem {
+  type: string;
+  label: string;
+  category: 'boards' | 'passive' | 'semiconductors' | 'sensors';
+  value: string;
+  desc: string;
+  defaultPos: [number, number, number];
+  params: Record<string, number | string | boolean>;
+}
+
+const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
+  // Microcontrollers & Power
+  {
+    type: 'ARDUINO_UNO',
+    label: 'Arduino Uno R3',
+    category: 'boards',
+    value: 'ATmega328P',
+    desc: 'Classic dev board with ATmega328P, 16MHz, USB, and digital/analog headers',
+    defaultPos: [0, 0, 65] as [number, number, number],
+    params: { mcu: 'ATmega328P', clock: '16MHz', logicVoltage: 5 },
+  },
+  {
+    type: 'ARDUINO_NANO',
+    label: 'Arduino Nano V3',
+    category: 'boards',
+    value: 'ATmega328P',
+    desc: 'Breadboard-friendly compact MCU with 30-pin DIP footprint',
+    defaultPos: [0, 5, 0] as [number, number, number],
+    params: { mcu: 'ATmega328P', clock: '16MHz', logicVoltage: 5 },
+  },
+  {
+    type: 'ESP32_DEVKIT',
+    label: 'ESP32 DevKit V1',
+    category: 'boards',
+    value: 'ESP32-WROOM-32',
+    desc: 'Dual-core 240MHz Wi-Fi & Bluetooth microcontroller with 30-pin header',
+    defaultPos: [0, 0, -65] as [number, number, number],
+    params: { mcu: 'ESP32', clock: '240MHz', logicVoltage: 3.3 },
+  },
+  {
+    type: 'BATTERY_9V',
+    label: '9V Alkaline Battery',
+    category: 'boards',
+    value: '9V',
+    desc: 'Standard 9V block battery with top positive & negative snap terminals',
+    defaultPos: [-95, 0, 0] as [number, number, number],
+    params: { voltage: 9, capacityMah: 550 },
+  },
+
+  // Passive
+  {
+    type: 'RESISTOR',
+    label: 'Resistor 1/4W (Axial)',
+    category: 'passive',
+    value: '1kΩ',
+    desc: 'Axial ceramic body with 4-band EIA color coding and bent wire leads',
+    defaultPos: [10, 5, -3.34] as [number, number, number],
+    params: { resistance: 1000, powerRating: 0.25 },
+  },
+  {
+    type: 'POTENTIOMETER',
+    label: 'Rotary Potentiometer 10k',
+    category: 'passive',
+    value: '10kΩ',
+    desc: '3-pin breadboard-mountable trimmer with rotating control dial',
+    defaultPos: [-30, 5, -3.34] as [number, number, number],
+    params: { totalResistance: 10000, wiperPosition: 0.5 },
+  },
+  {
+    type: 'CAPACITOR',
+    label: 'Ceramic Disc Capacitor',
+    category: 'passive',
+    value: '100nF',
+    desc: '100nF (0.1µF) decoupling ceramic disc capacitor (Code 104)',
+    defaultPos: [25, 5, -3.34] as [number, number, number],
+    params: { capacitance: 1e-7, maxVoltage: 50 },
+  },
+  {
+    type: 'CAPACITOR_ELECTROLYTIC',
+    label: 'Electrolytic Capacitor 10µF',
+    category: 'passive',
+    value: '10µF',
+    desc: 'Radial aluminum electrolytic can with white negative polarity stripe',
+    defaultPos: [35, 5, -3.34] as [number, number, number],
+    params: { capacitance: 1e-5, maxVoltage: 25 },
+  },
+  {
+    type: 'PUSHBUTTON',
+    label: 'Tactile Pushbutton 6mm',
+    category: 'passive',
+    value: 'NO',
+    desc: '4-pin SPST momentary tactile switch straddling breadboard center',
+    defaultPos: [-15, 5, 0] as [number, number, number],
+    params: { switchState: false },
+  },
+
+  // Semiconductors & ICs
+  {
+    type: 'LED',
+    label: '5mm LED (Diffused Red)',
+    category: 'semiconductors',
+    value: 'Red',
+    desc: '5mm diffused domed lens with live brightness and color emission',
+    defaultPos: [0, 5, -3.34] as [number, number, number],
+    params: { color: '#EF4444', forwardVoltage: 2.0, forwardCurrent: 0.02 },
+  },
+  {
+    type: 'LED_RGB',
+    label: 'RGB LED (Common Cathode)',
+    category: 'semiconductors',
+    value: 'RGB',
+    desc: '4-lead RGB through-hole LED with independent Red, Green, Blue control',
+    defaultPos: [50, 5, -3.34] as [number, number, number],
+    params: { color: 'RGB', type: 'common_cathode' },
+  },
+  {
+    type: 'TIMER_555',
+    label: 'NE555 Timer IC (DIP-8)',
+    category: 'semiconductors',
+    value: 'NE555',
+    desc: 'Classic 8-pin precision bipolar timer IC for astable & monostable pulses',
+    defaultPos: [-45, 5, 0] as [number, number, number],
+    params: { ic: 'NE555', supplyMin: 4.5, supplyMax: 16 },
+  },
+
+  // Sensors & Actuators
+  {
+    type: 'HC_SR04',
+    label: 'HC-SR04 Ultrasonic Sonar',
+    category: 'sensors',
+    value: '2-400cm',
+    desc: 'Distance sensor with Transmitter & Receiver transducers and 4-pin header',
+    defaultPos: [95, 0, 0] as [number, number, number],
+    params: { minRangeCm: 2, maxRangeCm: 400 },
+  },
+  {
+    type: 'SERVO_SG90',
+    label: 'SG90 Micro Servo 9g',
+    category: 'sensors',
+    value: '180°',
+    desc: 'Miniature 9-gram servo motor with geared rotating horn and 3-pin cable',
+    defaultPos: [95, 0, -45] as [number, number, number],
+    params: { minAngle: 0, maxAngle: 180, currentAngle: 90 },
+  },
+  {
+    type: 'LCD_1602',
+    label: 'LCD 16x2 Character Display',
+    category: 'sensors',
+    value: '16x2 HD44780',
+    desc: '16-character by 2-line alphanumeric LCD module with LED backlight',
+    defaultPos: [0, 0, -100] as [number, number, number],
+    params: { rows: 2, cols: 16, controller: 'HD44780' },
+  },
+];
 
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
@@ -58,6 +215,8 @@ export function Studio3DCanvas({
 }: Studio3DCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
+  const [libSearch, setLibSearch] = useState('');
+  const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
   const [activeWireStart, setActiveWireStart] = useState<{
     compId: string;
     pinId: string;
@@ -66,6 +225,18 @@ export function Studio3DCanvas({
   const [activeWireColor, setActiveWireColor] = useState('#EF4444');
   const [hoveredHole, setHoveredHole] = useState<BreadboardHole3D | null>(null);
   const [hoveredPinInfo, setHoveredPinInfo] = useState<{ compId: string; pinName: string } | null>(null);
+
+  const filteredLibrary = useMemo(() => {
+    return LIBRARY_3D_COMPONENTS.filter((item) => {
+      const matchCat = libCategory === 'all' || item.category === libCategory;
+      const matchSearch =
+        !libSearch ||
+        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
+        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
+        item.desc.toLowerCase().includes(libSearch.toLowerCase());
+      return matchCat && matchSearch;
+    });
+  }, [libCategory, libSearch]);
 
   // Keyboard shortcut listener (R to rotate, Delete to remove, Esc to cancel wire)
   useEffect(() => {
@@ -150,14 +321,53 @@ export function Studio3DCanvas({
         ly = ap.localPos[1] + 4.2;
         lz = ap.localPos[2];
       }
+    } else if (comp.type === 'ARDUINO_NANO') {
+      const pinNum = parseInt(pinId.replace(/\D/g, '')) || 1;
+      const isRightSide = pinNum > 15;
+      const idx = isRightSide ? 30 - pinNum : pinNum - 1;
+      lx = -17.78 + idx * 2.54;
+      lz = isRightSide ? 7.62 : -7.62;
+      ly = -4.0;
+    } else if (comp.type === 'ESP32_DEVKIT') {
+      const pinNum = parseInt(pinId.replace(/\D/g, '')) || 1;
+      const isRightSide = pinNum > 15;
+      const idx = isRightSide ? 30 - pinNum : pinNum - 1;
+      lx = -17.78 + idx * 2.54;
+      lz = isRightSide ? 11.43 : -11.43;
+      ly = -4.0;
     } else if (comp.type === 'LED') {
       if (pinId === 'anode') lx = -1.27;
       else lx = 1.27;
+      ly = -5;
+    } else if (comp.type === 'LED_RGB') {
+      if (pinId === 'R') lx = -3.81;
+      else if (pinId === 'C') lx = -1.27;
+      else if (pinId === 'G') lx = 1.27;
+      else lx = 3.81;
       ly = -5;
     } else if (comp.type === 'RESISTOR') {
       if (pinId === '1') lx = -5.08;
       else lx = 5.08;
       ly = -5;
+    } else if (comp.type === 'POTENTIOMETER') {
+      if (pinId === '1') { lx = -2.54; lz = 0; }
+      else if (pinId === '2' || pinId === 'wiper') { lx = 0; lz = 2.54; }
+      else { lx = 2.54; lz = 0; }
+      ly = -4;
+    } else if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
+      if (pinId === '1' || pinId === '+') lx = -1.27;
+      else lx = 1.27;
+      ly = -5;
+    } else if (comp.type === 'TIMER_555') {
+      const pNum = parseInt(pinId) || 1;
+      if (pNum >= 1 && pNum <= 4) {
+        lx = -3.81 + (pNum - 1) * 2.54;
+        lz = -3.81;
+      } else {
+        lx = 3.81 - (pNum - 5) * 2.54;
+        lz = 3.81;
+      }
+      ly = -3;
     } else if (comp.type === 'BATTERY_9V') {
       if (pinId === '+') lx = -6.5;
       else lx = 6.5;
@@ -168,6 +378,22 @@ export function Studio3DCanvas({
       else if (pinId === '2A') { lx = -2.54; lz = 2.54; }
       else { lx = 2.54; lz = 2.54; }
       ly = -4;
+    } else if (comp.type === 'HC_SR04') {
+      if (pinId === 'VCC') lx = -3.81;
+      else if (pinId === 'TRIG') lx = -1.27;
+      else if (pinId === 'ECHO') lx = 1.27;
+      else lx = 3.81;
+      ly = -8;
+    } else if (comp.type === 'SERVO_SG90') {
+      if (pinId === 'GND') lx = -2.54;
+      else if (pinId === 'VCC') lx = 0;
+      else lx = 2.54;
+      ly = -10;
+    } else if (comp.type === 'LCD_1602') {
+      const pIdx = parseInt(pinId.replace(/\D/g, '')) || 1;
+      lx = -19.05 + (pIdx - 1) * 2.54;
+      ly = 15;
+      lz = 0;
     }
 
     const rx = lx * cos - lz * sin;
@@ -395,6 +621,242 @@ export function Studio3DCanvas({
             );
           }
 
+          if (comp.type === 'POTENTIOMETER') {
+            return (
+              <group
+                key={comp.id}
+                position={pos}
+                rotation={rot}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {/* Blue housing */}
+                <mesh position={[0, 4.5, 0]}>
+                  <boxGeometry args={[9.5, 9.5, 9.5]} />
+                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#1E40AF'} roughness={0.4} />
+                </mesh>
+                {/* Brass shaft */}
+                <mesh position={[0, 11.0, 0]}>
+                  <cylinderGeometry args={[2.5, 2.5, 5.0, 16]} />
+                  <meshStandardMaterial color="#EAB308" metalness={0.9} roughness={0.2} />
+                </mesh>
+                {/* Blue knob cap */}
+                <mesh position={[0, 14.0, 0]}>
+                  <cylinderGeometry args={[5.0, 5.0, 3.5, 24]} />
+                  <meshStandardMaterial color="#2563EB" roughness={0.4} />
+                </mesh>
+                {/* Pins 1, wiper (2), 3 */}
+                {[-2.54, 0, 2.54].map((px, i) => (
+                  <mesh
+                    key={i}
+                    position={[px, -1.5, i === 1 ? 2.54 : 0]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const pinId = i === 0 ? '1' : i === 1 ? '2' : '3';
+                      const pPos = getPinWorld3D(comp.id, pinId);
+                      handlePinClick(comp.id, pinId, pPos);
+                    }}
+                  >
+                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
+                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          }
+
+          if (comp.type === 'CAPACITOR_ELECTROLYTIC') {
+            return (
+              <group
+                key={comp.id}
+                position={pos}
+                rotation={rot}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {/* Blue can body */}
+                <mesh position={[0, 5.0, 0]}>
+                  <cylinderGeometry args={[3.2, 3.2, 8.5, 24]} />
+                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#1E3A8A'} roughness={0.3} />
+                </mesh>
+                {/* White polarity stripe */}
+                <mesh position={[-3.15, 5.0, 0]}>
+                  <boxGeometry args={[0.2, 8.5, 1.2]} />
+                  <meshStandardMaterial color="#F8FAFC" />
+                </mesh>
+                {/* Silver cap */}
+                <mesh position={[0, 9.3, 0]}>
+                  <cylinderGeometry args={[3.1, 3.1, 0.2, 24]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+                {/* Two pins */}
+                {[-1.27, 1.27].map((px, i) => (
+                  <mesh
+                    key={i}
+                    position={[px, -1.5, 0]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const pinId = i === 0 ? '+' : '-';
+                      const pPos = getPinWorld3D(comp.id, pinId);
+                      handlePinClick(comp.id, pinId, pPos);
+                    }}
+                  >
+                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
+                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          }
+
+          if (comp.type === 'CAPACITOR') {
+            return (
+              <group
+                key={comp.id}
+                position={pos}
+                rotation={rot}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {/* Tan ceramic disc */}
+                <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[3.0, 3.0, 1.2, 24]} />
+                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#D97706'} roughness={0.6} />
+                </mesh>
+                {/* Two leads */}
+                {[-1.27, 1.27].map((px, i) => (
+                  <mesh
+                    key={i}
+                    position={[px, -1.5, 0]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const pinId = i === 0 ? '1' : '2';
+                      const pPos = getPinWorld3D(comp.id, pinId);
+                      handlePinClick(comp.id, pinId, pPos);
+                    }}
+                  >
+                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
+                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          }
+
+          if (comp.type === 'TIMER_555') {
+            return (
+              <group
+                key={comp.id}
+                position={pos}
+                rotation={rot}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {/* Black DIP-8 package */}
+                <mesh position={[0, 2.5, 0]}>
+                  <boxGeometry args={[9.5, 3.8, 6.4]} />
+                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#18181B'} roughness={0.5} />
+                </mesh>
+                {/* Pin 1 notch */}
+                <mesh position={[-4.5, 3.8, 0]}>
+                  <cylinderGeometry args={[0.8, 0.8, 0.8, 16]} />
+                  <meshBasicMaterial color="#0A0A0A" />
+                </mesh>
+                {/* 8 Pins */}
+                {Array.from({ length: 4 }).map((_, i) => {
+                  const px = -3.81 + i * 2.54;
+                  return (
+                    <group key={i}>
+                      {/* Pins 1..4 on Row E (Z = -3.81) */}
+                      <mesh
+                        position={[px, -0.5, -3.81]}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pinId = String(i + 1);
+                          const pPos = getPinWorld3D(comp.id, pinId);
+                          handlePinClick(comp.id, pinId, pPos);
+                        }}
+                      >
+                        <boxGeometry args={[0.6, 2.8, 0.4]} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                      </mesh>
+                      {/* Pins 8..5 on Row F (Z = 3.81) */}
+                      <mesh
+                        position={[px, -0.5, 3.81]}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pinId = String(8 - i);
+                          const pPos = getPinWorld3D(comp.id, pinId);
+                          handlePinClick(comp.id, pinId, pPos);
+                        }}
+                      >
+                        <boxGeometry args={[0.6, 2.8, 0.4]} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                      </mesh>
+                    </group>
+                  );
+                })}
+              </group>
+            );
+          }
+
+          if (comp.type === 'HC_SR04') {
+            return (
+              <group
+                key={comp.id}
+                position={pos}
+                rotation={rot}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {/* Blue PCB */}
+                <mesh position={[0, 8.0, 0]}>
+                  <boxGeometry args={[45.0, 20.0, 1.6]} />
+                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#0284C7'} roughness={0.4} />
+                </mesh>
+                {/* Ultrasonic Transducers T and R */}
+                <mesh position={[-12.0, 10.0, 6.0]} rotation={[Math.PI / 2, 0, 0]}>
+                  <cylinderGeometry args={[7.5, 7.5, 12.0, 24]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+                </mesh>
+                <mesh position={[12.0, 10.0, 6.0]} rotation={[Math.PI / 2, 0, 0]}>
+                  <cylinderGeometry args={[7.5, 7.5, 12.0, 24]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+                </mesh>
+                {/* 4 Header Pins: VCC, TRIG, ECHO, GND */}
+                {['VCC', 'TRIG', 'ECHO', 'GND'].map((pinName, i) => (
+                  <mesh
+                    key={pinName}
+                    position={[-3.81 + i * 2.54, -1.0, 0]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const pPos = getPinWorld3D(comp.id, pinName);
+                      handlePinClick(comp.id, pinName, pPos);
+                    }}
+                  >
+                    <cylinderGeometry args={[0.35, 0.35, 3.5, 8]} />
+                    <meshStandardMaterial color="#EAB308" metalness={0.9} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          }
+
           return null;
         })}
 
@@ -465,6 +927,7 @@ export function Studio3DCanvas({
             { hex: '#10B981', label: 'Green' },
             { hex: '#F59E0B', label: 'Yellow' },
             { hex: '#1E293B', label: 'Black' },
+            { hex: '#F8FAFC', label: 'White' },
           ].map((c) => (
             <button
               key={c.hex}
@@ -488,27 +951,61 @@ export function Studio3DCanvas({
           className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg cursor-pointer transition-all"
         >
           <Plus className="w-4 h-4" />
-          <span>Add 3D Part</span>
+          <span>3D Library</span>
         </button>
       </div>
 
-      {/* Add Component Drawer Dropdown */}
+      {/* Expanded Searchable 3D Component Library Panel */}
       {isAddDrawerOpen && (
-        <div className="absolute top-14 right-4 w-64 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl z-30 font-mono text-xs space-y-2">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-300 font-bold uppercase text-[10px]">
-            <span>3D Component Library</span>
-            <button onClick={() => setIsAddDrawerOpen(false)} className="text-slate-400 hover:text-white">
+        <div className="absolute top-14 right-4 w-80 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl z-30 font-mono text-xs space-y-3 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-200 font-bold uppercase text-[11px]">
+            <span className="flex items-center gap-1.5 text-cyan-400">
+              <Cpu className="w-4 h-4" />
+              3D Component Library
+            </span>
+            <button onClick={() => setIsAddDrawerOpen(false)} className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-1.5">
+
+          {/* Real-time Search Input */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={libSearch}
+              onChange={(e) => setLibSearch(e.target.value)}
+              placeholder="Search 15+ 3D components..."
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap gap-1 text-[10px]">
             {[
-              { type: 'ARDUINO_UNO', label: 'Arduino Uno Rev3', value: 'ATmega328P', desc: 'Turquoise PCB & headers' },
-              { type: 'LED', label: '5mm LED', value: 'Red', desc: 'Translucent dome & pins' },
-              { type: 'RESISTOR', label: 'Resistor 1/4W', value: '220Ω', desc: 'Axial EIA 4-band rings' },
-              { type: 'BATTERY_9V', label: '9V Battery Block', value: '9V', desc: 'Metallic top snaps' },
-              { type: 'PUSHBUTTON', label: 'Tactile Switch 6mm', value: 'NO', desc: '4-Pin pushbutton' },
-            ].map((item) => (
+              { id: 'all', label: 'All' },
+              { id: 'boards', label: 'Boards' },
+              { id: 'passive', label: 'Passive' },
+              { id: 'semiconductors', label: 'ICs' },
+              { id: 'sensors', label: 'Sensors' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setLibCategory(tab.id as typeof libCategory)}
+                className={`px-2 py-0.5 rounded-full transition-colors ${
+                  libCategory === tab.id
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Component List */}
+          <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+            {filteredLibrary.map((item) => (
               <button
                 key={item.type}
                 onClick={() => {
@@ -517,10 +1014,10 @@ export function Studio3DCanvas({
                     type: item.type,
                     label: item.label,
                     value: item.value,
-                    parameters: item.type === 'LED' ? { color: 'Red', forwardVoltage: 1.9 } : {},
-                    x3d: (Math.random() - 0.5) * 40,
-                    y3d: 0,
-                    z3d: (Math.random() - 0.5) * 30,
+                    parameters: item.params || {},
+                    x3d: item.defaultPos[0],
+                    y3d: item.defaultPos[1],
+                    z3d: item.defaultPos[2],
                     rotY: 0,
                   };
                   onAddComponent3D(newComp);
@@ -529,21 +1026,31 @@ export function Studio3DCanvas({
                 }}
                 className="w-full text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-colors cursor-pointer group"
               >
-                <div className="font-semibold text-white group-hover:text-cyan-400">{item.label}</div>
-                <div className="text-[10px] text-slate-400">{item.desc}</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white group-hover:text-cyan-400">{item.label}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-cyan-300 font-mono">
+                    {item.value}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{item.desc}</div>
               </button>
             ))}
+            {filteredLibrary.length === 0 && (
+              <div className="text-center py-6 text-slate-500 text-xs">
+                No matching 3D components found.
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Floating Wire HUD when wire is selected */}
       {selectedWire && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-4 text-slate-200 backdrop-blur">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-bold uppercase text-[10px]">3D Wire:</span>
+            <span className="text-amber-400 font-bold uppercase text-[10px]">3D Jumper:</span>
             <span className="text-[11px] text-slate-300">
-              {selectedWire.fromPin.compId} ({selectedWire.fromPin.pinId}) ➔ {selectedWire.toPin.compId} ({selectedWire.toPin.pinId})
+              {selectedWire.fromPin.compId} [{selectedWire.fromPin.pinId}] ➔ {selectedWire.toPin.compId} [{selectedWire.toPin.pinId}]
             </span>
           </div>
 
@@ -551,7 +1058,7 @@ export function Studio3DCanvas({
 
           {/* Color picker */}
           <div className="flex items-center gap-1">
-            {['#EF4444', '#3B82F6', '#10B981', '#F59E0B', '#1E293B'].map((hex) => (
+            {['#EF4444', '#3B82F6', '#10B981', '#F59E0B', '#1E293B', '#F8FAFC'].map((hex) => (
               <button
                 key={hex}
                 onClick={() => onUpdateWire3D({ ...selectedWire, color: hex })}
@@ -563,6 +1070,44 @@ export function Studio3DCanvas({
 
           <div className="h-4 w-px bg-slate-700" />
 
+          {/* Disconnect Pin 1 */}
+          <button
+            onClick={() => {
+              const p2 = getPinWorld3D(selectedWire.toPin.compId, selectedWire.toPin.pinId);
+              onDeleteWire3D(selectedWire.id);
+              onSelectWire(null);
+              setActiveWireStart({
+                compId: selectedWire.toPin.compId,
+                pinId: selectedWire.toPin.pinId,
+                pos: p2,
+              });
+            }}
+            className="px-2 py-0.5 bg-amber-950/60 border border-amber-600 text-amber-300 hover:bg-amber-900 rounded text-[10px] font-bold cursor-pointer transition-colors"
+            title="Detach Pin 1 and route to another hole"
+          >
+            Disconnect Pin 1
+          </button>
+
+          {/* Disconnect Pin 2 */}
+          <button
+            onClick={() => {
+              const p1 = getPinWorld3D(selectedWire.fromPin.compId, selectedWire.fromPin.pinId);
+              onDeleteWire3D(selectedWire.id);
+              onSelectWire(null);
+              setActiveWireStart({
+                compId: selectedWire.fromPin.compId,
+                pinId: selectedWire.fromPin.pinId,
+                pos: p1,
+              });
+            }}
+            className="px-2 py-0.5 bg-amber-950/60 border border-amber-600 text-amber-300 hover:bg-amber-900 rounded text-[10px] font-bold cursor-pointer transition-colors"
+            title="Detach Pin 2 and route to another hole"
+          >
+            Disconnect Pin 2
+          </button>
+
+          <div className="h-4 w-px bg-slate-700" />
+
           {/* Delete Wire */}
           <button
             onClick={() => {
@@ -570,9 +1115,10 @@ export function Studio3DCanvas({
               onSelectWire(null);
             }}
             className="flex items-center gap-1 text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
+            title="Delete this jumper wire [Delete]"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
+            <span>Delete [Del]</span>
           </button>
         </div>
       )}

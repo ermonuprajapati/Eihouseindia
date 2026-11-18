@@ -13,6 +13,8 @@ import {
   Trash2,
   Sliders,
   X,
+  RotateCw,
+  Compass,
 } from 'lucide-react';
 
 const Pcb3dViewer = dynamic(
@@ -54,6 +56,11 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
   // Layer Stackup & Fab Specs Modal
   const [showStackupModal, setShowStackupModal] = useState(false);
+  const [isStackupHudOpen, setIsStackupHudOpen] = useState(false);
+  const [cameraPreset, setCameraPreset] = useState<'iso' | 'top' | 'bot' | 'front' | 'reset' | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [isDraggingComp, setIsDraggingComp] = useState(false);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [copperLayers, setCopperLayers] = useState<2 | 4 | 6 | 8>(pcb.copperLayers || 2);
   const [boardThicknessMm, setBoardThicknessMm] = useState<number>(pcb.boardThicknessMm || 1.6);
   const [copperWeightOz, setCopperWeightOz] = useState<number>(1);
@@ -67,7 +74,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
     components3D: true,
   });
 
-  // Keyboard shortcut listener for track deletion and escape
+  // Keyboard shortcut listener for track deletion, rotation, and escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -81,10 +88,54 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       } else if (e.key === 'Escape') {
         setRoutingStartPad(null);
         setSelectedTrackId(null);
+        setSelectedComponentId(null);
+        setIsDraggingComp(false);
         setIsRoutingMode(false);
       } else if (e.key === 'r' || e.key === 'R') {
         if (!is3DMode) {
-          setIsRoutingMode((m) => !m);
+          if (selectedComponentId && pcb.components && onUpdatePcb) {
+            e.preventDefault();
+            const targetComp = pcb.components.find((c) => c.componentId === selectedComponentId);
+            if (targetComp) {
+              const newRot = ((targetComp.rotation || 0) + 90) % 360;
+              const updatedComponents = pcb.components.map((c) =>
+                c.componentId === selectedComponentId ? { ...c, rotation: newRot } : c
+              );
+              const padMapping = new Map<string, { oldX: number; oldY: number; newX: number; newY: number }>();
+              const updatedPads = pcb.pads.map((p) => {
+                if (p.componentId === selectedComponentId) {
+                  const relX = p.x - targetComp.x;
+                  const relY = p.y - targetComp.y;
+                  const newPadX = Math.round((targetComp.x - relY) * 10) / 10;
+                  const newPadY = Math.round((targetComp.y + relX) * 10) / 10;
+                  padMapping.set(p.id, { oldX: p.x, oldY: p.y, newX: newPadX, newY: newPadY });
+                  return { ...p, x: newPadX, y: newPadY };
+                }
+                return p;
+              });
+              const updatedTracks = pcb.tracks.map((t) => {
+                let from = { ...t.from };
+                let to = { ...t.to };
+                for (const [, m] of padMapping) {
+                  if (Math.hypot(t.from.x - m.oldX, t.from.y - m.oldY) < 0.3) {
+                    from = { x: m.newX, y: m.newY };
+                  }
+                  if (Math.hypot(t.to.x - m.oldX, t.to.y - m.oldY) < 0.3) {
+                    to = { x: m.newX, y: m.newY };
+                  }
+                }
+                return { ...t, from, to };
+              });
+              onUpdatePcb({
+                ...pcb,
+                components: updatedComponents,
+                pads: updatedPads,
+                tracks: updatedTracks,
+              });
+            }
+          } else {
+            setIsRoutingMode((m) => !m);
+          }
         }
       } else if (e.key === 'v' || e.key === 'V') {
         if (!is3DMode && mousePos) {
@@ -115,7 +166,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, onUpdatePcb, pcb, is3DMode, mousePos, activeCopperLayer]);
+  }, [selectedTrackId, selectedComponentId, onUpdatePcb, pcb, is3DMode, mousePos, activeCopperLayer]);
 
   const [solderMaskColor, setSolderMaskColor] = useState<string>('#065F46');
 
@@ -281,9 +332,10 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       ctx.stroke();
     }
 
-    // 3. Draw Bottom Copper Tracks (Blue)
+    // 3. Draw Bottom Copper Tracks (Blue, with Layer Dimming)
     if (visibleLayers.bottomCopper) {
       ctx.lineCap = 'round';
+      const isLayerActive = activeCopperLayer === 'bottom_copper';
       pcb.tracks
         .filter((t) => t.layer === 'bottom_copper')
         .forEach((t) => {
@@ -296,8 +348,12 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
             ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
             ctx.stroke();
           }
-          ctx.strokeStyle = '#3B82F6';
-          ctx.lineWidth = Math.max(t.widthMm * scale, 1.8);
+          ctx.strokeStyle = isSelected
+            ? '#F59E0B'
+            : isLayerActive
+            ? '#3B82F6'
+            : 'rgba(59, 130, 246, 0.35)';
+          ctx.lineWidth = Math.max(t.widthMm * scale, isLayerActive ? 2.0 : 1.2);
           ctx.beginPath();
           ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
           ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
@@ -305,9 +361,10 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         });
     }
 
-    // 4. Draw Top Copper Tracks (Red)
+    // 4. Draw Top Copper Tracks (Red, with Layer Dimming)
     if (visibleLayers.topCopper) {
       ctx.lineCap = 'round';
+      const isLayerActive = activeCopperLayer === 'top_copper';
       pcb.tracks
         .filter((t) => t.layer === 'top_copper')
         .forEach((t) => {
@@ -320,8 +377,12 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
             ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
             ctx.stroke();
           }
-          ctx.strokeStyle = '#EF4444';
-          ctx.lineWidth = Math.max(t.widthMm * scale, 1.8);
+          ctx.strokeStyle = isSelected
+            ? '#F59E0B'
+            : isLayerActive
+            ? '#EF4444'
+            : 'rgba(239, 68, 68, 0.35)';
+          ctx.lineWidth = Math.max(t.widthMm * scale, isLayerActive ? 2.0 : 1.2);
           ctx.beginPath();
           ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
           ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
@@ -418,53 +479,104 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         pcb.components.forEach((comp) => {
           const cx = offsetX + comp.x * scale;
           const cy = offsetY + comp.y * scale;
+          const isCompSelected = comp.componentId === selectedComponentId;
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          if (comp.rotation) {
+            ctx.rotate((comp.rotation * Math.PI) / 180);
+          }
+
+          if (isCompSelected) {
+            ctx.strokeStyle = '#38BDF8';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(-9 * scale, -9 * scale, 18 * scale, 18 * scale);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#38BDF8';
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText('↺ [R]', -7 * scale, 13 * scale);
+          }
+
+          ctx.strokeStyle = isCompSelected ? '#38BDF8' : '#E2E8F0';
+          ctx.fillStyle = isCompSelected ? '#38BDF8' : '#F8FAFC';
+          ctx.lineWidth = 1;
+          ctx.font = 'bold 9px monospace';
 
           if (comp.type === 'TIMER_555' || comp.type.includes('IC')) {
             // DIP-8 box
-            ctx.strokeRect(cx - 5 * scale, cy - 8 * scale, 10 * scale, 16 * scale);
+            ctx.strokeRect(-5 * scale, -8 * scale, 10 * scale, 16 * scale);
             // Pin 1 notch
             ctx.beginPath();
-            ctx.arc(cx, cy - 8 * scale, 2 * scale, 0, Math.PI);
+            ctx.arc(0, -8 * scale, 2 * scale, 0, Math.PI);
             ctx.stroke();
-            ctx.fillText(comp.designator, cx - 6 * scale, cy - 10 * scale);
+            // Pin 1 dot
+            ctx.beginPath();
+            ctx.arc(-3 * scale, -5 * scale, 1 * scale, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillText(comp.designator, -6 * scale, -10 * scale);
           } else if (comp.type === 'RESISTOR' || comp.type === 'POTENTIOMETER') {
             // Axial resistor box
-            ctx.strokeRect(cx - 6 * scale, cy - 2.5 * scale, 12 * scale, 5 * scale);
-            ctx.fillText(`${comp.designator} ${comp.value}`, cx - 7 * scale, cy - 4 * scale);
+            ctx.strokeRect(-6 * scale, -2.5 * scale, 12 * scale, 5 * scale);
+            ctx.fillText(`${comp.designator} ${comp.value}`, -7 * scale, -4 * scale);
           } else if (comp.type === 'CAPACITOR') {
             // Polarized capacitor circle
             ctx.beginPath();
-            ctx.arc(cx, cy, 4.5 * scale, 0, Math.PI * 2);
+            ctx.arc(0, 0, 4.5 * scale, 0, Math.PI * 2);
             ctx.stroke();
-            ctx.fillText('+', cx - 7 * scale, cy - 1 * scale);
-            ctx.fillText(`${comp.designator}`, cx - 6 * scale, cy + 9 * scale);
+            ctx.fillText('+', -7 * scale, -1 * scale);
+            ctx.fillText(`${comp.designator}`, -6 * scale, 9 * scale);
           } else if (comp.type === 'LED' || comp.type === 'DIODE') {
             // LED circle with flat edge
             ctx.beginPath();
-            ctx.arc(cx, cy, 3.5 * scale, -0.6 * Math.PI, 0.6 * Math.PI);
+            ctx.arc(0, 0, 3.5 * scale, -0.6 * Math.PI, 0.6 * Math.PI);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(cx + 3.5 * scale * Math.cos(0.6 * Math.PI), cy + 3.5 * scale * Math.sin(0.6 * Math.PI));
-            ctx.lineTo(cx + 3.5 * scale * Math.cos(-0.6 * Math.PI), cy + 3.5 * scale * Math.sin(-0.6 * Math.PI));
+            ctx.moveTo(3.5 * scale * Math.cos(0.6 * Math.PI), 3.5 * scale * Math.sin(0.6 * Math.PI));
+            ctx.lineTo(3.5 * scale * Math.cos(-0.6 * Math.PI), 3.5 * scale * Math.sin(-0.6 * Math.PI));
             ctx.stroke();
-            ctx.fillText(comp.designator, cx - 6 * scale, cy + 8 * scale);
+            ctx.fillText(comp.designator, -6 * scale, 8 * scale);
           } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
             // Terminal block outline
-            ctx.strokeRect(cx - 7 * scale, cy - 4 * scale, 14 * scale, 8 * scale);
-            ctx.fillText(comp.designator, cx - 6 * scale, cy - 6 * scale);
+            ctx.strokeRect(-7 * scale, -4 * scale, 14 * scale, 8 * scale);
+            ctx.fillText(comp.designator, -6 * scale, -6 * scale);
           } else {
             // Generic component boundary
-            ctx.strokeRect(cx - 5 * scale, cy - 5 * scale, 10 * scale, 10 * scale);
-            ctx.fillText(comp.designator, cx - 6 * scale, cy - 7 * scale);
+            ctx.strokeRect(-5 * scale, -5 * scale, 10 * scale, 10 * scale);
+            ctx.fillText(comp.designator, -6 * scale, -7 * scale);
           }
+          ctx.restore();
         });
       }
     }
-  }, [pcb, visibleLayers, is3DMode, routingStartPad, mousePos, hoveredPadId, selectedTrackId, activeCopperLayer]);
+  }, [pcb, visibleLayers, is3DMode, routingStartPad, mousePos, hoveredPadId, selectedTrackId, selectedComponentId, activeCopperLayer]);
 
   // ----------------------------------------------------
-  // Interactive 2D Routing & Track Selection Handlers
+  // Interactive 2D Routing, Dragging & Selection Handlers
   // ----------------------------------------------------
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 || !mousePos) return;
+    const { mmX, mmY } = mousePos;
+
+    // Check if clicked on a component to drag or select (when not actively drawing wire)
+    if (!isRoutingMode && !routingStartPad) {
+      const clickedComp = pcb.components?.find((c) => {
+        return Math.hypot(c.x - mmX, c.y - mmY) <= 8;
+      });
+      if (clickedComp) {
+        setSelectedComponentId(clickedComp.componentId);
+        setSelectedTrackId(null);
+        setIsDraggingComp(true);
+        setDragOffset({ x: mmX - clickedComp.x, y: mmY - clickedComp.y });
+        return;
+      }
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsDraggingComp(false);
+  };
+
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvas2dRef.current;
     if (!canvas) return;
@@ -481,11 +593,67 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
     setMousePos({ canvasX, canvasY, mmX, mmY });
 
+    // Handle live component dragging
+    if (isDraggingComp && selectedComponentId && pcb.components && onUpdatePcb) {
+      const targetComp = pcb.components.find((c) => c.componentId === selectedComponentId);
+      if (targetComp) {
+        const snapX = Math.round((mmX - dragOffset.x) * 2) / 2;
+        const snapY = Math.round((mmY - dragOffset.y) * 2) / 2;
+        const clampedX = Math.max(6, Math.min(pcb.widthMm - 6, snapX));
+        const clampedY = Math.max(6, Math.min(pcb.heightMm - 6, snapY));
+        const deltaX = clampedX - targetComp.x;
+        const deltaY = clampedY - targetComp.y;
+
+        if (Math.abs(deltaX) > 0.05 || Math.abs(deltaY) > 0.05) {
+          const updatedComponents = pcb.components.map((c) =>
+            c.componentId === selectedComponentId ? { ...c, x: clampedX, y: clampedY } : c
+          );
+          const padMapping = new Map<string, { oldX: number; oldY: number; newX: number; newY: number }>();
+          const updatedPads = pcb.pads.map((p) => {
+            if (p.componentId === selectedComponentId) {
+              const newX = Math.round((p.x + deltaX) * 10) / 10;
+              const newY = Math.round((p.y + deltaY) * 10) / 10;
+              padMapping.set(p.id, { oldX: p.x, oldY: p.y, newX, newY });
+              return { ...p, x: newX, y: newY };
+            }
+            return p;
+          });
+          const updatedTracks = pcb.tracks.map((t) => {
+            let from = { ...t.from };
+            let to = { ...t.to };
+            for (const [, m] of padMapping) {
+              if (Math.hypot(t.from.x - m.oldX, t.from.y - m.oldY) < 0.3) {
+                from = { x: m.newX, y: m.newY };
+              }
+              if (Math.hypot(t.to.x - m.oldX, t.to.y - m.oldY) < 0.3) {
+                to = { x: m.newX, y: m.newY };
+              }
+            }
+            return { ...t, from, to };
+          });
+          onUpdatePcb({
+            ...pcb,
+            components: updatedComponents,
+            pads: updatedPads,
+            tracks: updatedTracks,
+          });
+        }
+      }
+    }
+
     const hovered = pcb.pads.find((p) => {
       const d = Math.hypot(p.x - mmX, p.y - mmY);
       return d <= Math.max(p.diameterMm, 2.5);
     });
     setHoveredPadId(hovered ? hovered.id : null);
+  };
+
+  const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setRoutingStartPad(null);
+    setSelectedTrackId(null);
+    setSelectedComponentId(null);
+    setIsDraggingComp(false);
   };
 
   const handleCanvasClick = () => {
@@ -503,6 +671,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         // Start interactive routing trace from this pad
         setRoutingStartPad({ id: clickedPad.id, x: clickedPad.x, y: clickedPad.y });
         setSelectedTrackId(null);
+        setSelectedComponentId(null);
       } else if (routingStartPad.id !== clickedPad.id) {
         // Complete the track connection
         const newTrack: PcbTrack = {
@@ -563,10 +732,21 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
     if (clickedTrack) {
       setSelectedTrackId(clickedTrack.id);
+      setSelectedComponentId(null);
       setRoutingStartPad(null);
     } else {
-      setSelectedTrackId(null);
-      setRoutingStartPad(null);
+      // Check if clicked component
+      const clickedComp = pcb.components?.find((c) => {
+        return Math.hypot(c.x - mmX, c.y - mmY) <= 8;
+      });
+      if (clickedComp) {
+        setSelectedComponentId(clickedComp.componentId);
+        setSelectedTrackId(null);
+      } else {
+        setSelectedTrackId(null);
+        setSelectedComponentId(null);
+        setRoutingStartPad(null);
+      }
     }
   };
 
@@ -655,31 +835,174 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                 <span>{routingStartPad ? 'Routing Active...' : 'Route [R]'}</span>
               </button>
 
-              {/* Delete Selected Track Button */}
-              {selectedTrackId && (
+              {/* Rotate Selected Component Button */}
+              {selectedComponentId && (
                 <button
+                  type="button"
                   onClick={() => {
-                    if (onUpdatePcb) {
+                    const targetComp = pcb.components?.find((c) => c.componentId === selectedComponentId);
+                    if (targetComp && onUpdatePcb) {
+                      const newRot = ((targetComp.rotation || 0) + 90) % 360;
+                      const updatedComponents = pcb.components!.map((c) =>
+                        c.componentId === selectedComponentId ? { ...c, rotation: newRot } : c
+                      );
+                      const padMapping = new Map<string, { oldX: number; oldY: number; newX: number; newY: number }>();
+                      const updatedPads = pcb.pads.map((p) => {
+                        if (p.componentId === selectedComponentId) {
+                          const relX = p.x - targetComp.x;
+                          const relY = p.y - targetComp.y;
+                          const newPadX = Math.round((targetComp.x - relY) * 10) / 10;
+                          const newPadY = Math.round((targetComp.y + relX) * 10) / 10;
+                          padMapping.set(p.id, { oldX: p.x, oldY: p.y, newX: newPadX, newY: newPadY });
+                          return { ...p, x: newPadX, y: newPadY };
+                        }
+                        return p;
+                      });
+                      const updatedTracks = pcb.tracks.map((t) => {
+                        let from = { ...t.from };
+                        let to = { ...t.to };
+                        for (const [, m] of padMapping) {
+                          if (Math.hypot(t.from.x - m.oldX, t.from.y - m.oldY) < 0.3) {
+                            from = { x: m.newX, y: m.newY };
+                          }
+                          if (Math.hypot(t.to.x - m.oldX, t.to.y - m.oldY) < 0.3) {
+                            to = { x: m.newX, y: m.newY };
+                          }
+                        }
+                        return { ...t, from, to };
+                      });
                       onUpdatePcb({
                         ...pcb,
-                        tracks: pcb.tracks.filter((t) => t.id !== selectedTrackId),
+                        components: updatedComponents,
+                        pads: updatedPads,
+                        tracks: updatedTracks,
                       });
-                      setSelectedTrackId(null);
                     }
                   }}
-                  className="px-2 py-0.5 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700 rounded flex items-center gap-1"
-                  title="Delete selected track [Delete]"
+                  className="px-2 py-0.5 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-600 rounded flex items-center gap-1 font-mono text-[11px]"
+                  title="Rotate selected footprint 90° [Shortcut: R]"
                 >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Del Track</span>
+                  <RotateCw className="w-3 h-3" />
+                  <span>Rotate [R]</span>
                 </button>
+              )}
+
+              {/* Wire/Track Selection Action Buttons */}
+              {selectedTrackId && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trk = pcb.tracks.find((t) => t.id === selectedTrackId);
+                      if (trk && onUpdatePcb) {
+                        onUpdatePcb({
+                          ...pcb,
+                          tracks: pcb.tracks.filter((t) => t.id !== selectedTrackId),
+                        });
+                        setSelectedTrackId(null);
+                        setRoutingStartPad({ id: `reroute_${Date.now()}`, x: trk.from.x, y: trk.from.y });
+                        setIsRoutingMode(true);
+                      }
+                    }}
+                    className="px-2 py-0.5 bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-600 rounded flex items-center gap-1 font-mono text-[11px]"
+                    title="Disconnect trace and re-route endpoint"
+                  >
+                    <Route className="w-3 h-3" />
+                    <span>Disconnect / Re-route</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onUpdatePcb) {
+                        onUpdatePcb({
+                          ...pcb,
+                          tracks: pcb.tracks.filter((t) => t.id !== selectedTrackId),
+                        });
+                        setSelectedTrackId(null);
+                      }
+                    }}
+                    className="px-2 py-0.5 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700 rounded flex items-center gap-1 font-mono text-[11px]"
+                    title="Delete selected track [Delete]"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Del Track</span>
+                  </button>
+                </div>
               )}
 
               {/* Stackup & Fab Specs Modal Toggle */}
               <button
-                onClick={() => setShowStackupModal(true)}
-                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded flex items-center gap-1"
-                title="Configure PCB Layer Stack & Fabrication Specs"
+                type="button"
+                onClick={() => setIsStackupHudOpen((prev) => !prev)}
+                className={`px-2.5 py-0.5 rounded flex items-center gap-1 font-mono text-[11px] transition-colors cursor-pointer ${
+                  isStackupHudOpen
+                    ? 'bg-cyan-950 border border-cyan-500 text-cyan-300 font-bold'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+                title="Toggle PCB Layer Stack & Fabrication HUD"
+              >
+                <Sliders className="w-3 h-3 text-cyan-400" />
+                <span>Stackup</span>
+              </button>
+            </div>
+          )}
+
+          {/* 3D Mode Camera Controls in Top Toolbar */}
+          {is3DMode && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800 font-mono text-[11px]">
+              <span className="text-slate-500 flex items-center gap-1">
+                <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                Camera:
+              </span>
+              <button
+                type="button"
+                onClick={() => setCameraPreset('top')}
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Top View (F.Cu)"
+              >
+                Top
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraPreset('iso')}
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Isometric 3D Perspective"
+              >
+                Isometric
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraPreset('bot')}
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Bottom View (B.Cu)"
+              >
+                Bottom
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraPreset('front')}
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Front Edge View"
+              >
+                Front
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraPreset('reset')}
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Reset Camera"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsStackupHudOpen((prev) => !prev)}
+                className={`ml-2 px-2.5 py-0.5 rounded flex items-center gap-1 font-mono text-[11px] transition-colors cursor-pointer ${
+                  isStackupHudOpen
+                    ? 'bg-cyan-950 border border-cyan-500 text-cyan-300 font-bold'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+                title="Toggle PCB Layer Stack & Fabrication HUD"
               >
                 <Sliders className="w-3 h-3 text-cyan-400" />
                 <span>Stackup</span>
@@ -780,43 +1103,53 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       {/* Main View Area */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         <div className="flex-1 relative flex items-center justify-center p-4">
-          {/* Floating PCB Layer Stack & Dimensions Callout HUD */}
-          <div className="absolute top-6 left-6 bg-[#0B1528]/95 backdrop-blur-md border border-slate-700/80 rounded-xl p-3 shadow-2xl font-mono text-xs z-20 flex flex-col gap-1.5 pointer-events-auto min-w-[240px]">
-            <div className="flex items-center gap-2 pb-1.5 border-b border-slate-800">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <strong className="text-slate-100 text-[11px] uppercase tracking-wider">PCB Fabrication Stackup</strong>
-              <button
-                type="button"
-                onClick={() => setShowStackupModal(true)}
-                className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold hover:bg-emerald-900 cursor-pointer"
-              >
-                {copperLayers}-LAYER FR-4
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-300">
-              <div>Dimensions: <strong className="text-cyan-400">{boardWidth} × {boardHeight} mm</strong></div>
-              <div>Thickness: <strong className="text-cyan-400">{boardThicknessMm} mm</strong></div>
-              <div>Finished Cu: <strong className="text-amber-400">{copperWeightOz} oz (35µm)</strong></div>
-              <div>Surface: <strong className="text-amber-400">ENIG Gold</strong></div>
-            </div>
-            {/* Miniature Cross-Section Layer Stackup */}
-            <div className="flex flex-col gap-0.5 mt-1 pt-1.5 border-t border-slate-800 text-[10px]">
-              <div className="flex items-center justify-between text-red-400 font-bold">
-                <span>L1: F.Cu (Top Copper)</span>
-                <span>35 µm</span>
+          {/* Floating PCB Layer Stack & Dimensions Callout HUD (Toggleable & Closable) */}
+          {isStackupHudOpen && (
+            <div className="absolute top-6 left-6 bg-[#0B1528]/95 backdrop-blur-md border border-slate-700/80 rounded-xl p-3 shadow-2xl font-mono text-xs z-30 flex flex-col gap-1.5 pointer-events-auto min-w-[250px] animate-in fade-in duration-150">
+              <div className="flex items-center gap-2 pb-1.5 border-b border-slate-800">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <strong className="text-slate-100 text-[11px] uppercase tracking-wider">PCB Fabrication Stackup</strong>
+                <button
+                  type="button"
+                  onClick={() => setShowStackupModal(true)}
+                  className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold hover:bg-emerald-900 cursor-pointer"
+                >
+                  {copperLayers}-LAYER FR-4
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsStackupHudOpen(false)}
+                  className="text-slate-400 hover:text-white p-0.5 hover:bg-slate-800 rounded ml-1 transition-colors"
+                  title="Close Stackup HUD"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="h-2 rounded-xs bg-emerald-900 border border-emerald-700/60 flex items-center justify-center text-[8px] text-emerald-200">
-                FR-4 Dielectric Core ({boardThicknessMm - (copperLayers === 2 ? 0.07 : 0.14)} mm)
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-300">
+                <div>Dimensions: <strong className="text-cyan-400">{boardWidth} × {boardHeight} mm</strong></div>
+                <div>Thickness: <strong className="text-cyan-400">{boardThicknessMm} mm</strong></div>
+                <div>Finished Cu: <strong className="text-amber-400">{copperWeightOz} oz (35µm)</strong></div>
+                <div>Surface: <strong className="text-amber-400">ENIG Gold</strong></div>
               </div>
-              <div className="flex items-center justify-between text-blue-400 font-bold">
-                <span>L{copperLayers}: B.Cu (Bottom Copper)</span>
-                <span>35 µm</span>
+              {/* Miniature Cross-Section Layer Stackup */}
+              <div className="flex flex-col gap-0.5 mt-1 pt-1.5 border-t border-slate-800 text-[10px]">
+                <div className="flex items-center justify-between text-red-400 font-bold">
+                  <span>L1: F.Cu (Top Copper)</span>
+                  <span>35 µm</span>
+                </div>
+                <div className="h-2 rounded-xs bg-emerald-900 border border-emerald-700/60 flex items-center justify-center text-[8px] text-emerald-200">
+                  FR-4 Dielectric Core ({boardThicknessMm - (copperLayers === 2 ? 0.07 : 0.14)} mm)
+                </div>
+                <div className="flex items-center justify-between text-blue-400 font-bold">
+                  <span>L{copperLayers}: B.Cu (Bottom Copper)</span>
+                  <span>35 µm</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
           {is3DMode ? (
             <div className="w-full h-full relative">
-              <Pcb3dViewer pcb={pcb} solderMaskColor={solderMaskColor} />
+              <Pcb3dViewer pcb={pcb} solderMaskColor={solderMaskColor} cameraPreset={cameraPreset} />
             </div>
           ) : (
             <div className="relative flex items-center justify-center">
@@ -824,9 +1157,21 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                 ref={canvas2dRef}
                 width={800}
                 height={550}
+                onMouseDown={handleCanvasMouseDown}
                 onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
                 onClick={handleCanvasClick}
-                style={{ cursor: isRoutingMode || routingStartPad ? 'crosshair' : 'default' }}
+                onContextMenu={handleCanvasContextMenu}
+                style={{
+                  cursor:
+                    isRoutingMode || routingStartPad
+                      ? 'crosshair'
+                      : isDraggingComp
+                      ? 'grabbing'
+                      : selectedComponentId
+                      ? 'grab'
+                      : 'default',
+                }}
                 className="max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
               />
               {/* Floating Routing Helper Banner */}

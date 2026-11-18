@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 import { CircuitComponent, CircuitWire, WireInteractionMode, WireRoutingStyle } from '@/modules/engineering-lab/types';
 import {
   RotateCw,
@@ -613,6 +614,27 @@ export function SchematicCanvas({
     if (!wire) return;
     onUpdateWire({ ...wire, color });
     setWireContextMenu(null);
+  };
+
+  // Disconnect start or end pin and re-enter wire routing mode
+  const handleDisconnectWireEndpoint = (wireId: string, endpoint: 'start' | 'end') => {
+    const wire = wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    onDeleteWire(wireId);
+    setWireSelected(null);
+    setWireContextMenu(null);
+
+    const keepCompId = endpoint === 'start' ? wire.toCompId : wire.fromCompId;
+    const keepPinId = endpoint === 'start' ? wire.toPinId : wire.fromPinId;
+
+    const keepComp = components.find((c) => c.id === keepCompId);
+    const keepPin = keepComp?.pins.find((p) => p.id === keepPinId);
+    if (keepComp && keepPin) {
+      const pCoord = getPinWorldCoord(keepComp, keepPin);
+      setActiveWireStart({ compId: keepComp.id, pinId: keepPin.id, x: pCoord.x, y: pCoord.y });
+      setActiveWaypoints(wire.points || []);
+      toast.info(`Disconnected ${endpoint === 'start' ? 'Start' : 'End'} pin. Click another pin to reconnect, or press Esc to cancel.`);
+    }
   };
 
   // Calculate Solder Junction Dots (Points where 3 or more wire connections meet)
@@ -1358,18 +1380,7 @@ export function SchematicCanvas({
             </div>
             <button
               onClick={() => {
-                if (targetWire) {
-                  onDeleteWire(targetWire.id);
-                  const toComp = components.find((c) => c.id === targetWire.toCompId);
-                  const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
-                  if (toComp && toPin) {
-                    const pCoord = getPinWorldCoord(toComp, toPin);
-                    setActiveWireStart({ compId: toComp.id, pinId: toPin.id, x: pCoord.x, y: pCoord.y });
-                    setActiveWaypoints(targetWire.points || []);
-                  }
-                }
-                setWireContextMenu(null);
-                setWireSelected(null);
+                if (targetWire) handleDisconnectWireEndpoint(targetWire.id, 'start');
               }}
               className="w-full text-left px-2 py-1 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 cursor-pointer"
             >
@@ -1378,18 +1389,7 @@ export function SchematicCanvas({
             </button>
             <button
               onClick={() => {
-                if (targetWire) {
-                  onDeleteWire(targetWire.id);
-                  const fromComp = components.find((c) => c.id === targetWire.fromCompId);
-                  const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
-                  if (fromComp && fromPin) {
-                    const pCoord = getPinWorldCoord(fromComp, fromPin);
-                    setActiveWireStart({ compId: fromComp.id, pinId: fromPin.id, x: pCoord.x, y: pCoord.y });
-                    setActiveWaypoints(targetWire.points || []);
-                  }
-                }
-                setWireContextMenu(null);
-                setWireSelected(null);
+                if (targetWire) handleDisconnectWireEndpoint(targetWire.id, 'end');
               }}
               className="w-full text-left px-2 py-1 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 cursor-pointer"
             >
@@ -1454,6 +1454,114 @@ export function SchematicCanvas({
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete Wire</span>
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Clean Floating Wire Action Bar when user clicks an existing wire */}
+      {(() => {
+        if (!selectedWireId || wireContextMenu) return null;
+        const targetWire = wires.find((w) => w.id === selectedWireId);
+        if (!targetWire) return null;
+
+        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
+        const toComp = components.find((c) => c.id === targetWire.toCompId);
+        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
+        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
+        if (!fromComp || !toComp || !fromPin || !toPin) return null;
+
+        const p1 = getPinWorldCoord(fromComp, fromPin);
+        const p2 = getPinWorldCoord(toComp, toPin);
+
+        let midWorld = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        if (targetWire.points && targetWire.points.length > 0) {
+          const midIdx = Math.floor(targetWire.points.length / 2);
+          midWorld = targetWire.points[midIdx];
+        }
+
+        const screenX = midWorld.x * zoom + pan.x;
+        const screenY = midWorld.y * zoom + pan.y;
+
+        return (
+          <div
+            className="absolute z-30 flex items-center gap-1.5 bg-[#0B1528]/95 border border-slate-700/90 px-2.5 py-1.5 rounded-xl shadow-2xl backdrop-blur font-mono text-xs select-none pointer-events-auto"
+            style={{
+              left: `${Math.max(140, Math.min(window.innerWidth - 220, screenX))}px`,
+              top: `${Math.max(45, screenY - 50)}px`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {/* Disconnect Start Pin */}
+            <button
+              type="button"
+              onClick={() => handleDisconnectWireEndpoint(targetWire.id, 'start')}
+              className="px-2 py-1 bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 rounded flex items-center gap-1 text-[11px] font-semibold transition-colors cursor-pointer"
+              title="Disconnect Start Pin and re-route from End Pin"
+            >
+              <Scissors className="w-3.5 h-3.5 text-sky-400" />
+              <span>Disconnect Start</span>
+            </button>
+
+            {/* Disconnect End Pin */}
+            <button
+              type="button"
+              onClick={() => handleDisconnectWireEndpoint(targetWire.id, 'end')}
+              className="px-2 py-1 bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 rounded flex items-center gap-1 text-[11px] font-semibold transition-colors cursor-pointer"
+              title="Disconnect End Pin and re-route from Start Pin"
+            >
+              <Scissors className="w-3.5 h-3.5 text-sky-400" />
+              <span>Disconnect End</span>
+            </button>
+
+            <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+            {/* Color Swatches */}
+            <div className="flex items-center gap-1 px-1">
+              {[
+                { label: 'Green', hex: '#10B981' },
+                { label: 'Red', hex: '#EF4444' },
+                { label: 'Blue', hex: '#3B82F6' },
+                { label: 'Yellow', hex: '#FBBF24' },
+                { label: 'Purple', hex: '#A855F7' },
+                { label: 'Slate', hex: '#64748B' },
+              ].map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={() => handleChangeWireColor(targetWire.id, c.hex)}
+                  className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
+                    (targetWire.color || '#10B981') === c.hex ? 'border-white scale-125 ring-1 ring-white/50' : 'border-slate-600 hover:scale-110'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                  title={`Set wire color: ${c.label}`}
+                />
+              ))}
+            </div>
+
+            <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+            {/* Delete Wire */}
+            <button
+              type="button"
+              onClick={() => {
+                onDeleteWire(targetWire.id);
+                setWireSelected(null);
+              }}
+              className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded transition-colors cursor-pointer"
+              title="Delete Wire [Delete]"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Close / Deselect */}
+            <button
+              type="button"
+              onClick={() => setWireSelected(null)}
+              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded text-[11px] leading-none"
+              title="Close Wire Bar"
+            >
+              ✕
             </button>
           </div>
         );

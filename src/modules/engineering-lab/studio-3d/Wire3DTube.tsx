@@ -23,36 +23,48 @@ export function Wire3DTube({
   isSelected = false,
   onClick,
 }: Wire3DTubeProps) {
-  // Generate arched CatmullRomCurve3
-  const { geometry, haloGeometry } = useMemo(() => {
+  // Generate realistic Dupont jumper arched CatmullRomCurve3
+  // with straight vertical entry and exit (90 degrees)
+  const { geometry, haloGeometry, dupontStartPos, dupontEndPos } = useMemo(() => {
     const dist = start.distanceTo(end);
-    const mid = new THREE.Vector3()
-      .addVectors(start, end)
-      .multiplyScalar(0.5);
 
-    // Natural arch height based on distance
-    const archHeight = Math.max(10, Math.min(35, dist * 0.35));
+    // Dupont connector housing height is 8mm
+    // Wire enters top of housing at start.y + 8.0 and end.y + 8.0
+    const wireStart = start.clone().add(new THREE.Vector3(0, 8.0, 0));
+    const wireEnd = end.clone().add(new THREE.Vector3(0, 8.0, 0));
+
+    // Vertical straight exit from Dupont connector
+    const pStartLift = wireStart.clone().add(new THREE.Vector3(0, 5.0, 0));
+    const pEndLift = wireEnd.clone().add(new THREE.Vector3(0, 5.0, 0));
+
+    // Graceful arch apex
+    const mid = new THREE.Vector3()
+      .addVectors(wireStart, wireEnd)
+      .multiplyScalar(0.5);
+    const archHeight = Math.max(8, Math.min(32, dist * 0.32));
     mid.y += archHeight;
 
-    // Intermediate points for vertical pin exit/entry
-    const pStartLift = start.clone().add(new THREE.Vector3(0, 4, 0));
-    const pEndLift = end.clone().add(new THREE.Vector3(0, 4, 0));
-
     const curve = new THREE.CatmullRomCurve3([
-      start,
+      wireStart,
       pStartLift,
       mid,
       pEndLift,
-      end,
+      wireEnd,
     ]);
 
-    const geom = new THREE.TubeGeometry(curve, 36, 0.75, 8, false);
-    const haloGeom = new THREE.TubeGeometry(curve, 36, 1.4, 8, false);
+    // Realistic slim Dupont wire radius: 0.45mm
+    const geom = new THREE.TubeGeometry(curve, 36, 0.45, 8, false);
+    const haloGeom = new THREE.TubeGeometry(curve, 36, 1.1, 8, false);
 
-    return { geometry: geom, haloGeometry: haloGeom };
+    return {
+      geometry: geom,
+      haloGeometry: haloGeom,
+      dupontStartPos: start.clone().add(new THREE.Vector3(0, 4.0, 0)),
+      dupontEndPos: end.clone().add(new THREE.Vector3(0, 4.0, 0)),
+    };
   }, [start, end]);
 
-  // Clean up geometry on unmount to prevent GPU leaks
+  // Clean up geometry on unmount to prevent GPU memory leaks
   useEffect(() => {
     return () => {
       geometry.dispose();
@@ -64,17 +76,26 @@ export function Wire3DTube({
     return {
       insulation: new THREE.MeshStandardMaterial({
         color: isSelected ? '#F59E0B' : color,
-        roughness: 0.35,
-        metalness: 0.1,
+        roughness: 0.38,
+        metalness: 0.12,
       }),
       halo: new THREE.MeshBasicMaterial({
         color: '#F59E0B',
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.45,
+      }),
+      dupontHousing: new THREE.MeshStandardMaterial({
+        color: '#18181B', // Matte black molded Dupont plastic housing
+        roughness: 0.5,
+        metalness: 0.1,
+      }),
+      dupontCollar: new THREE.MeshStandardMaterial({
+        color: '#27272A',
+        roughness: 0.4,
       }),
       pinTip: new THREE.MeshStandardMaterial({
-        color: '#E2E8F0',
-        metalness: 0.9,
+        color: '#CBD5E1', // Nickel/silver plated 0.64mm square terminal pin
+        metalness: 0.95,
         roughness: 0.15,
       }),
     };
@@ -82,12 +103,12 @@ export function Wire3DTube({
 
   return (
     <group>
-      {/* Selection Halo */}
+      {/* Selection Glow Halo */}
       {isSelected && (
         <mesh geometry={haloGeometry} material={materials.halo} />
       )}
 
-      {/* Main Jumper Wire Tube */}
+      {/* Main Jumper Wire Flexible PVC Insulation Tube */}
       <mesh
         geometry={geometry}
         material={materials.insulation}
@@ -98,12 +119,32 @@ export function Wire3DTube({
         }}
       />
 
-      {/* Metal Pin Tips plugging into hole */}
-      <mesh position={[start.x, start.y - 1.5, start.z]} material={materials.pinTip}>
-        <cylinderGeometry args={[0.35, 0.35, 3, 8]} />
+      {/* --- START DUPONT CONNECTOR --- */}
+      {/* Black Plastic 2.54mm Dupont Housing */}
+      <mesh position={[dupontStartPos.x, dupontStartPos.y, dupontStartPos.z]} material={materials.dupontHousing}>
+        <boxGeometry args={[2.5, 8.0, 2.5]} />
       </mesh>
+      {/* Top strain-relief collar */}
+      <mesh position={[dupontStartPos.x, dupontStartPos.y + 4.1, dupontStartPos.z]} material={materials.dupontCollar}>
+        <cylinderGeometry args={[1.3, 1.3, 0.4, 12]} />
+      </mesh>
+      {/* Metallic Pin Tip entering breadboard hole */}
+      <mesh position={[start.x, start.y - 1.5, start.z]} material={materials.pinTip}>
+        <cylinderGeometry args={[0.32, 0.32, 3.5, 8]} />
+      </mesh>
+
+      {/* --- END DUPONT CONNECTOR --- */}
+      {/* Black Plastic 2.54mm Dupont Housing */}
+      <mesh position={[dupontEndPos.x, dupontEndPos.y, dupontEndPos.z]} material={materials.dupontHousing}>
+        <boxGeometry args={[2.5, 8.0, 2.5]} />
+      </mesh>
+      {/* Top strain-relief collar */}
+      <mesh position={[dupontEndPos.x, dupontEndPos.y + 4.1, dupontEndPos.z]} material={materials.dupontCollar}>
+        <cylinderGeometry args={[1.3, 1.3, 0.4, 12]} />
+      </mesh>
+      {/* Metallic Pin Tip entering breadboard hole */}
       <mesh position={[end.x, end.y - 1.5, end.z]} material={materials.pinTip}>
-        <cylinderGeometry args={[0.35, 0.35, 3, 8]} />
+        <cylinderGeometry args={[0.32, 0.32, 3.5, 8]} />
       </mesh>
     </group>
   );
