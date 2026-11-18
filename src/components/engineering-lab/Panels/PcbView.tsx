@@ -192,6 +192,115 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       ctx.fill();
     });
 
+    // 2.1 Draw CAD Dimension Extension Lines & Rulers
+    const pcbW = pcb.widthMm * scale;
+    const pcbH = pcb.heightMm * scale;
+
+    // Top Dimension Line (Horizontal Width)
+    ctx.strokeStyle = '#06B6D4';
+    ctx.lineWidth = 1;
+    // Extension ticks
+    ctx.beginPath();
+    ctx.moveTo(offsetX, offsetY);
+    ctx.lineTo(offsetX, offsetY - 24);
+    ctx.moveTo(offsetX + pcbW, offsetY);
+    ctx.lineTo(offsetX + pcbW, offsetY - 24);
+    ctx.stroke();
+
+    // Main horizontal dimension line with arrows
+    ctx.beginPath();
+    ctx.moveTo(offsetX, offsetY - 16);
+    ctx.lineTo(offsetX + pcbW, offsetY - 16);
+    ctx.stroke();
+
+    // Arrow heads
+    ctx.fillStyle = '#06B6D4';
+    ctx.beginPath();
+    ctx.moveTo(offsetX, offsetY - 16);
+    ctx.lineTo(offsetX + 6, offsetY - 19);
+    ctx.lineTo(offsetX + 6, offsetY - 13);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(offsetX + pcbW, offsetY - 16);
+    ctx.lineTo(offsetX + pcbW - 6, offsetY - 19);
+    ctx.lineTo(offsetX + pcbW - 6, offsetY - 13);
+    ctx.closePath();
+    ctx.fill();
+
+    // Width Dimension Pill Badge
+    const wLabel = `${pcb.widthMm.toFixed(1)} mm`;
+    ctx.fillStyle = '#042F2E';
+    ctx.strokeStyle = '#0D9488';
+    ctx.lineWidth = 1;
+    ctx.fillRect(offsetX + pcbW / 2 - 36, offsetY - 24, 72, 16);
+    ctx.strokeRect(offsetX + pcbW / 2 - 36, offsetY - 24, 72, 16);
+    ctx.fillStyle = '#2DD4BF';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(wLabel, offsetX + pcbW / 2 - 24, offsetY - 12);
+
+    // Left Dimension Line (Vertical Height)
+    ctx.strokeStyle = '#06B6D4';
+    ctx.beginPath();
+    ctx.moveTo(offsetX, offsetY);
+    ctx.lineTo(offsetX - 24, offsetY);
+    ctx.moveTo(offsetX, offsetY + pcbH);
+    ctx.lineTo(offsetX - 24, offsetY + pcbH);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(offsetX - 16, offsetY);
+    ctx.lineTo(offsetX - 16, offsetY + pcbH);
+    ctx.stroke();
+
+    // Arrow heads
+    ctx.fillStyle = '#06B6D4';
+    ctx.beginPath();
+    ctx.moveTo(offsetX - 16, offsetY);
+    ctx.lineTo(offsetX - 19, offsetY + 6);
+    ctx.lineTo(offsetX - 13, offsetY + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(offsetX - 16, offsetY + pcbH);
+    ctx.lineTo(offsetX - 19, offsetY + pcbH - 6);
+    ctx.lineTo(offsetX - 13, offsetY + pcbH - 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Height Dimension Pill Badge
+    const hLabel = `${pcb.heightMm.toFixed(1)} mm`;
+    ctx.fillStyle = '#042F2E';
+    ctx.strokeStyle = '#0D9488';
+    ctx.lineWidth = 1;
+    ctx.fillRect(offsetX - 72, offsetY + pcbH / 2 - 8, 52, 16);
+    ctx.strokeRect(offsetX - 72, offsetY + pcbH / 2 - 8, 52, 16);
+    ctx.fillStyle = '#2DD4BF';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(hLabel, offsetX - 68, offsetY + pcbH / 2 + 4);
+
+    // Millimeter Edge Ticks along Top and Left Borders
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 1;
+    for (let m = 0; m <= pcb.widthMm; m += 5) {
+      const tx = offsetX + m * scale;
+      const isMajor = m % 10 === 0;
+      ctx.beginPath();
+      ctx.moveTo(tx, offsetY);
+      ctx.lineTo(tx, offsetY + (isMajor ? 6 : 3));
+      ctx.stroke();
+    }
+    for (let m = 0; m <= pcb.heightMm; m += 5) {
+      const ty = offsetY + m * scale;
+      const isMajor = m % 10 === 0;
+      ctx.beginPath();
+      ctx.moveTo(offsetX, ty);
+      ctx.lineTo(offsetX + (isMajor ? 6 : 3), ty);
+      ctx.stroke();
+    }
+
     // 3. Draw Bottom Copper Tracks (Blue)
     if (visibleLayers.bottomCopper) {
       ctx.lineCap = 'round';
@@ -828,11 +937,138 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
           ctx.arc(sc1.px, sc1.py, 1.8 * zoom3D, 0, Math.PI * 2);
           ctx.arc(sc2.px, sc2.py, 1.8 * zoom3D, 0, Math.PI * 2);
           ctx.fill();
+        } else if (comp.type.includes('ARDUINO') || comp.type.includes('ESP32') || comp.type.includes('PICO') || comp.type.includes('STM32') || comp.type.includes('MCU')) {
+          // --- MICROCONTROLLER DEVELOPMENT MODULE ON PCB ---
+          const isArduino = comp.type.includes('ARDUINO');
+          const isEsp = comp.type.includes('ESP32');
+          const isPico = comp.type.includes('PICO');
+          const modW = isArduino ? 28 : isPico ? 21 : 18;
+          const modD = isArduino ? 20 : isPico ? 11 : 13;
+
+          const mTop1 = project3D(cx - modW / 2, -5.5, cy - modD / 2);
+          const mTop2 = project3D(cx + modW / 2, -5.5, cy - modD / 2);
+          const mTop3 = project3D(cx + modW / 2, -5.5, cy + modD / 2);
+          const mTop4 = project3D(cx - modW / 2, -5.5, cy + modD / 2);
+
+          // Substrate PCB Color
+          ctx.fillStyle = isArduino ? '#00878F' : isPico ? '#059669' : '#0F172A';
+          ctx.strokeStyle = isArduino ? '#005C62' : isPico ? '#047857' : '#334155';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(mTop1.px, mTop1.py);
+          ctx.lineTo(mTop2.px, mTop2.py);
+          ctx.lineTo(mTop3.px, mTop3.py);
+          ctx.lineTo(mTop4.px, mTop4.py);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Female Header Pin Sockets
+          const h1 = project3D(cx - modW / 2 + 2, -6.5, cy);
+          const h2 = project3D(cx + modW / 2 - 2, -6.5, cy);
+          ctx.fillStyle = '#1E293B';
+          ctx.fillRect(h1.px - 2, h1.py - modD * 0.8, 4, modD * 1.6);
+          ctx.fillRect(h2.px - 2, h2.py - modD * 0.8, 4, modD * 1.6);
+
+          // Metallic USB Connector
+          const usbP = project3D(cx - modW / 2 + 2, -7.5, cy);
+          ctx.fillStyle = '#CBD5E1';
+          ctx.fillRect(usbP.px - 4, usbP.py - 3, 8, 6);
+
+          // MCU Chip in center
+          const chipP = project3D(cx + 2, -6.5, cy);
+          ctx.fillStyle = '#0F172A';
+          ctx.fillRect(chipP.px - 4, chipP.py - 4, 8, 8);
+
+          // Silkscreen
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 7px monospace';
+          ctx.fillText(comp.designator || (isArduino ? 'UNO' : isPico ? 'PICO' : isEsp ? 'ESP32' : 'MCU'), mTop1.px + 2, mTop1.py + 8);
+        } else if (comp.type.includes('7805') || comp.type.includes('LM317') || comp.type.includes('IRF') || comp.type.includes('MOSFET') || comp.type.includes('TIP') || comp.type.includes('TRANSISTOR') || comp.type.includes('TO220')) {
+          // --- TO-220 POWER PACKAGE (REGULATOR / POWER MOSFET) ---
+          const tabP = project3D(cx, -9, cy - 2);
+          const bodyP = project3D(cx, -6, cy + 1);
+
+          // Metal Heatsink Tab with Mounting Hole
+          ctx.fillStyle = '#CBD5E1';
+          ctx.strokeStyle = '#94A3B8';
+          ctx.fillRect(tabP.px - 5 * zoom3D, tabP.py - 4 * zoom3D, 10 * zoom3D, 8 * zoom3D);
+          ctx.strokeRect(tabP.px - 5 * zoom3D, tabP.py - 4 * zoom3D, 10 * zoom3D, 8 * zoom3D);
+          // Mounting Hole
+          ctx.fillStyle = '#050D1A';
+          ctx.beginPath();
+          ctx.arc(tabP.px, tabP.py - 1 * zoom3D, 1.5 * zoom3D, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Black Molded Epoxy Body
+          ctx.fillStyle = '#1E293B';
+          ctx.strokeStyle = '#475569';
+          ctx.fillRect(bodyP.px - 5 * zoom3D, bodyP.py - 3 * zoom3D, 10 * zoom3D, 6 * zoom3D);
+          ctx.strokeRect(bodyP.px - 5 * zoom3D, bodyP.py - 3 * zoom3D, 10 * zoom3D, 6 * zoom3D);
+
+          // 3 Silver Leads to Board
+          ctx.strokeStyle = '#CBD5E1';
+          ctx.lineWidth = 1.2 * zoom3D;
+          const leadBase = project3D(cx, -1.8, cy);
+          for (let li = -2; li <= 2; li += 2) {
+            ctx.beginPath();
+            ctx.moveTo(bodyP.px + li * 2 * zoom3D, bodyP.py + 3 * zoom3D);
+            ctx.lineTo(leadBase.px + li * 2 * zoom3D, leadBase.py);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = '#94A3B8';
+          ctx.font = 'bold 7px monospace';
+          ctx.fillText(comp.designator || 'Q1', bodyP.px - 4 * zoom3D, bodyP.py + 1 * zoom3D);
+        } else if (comp.type.includes('RELAY')) {
+          // --- MINIATURE SUGAR CUBE ELECTROMECHANICAL RELAY ---
+          const rP1 = project3D(cx - 7, -8, cy - 5);
+          const rP2 = project3D(cx + 7, -8, cy - 5);
+          const rP3 = project3D(cx + 7, -8, cy + 5);
+          const rP4 = project3D(cx - 7, -8, cy + 5);
+
+          // Blue Enclosure Cube
+          ctx.fillStyle = '#1D4ED8';
+          ctx.strokeStyle = '#1E40AF';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(rP1.px, rP1.py);
+          ctx.lineTo(rP2.px, rP2.py);
+          ctx.lineTo(rP3.px, rP3.py);
+          ctx.lineTo(rP4.px, rP4.py);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 7px monospace';
+          ctx.fillText('RELAY', rP1.px + 2, rP1.py + 6);
+          ctx.fillText('10A 250V', rP1.px + 2, rP1.py + 13);
+        } else if (comp.type === 'PUSHBUTTON' || comp.type.includes('BUTTON') || comp.type.includes('SWITCH')) {
+          // --- 6X6MM TACTILE PUSHBUTTON SWITCH ---
+          const swP = project3D(cx, -4.5, cy);
+          // Metal Casing
+          ctx.fillStyle = '#CBD5E1';
+          ctx.strokeStyle = '#94A3B8';
+          ctx.fillRect(swP.px - 4 * zoom3D, swP.py - 4 * zoom3D, 8 * zoom3D, 8 * zoom3D);
+          ctx.strokeRect(swP.px - 4 * zoom3D, swP.py - 4 * zoom3D, 8 * zoom3D, 8 * zoom3D);
+
+          // Black Actuator Button
+          ctx.fillStyle = '#0F172A';
+          ctx.beginPath();
+          ctx.arc(swP.px, swP.py, 2.2 * zoom3D, 0, Math.PI * 2);
+          ctx.fill();
         } else {
-          // Generic SMD / Through-hole Package
-          const genP = project3D(cx, -4, cy);
-          ctx.fillStyle = '#334155';
-          ctx.fillRect(genP.px - 4 * zoom3D, genP.py - 4 * zoom3D, 8 * zoom3D, 8 * zoom3D);
+          // General DIP / SOIC Package with Silver Pins
+          const genP = project3D(cx, -4.5, cy);
+          ctx.fillStyle = '#1E293B';
+          ctx.strokeStyle = '#475569';
+          ctx.fillRect(genP.px - 5 * zoom3D, genP.py - 4 * zoom3D, 10 * zoom3D, 8 * zoom3D);
+          ctx.strokeRect(genP.px - 5 * zoom3D, genP.py - 4 * zoom3D, 10 * zoom3D, 8 * zoom3D);
+
+          ctx.fillStyle = '#94A3B8';
+          ctx.font = 'bold 7px monospace';
+          ctx.fillText(comp.designator || comp.type.slice(0, 4), genP.px - 4 * zoom3D, genP.py + 2);
         }
       });
     }
@@ -1087,6 +1323,40 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       {/* Main View Area */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         <div className="flex-1 relative flex items-center justify-center p-4">
+          {/* Floating PCB Layer Stack & Dimensions Callout HUD */}
+          <div className="absolute top-6 left-6 bg-[#0B1528]/95 backdrop-blur-md border border-slate-700/80 rounded-xl p-3 shadow-2xl font-mono text-xs z-20 flex flex-col gap-1.5 pointer-events-auto min-w-[240px]">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-slate-800">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <strong className="text-slate-100 text-[11px] uppercase tracking-wider">PCB Fabrication Stackup</strong>
+              <button
+                type="button"
+                onClick={() => setShowStackupModal(true)}
+                className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold hover:bg-emerald-900 cursor-pointer"
+              >
+                {copperLayers}-LAYER FR-4
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-300">
+              <div>Dimensions: <strong className="text-cyan-400">{boardWidth} × {boardHeight} mm</strong></div>
+              <div>Thickness: <strong className="text-cyan-400">{boardThicknessMm} mm</strong></div>
+              <div>Finished Cu: <strong className="text-amber-400">{copperWeightOz} oz (35µm)</strong></div>
+              <div>Surface: <strong className="text-amber-400">ENIG Gold</strong></div>
+            </div>
+            {/* Miniature Cross-Section Layer Stackup */}
+            <div className="flex flex-col gap-0.5 mt-1 pt-1.5 border-t border-slate-800 text-[10px]">
+              <div className="flex items-center justify-between text-red-400 font-bold">
+                <span>L1: F.Cu (Top Copper)</span>
+                <span>35 µm</span>
+              </div>
+              <div className="h-2 rounded-xs bg-emerald-900 border border-emerald-700/60 flex items-center justify-center text-[8px] text-emerald-200">
+                FR-4 Dielectric Core ({boardThicknessMm - (copperLayers === 2 ? 0.07 : 0.14)} mm)
+              </div>
+              <div className="flex items-center justify-between text-blue-400 font-bold">
+                <span>L{copperLayers}: B.Cu (Bottom Copper)</span>
+                <span>35 µm</span>
+              </div>
+            </div>
+          </div>
           {is3DMode ? (
             <div
               onMouseDown={(e) => {

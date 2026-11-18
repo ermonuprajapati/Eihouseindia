@@ -106,6 +106,7 @@ export function EngineeringLabApp() {
 
   // Selection
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
+  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
 
   // SECTION 11: WORKSPACE PERSISTENCE & LAYOUT PREFERENCES
   const [isBrowserOpen, setIsBrowserOpen] = useState(true);
@@ -406,6 +407,21 @@ export function EngineeringLabApp() {
       ...prev,
       wires: prev.wires.filter((w) => w.id !== wireId),
     }));
+    if (selectedWireId === wireId) {
+      setSelectedWireId(null);
+    }
+    toast.info('Wire deleted');
+  };
+
+  const handleDisconnectWire = (wireId: string) => {
+    recordHistory();
+    setProject((prev) => ({
+      ...prev,
+      wires: prev.wires.filter((w) => w.id !== wireId),
+    }));
+    if (selectedWireId === wireId) {
+      setSelectedWireId(null);
+    }
     toast.info('Wire disconnected');
   };
 
@@ -584,6 +600,7 @@ export function EngineeringLabApp() {
   }, [selectedCompId, undoStack, redoStack]);
 
   const selectedComponent = project.components.find((c) => c.id === selectedCompId) || null;
+  const selectedWire = project.wires.find((w) => w.id === selectedWireId) || null;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#070D18]">
@@ -645,7 +662,15 @@ export function EngineeringLabApp() {
                 components={project.components}
                 wires={project.wires}
                 selectedCompId={selectedCompId}
-                onSelectComponent={setSelectedCompId}
+                selectedWireId={selectedWireId}
+                onSelectComponent={(id) => {
+                  setSelectedCompId(id);
+                  if (id) setSelectedWireId(null);
+                }}
+                onSelectWire={(id) => {
+                  setSelectedWireId(id);
+                  if (id) setSelectedCompId(null);
+                }}
                 onUpdateComponentPosition={handleUpdateComponentPosition}
                 onRotateComponent={handleRotateComponent}
                 onMirrorComponent={handleMirrorComponent}
@@ -667,6 +692,7 @@ export function EngineeringLabApp() {
                     wires: [],
                   }));
                   setSelectedCompId(null);
+                  setSelectedWireId(null);
                   toast.success('Schematic sheet cleared (Undo with Ctrl+Z)');
                 }}
                 isSimulating={isSimulating}
@@ -680,10 +706,21 @@ export function EngineeringLabApp() {
 
             <PropertiesInspector
               component={selectedComponent}
+              selectedWire={selectedWire}
+              components={project.components}
               onUpdateComponent={handleUpdateComponent}
+              onUpdateWire={(updatedWire) => {
+                recordHistory();
+                setProject((prev) => ({
+                  ...prev,
+                  wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
+                }));
+              }}
               onRotateComponent={handleRotateComponent}
               onMirrorComponent={handleMirrorComponent}
               onDeleteComponent={handleDeleteComponent}
+              onDeleteWire={handleDeleteWire}
+              onDisconnectWire={handleDisconnectWire}
               onDuplicateComponent={handleDuplicateComponent}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}
@@ -691,6 +728,7 @@ export function EngineeringLabApp() {
               width={inspectorWidth}
               onWidthChange={setInspectorWidth}
               simState={selectedCompId ? simStates[selectedCompId] : undefined}
+              wireCurrent={selectedWireId ? wireCurrents[selectedWireId] : undefined}
             />
           </>
         )}
@@ -702,7 +740,15 @@ export function EngineeringLabApp() {
               components={project.components}
               wires={project.wires}
               selectedCompId={selectedCompId}
-              onSelectComponent={setSelectedCompId}
+              selectedWireId={selectedWireId}
+              onSelectComponent={(id) => {
+                setSelectedCompId(id);
+                if (id) setSelectedWireId(null);
+              }}
+              onSelectWire={(id) => {
+                setSelectedWireId(id);
+                if (id) setSelectedCompId(null);
+              }}
               onAddComponent={handleAddComponent}
               onUpdateComponent={handleUpdateComponent}
               onUpdateComponentPosition={handleUpdateComponentPosition}
@@ -717,16 +763,28 @@ export function EngineeringLabApp() {
 
             <PropertiesInspector
               component={selectedComponent}
+              selectedWire={selectedWire}
+              components={project.components}
               onUpdateComponent={handleUpdateComponent}
+              onUpdateWire={(updatedWire) => {
+                recordHistory();
+                setProject((prev) => ({
+                  ...prev,
+                  wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
+                }));
+              }}
               onRotateComponent={handleRotateComponent}
               onMirrorComponent={handleMirrorComponent}
               onDeleteComponent={handleDeleteComponent}
+              onDeleteWire={handleDeleteWire}
+              onDisconnectWire={handleDisconnectWire}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}
               onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
               width={inspectorWidth}
               onWidthChange={setInspectorWidth}
               simState={selectedCompId ? simStates[selectedCompId] : undefined}
+              wireCurrent={selectedWireId ? wireCurrents[selectedWireId] : undefined}
             />
           </div>
         )}

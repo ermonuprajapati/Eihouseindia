@@ -686,71 +686,608 @@ export function SchematicSymbol({
           </g>
         );
 
-      case 'ARDUINO_UNO':
-      case 'ARDUINO_MEGA':
-      case 'ARDUINO_NANO':
-      case 'ESP32_DEVKIT':
-      case 'ESP32_S3':
-      case 'ESP32_C3':
-      case 'STM32F103':
-      case 'STM32_NUCLEO':
-      case 'RASPBERRY_PI_PICO':
-      case 'RASPBERRY_PI_PICO2': {
-        const boardTitle =
-          type === 'ARDUINO_MEGA'
-            ? 'MEGA 2560'
-            : type === 'ARDUINO_NANO'
-            ? 'NANO V3'
-            : type === 'ESP32_DEVKIT'
-            ? 'ESP32 WROOM'
-            : type === 'ESP32_S3'
-            ? 'ESP32-S3'
-            : type === 'ESP32_C3'
-            ? 'ESP32-C3 RISC-V'
-            : type === 'STM32F103'
-            ? 'STM32F103'
-            : type === 'STM32_NUCLEO'
-            ? 'NUCLEO-F401RE'
-            : type === 'RASPBERRY_PI_PICO2'
-            ? 'PICO 2 (RP2350)'
-            : type === 'RASPBERRY_PI_PICO'
-            ? 'PI PICO'
-            : 'ARDUINO UNO';
-        const boardColor =
-          type.includes('ESP')
-            ? '#BE185D'
-            : type.includes('STM')
-            ? '#2563EB'
-            : type.includes('PICO')
-            ? '#059669'
-            : '#0284C7';
+      case 'ARDUINO_UNO': {
+        const pin13High = isSimulating && simState && (simState.on || simState.voltage > 2.5);
         return (
           <g>
-            {/* MCU Board Outline */}
-            <rect
-              x="-65"
-              y="-40"
-              width="130"
-              height="80"
-              rx="5"
-              stroke={boardColor}
-              strokeWidth="2"
-              fill="#082F49"
-            />
-            {/* USB & Power Jacks */}
-            <rect x="-68" y="-30" width="12" height="18" rx="2" fill="#94A3B8" />
-            <rect x="-68" y="10" width="16" height="14" rx="2" fill="#1E293B" />
-            {/* Main Processor IC */}
-            <rect x="-10" y="-12" width="50" height="24" rx="2" fill="#0F172A" stroke="#334155" />
-            <text x="15" y="3" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">
-              {component.value.split(' ')[0]}
+            {/* Real Arduino Uno R3 Italian Turquoise Blue PCB */}
+            <rect x="-55" y="-55" width="110" height="110" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
+            <rect x="-51" y="-51" width="102" height="102" rx="6" fill="none" stroke="#00979C" strokeWidth="1" opacity="0.6" />
+
+            {/* Silver Metallic USB-B Socket */}
+            <rect x="-58" y="-45" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1.5" />
+            <rect x="-56" y="-39" width="10" height="12" rx="1" fill="#334155" />
+
+            {/* Black DC Power Barrel Jack */}
+            <rect x="-58" y="18" width="18" height="22" rx="3" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
+            <circle cx="-48" cy="29" r="3.5" fill="#F59E0B" />
+
+            {/* ATmega328P DIP-28 IC Socket & Microcontroller Chip */}
+            <rect x="-18" y="-24" width="36" height="48" rx="2" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
+            <path d="M -4,-24 C -4,-20 4,-20 4,-24" fill="#1E293B" stroke="#334155" />
+            {/* IC Pins Silver */}
+            {[-18, -10, -2, 6, 14, 22].map((py, idx) => (
+              <g key={idx}>
+                <rect x="-21" y={py - 2} width="3" height="4" fill="#94A3B8" />
+                <rect x="18" y={py - 2} width="3" height="4" fill="#94A3B8" />
+              </g>
+            ))}
+            <text x="0" y="3" fill="#E2E8F0" fontSize="6" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ATmega328P
             </text>
-            <text x="0" y="-24" fill="#38BDF8" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              {boardTitle}
+
+            {/* 16MHz Crystal Resonator */}
+            <rect x="-28" y="-8" width="7" height="18" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
+            <text x="-24.5" y="4" fill="#1E293B" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">16.0</text>
+
+            {/* Reset Tactile Pushbutton (Red Cap) */}
+            <rect x="-42" y="-42" width="10" height="10" rx="2" fill="#334155" />
+            <circle cx="-37" cy="-37" r="3" fill="#EA580C" stroke="#C2410C" strokeWidth="1" />
+
+            {/* Female Header Strips (Black with Gold Contacts) */}
+            {/* Left Header Strip (Power & Analog) */}
+            <rect x="-54" y="-52" width="8" height="104" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {[-45, -35, -25, -5, 5, 15, 25, 35, 45].map((hy, idx) => (
+              <circle key={idx} cx="-50" cy={hy} r="1.8" fill="#F59E0B" />
+            ))}
+
+            {/* Right Header Strip (Digital PWM) */}
+            <rect x="46" y="-52" width="8" height="104" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {[-45, -35, -25, -15, 5, 15, 25, 35, 45].map((hy, idx) => (
+              <circle key={idx} cx="50" cy={hy} r="1.8" fill="#F59E0B" />
+            ))}
+
+            {/* Active Pin 13 LED (L) & Power LED (ON) */}
+            <circle cx="2" cy="-32" r="2.5" fill="#10B981" />
+            <circle cx="10" cy="-32" r="2.5" fill={pin13High ? '#F59E0B' : '#78350F'} />
+            {pin13High && <circle cx="10" cy="-32" r="7" fill="rgba(245,158,11,0.4)" />}
+            <text x="2" y="-36" fill="#A7F3D0" fontSize="4" fontFamily="monospace" textAnchor="middle">ON</text>
+            <text x="10" y="-36" fill="#FDE68A" fontSize="4" fontFamily="monospace" textAnchor="middle">L</text>
+
+            {/* Arduino White Silkscreen Branding */}
+            <text x="0" y="-42" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
+              ARDUINO
+            </text>
+            <text x="0" y="38" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              UNO R3
             </text>
           </g>
         );
       }
+
+      case 'ARDUINO_NANO': {
+        return (
+          <g>
+            <rect x="-25" y="-50" width="50" height="100" rx="4" fill="#0284C7" stroke="#0369A1" strokeWidth="2" />
+            {/* Mini-USB on Top */}
+            <rect x="-9" y="-53" width="18" height="10" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
+            {/* ATmega328P TQFP Square Chip rotated 45 deg */}
+            <g transform="translate(0, -6) rotate(45)">
+              <rect x="-9" y="-9" width="18" height="18" rx="1" fill="#0F172A" stroke="#334155" />
+              <circle cx="-5" cy="-5" r="1" fill="#94A3B8" />
+            </g>
+            {/* ICSP Header 2x3 */}
+            <rect x="-6" y="22" width="12" height="16" fill="#0F172A" />
+            {[-3, 3].map((px, ix) => (
+              [26, 30, 34].map((py, iy) => (
+                <circle key={`${ix}-${iy}`} cx={px} cy={py} r="1" fill="#F59E0B" />
+              ))
+            ))}
+            {/* Pin header strips along both sides */}
+            <rect x="-24" y="-45" width="4" height="90" fill="#0F172A" />
+            <rect x="20" y="-45" width="4" height="90" fill="#0F172A" />
+            <text x="0" y="45" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              NANO V3
+            </text>
+          </g>
+        );
+      }
+
+      case 'ARDUINO_MEGA': {
+        return (
+          <g>
+            <rect x="-60" y="-60" width="120" height="120" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
+            <rect x="-63" y="-50" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" />
+            <rect x="-63" y="15" width="18" height="22" rx="3" fill="#1E293B" />
+            {/* ATmega2560 Square TQFP in center */}
+            <g transform="translate(0, -6) rotate(45)">
+              <rect x="-14" y="-14" width="28" height="28" rx="2" fill="#0F172A" stroke="#334155" />
+            </g>
+            <text x="0" y="3" fill="#94A3B8" fontSize="6" fontFamily="monospace" fontWeight="bold" textAnchor="middle">ATmega2560</text>
+            {/* Extended Double-row Digital Header on Bottom */}
+            <rect x="-50" y="44" width="100" height="10" rx="2" fill="#0F172A" stroke="#1E293B" />
+            <text x="0" y="-44" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
+              MEGA 2560
+            </text>
+          </g>
+        );
+      }
+
+      case 'ESP32_DEVKIT':
+      case 'ESP32_S3':
+      case 'ESP32_C3': {
+        return (
+          <g>
+            {/* Matte Black PCB with Gold Headers */}
+            <rect x="-35" y="-50" width="70" height="100" rx="5" fill="#0F172A" stroke="#1E293B" strokeWidth="2" />
+            {/* Perforated Metal RF Can Shield */}
+            <rect x="-24" y="-30" width="48" height="42" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" />
+            {/* Serpentine PCB Antenna in Copper */}
+            <path d="M -18,-42 L 18,-42 L 18,-36 L -12,-36 L -12,-32 L 18,-32" fill="none" stroke="#F59E0B" strokeWidth="1.8" />
+            {/* Text on Shield */}
+            <text x="0" y="-14" fill="#1E293B" fontSize="6" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">
+              ESP-WROOM-32
+            </text>
+            <text x="0" y="-5" fill="#334155" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
+              Wi-Fi + BLE
+            </text>
+            {/* Micro-USB on Bottom */}
+            <rect x="-8" y="44" width="16" height="8" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
+            {/* Boot and EN Buttons */}
+            <circle cx="-16" cy="36" r="3" fill="#334155" stroke="#64748B" />
+            <circle cx="16" cy="36" r="3" fill="#334155" stroke="#64748B" />
+            <text x="-16" y="32" fill="#64748B" fontSize="4" fontFamily="monospace" textAnchor="middle">EN</text>
+            <text x="16" y="32" fill="#64748B" fontSize="4" fontFamily="monospace" textAnchor="middle">IO0</text>
+            {/* Header Pins on Both Edges */}
+            <rect x="-34" y="-45" width="4" height="90" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+            <rect x="30" y="-45" width="4" height="90" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+            <text x="0" y="24" fill="#38BDF8" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {type === 'ESP32_S3' ? 'ESP32-S3' : type === 'ESP32_C3' ? 'ESP32-C3' : 'ESP32 DEVKIT'}
+            </text>
+          </g>
+        );
+      }
+
+      case 'RASPBERRY_PI_PICO':
+      case 'RASPBERRY_PI_PICO2': {
+        return (
+          <g>
+            {/* British Racing Green PCB */}
+            <rect x="-30" y="-50" width="60" height="100" rx="4" fill="#005930" stroke="#004324" strokeWidth="2" />
+            {/* Micro-USB on Top */}
+            <rect x="-9" y="-53" width="18" height="9" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
+            {/* RP2040 Chip Rotated 45 deg */}
+            <g transform="translate(0, -4) rotate(45)">
+              <rect x="-10" y="-10" width="20" height="20" rx="1" fill="#0F172A" stroke="#334155" />
+            </g>
+            <text x="0" y="2" fill="#FFFFFF" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              {type === 'RASPBERRY_PI_PICO2' ? 'RP2350' : 'RP2040'}
+            </text>
+            {/* BOOTSEL Button */}
+            <rect x="-6" y="20" width="12" height="7" rx="1" fill="#CBD5E1" />
+            <circle cx="0" cy="23.5" r="2" fill="#F59E0B" />
+            <text x="0" y="17" fill="#A7F3D0" fontSize="4.5" fontFamily="monospace" textAnchor="middle">BOOTSEL</text>
+            {/* Castellated Edge Pads */}
+            {[-40, -30, -20, -10, 0, 10, 20, 30, 40].map((py, idx) => (
+              <g key={idx}>
+                <circle cx="-30" cy={py} r="1.5" fill="#F59E0B" />
+                <circle cx="30" cy={py} r="1.5" fill="#F59E0B" />
+              </g>
+            ))}
+            <text x="0" y="42" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
+              Raspberry Pi
+            </text>
+          </g>
+        );
+      }
+
+      case 'STM32F103':
+      case 'STM32_NUCLEO': {
+        return (
+          <g>
+            <rect x="-32" y="-50" width="64" height="100" rx="4" fill="#1D4ED8" stroke="#1E40AF" strokeWidth="2" />
+            <rect x="-8" y="-53" width="16" height="8" rx="1" fill="#CBD5E1" />
+            <rect x="-12" y="-12" width="24" height="24" rx="2" fill="#0F172A" stroke="#334155" />
+            <text x="0" y="3" fill="#E2E8F0" fontSize="5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">CORTEX-M</text>
+            {/* Yellow Jumpers (BOOT0, BOOT1) */}
+            <rect x="-10" y="20" width="7" height="10" fill="#F59E0B" stroke="#B45309" />
+            <rect x="3" y="20" width="7" height="10" fill="#F59E0B" stroke="#B45309" />
+            <text x="0" y="44" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {type === 'STM32_NUCLEO' ? 'NUCLEO' : 'STM32 BLUE'}
+            </text>
+          </g>
+        );
+      }
+
+      case 'FUSE':
+        return (
+          <g>
+            <rect x="-18" y="-7" width="36" height="14" rx="2" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <line x1="-30" y1="0" x2="30" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <text x="0" y="3.5" fill="#E2E8F0" fontSize="7" fontFamily="monospace" fontWeight="bold" textAnchor="middle">FUSE</text>
+          </g>
+        );
+
+      case 'TRANSFORMER':
+      case 'CONTROL_TRANSFORMER':
+        return (
+          <g>
+            {/* Primary Coil Arcs */}
+            <path d="M -25,-20 L -12,-20 C -7,-20 -7,-12 -12,-12 C -7,-12 -7,-4 -12,-4 C -7,-4 -7,4 -12,4 C -7,4 -7,12 -12,12 C -7,12 -7,20 -12,20 L -25,20" fill="none" stroke={strokeColor} strokeWidth="2" />
+            {/* Dual Magnetic Iron Core Lines */}
+            <line x1="-3" y1="-22" x2="-3" y2="22" stroke="#94A3B8" strokeWidth="1.8" />
+            <line x1="3" y1="-22" x2="3" y2="22" stroke="#94A3B8" strokeWidth="1.8" />
+            {/* Secondary Coil Arcs */}
+            <path d="M 25,-20 L 12,-20 C 7,-20 7,-12 12,-12 C 7,-12 7,-4 12,-4 C 7,-4 7,4 12,4 C 7,4 7,12 12,12 C 7,12 7,20 12,20 L 25,20" fill="none" stroke="#38BDF8" strokeWidth="2" />
+            <text x="0" y="-25" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">XFRMR</text>
+          </g>
+        );
+
+      case 'CRYSTAL':
+        return (
+          <g>
+            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <line x1="8" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" />
+            {/* Capacitor Electrodes */}
+            <line x1="-8" y1="-14" x2="-8" y2="14" stroke={strokeColor} strokeWidth="2.5" />
+            <line x1="8" y1="-14" x2="8" y2="14" stroke={strokeColor} strokeWidth="2.5" />
+            {/* Quartz Crystal Body */}
+            <rect x="-4" y="-12" width="8" height="24" rx="1" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" />
+            <text x="0" y="22" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">XTAL</text>
+          </g>
+        );
+
+      case 'OPTOCOUPLER':
+        return (
+          <g>
+            <rect x="-24" y="-20" width="48" height="40" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* Internal LED */}
+            <path d="M -16,-10 L -16,10 M -16,-4 L -8,0 L -16,4 Z M -8,-8 L -8,8" stroke="#10B981" strokeWidth="1.5" fill="#10B981" />
+            {/* Optical Emission Arrows */}
+            <path d="M -6,-5 L -2,-2 M -3,-6 L -2,-2 L -6,-2" stroke="#10B981" strokeWidth="1.2" fill="none" />
+            <path d="M -6,2 L -2,5 M -3,1 L -2,5 L -6,5" stroke="#10B981" strokeWidth="1.2" fill="none" />
+            {/* Phototransistor */}
+            <path d="M 6,-10 L 6,10 M 6,-4 L 14,-10 M 6,4 L 14,10" stroke="#38BDF8" strokeWidth="1.5" />
+            <path d="M 10,8 L 14,10 L 13,6" fill="#38BDF8" />
+            <text x="0" y="27" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">OPTO</text>
+          </g>
+        );
+
+      case 'POWER_SUPPLY_24V':
+        return (
+          <g>
+            <rect x="-32" y="-24" width="64" height="48" rx="4" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="-16" y="-8" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">AC IN</text>
+            <text x="14" y="-8" fill="#10B981" fontSize="8" fontFamily="monospace" fontWeight="bold">24V DC</text>
+            <path d="M -6,0 L 6,0 M 0,-6 L 6,0 L 0,6" stroke="#38BDF8" strokeWidth="1.5" fill="none" />
+            <text x="0" y="16" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">SMPS 24V</text>
+          </g>
+        );
+
+      case 'VFD_DRIVE':
+        return (
+          <g>
+            <rect x="-35" y="-28" width="70" height="56" rx="4" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="0" y="-14" fill="#38BDF8" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">VFD INVERTER</text>
+            <path d="M -20,2 C -15,10 -10,-6 -5,2" fill="none" stroke="#F59E0B" strokeWidth="1.5" />
+            <path d="M 0,2 L 8,2 L 8,-4 L 16,-4 L 16,2" fill="none" stroke="#10B981" strokeWidth="1.5" />
+            <text x="0" y="20" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">0 - 50 Hz PWM</text>
+          </g>
+        );
+
+      case 'PLC_CPU':
+        return (
+          <g>
+            <rect x="-38" y="-30" width="76" height="60" rx="4" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <rect x="-34" y="-26" width="68" height="12" rx="2" fill="#1E293B" />
+            <text x="0" y="-18" fill="#38BDF8" fontSize="7" fontFamily="monospace" textAnchor="middle">INPUTS: X0 - X7</text>
+            <text x="0" y="3" fill="#FFFFFF" fontSize="9" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">PLC CPU</text>
+            <rect x="-34" y="14" width="68" height="12" rx="2" fill="#1E293B" />
+            <text x="0" y="22" fill="#10B981" fontSize="7" fontFamily="monospace" textAnchor="middle">OUTPUTS: Y0 - Y5</text>
+          </g>
+        );
+
+      case 'SOFT_STARTER':
+        return (
+          <g>
+            <rect x="-30" y="-24" width="60" height="48" rx="4" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <path d="M -15,-6 L -5,6 M -5,-6 L -15,6" stroke="#F59E0B" strokeWidth="1.8" />
+            <text x="0" y="-10" fill="#38BDF8" fontSize="7.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">SOFT START</text>
+            <path d="M -18,12 L -6,12 L 6,4 L 18,4" fill="none" stroke="#10B981" strokeWidth="1.5" />
+            <text x="0" y="20" fill="#94A3B8" fontSize="6.5" fontFamily="monospace" textAnchor="middle">SCR BYPASS</text>
+          </g>
+        );
+
+      case 'RELAY_THERMAL_OVERLOAD':
+        return (
+          <g>
+            <rect x="-35" y="-24" width="70" height="48" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* 3 Thermal Bimetal Elements */}
+            {[-18, 0, 18].map((px, idx) => (
+              <g key={idx}>
+                <line x1={px} y1="-20" x2={px} y2="-8" stroke="#F59E0B" strokeWidth="1.8" />
+                <rect x={px - 3} y="-8" width="6" height="8" stroke="#EF4444" strokeWidth="1.2" fill="#7F1D1D" />
+                <line x1={px} y1="0" x2={px} y2="20" stroke="#F59E0B" strokeWidth="1.8" />
+              </g>
+            ))}
+            <text x="0" y="16" fill="#EF4444" fontSize="7" fontFamily="monospace" fontWeight="bold" textAnchor="middle">OLR (95-96 / 97-98)</text>
+          </g>
+        );
+
+      case 'RELAY_TIMER':
+        return (
+          <g>
+            <rect x="-26" y="-22" width="52" height="44" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <circle cx="0" cy="-2" r="12" fill="none" stroke="#F59E0B" strokeWidth="1.5" />
+            <line x1="0" y1="-2" x2="0" y2="-9" stroke="#F59E0B" strokeWidth="1.5" />
+            <line x1="0" y1="-2" x2="6" y2="-2" stroke="#F59E0B" strokeWidth="1.5" />
+            <text x="0" y="17" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">TIMER (TON)</text>
+          </g>
+        );
+
+      case 'RELAY_SSR':
+        return (
+          <g>
+            <rect x="-28" y="-22" width="56" height="44" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="-14" y="-8" fill="#10B981" fontSize="7" fontFamily="monospace" fontWeight="bold">DC IN</text>
+            <text x="14" y="-8" fill="#EF4444" fontSize="7" fontFamily="monospace" fontWeight="bold">AC LOAD</text>
+            <text x="0" y="4" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">SSR</text>
+            <text x="0" y="16" fill="#94A3B8" fontSize="6.5" fontFamily="monospace" textAnchor="middle">SOLID STATE</text>
+          </g>
+        );
+
+      case 'SAFETY_RELAY':
+        return (
+          <g>
+            <rect x="-35" y="-25" width="70" height="50" rx="4" stroke="#EF4444" strokeWidth="2" fill={fillColor} />
+            <rect x="-31" y="-21" width="62" height="42" rx="2" fill="#450A0A" opacity="0.4" />
+            <text x="0" y="-6" fill="#EF4444" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">SAFETY RELAY</text>
+            <text x="0" y="6" fill="#FCA5A5" fontSize="7" fontFamily="monospace" textAnchor="middle">DUAL CH REDUNDANT</text>
+            <text x="0" y="17" fill="#94A3B8" fontSize="6" fontFamily="monospace" textAnchor="middle">SIL 3 / Cat 4</text>
+          </g>
+        );
+
+      case 'RELAY_ELECTROMECHANICAL':
+      case 'INDUSTRIAL_RELAY_24V':
+        return (
+          <g>
+            <rect x="-28" y="-22" width="56" height="44" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <rect x="-24" y="-12" width="14" height="24" stroke="#F59E0B" strokeWidth="1.5" fill="#1E293B" />
+            <text x="-17" y="3" fill="#F59E0B" fontSize="6.5" fontFamily="monospace" textAnchor="middle">COIL</text>
+            {/* SPDT Contacts */}
+            <line x1="2" y1="0" x2="14" y2="0" stroke={strokeColor} strokeWidth="1.8" />
+            <line x1="14" y1="0" x2="22" y2="-8" stroke="#38BDF8" strokeWidth="1.8" />
+            <circle cx="22" cy="-8" r="1.5" fill="#38BDF8" />
+            <circle cx="22" cy="8" r="1.5" fill="#38BDF8" />
+            <text x="6" y="16" fill="#94A3B8" fontSize="6.5" fontFamily="monospace">COM/NO/NC</text>
+          </g>
+        );
+
+      case 'AUXILIARY_CONTACT_BLOCK':
+        return (
+          <g>
+            <rect x="-26" y="-20" width="52" height="40" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* 13-14 NO */}
+            <path d="M -16,-12 L -16,12 M -16,-4 L -8,4" stroke="#10B981" strokeWidth="1.8" />
+            <text x="-16" y="-14" fill="#10B981" fontSize="6" fontFamily="monospace">13-14 NO</text>
+            {/* 21-22 NC */}
+            <path d="M 12,-12 L 12,12 M 12,-4 L 12,4" stroke="#EF4444" strokeWidth="1.8" />
+            <text x="12" y="-14" fill="#EF4444" fontSize="6" fontFamily="monospace">21-22 NC</text>
+          </g>
+        );
+
+      case 'SWITCH_DPST':
+        return (
+          <g>
+            {/* Pole 1 */}
+            <line x1="-25" y1="-12" x2="-10" y2="-12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="10" y1="-12" x2="25" y2="-12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-10" y1="-12" x2="8" y2="-22" stroke="#38BDF8" strokeWidth="2" />
+            {/* Pole 2 */}
+            <line x1="-25" y1="12" x2="-10" y2="12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="10" y1="12" x2="25" y2="12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-10" y1="12" x2="8" y2="2" stroke="#38BDF8" strokeWidth="2" />
+            {/* Mechanical Ganging Dashed Line */}
+            <line x1="0" y1="-16" x2="0" y2="8" stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3,3" />
+            <text x="0" y="24" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">DPST</text>
+          </g>
+        );
+
+      case 'SWITCH_DPDT':
+        return (
+          <g>
+            <line x1="-25" y1="-10" x2="-8" y2="-10" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-8" y1="-10" x2="12" y2="-18" stroke="#38BDF8" strokeWidth="2" />
+            <line x1="-25" y1="10" x2="-8" y2="10" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-8" y1="10" x2="12" y2="2" stroke="#38BDF8" strokeWidth="2" />
+            <line x1="2" y1="-14" x2="2" y2="6" stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3,3" />
+            <text x="0" y="25" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">DPDT</text>
+          </g>
+        );
+
+      case 'SWITCH_SELECTOR':
+      case 'SWITCH_ROTARY':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <line x1="0" y1="0" x2="10" y2="-10" stroke="#F59E0B" strokeWidth="2.5" />
+            <circle cx="0" cy="0" r="3" fill="#F59E0B" />
+            <text x="-10" y="-10" fill="#94A3B8" fontSize="6" fontFamily="monospace">1</text>
+            <text x="0" y="-12" fill="#94A3B8" fontSize="6" fontFamily="monospace">0</text>
+            <text x="10" y="-10" fill="#94A3B8" fontSize="6" fontFamily="monospace">2</text>
+            <text x="0" y="26" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">SELECTOR</text>
+          </g>
+        );
+
+      case 'SWITCH_LIMIT':
+        return (
+          <g>
+            <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <line x1="10" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-10" y1="0" x2="8" y2="-12" stroke="#38BDF8" strokeWidth="2" />
+            {/* Roller Wheel Symbol */}
+            <circle cx="10" cy="-14" r="3.5" fill="#F59E0B" stroke="#B45309" strokeWidth="1" />
+            <text x="0" y="16" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">LIMIT SW</text>
+          </g>
+        );
+
+      case 'SWITCH_MICRO':
+        return (
+          <g>
+            <rect x="-20" y="-12" width="40" height="24" rx="2" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
+            <path d="M -12,-12 C -6,-20 6,-20 12,-12" stroke="#F59E0B" strokeWidth="2" fill="none" />
+            <circle cx="0" cy="-18" r="2" fill="#F59E0B" />
+            <text x="0" y="4" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">MICRO</text>
+          </g>
+        );
+
+      case 'SWITCH_FOOT':
+        return (
+          <g>
+            <line x1="-25" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <path d="M -15,-8 L 15,-8 L 20,0 L -15,-8" stroke="#F59E0B" strokeWidth="1.8" fill="#78350F" />
+            <text x="0" y="14" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">FOOT PEDAL</text>
+          </g>
+        );
+
+      case 'SWITCH_KEY':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="16" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <path d="M -4,-2 L 4,-2 L 4,6 L 2,8 L -2,8 L -4,6 Z" fill="#F59E0B" />
+            <circle cx="0" cy="-6" r="2" fill="#1E293B" />
+            <text x="0" y="24" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">KEY SWITCH</text>
+          </g>
+        );
+
+      case 'SWITCH_CHANGEOVER':
+      case 'SWITCH_ISOLATOR':
+        return (
+          <g>
+            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <line x1="8" y1="-12" x2="25" y2="-12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="8" y1="12" x2="25" y2="12" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-8" y1="0" x2="10" y2="-14" stroke="#EF4444" strokeWidth="2.5" />
+            <text x="0" y="24" fill="#EF4444" fontSize="7" fontFamily="monospace" textAnchor="middle">ISOLATOR</text>
+          </g>
+        );
+
+      case 'PROTECTION_MCCB':
+      case 'PROTECTION_MPCB':
+        return (
+          <g>
+            <rect x="-24" y="-30" width="48" height="60" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="0" y="-14" fill="#F59E0B" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {type === 'PROTECTION_MPCB' ? 'MPCB' : 'MCCB'}
+            </text>
+            <circle cx="0" cy="4" r="8" stroke="#38BDF8" strokeWidth="1.5" fill="#0F172A" />
+            <line x1="0" y1="4" x2="5" y2="-1" stroke="#38BDF8" strokeWidth="2" />
+            <text x="0" y="22" fill="#94A3B8" fontSize="6.5" fontFamily="monospace" textAnchor="middle">TRIP ADJ</text>
+          </g>
+        );
+
+      case 'PROTECTION_RCCB':
+        return (
+          <g>
+            <rect x="-26" y="-28" width="52" height="56" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <circle cx="0" cy="-6" r="11" stroke="#38BDF8" strokeWidth="2" fill="none" />
+            <line x1="-6" y1="-6" x2="6" y2="-6" stroke="#38BDF8" strokeWidth="1.5" />
+            <rect x="-6" y="10" width="12" height="6" rx="1" fill="#EF4444" />
+            <text x="0" y="15" fill="#FFFFFF" fontSize="5" fontFamily="monospace" textAnchor="middle">TEST</text>
+            <text x="0" y="-20" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">RCCB 30mA</text>
+          </g>
+        );
+
+      case 'PROTECTION_SPD':
+        return (
+          <g>
+            <rect x="-20" y="-24" width="40" height="48" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* Spark Gap / MOV Varistor Symbol */}
+            <path d="M -8,-10 L 8,10 M -12,-10 L -8,-10 M 8,10 L 12,10" stroke="#F59E0B" strokeWidth="2" />
+            <text x="0" y="2" fill="#38BDF8" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">MOV</text>
+            <text x="0" y="16" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">SPD</text>
+          </g>
+        );
+
+      case 'TERMINAL_PE_N':
+      case 'DIN_RAIL_TERMINAL':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="14" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            {/* Earth Symbol */}
+            <line x1="-9" y1="2" x2="9" y2="2" stroke="#10B981" strokeWidth="2" />
+            <line x1="-6" y1="6" x2="6" y2="6" stroke="#10B981" strokeWidth="2" />
+            <line x1="-3" y1="10" x2="3" y2="10" stroke="#10B981" strokeWidth="2" />
+            <text x="0" y="-3" fill="#10B981" fontSize="7" fontFamily="monospace" fontWeight="bold" textAnchor="middle">PE / N</text>
+          </g>
+        );
+
+      case 'INDUSTRIAL_PILOT_LAMP': {
+        const isLit = isSimulating && simState && (simState.on || simState.voltage > 12);
+        return (
+          <g>
+            {/* Circle with Cross */}
+            <circle cx="0" cy="0" r="18" stroke={isLit ? '#10B981' : strokeColor} strokeWidth="2" fill={isLit ? '#064E3B' : fillColor} />
+            {isLit && <circle cx="0" cy="0" r="24" fill="rgba(16,185,129,0.3)" />}
+            <line x1="-12" y1="-12" x2="12" y2="12" stroke={isLit ? '#34D399' : strokeColor} strokeWidth="2" />
+            <line x1="12" y1="-12" x2="-12" y2="12" stroke={isLit ? '#34D399' : strokeColor} strokeWidth="2" />
+            <text x="0" y="26" fill="#E2E8F0" fontSize="7" fontFamily="monospace" textAnchor="middle">PILOT LAMP</text>
+          </g>
+        );
+      }
+
+      case 'LOGIC_74HC595':
+        return (
+          <g>
+            <rect x="-35" y="-25" width="70" height="50" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="0" y="-12" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">74HC595</text>
+            <text x="0" y="0" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">8-BIT SHIFT REG</text>
+            <text x="0" y="14" fill="#94A3B8" fontSize="6" fontFamily="monospace" textAnchor="middle">SER ➔ Q0-Q7</text>
+          </g>
+        );
+
+      case 'SENSOR_MPU6050':
+        return (
+          <g>
+            <rect x="-26" y="-22" width="52" height="44" rx="3" stroke={strokeColor} strokeWidth="2" fill="#0F172A" />
+            <path d="M 0,0 L 12,0 M 0,0 L 0,-12 M 0,0 L -8,8" stroke="#38BDF8" strokeWidth="1.8" />
+            <text x="14" y="2" fill="#38BDF8" fontSize="6" fontFamily="monospace">X</text>
+            <text x="2" y="-13" fill="#38BDF8" fontSize="6" fontFamily="monospace">Y</text>
+            <text x="-12" y="10" fill="#38BDF8" fontSize="6" fontFamily="monospace">Z</text>
+            <text x="0" y="16" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">MPU6050 6-DOF</text>
+          </g>
+        );
+
+      case 'SENSOR_PROXIMITY_INDUCTIVE':
+        return (
+          <g>
+            <rect x="-24" y="-14" width="48" height="28" rx="2" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <path d="M -16,-8 L -16,8 M -16,-4 L -8,0 L -16,4" stroke="#F59E0B" strokeWidth="1.5" />
+            <path d="M 0,-8 L 8,0 L 0,8 L -8,0 Z" stroke="#38BDF8" strokeWidth="1.5" fill="none" />
+            <text x="0" y="22" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">PROX INDUCTIVE</text>
+          </g>
+        );
+
+      case 'ENCODER_OPTICAL':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <circle cx="0" cy="0" r="10" stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3,3" fill="none" />
+            <text x="0" y="3" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">ENC</text>
+            <text x="0" y="26" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">PULSE A/B/Z</text>
+          </g>
+        );
+
+      case 'OPAMP_LM741':
+        return (
+          <g>
+            {/* Standard OpAmp Triangle */}
+            <path d="M -22,-24 L 24,0 L -22,24 Z" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="-14" y="-10" fill="#94A3B8" fontSize="10" fontWeight="bold">-</text>
+            <text x="-14" y="16" fill="#94A3B8" fontSize="10" fontWeight="bold">+</text>
+            <text x="4" y="3" fill="#38BDF8" fontSize="7" fontFamily="monospace" fontWeight="bold">741</text>
+          </g>
+        );
+
+      case 'COMPARATOR_LM393':
+        return (
+          <g>
+            <path d="M -22,-24 L 24,0 L -22,24 Z" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <text x="-14" y="-10" fill="#94A3B8" fontSize="10" fontWeight="bold">-</text>
+            <text x="-14" y="16" fill="#94A3B8" fontSize="10" fontWeight="bold">+</text>
+            <text x="2" y="3" fill="#F59E0B" fontSize="6.5" fontFamily="monospace" fontWeight="bold">LM393</text>
+          </g>
+        );
 
       case 'CONTACTOR_MAIN':
         return (
@@ -856,6 +1393,11 @@ export function SchematicSymbol({
     }
   };
 
+  const compW = component.width ? Math.max(110, component.width + 24) : 110;
+  const compH = component.height ? Math.max(90, component.height + 24) : 90;
+  const halfW = compW / 2;
+  const halfH = compH / 2;
+
   return (
     <div
       className={`relative select-none cursor-pointer transition-transform ${
@@ -881,9 +1423,9 @@ export function SchematicSymbol({
 
       {/* SVG Canvas for Schematic Symbol */}
       <svg
-        width="110"
-        height="90"
-        viewBox="-55 -45 110 90"
+        width={compW}
+        height={compH}
+        viewBox={`-${halfW} -${halfH} ${compW} ${compH}`}
         className="overflow-visible"
       >
         {renderSymbolGraphic()}

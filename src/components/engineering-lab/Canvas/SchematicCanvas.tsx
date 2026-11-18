@@ -22,7 +22,9 @@ interface SchematicCanvasProps {
   components: CircuitComponent[];
   wires: CircuitWire[];
   selectedCompId: string | null;
+  selectedWireId?: string | null;
   onSelectComponent: (id: string | null) => void;
+  onSelectWire?: (id: string | null) => void;
   onUpdateComponentPosition: (id: string, x: number, y: number) => void;
   onRotateComponent: (id: string) => void;
   onMirrorComponent?: (id: string) => void;
@@ -84,7 +86,9 @@ export function SchematicCanvas({
   components,
   wires,
   selectedCompId,
+  selectedWireId: propSelectedWireId,
   onSelectComponent,
+  onSelectWire,
   onUpdateComponentPosition,
   onRotateComponent,
   onMirrorComponent,
@@ -124,7 +128,12 @@ export function SchematicCanvas({
   const [animOffset, setAnimOffset] = useState(0);
 
   // Selected Wire State & Context Menu
-  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
+  const [localSelectedWireId, setLocalSelectedWireId] = useState<string | null>(null);
+  const selectedWireId = propSelectedWireId !== undefined ? propSelectedWireId : localSelectedWireId;
+  const setWireSelected = (id: string | null) => {
+    setLocalSelectedWireId(id);
+    onSelectWire?.(id);
+  };
   const [wireContextMenu, setWireContextMenu] = useState<{
     x: number;
     y: number;
@@ -167,13 +176,13 @@ export function SchematicCanvas({
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWireId) {
           onDeleteWire(selectedWireId);
-          setSelectedWireId(null);
+          setWireSelected(null);
           setWireContextMenu(null);
         } else if (selectedCompId) {
           onDeleteComponent(selectedCompId);
         }
       } else if (e.key === 'Escape') {
-        setSelectedWireId(null);
+        setWireSelected(null);
         setActiveWireStart(null);
         setActiveWaypoints([]);
         setWireContextMenu(null);
@@ -239,7 +248,7 @@ export function SchematicCanvas({
         setIsPanning(true);
         setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         onSelectComponent(null);
-        setSelectedWireId(null);
+        setWireSelected(null);
         setHighlightedNetId(null);
       }
     } else if (e.button === 1) {
@@ -247,7 +256,7 @@ export function SchematicCanvas({
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       onSelectComponent(null);
-      setSelectedWireId(null);
+      setWireSelected(null);
       setHighlightedNetId(null);
     }
   };
@@ -319,7 +328,7 @@ export function SchematicCanvas({
     const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
     const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
 
-    setSelectedWireId(wireId);
+    setWireSelected(wireId);
     setWireContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -497,6 +506,24 @@ export function SchematicCanvas({
           </>
         )}
 
+        {/* Selected Wire Quick CAD Actions */}
+        {selectedWireId && (
+          <>
+            <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+            <button
+              onClick={() => {
+                onDeleteWire(selectedWireId);
+                setWireSelected(null);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-rose-950/80 text-rose-300 border border-rose-700 hover:bg-rose-900 transition-colors shadow"
+              title="Delete Selected Wire [Delete or Backspace]"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Delete Wire [Del]</span>
+            </button>
+          </>
+        )}
+
         <div className="w-[1px] h-4 bg-slate-700 mx-1" />
 
         {/* Clear Sheet Action */}
@@ -586,7 +613,7 @@ export function SchematicCanvas({
                       setHighlightedNetId(wire.id);
                     } else {
                       // Standard Select: SELECTS the wire, does NOT delete!
-                      setSelectedWireId(wire.id);
+                      setWireSelected(wire.id);
                       onSelectComponent(null);
                     }
                   }}
@@ -658,7 +685,7 @@ export function SchematicCanvas({
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteWire(wire.id);
-                      setSelectedWireId(null);
+                      setWireSelected(null);
                     }}
                   >
                     <circle cx={midPoint.x} cy={midPoint.y} r={10} fill="#E11D48" stroke="#FFFFFF" strokeWidth={1.5} />
@@ -828,7 +855,7 @@ export function SchematicCanvas({
           </div>
           <button
             onClick={() => {
-              setSelectedWireId(wireContextMenu.wireId);
+              setWireSelected(wireContextMenu.wireId);
               setWireContextMenu(null);
             }}
             className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded flex items-center gap-2"
@@ -890,7 +917,7 @@ export function SchematicCanvas({
                 }
               }
               setWireContextMenu(null);
-              setSelectedWireId(null);
+              setWireSelected(null);
             }}
             className="w-full text-left px-2 py-1.5 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 border-t border-slate-800"
           >
@@ -901,7 +928,7 @@ export function SchematicCanvas({
             onClick={() => {
               onDeleteWire(wireContextMenu.wireId);
               setWireContextMenu(null);
-              setSelectedWireId(null);
+              setWireSelected(null);
             }}
             className="w-full text-left px-2 py-1.5 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded flex items-center gap-2 border-t border-slate-800"
           >

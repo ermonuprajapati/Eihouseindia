@@ -75,6 +75,8 @@ export interface CircuitComponent {
   pins: ComponentPin[];
   footprint: string;
   model3d?: string;
+  width?: number;
+  height?: number;
   tolerance?: number;
   internalResistance?: number;
   model?: string;

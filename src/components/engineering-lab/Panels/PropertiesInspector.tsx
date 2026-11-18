@@ -1,18 +1,24 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { CircuitComponent } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
+  selectedWire?: CircuitWire | null;
+  components?: CircuitComponent[];
   onUpdateComponent: (updated: CircuitComponent) => void;
+  onUpdateWire?: (updated: CircuitWire) => void;
   onRotateComponent: (id: string) => void;
   onMirrorComponent?: (id: string) => void;
   onDeleteComponent: (id: string) => void;
+  onDeleteWire?: (wireId: string) => void;
+  onDisconnectWire?: (wireId: string) => void;
   onDuplicateComponent?: (id: string) => void;
   onClose: () => void;
   simState?: { voltage: number; current: number; on?: boolean };
+  wireCurrent?: number;
   isOpen?: boolean;
   onToggleOpen?: () => void;
   width?: number;
@@ -57,13 +63,19 @@ const MODEL_3D_OPTIONS = [
 
 export function PropertiesInspector({
   component,
+  selectedWire,
+  components,
   onUpdateComponent,
+  onUpdateWire,
   onRotateComponent,
   onMirrorComponent,
   onDeleteComponent,
+  onDeleteWire,
+  onDisconnectWire,
   onDuplicateComponent,
   onClose,
   simState,
+  wireCurrent,
   isOpen = true,
   onToggleOpen,
   width = 320,
@@ -106,6 +118,158 @@ export function PropertiesInspector({
           <Sliders className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400" />
         </button>
       </div>
+    );
+  }
+
+  // DEDICATED WIRE CONNECTION INSPECTOR VIEW
+  if (!component && selectedWire) {
+    const fromComp = components?.find((c) => c.id === selectedWire.fromCompId);
+    const toComp = components?.find((c) => c.id === selectedWire.toCompId);
+    const fromPin = fromComp?.pins.find((p) => p.id === selectedWire.fromPinId);
+    const toPin = toComp?.pins.find((p) => p.id === selectedWire.toPinId);
+
+    const wireColors = [
+      { name: 'Red (+5V / VCC)', hex: '#EF4444' },
+      { name: 'Black (GND / 0V)', hex: '#1E293B' },
+      { name: 'Blue (Signal / Net)', hex: '#3B82F6' },
+      { name: 'Green (Data)', hex: '#10B981' },
+      { name: 'Yellow (Clock / PWM)', hex: '#F59E0B' },
+      { name: 'Orange (Analog)', hex: '#F97316' },
+      { name: 'Purple (Digital)', hex: '#A855F7' },
+      { name: 'White (Neutral)', hex: '#F8FAFC' },
+    ];
+
+    const currentAmps = wireCurrent ?? 0;
+    const currentMa = Math.abs(currentAmps) * 1000;
+
+    return (
+      <aside
+        style={{ width: `${width}px` }}
+        className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full text-slate-200 text-xs select-none relative shrink-0 overflow-y-auto"
+      >
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            isResizingRef.current = true;
+          }}
+          className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-sky-500/60 active:bg-sky-500 transition-colors z-30"
+          title="Drag to resize inspector"
+        />
+
+        {/* Header */}
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <Cable className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-sm">Wire Connection</h3>
+              <span className="text-[10px] text-slate-400 font-mono">Net ID: {selectedWire.id}</span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Collapse Inspector (I)"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 space-y-5 flex-1">
+          {/* Terminals Connection Card */}
+          <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-3 font-mono">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Connected Terminals</span>
+            
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-500">From Source</span>
+                <strong className="text-emerald-400">{fromComp?.label || selectedWire.fromCompId}</strong>
+                <span className="text-[11px] text-slate-300">Pin: {fromPin?.name || selectedWire.fromPinId}</span>
+              </div>
+              <span className="text-slate-600 text-base">➔</span>
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] text-slate-500">To Destination</span>
+                <strong className="text-sky-400">{toComp?.label || selectedWire.toCompId}</strong>
+                <span className="text-[11px] text-slate-300">Pin: {toPin?.name || selectedWire.toPinId}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Wire Telemetry */}
+          <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-2 font-mono">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Net Telemetry</span>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 bg-slate-950/80 rounded border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Conduction Current</span>
+                <span className="text-amber-400 font-bold text-sm">
+                  {currentMa < 1 && currentMa > 0.001 ? `${(currentMa * 1000).toFixed(1)} µA` : `${currentMa.toFixed(3)} mA`}
+                </span>
+              </div>
+              <div className="p-2 bg-slate-950/80 rounded border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Current Direction</span>
+                <span className={`font-bold text-sm ${currentAmps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {Math.abs(currentAmps) < 0.000001 ? 'Idle (0 A)' : currentAmps >= 0 ? 'Forward (➔)' : 'Reverse (⬅)'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Wire Color Chooser */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <span>Wire Insulation Color</span>
+              <span className="font-mono text-[10px] text-slate-400">{selectedWire.color || '#10B981'}</span>
+            </label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {wireColors.map((col) => (
+                <button
+                  key={col.hex}
+                  type="button"
+                  onClick={() => onUpdateWire?.({ ...selectedWire, color: col.hex })}
+                  className={`h-7 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                    (selectedWire.color || '#10B981') === col.hex ? 'border-white ring-2 ring-white/50 scale-105' : 'border-slate-700 opacity-80 hover:opacity-100'
+                  }`}
+                  style={{ backgroundColor: col.hex }}
+                  title={col.name}
+                >
+                  {(selectedWire.color || '#10B981') === col.hex && <Check className="w-3.5 h-3.5 text-white drop-shadow stroke-[3]" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Primary Operations: Delete and Disconnect */}
+          <div className="space-y-2 pt-2 border-t border-slate-800">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Wire Actions</span>
+
+            {/* Disconnect and Reconnect Button */}
+            {onDisconnectWire && (
+              <button
+                type="button"
+                onClick={() => onDisconnectWire(selectedWire.id)}
+                className="w-full py-2 px-3 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Scissors className="w-3.5 h-3.5 text-sky-400" />
+                <span>Disconnect &amp; Re-route End</span>
+              </button>
+            )}
+
+            {/* Delete Wire Button */}
+            {onDeleteWire && (
+              <button
+                type="button"
+                onClick={() => onDeleteWire(selectedWire.id)}
+                className="w-full py-2 px-3 rounded-lg bg-rose-950/90 hover:bg-rose-900 border border-rose-600/80 text-rose-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Delete Wire [Delete Key]</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </aside>
     );
   }
 
