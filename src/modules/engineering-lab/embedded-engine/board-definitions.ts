@@ -1,3 +1,14 @@
+export type CpuEmulationLevel =
+  | 'high_level_api'
+  | 'instruction_set_emulation'
+  | 'non_executable_codegen';
+
+export type PhysicalUploadMethod =
+  | 'web_serial_bootloader'
+  | 'drag_drop_uf2'
+  | 'stlink_swd_webusb'
+  | 'manual_binary_download';
+
 export interface TargetBoardSpec {
   id: string;
   name: string;
@@ -11,7 +22,11 @@ export interface TargetBoardSpec {
   clockMhz: number;
   supportedCompiler: string;
   buildFormat: '.hex' | '.bin' | '.uf2' | '.elf';
+  runtime: string;
+  cpuEmulationLevel: CpuEmulationLevel;
   supportedPeripherals: string[];
+  unsupportedPeripherals: string[];
+  physicalUploadAvailability: PhysicalUploadMethod;
   simulationEngine: string;
   isExecutable: boolean;
   limitations: string;
@@ -33,10 +48,14 @@ export const TARGET_BOARDS: TargetBoardSpec[] = [
     clockMhz: 16,
     supportedCompiler: 'avr-gcc 12.2.0 (C++17 / Arduino Core 1.8.x)',
     buildFormat: '.hex',
-    supportedPeripherals: ['14 Digital GPIO (6 PWM)', '6 Analog Inputs (10-bit ADC)', 'UART (Serial)', 'SPI', 'I2C/Wire', 'Timers 0/1/2'],
-    simulationEngine: 'AVR8 Virtual Machine (Cycle-accurate instruction & peripheral core)',
+    runtime: 'In-Browser Sandboxed C++/Arduino Runtime',
+    cpuEmulationLevel: 'high_level_api',
+    supportedPeripherals: ['14 Digital GPIO (6 PWM)', '6 Analog Inputs (10-bit ADC)', 'UART (Serial.print/println)', 'millis/micros timer', 'delay/delayMicroseconds'],
+    unsupportedPeripherals: ['Direct AVR machine binary opcodes', 'Hardware Watchdog reset', 'Hardware timer interrupt registers (TCCR1A, etc.)', 'EEPROM endurance fatigue'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'High-Level C++/Arduino API Behavioral Runtime (AST/Sandbox)',
     isExecutable: true,
-    limitations: 'EEPROM write cycles limited to virtual persistence; external watchdog timer emulation is approximated.',
+    limitations: 'Executes standard Arduino C++ APIs. Does not execute raw compiled .hex AVR machine opcodes or direct hardware register manipulation.',
     defaultSketch: `// Arduino Uno R3 - Virtual Firmware
 void setup() {
   pinMode(13, OUTPUT);
@@ -88,10 +107,14 @@ void loop() {
     clockMhz: 16,
     supportedCompiler: 'avr-gcc 12.2.0 (Arduino AVR Core)',
     buildFormat: '.hex',
-    supportedPeripherals: ['54 Digital GPIO (15 PWM)', '16 Analog Inputs (10-bit ADC)', '4 Hardware UARTs', 'SPI', 'I2C/TWI', '6 Hardware Timers'],
-    simulationEngine: 'AVR8 Mega Virtual Engine (High-capacity register bank & multi-UART)',
+    runtime: 'In-Browser Sandboxed C++/Arduino Runtime',
+    cpuEmulationLevel: 'high_level_api',
+    supportedPeripherals: ['54 Digital GPIO (15 PWM)', '16 Analog Inputs (A0-A15)', 'Hardware UART0-UART3 APIs', 'GPIO matrix'],
+    unsupportedPeripherals: ['External Memory Interface (XMEM)', 'Direct register writes (PORTA-PORTL)', 'Low-level timer capture interrupts'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'High-Level C++/Arduino API Behavioral Runtime (AST/Sandbox)',
     isExecutable: true,
-    limitations: 'Extended 16-bit timer capture modes approximate simulated frequency; external XMEM interface unsupported.',
+    limitations: 'High-level multi-UART and GPIO API execution; hardware bus timing is approximated in JS event loop.',
     defaultSketch: `// Arduino Mega 2560 - Multi-UART Firmware
 void setup() {
   Serial.begin(115200);
@@ -130,10 +153,14 @@ void loop() {
     clockMhz: 16,
     supportedCompiler: 'avr-gcc 12.2.0 (Arduino Nano target)',
     buildFormat: '.hex',
-    supportedPeripherals: ['14 Digital GPIO (6 PWM)', '8 Analog Inputs (A0-A7)', 'UART', 'SPI', 'I2C'],
-    simulationEngine: 'AVR8 Virtual Machine (Full instruction execution)',
+    runtime: 'In-Browser Sandboxed C++/Arduino Runtime',
+    cpuEmulationLevel: 'high_level_api',
+    supportedPeripherals: ['14 Digital GPIO (6 PWM)', '8 Analog Inputs (A0-A7)', 'UART Serial', 'Basic PWM'],
+    unsupportedPeripherals: ['Direct assembly instruction execution', 'Sleep power modes', 'Direct bitwise PORT writes'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'High-Level C++/Arduino API Behavioral Runtime (AST/Sandbox)',
     isExecutable: true,
-    limitations: 'Pins A6 and A7 are analog-only inputs without digital GPIO pullup support.',
+    limitations: 'Behavioral execution of standard sketch functions; pins A6 and A7 lack internal pullups per ATmega328P datasheet.',
     defaultSketch: `// Arduino Nano - Compact Controller
 void setup() {
   pinMode(13, OUTPUT);
@@ -167,10 +194,14 @@ void loop() {
     clockMhz: 240,
     supportedCompiler: 'xtensa-esp32-elf-gcc (ESP-IDF / Arduino ESP32 Core)',
     buildFormat: '.bin',
-    supportedPeripherals: ['Wi-Fi 802.11 b/g/n', 'Bluetooth 4.2 BR/EDR & BLE', '36 GPIOs', '2x 8-bit DAC', '18x 12-bit ADC', '3x UART', '4x SPI', '2x I2C', '16x PWM (LEDC)'],
-    simulationEngine: 'High-Level C/C++ API Virtual Runtime (Wokwi-compatible API)',
+    runtime: 'In-Browser Sandboxed C++/Arduino Runtime',
+    cpuEmulationLevel: 'high_level_api',
+    supportedPeripherals: ['Digital GPIO', 'ADC Analog Inputs', 'LEDC PWM', 'Serial UART output', 'Basic Virtual Sensor reading'],
+    unsupportedPeripherals: ['Hardware 802.11 Wi-Fi baseband & RF physics', 'Bluetooth BLE controller', 'FreeRTOS preemptive dual-core scheduler', 'Hardware crypto acceleration'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'High-Level C++/Arduino API Behavioral Runtime (AST/Sandbox)',
     isExecutable: true,
-    limitations: 'WiFi/BLE RF physics layer is virtualized; FreeRTOS dual-core task scheduling runs cooperatively in the browser JS event loop.',
+    limitations: 'WiFi/BLE RF physics is virtualized via mock APIs; FreeRTOS dual-core tasks execute cooperatively in the browser event loop.',
     defaultSketch: `// ESP32 Dual-Core DevKit Firmware
 #define LED_PIN 2
 
@@ -209,22 +240,24 @@ void loop() {
     clockMhz: 240,
     supportedCompiler: 'xtensa-esp32s3-elf-gcc (ESP-IDF v5.x / Arduino Core)',
     buildFormat: '.bin',
-    supportedPeripherals: ['Wi-Fi & BLE 5.0 Mesh', 'USB-OTG Full Speed', 'AI Vector Instructions', '45 Programmable GPIOs', '14x Capacitive Touch', 'LCD & Camera Interface'],
-    simulationEngine: 'High-Level C/C++ API Virtual Runtime',
-    isExecutable: true,
-    limitations: 'Hardware AI Vector instructions and native USB-OTG PHY are simulated via high-level API emulators; physical flashing supports Web Serial.',
-    defaultSketch: `// ESP32-S3 AI & Edge Computing Firmware
+    runtime: 'Targeted Native ESP-IDF Toolchain (Compiler Target)',
+    cpuEmulationLevel: 'non_executable_codegen',
+    supportedPeripherals: ['Syntax Diagnostics', 'Header/Pinout Planning', 'ESP-IDF C/C++ CodeGen', '.bin Firmware Compilation'],
+    unsupportedPeripherals: ['Xtensa LX7 Vector Instructions', 'Hardware USB-OTG PHY', 'Octal SPI PSRAM timing', 'Wi-Fi/BLE radio'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'Non-executable in browser. Code generator, syntax diagnostics, and downloadable binary compiler target only.',
+    isExecutable: false,
+    limitations: 'Xtensa LX7 dual-core vector extensions and native USB PHY are not emulated in browser. Provided for pinout planning, syntax validation, and downloadable .bin firmware flashing.',
+    defaultSketch: `// ESP32-S3 Target Firmware (Code Generation & Build Only)
 #define RGB_LED 48
 
 void setup() {
   Serial.begin(115200);
   pinMode(RGB_LED, OUTPUT);
-  Serial.println("[ESP32-S3] LX7 Vector AI Core Ready");
 }
 
 void loop() {
   digitalWrite(RGB_LED, HIGH);
-  Serial.println("S3 Tensor Inference: Output=[0.942, 0.031, 0.027]");
   delay(800);
   digitalWrite(RGB_LED, LOW);
   delay(800);
@@ -248,17 +281,20 @@ void loop() {
     clockMhz: 160,
     supportedCompiler: 'riscv32-esp-elf-gcc (ESP-IDF v5.x)',
     buildFormat: '.bin',
-    supportedPeripherals: ['Wi-Fi 802.11 b/g/n', 'Bluetooth 5 (LE)', '22 GPIOs', '6x 12-bit ADC', '3x SPI', '2x UART', '1x I2C', '6x PWM'],
-    simulationEngine: 'High-Level RISC-V C/C++ Virtual Runtime',
-    isExecutable: true,
-    limitations: 'Hardware crypto accelerator (AES-128/256, SHA-2) simulated through JS crypto primitives.',
-    defaultSketch: `// ESP32-C3 Open RISC-V Architecture
+    runtime: 'Targeted Native RISC-V Toolchain (Compiler Target)',
+    cpuEmulationLevel: 'non_executable_codegen',
+    supportedPeripherals: ['Syntax Diagnostics', 'Pinout Mapping', 'RISC-V C/C++ CodeGen', '.bin Compilation'],
+    unsupportedPeripherals: ['RV32IMC hardware instruction pipeline', 'Hardware crypto accelerator (AES/SHA)', 'Wi-Fi/BLE radio'],
+    physicalUploadAvailability: 'web_serial_bootloader',
+    simulationEngine: 'Non-executable in browser. Code generator, syntax diagnostics, and downloadable binary compiler target only.',
+    isExecutable: false,
+    limitations: 'RISC-V single-core hardware instruction pipeline is not emulated in browser. Provided for code generation, syntax diagnostics, and downloadable .bin firmware.',
+    defaultSketch: `// ESP32-C3 Open RISC-V Architecture Target
 #define STATUS_PIN 8
 
 void setup() {
   Serial.begin(115200);
   pinMode(STATUS_PIN, OUTPUT);
-  Serial.println("[RISC-V] ESP32-C3 RV32IMC Single-Core Started");
 }
 
 void loop() {
@@ -266,7 +302,6 @@ void loop() {
   delay(500);
   digitalWrite(STATUS_PIN, LOW);
   delay(500);
-  Serial.println("[C3] RISC-V Core Active");
 }`,
     pinout: [
       { pin: 8, name: 'GPIO 8 (LED)', type: 'digital' },
@@ -286,25 +321,27 @@ void loop() {
     clockMhz: 72,
     supportedCompiler: 'arm-none-eabi-gcc (STM32duino / STM32CubeHAL)',
     buildFormat: '.bin',
-    supportedPeripherals: ['37 GPIOs (5V tolerant)', '2x 12-bit ADC (16 channels)', '7 Timers', '3x USART', '2x SPI', '2x I2C', 'USB 2.0 FS Device', 'CAN 2.0B'],
-    simulationEngine: 'ARM Cortex-M Virtual Runtime (Thumb-2 High-Level API)',
-    isExecutable: true,
-    limitations: 'USB direct PHY pullup resistor needs manual toggle in hardware; SWD hardware debugging simulated through virtual registers.',
-    defaultSketch: `// STM32F103 Blue Pill - ARM Cortex-M3
+    runtime: 'Targeted Native ARM GCC Toolchain (Compiler Target)',
+    cpuEmulationLevel: 'non_executable_codegen',
+    supportedPeripherals: ['Syntax Diagnostics', 'Pinout Planning', 'CMSIS / STM32Cube CodeGen', '.bin Compilation'],
+    unsupportedPeripherals: ['ARM Cortex-M3 Thumb-2 binary instruction execution', 'Hardware CAN bus controller', 'DMA controller', 'Hardware USB PHY'],
+    physicalUploadAvailability: 'stlink_swd_webusb',
+    simulationEngine: 'Non-executable in browser. Code generator, syntax diagnostics, and downloadable binary compiler target only.',
+    isExecutable: false,
+    limitations: 'ARM Cortex-M3 instruction-set emulation is not implemented in browser. Used for syntax checking, pinout verification, and STM32Cube / .bin compilation.',
+    defaultSketch: `// STM32F103 Blue Pill - Target Firmware
 #define LED_PIN PC13
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
-  Serial.println("[ARM Cortex-M3] STM32F103 @ 72MHz Online");
 }
 
 void loop() {
-  digitalWrite(LED_PIN, LOW); // Active Low onboard LED
+  digitalWrite(LED_PIN, LOW);
   delay(100);
   digitalWrite(LED_PIN, HIGH);
   delay(900);
-  Serial.println("SysTick 1000ms Event Triggered");
 }`,
     pinout: [
       { pin: 'PC13', name: 'PC13 (User LED, Active-Low)', type: 'digital' },
@@ -326,11 +363,15 @@ void loop() {
     clockMhz: 84,
     supportedCompiler: 'arm-none-eabi-gcc (Mbed OS / STM32CubeIDE)',
     buildFormat: '.bin',
-    supportedPeripherals: ['Arduino Uno v3 Connector Headers', 'ST Morpho Extension Headers', 'On-board ST-LINK/V2-1 Debugger', '12-bit ADC 2.4 MSPS', 'USB OTG FS'],
-    simulationEngine: 'ARM Cortex-M Virtual Runtime with FPU emulation',
-    isExecutable: true,
-    limitations: 'ST-LINK virtual COM port and drag-and-drop programming replicated via browser download and Web Serial.',
-    defaultSketch: `// STM32 Nucleo-F401RE High-Performance ARM
+    runtime: 'Targeted Native ARM GCC Toolchain (Compiler Target)',
+    cpuEmulationLevel: 'non_executable_codegen',
+    supportedPeripherals: ['Syntax Diagnostics', 'ST Morpho / Arduino Pin Mapping', 'DSP/FPU CodeGen', '.bin Compilation'],
+    unsupportedPeripherals: ['ARM Cortex-M4F binary execution', 'Hardware Floating Point Unit (FPU)', 'DMA 2', 'USB OTG FS'],
+    physicalUploadAvailability: 'stlink_swd_webusb',
+    simulationEngine: 'Non-executable in browser. Code generator, syntax diagnostics, and downloadable binary compiler target only.',
+    isExecutable: false,
+    limitations: 'ARM Cortex-M4F hardware core and FPU are not emulated in browser. Provided for firmware planning and .bin download for physical Nucleo boards.',
+    defaultSketch: `// STM32 Nucleo-F401RE Target Firmware
 #define USER_BUTTON PC13
 #define GREEN_LED PA5
 
@@ -338,7 +379,6 @@ void setup() {
   pinMode(GREEN_LED, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
   Serial.begin(115200);
-  Serial.println("[NUCLEO] STM32F401RE DSP/FPU Engine Online");
 }
 
 void loop() {
@@ -346,7 +386,6 @@ void loop() {
   delay(500);
   digitalWrite(GREEN_LED, LOW);
   delay(500);
-  Serial.println("Nucleo Heartbeat: 84MHz PLL Locked");
 }`,
     pinout: [
       { pin: 'PA5', name: 'PA5 (Arduino D13 / Green LED)', type: 'digital' },
@@ -366,10 +405,14 @@ void loop() {
     clockMhz: 133,
     supportedCompiler: 'arm-none-eabi-gcc (Raspberry Pi Pico SDK / Arduino Mbed Core)',
     buildFormat: '.uf2',
-    supportedPeripherals: ['2x Programmable I/O (PIO) Blocks (8 state machines)', '2x UART', '2x SPI', '2x I2C', '16x PWM Channels', '4x 12-bit ADC (3 external)'],
-    simulationEngine: 'RP2040 Virtual Runtime (PIO Instruction Emulation)',
+    runtime: 'In-Browser Sandboxed C++/Arduino Runtime',
+    cpuEmulationLevel: 'high_level_api',
+    supportedPeripherals: ['26 GPIO Digital I/O', '3x 12-bit ADC', 'PWM slices', 'UART Serial output', 'LED built-in (GP25)'],
+    unsupportedPeripherals: ['Programmable I/O (PIO) assembly state machines', 'Hardware Dual-Core multicore_launch_core1', 'DMA channels'],
+    physicalUploadAvailability: 'drag_drop_uf2',
+    simulationEngine: 'High-Level C++/Arduino API Behavioral Runtime (AST/Sandbox)',
     isExecutable: true,
-    limitations: 'PIO state machine timing is cycle-approximated in JavaScript runtime; UF2 export formatted for standard USB bootloader drag-and-drop.',
+    limitations: 'Simulates high-level Pico SDK & Arduino C++ APIs. Hardware PIO state machine bytecode and multicore FIFO are not emulated.',
     defaultSketch: `// Raspberry Pi Pico (RP2040 Dual ARM Core)
 #define PICO_LED 25
 
@@ -381,7 +424,7 @@ void setup() {
 
 void loop() {
   digitalWrite(PICO_LED, HIGH);
-  Serial.println("Pico Core0: Running / PIO State Machines Active");
+  Serial.println("Pico Core0: Running / High-Level API Active");
   delay(500);
   digitalWrite(PICO_LED, LOW);
   delay(500);
@@ -408,7 +451,11 @@ void loop() {
     clockMhz: 150,
     supportedCompiler: 'arm-none-eabi-gcc / riscv32-unknown-elf-gcc (Pico SDK 2.x)',
     buildFormat: '.uf2',
-    supportedPeripherals: ['Arm TrustZone for Cortex-M', '3x PIO blocks (12 state machines)', 'Hardware SHA-256 accelerator', 'TRNG', '8KB OTP Storage'],
+    runtime: 'Targeted Native ARM / RISC-V Toolchain (Compiler Target)',
+    cpuEmulationLevel: 'non_executable_codegen',
+    supportedPeripherals: ['Syntax Diagnostics', 'Pinout Planning', 'Pico SDK 2.x CodeGen', '.uf2 Compilation'],
+    unsupportedPeripherals: ['Arm TrustZone security extensions', 'Hazard3 RISC-V co-processor', 'PIO 2.0 blocks', 'HSTX high-speed serial'],
+    physicalUploadAvailability: 'drag_drop_uf2',
     simulationEngine: 'Hardware Compilation & UF2 Export Target Only (Cycle-accurate in-browser simulation pending upstream core)',
     isExecutable: false,
     limitations: 'UNSUPPORTED AS IN-BROWSER EXECUTABLE. RP2350 dual-architecture core does not yet have a verified browser cycle-accurate simulation engine. Use this target for code generation, syntax validation, and downloadable .UF2 firmware flashing to physical boards.',

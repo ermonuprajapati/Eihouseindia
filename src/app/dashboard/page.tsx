@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { PenLine, Trash2, ExternalLink, Bell, ShieldAlert, MailCheck } from 'lucide-react';
+import { PenLine, Trash2, ExternalLink, Bell, ShieldAlert, MailCheck, Cpu, FolderOpen, Layers, Settings2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -49,6 +49,51 @@ export default function AuthorDashboardPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Engineering Lab User Workspace State
+  interface SavedLabProject {
+    id: string;
+    title: string;
+    updatedAt: string;
+    componentCount: number;
+    wireCount: number;
+  }
+  const [labProjects, setLabProjects] = useState<SavedLabProject[]>([]);
+  const [labCustomComponents, setLabCustomComponents] = useState<Array<{ name: string; type: string; category: string; footprint: string }>>([]);
+
+  useEffect(() => {
+    try {
+      const pRaw = localStorage.getItem('ei_lab_projects_index');
+      if (pRaw) setLabProjects(JSON.parse(pRaw));
+      const cRaw = localStorage.getItem('ei_lab_user_custom_library');
+      if (cRaw) setLabCustomComponents(JSON.parse(cRaw));
+    } catch {}
+  }, []);
+
+  const handleDeleteLabProject = (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete circuit project "${title}"?`)) return;
+    try {
+      localStorage.removeItem(`ei_lab_${id}`);
+      const updated = labProjects.filter((p) => p.id !== id);
+      setLabProjects(updated);
+      localStorage.setItem('ei_lab_projects_index', JSON.stringify(updated));
+      toast.success(`Deleted project "${title}"`);
+    } catch {
+      toast.error('Failed to delete project');
+    }
+  };
+
+  const handleDeleteCustomComponent = (type: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete custom component "${name}"?`)) return;
+    try {
+      const updated = labCustomComponents.filter((c) => c.type !== type && c.name !== name);
+      setLabCustomComponents(updated);
+      localStorage.setItem('ei_lab_user_custom_library', JSON.stringify(updated));
+      toast.success(`Deleted component "${name}"`);
+    } catch {
+      toast.error('Failed to delete custom component');
+    }
+  };
 
   // Profile form state
   const [profileOverrides, setProfileOverrides] = useState<{
@@ -398,6 +443,10 @@ export default function AuthorDashboardPage() {
             <TabsTrigger value="pending">Pending Review ({pending.length})</TabsTrigger>
             <TabsTrigger value="published">Published ({published.length})</TabsTrigger>
             <TabsTrigger value="rejected">Rejected ({rejected.length})</TabsTrigger>
+            <TabsTrigger value="lab" className="gap-1.5">
+              <Cpu className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Engineering Lab ({labProjects.length})</span>
+            </TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="profile">Profile Settings</TabsTrigger>
           </TabsList>
@@ -546,6 +595,166 @@ export default function AuthorDashboardPage() {
                   </table>
                 </div>
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="lab" className="space-y-6">
+            {/* Header Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#0B1528] to-[#15233e] text-white p-6 rounded-xl border border-slate-800 shadow-md">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-6 w-6 text-emerald-400" />
+                  <h2 className="font-display text-xl font-bold">Engineering Lab Workspace</h2>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  Manage your saved circuit designs, custom component libraries, and browser CAD preferences.
+                </p>
+              </div>
+              <Button asChild className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shrink-0">
+                <Link href="/engineering-lab">
+                  <Plus className="h-4 w-4" />
+                  <span>Launch New Circuit</span>
+                </Link>
+              </Button>
+            </div>
+
+            {/* Section 1: Saved Circuits & Projects */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2 text-base">
+                  <FolderOpen className="h-5 w-5 text-primary" />
+                  <span>Saved Circuit Projects ({labProjects.length})</span>
+                </h3>
+              </div>
+
+              {labProjects.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-8 text-center space-y-3">
+                  <p className="text-sm text-slate-600">You do not have any saved circuit projects yet.</p>
+                  <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
+                    <Link href="/engineering-lab">Open Engineering Lab & Create Circuit</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                      <tr>
+                        <th className="px-4 py-3">Project Title</th>
+                        <th className="px-4 py-3">Components</th>
+                        <th className="px-4 py-3">Wires</th>
+                        <th className="px-4 py-3">Last Modified</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-mono text-xs">
+                      {labProjects.map((proj) => (
+                        <tr key={proj.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-sans font-semibold text-slate-900">
+                            {proj.title}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {proj.componentCount} parts
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {proj.wireCount} nets
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 font-sans text-xs">
+                            {proj.updatedAt ? format(new Date(proj.updatedAt), 'MMM d, yyyy h:mm a') : 'Recent'}
+                          </td>
+                          <td className="px-4 py-3 text-right space-x-2 font-sans">
+                            <Button asChild size="sm" variant="outline" className="h-7 text-xs border-emerald-600 text-emerald-700 hover:bg-emerald-50">
+                              <Link href={`/engineering-lab?load=${proj.id}`}>
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                <span>Open in Lab</span>
+                              </Link>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteLabProject(proj.id, proj.title)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Custom User Component Library */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2 text-base">
+                  <Layers className="h-5 w-5 text-primary" />
+                  <span>Personal Component Library ({labCustomComponents.length} User Parts)</span>
+                </h3>
+              </div>
+
+              {labCustomComponents.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+                  No custom components created yet. You can create custom parts using the &quot;+ New Part&quot; action in the Engineering Lab Component Browser.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                      <tr>
+                        <th className="px-4 py-3">Part Name</th>
+                        <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Category</th>
+                        <th className="px-4 py-3">Footprint</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-mono text-xs">
+                      {labCustomComponents.map((c, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-sans font-semibold text-slate-900">{c.name}</td>
+                          <td className="px-4 py-3 text-emerald-600 font-bold">{c.type}</td>
+                          <td className="px-4 py-3 font-sans capitalize text-slate-600">{c.category}</td>
+                          <td className="px-4 py-3 text-slate-500 text-[11px]">{c.footprint}</td>
+                          <td className="px-4 py-3 text-right font-sans">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteCustomComponent(c.type, c.name)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Section 3: Workspace Preferences */}
+            <div className="rounded-lg border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2 text-base">
+                <Settings2 className="h-5 w-5 text-primary" />
+                <span>Lab CAD &amp; Simulation Preferences</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/60">
+                  <div className="font-semibold text-slate-700 mb-1">Grid Snapping</div>
+                  <div className="text-slate-500">10px Orthogonal Grid with Automatic Pin Snap</div>
+                </div>
+                <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/60">
+                  <div className="font-semibold text-slate-700 mb-1">PCB CAD Units</div>
+                  <div className="text-slate-500">Metric (mm) / Imperial (mil) switchable in PCB mode</div>
+                </div>
+                <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/60">
+                  <div className="font-semibold text-slate-700 mb-1">Simulation Timestep</div>
+                  <div className="text-slate-500">Fixed Adaptive Trapezoidal Δt = 100 µs</div>
+                </div>
+              </div>
             </div>
           </TabsContent>
 

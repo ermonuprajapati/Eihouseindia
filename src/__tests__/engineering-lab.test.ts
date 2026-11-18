@@ -1611,7 +1611,7 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
           { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
         ],
         parameters: { resistance: 100.0 },
-        category: 'passives',
+        category: 'passive',
         footprint: 'R_Axial',
       },
       {
@@ -1716,7 +1716,7 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
       ],
       parameters: { resistance: 4700, tolerancePercent: 1 },
-      category: 'passives',
+      category: 'passive',
       footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
     };
 

@@ -33,12 +33,13 @@ import {
   FileText,
   Edit3,
   Zap,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { UserTrafficAnalytics } from '@/components/admin/UserTrafficAnalytics';
-import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
+import { COMPONENT_CATALOG, ComponentTemplate } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -166,6 +167,7 @@ export default function AdminPanelPage() {
   const [labSearchTerm, setLabSearchTerm] = useState('');
   const [labCategoryFilter, setLabCategoryFilter] = useState('all');
   const [labStatusFilter, setLabStatusFilter] = useState('all');
+  const [selectedLabComp, setSelectedLabComp] = useState<ComponentTemplate | null>(null);
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -2021,6 +2023,33 @@ export default function AdminPanelPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer shadow-sm">
+                          <Upload className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Validate Manifest JSON</span>
+                          <input
+                            type="file"
+                            accept="application/json"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                try {
+                                  const parsed = JSON.parse(event.target?.result as string);
+                                  if (Array.isArray(parsed) && parsed.length > 0) {
+                                    toast.success(`Validated manifest containing ${parsed.length} components.`);
+                                  } else {
+                                    toast.error('Invalid component manifest structure: expected array.');
+                                  }
+                                } catch {
+                                  toast.error('Malformed JSON manifest file.');
+                                }
+                              };
+                              reader.readAsText(file);
+                            }}
+                          />
+                        </label>
                         <Button
                           variant="outline"
                           size="sm"
@@ -2204,6 +2233,14 @@ export default function AdminPanelPage() {
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs text-slate-700 hover:text-primary mr-1"
+                                  onClick={() => setSelectedLabComp(comp)}
+                                >
+                                  <span>Inspect</span>
+                                </Button>
+                                <Button
                                   asChild
                                   variant="ghost"
                                   size="sm"
@@ -2220,6 +2257,88 @@ export default function AdminPanelPage() {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Admin Component Spec Inspection Dialog */}
+                    {selectedLabComp && (
+                      <Dialog open={!!selectedLabComp} onOpenChange={(open) => !open && setSelectedLabComp(null)}>
+                        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto font-sans">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-base font-bold text-[#0B1528]">
+                              <Cpu className="h-5 w-5 text-primary" />
+                              <span>{selectedLabComp.name}</span>
+                            </DialogTitle>
+                            <DialogDescription className="text-xs text-slate-500 font-mono">
+                              Type: {selectedLabComp.type} | MPN: {selectedLabComp.manufacturerPartNumber || 'Generic'}
+                            </DialogDescription>
+                          </DialogHeader>
+
+                          <div className="space-y-4 text-xs">
+                            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                              <div>
+                                <span className="font-semibold text-slate-500">Category:</span>
+                                <p className="text-slate-800 capitalize mt-0.5">{selectedLabComp.category.replace(/_/g, ' ')}</p>
+                              </div>
+                              <div>
+                                <span className="font-semibold text-slate-500">Designator Prefix:</span>
+                                <p className="font-mono font-bold text-emerald-600 mt-0.5">{selectedLabComp.designatorPrefix}</p>
+                              </div>
+                              <div>
+                                <span className="font-semibold text-slate-500">Package Type:</span>
+                                <p className="text-slate-800 mt-0.5">{selectedLabComp.packageType || 'THT'}</p>
+                              </div>
+                              <div>
+                                <span className="font-semibold text-slate-500">Simulation Status:</span>
+                                <p className="font-mono text-purple-700 font-bold mt-0.5">{selectedLabComp.simulationStatus || 'full_mna'}</p>
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="font-semibold text-slate-700">Description:</span>
+                              <p className="text-slate-600 mt-0.5 leading-relaxed">{selectedLabComp.description}</p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <span className="font-semibold text-slate-700">IPC Footprint &amp; 3D Model:</span>
+                              <div className="bg-slate-900 text-slate-200 font-mono p-2.5 rounded text-[11px] space-y-1">
+                                <div><strong className="text-slate-400">Footprint:</strong> {selectedLabComp.footprint}</div>
+                                <div><strong className="text-slate-400">3D Asset:</strong> {selectedLabComp.model3d || 'Procedural WebGL render'}</div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <span className="font-semibold text-slate-700">Pin Assignment Mapping ({selectedLabComp.pins.length} Terminals):</span>
+                              <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto bg-slate-50 p-2 rounded border border-slate-200 font-mono text-[11px]">
+                                {selectedLabComp.pins.map((pin) => (
+                                  <div key={pin.id} className="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200">
+                                    <span className="font-bold text-slate-700">Pin {pin.id}: {pin.name}</span>
+                                    <span className="text-[10px] uppercase text-emerald-600 bg-emerald-50 px-1 rounded">{pin.pinType}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <span className="font-semibold text-slate-700">Default Parameters:</span>
+                              <div className="bg-slate-50 p-2.5 rounded border border-slate-200 font-mono text-[11px] text-slate-700">
+                                <pre className="whitespace-pre-wrap">{JSON.stringify(selectedLabComp.defaultParams, null, 2)}</pre>
+                              </div>
+                            </div>
+                          </div>
+
+                          <DialogFooter className="flex justify-between items-center sm:justify-between pt-2 border-t border-slate-200">
+                            <Button asChild size="sm" variant="outline" className="text-xs">
+                              <Link href={`/engineering-lab?add=${selectedLabComp.type}`} target="_blank">
+                                <span>Test in Simulator</span>
+                                <ExternalLink className="h-3 w-3 ml-1" />
+                              </Link>
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setSelectedLabComp(null)}>
+                              Close
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                   </div>
                 )}
 

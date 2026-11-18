@@ -114,7 +114,7 @@ export function EngineeringLabApp() {
   const [inspectorWidth, setInspectorWidth] = useState(320);
   const [isExperimentsModalOpen, setIsExperimentsModalOpen] = useState(false);
 
-  // Load layout preferences from localStorage on mount
+  // Load layout preferences from localStorage on mount & check for project load URL param
   useEffect(() => {
     try {
       const saved = localStorage.getItem('ei_lab_workspace_layout_prefs');
@@ -124,6 +124,21 @@ export function EngineeringLabApp() {
         if (typeof parsed.isInspectorOpen === 'boolean') setIsInspectorOpen(parsed.isInspectorOpen);
         if (typeof parsed.browserWidth === 'number' && parsed.browserWidth >= 200) setBrowserWidth(parsed.browserWidth);
         if (typeof parsed.inspectorWidth === 'number' && parsed.inspectorWidth >= 200) setInspectorWidth(parsed.inspectorWidth);
+      }
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const loadId = params.get('load') || params.get('project');
+        if (loadId) {
+          const raw = localStorage.getItem(`ei_lab_${loadId}`);
+          if (raw) {
+            const parsedProject: EngineeringProject = JSON.parse(raw);
+            if (parsedProject && Array.isArray(parsedProject.components) && Array.isArray(parsedProject.wires)) {
+              setProject(parsedProject);
+              toast.success(`Loaded project "${parsedProject.title}"`);
+            }
+          }
+        }
       }
     } catch {}
   }, []);
@@ -400,6 +415,28 @@ export function EngineeringLabApp() {
   const handleSaveProject = () => {
     try {
       localStorage.setItem(`ei_lab_${project.id}`, JSON.stringify(project));
+
+      // Maintain user projects index for Dashboard
+      const indexRaw = localStorage.getItem('ei_lab_projects_index');
+      let indexList: Array<{ id: string; title: string; updatedAt: string; componentCount: number; wireCount: number }> = [];
+      try {
+        if (indexRaw) indexList = JSON.parse(indexRaw);
+      } catch {}
+      const existingIdx = indexList.findIndex((item) => item.id === project.id);
+      const entry = {
+        id: project.id,
+        title: project.title,
+        updatedAt: new Date().toISOString(),
+        componentCount: project.components.length,
+        wireCount: project.wires.length,
+      };
+      if (existingIdx >= 0) {
+        indexList[existingIdx] = entry;
+      } else {
+        indexList.unshift(entry);
+      }
+      localStorage.setItem('ei_lab_projects_index', JSON.stringify(indexList));
+
       setHasUnsavedChanges(false);
       toast.success('Project saved successfully to local storage.');
     } catch {

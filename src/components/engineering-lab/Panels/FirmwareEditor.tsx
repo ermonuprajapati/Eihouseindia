@@ -803,11 +803,22 @@ export function FirmwareEditor({
             </div>
 
             {/* Architecture Details Card */}
-            <div className="p-3 bg-slate-900/60 border border-slate-800 rounded text-[11px] space-y-1 text-slate-400">
-              <div><strong className="text-slate-300">Core:</strong> {currentBoard.architecture}</div>
-              <div><strong className="text-slate-300">Flash:</strong> {currentBoard.flashLabel}</div>
-              <div><strong className="text-slate-300">SRAM:</strong> {currentBoard.ramLabel}</div>
-              <div><strong className="text-slate-300">Clock:</strong> {currentBoard.clockMhz} MHz</div>
+            <div className="p-3 bg-slate-900/60 border border-slate-800 rounded text-[11px] space-y-1.5 text-slate-400">
+              <div className="flex items-center justify-between">
+                <div><strong className="text-slate-300">Core:</strong> {currentBoard.architecture}</div>
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                  currentBoard.cpuEmulationLevel === 'high_level_api'
+                    ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                    : currentBoard.cpuEmulationLevel === 'instruction_set_emulation'
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                    : 'bg-amber-950 text-amber-400 border border-amber-800'
+                }`}>
+                  {currentBoard.cpuEmulationLevel === 'high_level_api' ? 'High-Level API' : currentBoard.cpuEmulationLevel === 'instruction_set_emulation' ? 'Instruction Emulation' : 'CodeGen Target'}
+                </span>
+              </div>
+              <div><strong className="text-slate-300">Runtime:</strong> {currentBoard.runtime}</div>
+              <div><strong className="text-slate-300">Upload:</strong> {currentBoard.physicalUploadAvailability.replace(/_/g, ' ')}</div>
+              <div><strong className="text-slate-300">Flash:</strong> {currentBoard.flashLabel} | <strong className="text-slate-300">SRAM:</strong> {currentBoard.ramLabel} | <strong className="text-slate-300">Clock:</strong> {currentBoard.clockMhz} MHz</div>
             </div>
           </div>
         )}
@@ -889,20 +900,49 @@ export function FirmwareEditor({
               </div>
 
               <div>
-                <span className="text-slate-400">Supported Compiler:</span>
+                <span className="text-slate-400">Supported Compiler & Target Toolchain:</span>
                 <p className="text-sky-400 mt-0.5">{currentBoard.supportedCompiler}</p>
               </div>
 
               <div>
-                <span className="text-slate-400">Firmware Build Format:</span>
-                <p className="text-purple-400 mt-0.5">{currentBoard.buildFormat} (Intel HEX / Raw Binary / UF2 Drag-Drop)</p>
+                <span className="text-slate-400">Execution Runtime & Emulation Level:</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-slate-100 font-medium">{currentBoard.runtime}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                    currentBoard.cpuEmulationLevel === 'high_level_api'
+                      ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                      : currentBoard.cpuEmulationLevel === 'instruction_set_emulation'
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                      : 'bg-amber-950 text-amber-400 border border-amber-800'
+                  }`}>
+                    {currentBoard.cpuEmulationLevel === 'high_level_api' ? 'High-Level API (AST/Sandbox)' : currentBoard.cpuEmulationLevel === 'instruction_set_emulation' ? 'Instruction Set Emulation' : 'CodeGen / Flashing Target'}
+                  </span>
+                </div>
               </div>
 
               <div>
-                <span className="text-slate-400">Supported Peripherals:</span>
+                <span className="text-slate-400">Firmware Build Format & Physical Upload:</span>
+                <p className="text-purple-400 mt-0.5">
+                  Build: <span className="font-bold">{currentBoard.buildFormat}</span> | Physical Upload: <span className="text-emerald-400 font-semibold">{currentBoard.physicalUploadAvailability.replace(/_/g, ' ')}</span>
+                </p>
+              </div>
+
+              <div>
+                <span className="text-slate-400">Supported Peripherals (In-Browser):</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {currentBoard.supportedPeripherals.map((periph, i) => (
                     <span key={i} className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px]">
+                      {periph}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-amber-400 font-semibold">Unsupported / Non-Emulated Peripherals:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {currentBoard.unsupportedPeripherals.map((periph, i) => (
+                    <span key={i} className="px-2 py-0.5 bg-amber-950/60 text-amber-300 border border-amber-900/60 rounded text-[10px]">
                       {periph}
                     </span>
                   ))}
