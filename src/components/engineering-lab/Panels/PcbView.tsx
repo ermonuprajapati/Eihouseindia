@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { PcbLayout, PcbTrack } from '@/modules/engineering-lab/types';
 import {
   Layers,
@@ -9,7 +10,6 @@ import {
   AlertTriangle,
   CheckCircle,
   RotateCcw,
-  Compass,
   Play,
   Pause,
   Route,
@@ -17,6 +17,21 @@ import {
   Sliders,
   X,
 } from 'lucide-react';
+
+const Pcb3dViewer = dynamic(
+  () => import('@/modules/engineering-lab/pcb-engine/Pcb3dViewer').then((m) => m.Pcb3dViewer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-[#070D18] font-mono text-xs text-cyan-400">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+          <span>INITIALIZING THREE.JS PCB 3D VIEWER...</span>
+        </div>
+      </div>
+    ),
+  }
+);
 
 interface PcbViewProps {
   pcb: PcbLayout;
@@ -1434,37 +1449,8 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
             </div>
           </div>
           {is3DMode ? (
-            <div
-              onMouseDown={(e) => {
-                setIsDragging3D(true);
-                setIsAutoRotate(false);
-                setDragStart({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseMove={(e) => {
-                if (!isDragging3D) return;
-                const dx = e.clientX - dragStart.x;
-                const dy = e.clientY - dragStart.y;
-                setRotY((r) => r + dx * 0.008);
-                setRotX((r) => Math.max(0.01, Math.min(Math.PI - 0.01, r + dy * 0.008)));
-                setDragStart({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseUp={() => setIsDragging3D(false)}
-              onWheel={(e) => {
-                e.preventDefault();
-                setZoom3D((z) => Math.max(0.5, Math.min(2.5, z - e.deltaY * 0.001)));
-              }}
-              className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing relative"
-            >
-              <canvas
-                ref={canvas3dRef}
-                width={850}
-                height={550}
-                className="max-w-full max-h-full rounded-2xl border border-slate-800 shadow-2xl"
-              />
-              <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 backdrop-blur pointer-events-none flex items-center gap-2">
-                <Compass className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Drag to Orbit | Wheel to Zoom | Presets: Top / Iso / Bottom</span>
-              </div>
+            <div className="w-full h-full relative">
+              <Pcb3dViewer pcb={pcb} solderMaskColor="#065F46" />
             </div>
           ) : (
             <div className="relative flex items-center justify-center">

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CircuitSolver, getLedForwardVoltage } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
+import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { CircuitComponent, CircuitWire, EngineeringProject, PcbTrack } from '@/modules/engineering-lab/types';
 import { computeWireSvgPath } from '@/components/engineering-lab/Canvas/SchematicCanvas';
@@ -2205,5 +2207,346 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(testComp.y).toBe(220); // 2D schematic Y remains pristine
     expect(testComp.x3d).toBe(-40); // 3D world X
     expect(testComp.z3d).toBe(-10); // 3D world Z
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AL - Phase 1: Dual-Workflow Model Separation & Backward Compatibility
+  // --------------------------------------------------------------------------
+  it('TEST AL: verifies Track 1 (Schematic/PCB) and Track 2 (Virtual 3D) data model separation', () => {
+    const legacyProject: EngineeringProject = {
+      id: 'legacy-proj-1',
+      title: 'Legacy Audio Amp',
+      description: 'Tested circuit',
+      version: '1.0.0',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      components: [
+        {
+          id: 'c1',
+          type: 'RESISTOR',
+          label: 'R1',
+          value: '10kΩ',
+          x: 100,
+          y: 200,
+          rotation: 0,
+          category: 'passive',
+          footprint: 'R-AXIAL',
+          pins: [],
+          parameters: {},
+        },
+      ],
+      wires: [],
+      probes: [],
+      firmware: {
+        code: '',
+        language: 'arduino',
+        targetMcu: 'atmega328p',
+        serialLog: [],
+        isRunning: false,
+        gpioStates: {},
+      },
+      pcb: {
+        widthMm: 100,
+        heightMm: 80,
+        boardThicknessMm: 1.6,
+        copperLayers: 2,
+        tracks: [],
+        pads: [],
+        drcErrors: [],
+      },
+      instruments: {
+        oscilloscope: {
+          timebaseMs: 1,
+          ch1ScaleV: 1,
+          ch2ScaleV: 1,
+          ch1Enabled: true,
+          ch2Enabled: false,
+          triggerLevel: 0,
+          running: true,
+        },
+        multimeter: {
+          mode: 'DC_V',
+          reading: 0,
+          unit: 'V',
+          probesConnected: false,
+        },
+        functionGenerator: {
+          waveform: 'sine',
+          frequencyHz: 1000,
+          amplitudeV: 5,
+          offsetV: 0,
+          dutyCycle: 50,
+          enabled: false,
+        },
+        logicAnalyzer: {
+          channels: [],
+          sampleRateHz: 1000000,
+          running: false,
+        },
+      },
+    };
+
+    // Backward compatibility: legacy project loads without virtual3d property
+    expect(legacyProject.virtual3d).toBeUndefined();
+
+    // Track 2: Upgrading to include independent virtual3d state
+    const modernProject: EngineeringProject = {
+      ...legacyProject,
+      virtual3d: {
+        hasBreadboard: true,
+        components3d: [
+          {
+            id: 'c3d_1',
+            type: 'LED',
+            label: 'LED1',
+            value: 'Red',
+            parameters: { color: 'Red', forwardVoltage: 1.9 },
+            x3d: 15.0,
+            y3d: 0,
+            z3d: -5.0,
+            rotY: 90,
+            mountedOnHoleId: 'bb_row_12_C',
+          },
+        ],
+        wires3d: [
+          {
+            id: 'w3d_1',
+            fromPin: { compId: 'c3d_1', pinId: 'anode' },
+            toPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_10' },
+            color: '#EF4444',
+          },
+        ],
+      },
+    };
+
+    expect(modernProject.virtual3d).toBeDefined();
+    expect(modernProject.virtual3d?.components3d).toHaveLength(1);
+    expect(modernProject.virtual3d?.components3d[0].mountedOnHoleId).toBe('bb_row_12_C');
+    expect(modernProject.components[0].x).toBe(100); // 2D schematic unchanged
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AM - Phase 1: LED Color Forward Voltage & Battery Voltage Solver Sync
+  // --------------------------------------------------------------------------
+  it('TEST AM: verifies LED color change immediately updates Vf in solver and battery updates netlist', () => {
+    // Red LED default Vf = 1.9V
+    const redLed: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED_RED',
+      value: 'Red',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      category: 'semiconductors',
+      footprint: 'LED',
+      pins: [
+        { id: 'a', name: 'A', x: -20, y: 0, pinType: 'passive' },
+        { id: 'k', name: 'K', x: 20, y: 0, pinType: 'passive' },
+      ],
+      parameters: { color: 'Red' },
+    };
+    expect(getLedForwardVoltage(redLed)).toBeCloseTo(1.9, 1);
+
+    // Change to Blue LED -> Vf = 3.1V
+    const blueLed: CircuitComponent = {
+      ...redLed,
+      parameters: { color: 'Blue' },
+    };
+    expect(getLedForwardVoltage(blueLed)).toBeCloseTo(3.1, 1);
+
+    // Change to Green LED -> Vf = 2.3V
+    const greenLed: CircuitComponent = {
+      ...redLed,
+      parameters: { color: 'Green' },
+    };
+    expect(getLedForwardVoltage(greenLed)).toBeCloseTo(2.3, 1);
+
+    // Battery voltage change in solver: 9V -> 5V
+    const batteryComp: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BT1',
+      value: '9V',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      category: 'sources',
+      footprint: 'PAD',
+      pins: [
+        { id: 'p', name: '+', x: 0, y: -25, pinType: 'power' },
+        { id: 'n', name: '-', x: 0, y: 25, pinType: 'power' },
+      ],
+      parameters: { voltage: 9.0 },
+    };
+
+    const rComp: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1kΩ',
+      x: 100,
+      y: 0,
+      rotation: 0,
+      category: 'passive',
+      footprint: 'PAD',
+      pins: [
+        { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
+      ],
+      parameters: { resistance: 1000 },
+    };
+
+    const gndComp: CircuitComponent = {
+      id: 'gnd1',
+      type: 'GROUND',
+      label: 'GND',
+      value: '0V',
+      x: 0,
+      y: 100,
+      rotation: 0,
+      category: 'sources',
+      footprint: 'PAD',
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+      parameters: { voltage: 0 },
+    };
+
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: 'bat1', fromPinId: 'p', toCompId: 'r1', toPinId: '1' },
+      { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'gnd1', toPinId: '1' },
+      { id: 'w3', fromCompId: 'bat1', fromPinId: 'n', toCompId: 'gnd1', toPinId: '1' },
+    ];
+
+    // Solver with 9V
+    const res9V = solver.step([batteryComp, rComp, gndComp], wires, 0.001);
+    expect(res9V.componentStates['r1'].voltage).toBeCloseTo(9.0, 1);
+    expect(res9V.componentStates['r1'].current).toBeCloseTo(0.009, 3); // 9mA
+
+    // Update battery to 5V
+    const battery5V: CircuitComponent = {
+      ...batteryComp,
+      value: '5V',
+      parameters: { voltage: 5.0 },
+    };
+    const res5V = solver.step([battery5V, rComp, gndComp], wires, 0.001);
+    expect(res5V.componentStates['r1'].voltage).toBeCloseTo(5.0, 1);
+    expect(res5V.componentStates['r1'].current).toBeCloseTo(0.005, 3); // 5mA
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AN - Phase 3: Real Geometric Design Rule Check (DRC) Engine
+  // --------------------------------------------------------------------------
+  it('TEST AN: detects board edge clearance, min track width, and copper-to-copper DRC violations', () => {
+    const layoutWithErrors = {
+      widthMm: 50,
+      heightMm: 40,
+      boardThicknessMm: 1.6,
+      copperLayers: 2 as const,
+      pads: [
+        // Pad too close to left board edge (x = 0.5mm < 1.0mm)
+        {
+          id: 'pad_edge_err',
+          componentId: 'C1',
+          pinId: '1',
+          x: 0.5,
+          y: 20,
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          shape: 'round' as const,
+          layer: 'all' as const,
+        },
+      ],
+      tracks: [
+        // Track width too thin (0.10mm < 0.15mm min)
+        {
+          id: 'trk_thin',
+          layer: 'top_copper' as const,
+          from: { x: 10, y: 10 },
+          to: { x: 20, y: 10 },
+          widthMm: 0.10,
+        },
+      ],
+      drcErrors: [],
+    };
+
+    const violations = DrcEngine.runChecks(layoutWithErrors, {
+      minEdgeClearanceMm: 1.0,
+      minTrackWidthMm: 0.15,
+      minClearanceMm: 0.2,
+    });
+
+    expect(violations.length).toBeGreaterThanOrEqual(2);
+    const edgeViolation = violations.find((v) => v.rule === 'edge_clearance');
+    const widthViolation = violations.find((v) => v.rule === 'min_track_width');
+
+    expect(edgeViolation).toBeDefined();
+    expect(edgeViolation?.severity).toBe('error');
+    expect(widthViolation).toBeDefined();
+    expect(widthViolation?.severity).toBe('error');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AO - Phase 3: RS-274X Gerber & Excellon Manufacturing Export Bundle
+  // --------------------------------------------------------------------------
+  it('TEST AO: generates valid RS-274X Gerber files, Excellon drill file, and BOM CSV', () => {
+    const pcbTest = {
+      widthMm: 60,
+      heightMm: 45,
+      boardThicknessMm: 1.6,
+      copperLayers: 2 as const,
+      pads: [
+        { id: 'p1', componentId: 'R1', pinId: '1', x: 15, y: 20, diameterMm: 1.8, holeMm: 0.9, shape: 'rect' as const, layer: 'all' as const },
+        { id: 'p2', componentId: 'R1', pinId: '2', x: 25, y: 20, diameterMm: 1.8, holeMm: 0.9, shape: 'round' as const, layer: 'all' as const },
+      ],
+      tracks: [
+        { id: 't1', layer: 'top_copper' as const, from: { x: 15, y: 20 }, to: { x: 25, y: 20 }, widthMm: 0.35 },
+        { id: 't2', layer: 'bottom_copper' as const, from: { x: 15, y: 20 }, to: { x: 25, y: 20 }, widthMm: 0.35 },
+      ],
+      drcErrors: [],
+    };
+
+    const compsTest: CircuitComponent[] = [
+      {
+        id: 'R1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '10kΩ',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        category: 'passive',
+        footprint: 'R-AXIAL-0.25W',
+        pins: [],
+        parameters: {},
+        manufacturerPartNumber: 'MFR-25FBF52-10K',
+      },
+    ];
+
+    const bundle = GerberExporter.generateManufacturingBundle(pcbTest, compsTest);
+
+    // Verify all essential files are present
+    expect(bundle['Top_Copper.gtl']).toBeDefined();
+    expect(bundle['Bottom_Copper.gbl']).toBeDefined();
+    expect(bundle['Top_SolderMask.gts']).toBeDefined();
+    expect(bundle['Bottom_SolderMask.gbs']).toBeDefined();
+    expect(bundle['Board_Outline.gko']).toBeDefined();
+    expect(bundle['Drill_Plated.drl']).toBeDefined();
+    expect(bundle['Bill_of_Materials.csv']).toBeDefined();
+
+    // Verify RS-274X header format and aperture definition in Top Copper
+    expect(bundle['Top_Copper.gtl']).toContain('%FSLAX35Y35*%');
+    expect(bundle['Top_Copper.gtl']).toContain('%MOMM*%');
+    expect(bundle['Top_Copper.gtl']).toContain('D10*'); // Aperture call
+    expect(bundle['Top_Copper.gtl']).toContain('M02*'); // End of file
+
+    // Verify Excellon NC drill format
+    expect(bundle['Drill_Plated.drl']).toContain('M48');
+    expect(bundle['Drill_Plated.drl']).toContain('T01C0.900');
+    expect(bundle['Drill_Plated.drl']).toContain('X15.000Y20.000');
+    expect(bundle['Drill_Plated.drl']).toContain('M30');
+
+    // Verify BOM CSV format
+    expect(bundle['Bill_of_Materials.csv']).toContain('Item,Designator,Quantity');
+    expect(bundle['Bill_of_Materials.csv']).toContain('MFR-25FBF52-10K');
   });
 });

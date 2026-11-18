@@ -261,6 +261,33 @@ export interface PcbLayout {
   drcErrors: { id: string; message: string; severity: 'error' | 'warning' }[];
 }
 
+export interface Component3D {
+  id: string;
+  type: string;
+  label: string;
+  value?: string;
+  parameters: Record<string, number | string | boolean>;
+  x3d: number;
+  y3d: number;
+  z3d: number;
+  rotY: number;
+  mountedOnHoleId?: string;
+}
+
+export interface Wire3D {
+  id: string;
+  fromPin: { compId: string; pinId: string };
+  toPin: { compId: string; pinId: string };
+  color: string;
+  current?: number;
+}
+
+export interface Virtual3DProjectState {
+  hasBreadboard: boolean;
+  components3d: Component3D[];
+  wires3d: Wire3D[];
+}
+
 export interface EngineeringProject {
   id: string;
   title: string;
@@ -268,12 +295,15 @@ export interface EngineeringProject {
   version: string;
   createdAt: string;
   updatedAt: string;
+  // Track 1: Schematic + 2D/3D PCB Routing & Gerber
   components: CircuitComponent[];
   wires: CircuitWire[];
   probes: CircuitProbe[];
   firmware: FirmwareState;
   pcb: PcbLayout;
   instruments: VirtualInstrumentState;
+  // Track 2: Independent Direct 3D Virtual Electronics Studio
+  virtual3d?: Virtual3DProjectState;
 }
 
 export interface GuidedExperiment {
