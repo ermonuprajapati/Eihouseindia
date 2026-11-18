@@ -14,6 +14,7 @@ import {
   Hand,
   Sparkles,
   AlertOctagon,
+  Copy,
 } from 'lucide-react';
 import { SchematicSymbol } from './SchematicSymbols';
 
@@ -26,6 +27,9 @@ interface SchematicCanvasProps {
   onRotateComponent: (id: string) => void;
   onMirrorComponent?: (id: string) => void;
   onDeleteComponent: (id: string) => void;
+  onDuplicateComponent?: (id: string) => void;
+  onCopyComponent?: (id: string) => void;
+  onPasteComponent?: (atX?: number, atY?: number) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire: (wireId: string) => void;
   onUpdateWire?: (wire: CircuitWire) => void;
@@ -85,6 +89,9 @@ export function SchematicCanvas({
   onRotateComponent,
   onMirrorComponent,
   onDeleteComponent,
+  onDuplicateComponent,
+  onCopyComponent,
+  onPasteComponent,
   onAddWire,
   onDeleteWire,
   onUpdateWire,
@@ -137,7 +144,27 @@ export function SchematicCanvas({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        if (selectedCompId && onDuplicateComponent) {
+          e.preventDefault();
+          onDuplicateComponent(selectedCompId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        if (selectedCompId && onCopyComponent) {
+          e.preventDefault();
+          onCopyComponent(selectedCompId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        if (onPasteComponent) {
+          e.preventDefault();
+          onPasteComponent(mousePos.x, mousePos.y);
+        }
+      } else if (!e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R')) {
+        if (selectedCompId) {
+          e.preventDefault();
+          onRotateComponent(selectedCompId);
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWireId) {
           onDeleteWire(selectedWireId);
           setSelectedWireId(null);
@@ -165,7 +192,7 @@ export function SchematicCanvas({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedWireId, selectedCompId, onDeleteWire, onDeleteComponent]);
+  }, [selectedWireId, selectedCompId, onDeleteWire, onDeleteComponent, onDuplicateComponent, onCopyComponent, onPasteComponent, onRotateComponent, mousePos]);
 
   useEffect(() => {
     if (!isSimulating) return;
@@ -444,6 +471,31 @@ export function SchematicCanvas({
           <Trash2 className="w-3.5 h-3.5" />
           <span>Delete (D)</span>
         </button>
+
+        {/* Selected Component Quick CAD Actions */}
+        {selectedCompId && (
+          <>
+            <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+            <button
+              onClick={() => onRotateComponent(selectedCompId)}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono text-emerald-400 hover:bg-slate-800 transition-colors"
+              title="Rotate 90° (R key)"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>Rotate</span>
+            </button>
+            {onDuplicateComponent && (
+              <button
+                onClick={() => onDuplicateComponent(selectedCompId)}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono text-amber-400 hover:bg-slate-800 transition-colors"
+                title="Duplicate Component (Ctrl+D)"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Duplicate</span>
+              </button>
+            )}
+          </>
+        )}
 
         <div className="w-[1px] h-4 bg-slate-700 mx-1" />
 
@@ -824,6 +876,27 @@ export function SchematicCanvas({
               />
             ))}
           </div>
+          <button
+            onClick={() => {
+              const targetWire = wires.find((w) => w.id === wireContextMenu.wireId);
+              if (targetWire) {
+                onDeleteWire(targetWire.id);
+                const fromComp = components.find((c) => c.id === targetWire.fromCompId);
+                const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
+                if (fromComp && fromPin) {
+                  const pCoord = getPinWorldCoord(fromComp, fromPin);
+                  setActiveWireStart({ compId: fromComp.id, pinId: fromPin.id, x: pCoord.x, y: pCoord.y });
+                  setActiveWaypoints(targetWire.points || []);
+                }
+              }
+              setWireContextMenu(null);
+              setSelectedWireId(null);
+            }}
+            className="w-full text-left px-2 py-1.5 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 border-t border-slate-800"
+          >
+            <Spline className="w-3.5 h-3.5" />
+            <span>Disconnect &amp; Reconnect</span>
+          </button>
           <button
             onClick={() => {
               onDeleteWire(wireContextMenu.wireId);

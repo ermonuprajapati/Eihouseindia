@@ -653,13 +653,22 @@ export function Virtual3dStudio({
         // 3D 5mm Diffused LED Bulb
         const pLed = project3D(compX, compY - 14, compZ, width, height);
         const isGlowing = isSimulating && simState && (simState.on || simState.voltage > 1.8);
-        const colorName = String(comp.parameters?.color || 'Red').toLowerCase();
-        const baseColor = colorName.includes('blue')
+        const rawColor = String(comp.parameters?.color || 'Red');
+        const colorName = rawColor.toLowerCase();
+        const baseColor = rawColor.startsWith('#')
+          ? rawColor
+          : colorName.includes('blue')
           ? '#3B82F6'
           : colorName.includes('green')
           ? '#10B981'
-          : colorName.includes('yellow')
+          : colorName.includes('amber') || colorName.includes('yellow')
           ? '#F59E0B'
+          : colorName.includes('white')
+          ? '#F8FAFC'
+          : colorName.includes('cyan')
+          ? '#06B6D4'
+          : colorName.includes('purple') || colorName.includes('violet')
+          ? '#A855F7'
           : '#EF4444';
 
         // Outer Aura Glow during simulation

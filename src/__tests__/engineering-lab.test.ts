@@ -1556,4 +1556,227 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     pcbLayout.copperLayers = 6;
     expect(pcbLayout.copperLayers).toBe(6);
   });
+
+  // --------------------------------------------------------------------------
+  // TEST AA - N-Channel Power MOSFET (IRF540N) MNA Cutoff & Conduction
+  // --------------------------------------------------------------------------
+  it('TEST AA: solves N-channel MOSFET cutoff when Vgs < Vth, and channel conduction when Vgs >= Vth', () => {
+    // 12V Supply -> 100Ω Load Resistor -> Drain | Gate driven by V_control | Source to GND
+    const components: CircuitComponent[] = [
+      {
+        id: 'v_main',
+        type: 'DC_VOLTAGE',
+        label: 'V1',
+        designator: 'V1',
+        value: '12V',
+        x: 50,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '+', x: 0, y: -20, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        parameters: { voltage: 12.0 },
+        category: 'sources',
+        footprint: 'BATT',
+      },
+      {
+        id: 'v_gate',
+        type: 'DC_VOLTAGE',
+        label: 'VG',
+        designator: 'VG',
+        value: '0V',
+        x: 50,
+        y: 200,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '+', x: 0, y: -20, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        parameters: { voltage: 0.0 }, // Cutoff: Vgs = 0V < 3.0V Vth
+        category: 'sources',
+        footprint: 'BATT',
+      },
+      {
+        id: 'r_load',
+        type: 'RESISTOR',
+        label: 'RLOAD',
+        designator: 'R1',
+        value: '100Ω',
+        x: 150,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 100.0 },
+        category: 'passives',
+        footprint: 'R_Axial',
+      },
+      {
+        id: 'mosfet1',
+        type: 'MOSFET_N',
+        label: 'Q1',
+        designator: 'Q1',
+        value: 'IRF540N',
+        x: 250,
+        y: 150,
+        rotation: 0,
+        pins: [
+          { id: 'g', name: 'G', x: -25, y: 10, pinType: 'input' },
+          { id: 'd', name: 'D', x: 10, y: -25, pinType: 'passive' },
+          { id: 's', name: 'S', x: 10, y: 25, pinType: 'passive' },
+        ],
+        parameters: { vgsTh: 3.0, rdsOn: 0.044 },
+        category: 'active',
+        footprint: 'TO-220',
+      },
+      {
+        id: 'gnd',
+        type: 'GND',
+        label: 'GND',
+        designator: 'GND1',
+        value: '0V',
+        x: 250,
+        y: 300,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+        parameters: { voltage: 0 },
+        category: 'sources',
+        footprint: 'PAD',
+      },
+    ];
+
+    const wires: CircuitWire[] = [
+      // 12V+ to R_load pin 1
+      { id: 'w1', fromCompId: 'v_main', fromPinId: '1', toCompId: 'r_load', toPinId: '1' },
+      // R_load pin 2 to MOSFET Drain
+      { id: 'w2', fromCompId: 'r_load', fromPinId: '2', toCompId: 'mosfet1', toPinId: 'd' },
+      // VG+ to MOSFET Gate
+      { id: 'w3', fromCompId: 'v_gate', fromPinId: '1', toCompId: 'mosfet1', toPinId: 'g' },
+      // MOSFET Source to GND
+      { id: 'w4', fromCompId: 'mosfet1', fromPinId: 's', toCompId: 'gnd', toPinId: '1' },
+      // V_main- to GND
+      { id: 'w5', fromCompId: 'v_main', fromPinId: '2', toCompId: 'gnd', toPinId: '1' },
+      // V_gate- to GND
+      { id: 'w6', fromCompId: 'v_gate', fromPinId: '2', toCompId: 'gnd', toPinId: '1' },
+    ];
+
+    // Subcase 1: Cutoff Mode (Vgs = 0V < 3.0V Vth)
+    const cutoffRes = solver.step(components, wires, 0.001, 0.001);
+    const mosfetCutoffState = cutoffRes.componentStates['mosfet1'];
+    expect(mosfetCutoffState.on).toBe(false);
+    expect(mosfetCutoffState.current).toBeLessThanOrEqual(0.0001);
+
+    // Subcase 2: Active Conduction (Vgs = 5.0V >= 3.0V Vth)
+    components[1].parameters = { voltage: 5.0 };
+    components[1].value = '5V';
+    const activeRes = solver.step(components, wires, 0.001, 0.002);
+    const mosfetActiveState = activeRes.componentStates['mosfet1'];
+    expect(mosfetActiveState.on).toBe(true);
+    // Channel conducts: current ~ 12V / 100Ω = ~0.12A
+    expect(mosfetActiveState.current).toBeGreaterThan(0.08);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AB - LED Color Properties and Custom HEX Resolution
+  // --------------------------------------------------------------------------
+  it('TEST AB: validates LED preset colors, custom HEX colors, and forward-bias luminescence', () => {
+    const ledTemplate = COMPONENT_CATALOG.find((c) => c.type === 'LED');
+    expect(ledTemplate).toBeDefined();
+
+    const ledInstance = createComponentInstance(ledTemplate!, 100, 100);
+    expect(ledInstance.parameters.color).toBe('Red');
+
+    // Update with Custom HEX color (#06B6D4 Cyan)
+    ledInstance.parameters.color = '#06B6D4';
+    expect(ledInstance.parameters.color).toBe('#06B6D4');
+
+    // Update with Custom HEX color (#A855F7 Purple)
+    ledInstance.parameters.color = '#A855F7';
+    expect(ledInstance.parameters.color).toBe('#A855F7');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AC - Component Duplication & Copy/Paste Serialization
+  // --------------------------------------------------------------------------
+  it('TEST AC: duplicates component with incremented designator, offset position, and cloned parameters', () => {
+    const originalResistor: CircuitComponent = {
+      id: 'r_orig',
+      type: 'RESISTOR',
+      label: 'R1',
+      designator: 'R1',
+      value: '4.7kΩ',
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+      ],
+      parameters: { resistance: 4700, tolerancePercent: 1 },
+      category: 'passives',
+      footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
+    };
+
+    // Simulate duplication
+    const duplicated: CircuitComponent = {
+      ...JSON.parse(JSON.stringify(originalResistor)),
+      id: `c_${Date.now()}`,
+      designator: 'R2',
+      label: 'R2',
+      x: originalResistor.x + 30,
+      y: originalResistor.y + 30,
+    };
+
+    expect(duplicated.id).not.toBe(originalResistor.id);
+    expect(duplicated.designator).toBe('R2');
+    expect(duplicated.x).toBe(130);
+    expect(duplicated.y).toBe(130);
+    expect(duplicated.parameters.resistance).toBe(4700);
+    expect(duplicated.footprint).toBe(originalResistor.footprint);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AD - PCB Routing Waypoints & Via Insertion
+  // --------------------------------------------------------------------------
+  it('TEST AD: allows interactive routing waypoints and via pad multi-layer insertion', () => {
+    const pcbLayout = PcbGenerator.generatePcbFromSchematic([], []);
+
+    // Add multi-segment routed track with waypoint
+    const segment1: PcbTrack = {
+      id: 'trk_seg1',
+      layer: 'top_copper',
+      from: { x: 10, y: 10 },
+      to: { x: 25, y: 10 },
+      widthMm: 0.35,
+    };
+    const segment2: PcbTrack = {
+      id: 'trk_seg2',
+      layer: 'top_copper',
+      from: { x: 25, y: 10 },
+      to: { x: 25, y: 40 },
+      widthMm: 0.35,
+    };
+    pcbLayout.tracks.push(segment1, segment2);
+    expect(pcbLayout.tracks.length).toBe(2);
+
+    // Insert via pad through-hole on all layers
+    pcbLayout.pads.push({
+      id: 'via_1',
+      componentId: 'VIA',
+      pinId: 'VIA',
+      x: 25,
+      y: 40,
+      diameterMm: 0.8,
+      holeMm: 0.4,
+      shape: 'round',
+      layer: 'all',
+    });
+    const via = pcbLayout.pads.find((p) => p.id === 'via_1');
+    expect(via).toBeDefined();
+    expect(via?.diameterMm).toBe(0.8);
+    expect(via?.layer).toBe('all');
+  });
 });

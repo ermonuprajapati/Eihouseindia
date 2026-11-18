@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { CircuitComponent } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
@@ -10,6 +10,7 @@ interface PropertiesInspectorProps {
   onRotateComponent: (id: string) => void;
   onMirrorComponent?: (id: string) => void;
   onDeleteComponent: (id: string) => void;
+  onDuplicateComponent?: (id: string) => void;
   onClose: () => void;
   simState?: { voltage: number; current: number; on?: boolean };
   isOpen?: boolean;
@@ -60,6 +61,7 @@ export function PropertiesInspector({
   onRotateComponent,
   onMirrorComponent,
   onDeleteComponent,
+  onDuplicateComponent,
   onClose,
   simState,
   isOpen = true,
@@ -534,7 +536,7 @@ export function PropertiesInspector({
 
                 {type === 'LED' && (
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold">LED Color</label>
+                    <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold">Preset Color</label>
                     <select
                       value={String(parameters.color ?? 'Red')}
                       onChange={(e) => updateParameter('color', e.target.value, `${e.target.value} LED`)}
@@ -545,10 +547,76 @@ export function PropertiesInspector({
                       <option value="Blue">Blue (470nm)</option>
                       <option value="Amber">Amber (590nm)</option>
                       <option value="White">White (Warm)</option>
+                      <option value="Cyan">Cyan (505nm)</option>
+                      <option value="Purple">Purple (405nm)</option>
                     </select>
                   </div>
                 )}
               </div>
+
+              {type === 'LED' && (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
+                    <span>RGB & Custom HEX Color</span>
+                    <span className="text-cyan-400 font-mono text-[11px] font-bold">
+                      {String(parameters.color ?? 'Red').startsWith('#') ? parameters.color : `${parameters.color} LED`}
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={
+                        String(parameters.color ?? '#EF4444').startsWith('#')
+                          ? String(parameters.color)
+                          : String(parameters.color ?? '').toLowerCase().includes('green')
+                          ? '#10B981'
+                          : String(parameters.color ?? '').toLowerCase().includes('blue')
+                          ? '#3B82F6'
+                          : String(parameters.color ?? '').toLowerCase().includes('amber')
+                          ? '#F59E0B'
+                          : String(parameters.color ?? '').toLowerCase().includes('white')
+                          ? '#F8FAFC'
+                          : String(parameters.color ?? '').toLowerCase().includes('cyan')
+                          ? '#06B6D4'
+                          : String(parameters.color ?? '').toLowerCase().includes('purple')
+                          ? '#A855F7'
+                          : '#EF4444'
+                      }
+                      onChange={(e) => updateParameter('color', e.target.value, `Custom ${e.target.value}`)}
+                      className="w-9 h-8 bg-slate-950 border border-slate-700 rounded cursor-pointer p-0.5 shrink-0"
+                      title="Pick Custom RGB Color"
+                    />
+                    <input
+                      type="text"
+                      placeholder="#RRGGBB"
+                      value={String(parameters.color ?? 'Red')}
+                      onChange={(e) => updateParameter('color', e.target.value, `LED ${e.target.value}`)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 uppercase"
+                    />
+                  </div>
+                  {/* Preset Quick Chips */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {[
+                      { name: 'Red', hex: '#EF4444' },
+                      { name: 'Green', hex: '#10B981' },
+                      { name: 'Blue', hex: '#3B82F6' },
+                      { name: 'Amber', hex: '#F59E0B' },
+                      { name: 'White', hex: '#F8FAFC' },
+                      { name: 'Cyan', hex: '#06B6D4' },
+                      { name: 'Purple', hex: '#A855F7' },
+                    ].map((chip) => (
+                      <button
+                        key={chip.name}
+                        type="button"
+                        onClick={() => updateParameter('color', chip.hex, `${chip.name} LED`)}
+                        className="w-5 h-5 rounded-full border border-slate-600 hover:scale-125 transition-transform"
+                        style={{ backgroundColor: chip.hex }}
+                        title={`Select ${chip.name} (${chip.hex})`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -909,6 +977,17 @@ export function PropertiesInspector({
           <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
           <span>Rotate 90°</span>
         </button>
+
+        {onDuplicateComponent && (
+          <button
+            onClick={() => onDuplicateComponent(component.id)}
+            className="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded flex items-center justify-center gap-1.5 font-medium transition-colors text-xs"
+            title="Duplicate component (Ctrl+D)"
+          >
+            <Copy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Duplicate</span>
+          </button>
+        )}
 
         {onMirrorComponent && (
           <button

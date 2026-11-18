@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { SimulationWaveformPoint, VirtualInstrumentState } from '@/modules/engineering-lab/types';
-import { Activity, Gauge, Radio, Play, Pause } from 'lucide-react';
+import { Activity, Gauge, Radio, Play, Pause, Binary } from 'lucide-react';
 
 interface InstrumentPanelProps {
   instruments: VirtualInstrumentState;
@@ -107,6 +107,42 @@ export function InstrumentPanel({
     return () => cancelAnimationFrame(animId);
   }, [waveformData, instruments.oscilloscope, isSimulating]);
 
+  const keys = Object.keys(waveformData);
+  const ch1Key = keys[0];
+  const ch1Pts = ch1Key ? waveformData[ch1Key] : undefined;
+
+  // Real Mathematical Scope Measurements
+  const scopeStats = useMemo(() => {
+    if (!ch1Pts || ch1Pts.length < 2) {
+      return { vpp: 0, vrms: 0, freq: 0, periodMs: 0 };
+    }
+    const vals = ch1Pts.map((p) => p.value);
+    const maxV = Math.max(...vals);
+    const minV = Math.min(...vals);
+    const vpp = Math.max(0, maxV - minV);
+    const sumSq = vals.reduce((acc, v) => acc + v * v, 0);
+    const vrms = Math.sqrt(sumSq / vals.length);
+
+    const mid = (maxV + minV) / 2;
+    const crossings: number[] = [];
+    for (let i = 1; i < ch1Pts.length; i++) {
+      if ((ch1Pts[i - 1].value - mid) * (ch1Pts[i].value - mid) < 0) {
+        crossings.push(ch1Pts[i].time);
+      }
+    }
+    let periodMs = 0;
+    let freq = 0;
+    if (crossings.length >= 2) {
+      const avgHalfPeriod = (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
+      const periodSec = avgHalfPeriod * 2;
+      if (periodSec > 0.00001) {
+        periodMs = periodSec * 1000;
+        freq = 1.0 / periodSec;
+      }
+    }
+    return { vpp, vrms, freq, periodMs };
+  }, [ch1Pts]);
+
   return (
     <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* Sub Navigation Bar */}
@@ -138,6 +174,15 @@ export function InstrumentPanel({
           >
             <Radio className="w-3.5 h-3.5 text-purple-400" />
             Function Generator
+          </button>
+          <button
+            onClick={() => setActiveTab('logic')}
+            className={`px-3 py-1 rounded-md flex items-center gap-1.5 font-medium transition-colors ${
+              activeTab === 'logic' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Binary className="w-3.5 h-3.5 text-rose-400" />
+            Logic Analyzer
           </button>
         </div>
 
@@ -176,19 +221,35 @@ export function InstrumentPanel({
               <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
                 <div className="bg-slate-950 p-2 rounded border border-slate-900">
                   <span className="text-slate-500 block text-[9px]">Vpp (Peak-to-Peak)</span>
-                  <span className="text-cyan-300 font-bold text-sm">4.92 V</span>
+                  <span className="text-cyan-300 font-bold text-sm">
+                    {scopeStats.vpp > 0 ? `${scopeStats.vpp.toFixed(2)} V` : '--'}
+                  </span>
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-900">
                   <span className="text-slate-500 block text-[9px]">Vrms (Root Mean Square)</span>
-                  <span className="text-cyan-300 font-bold text-sm">3.48 V</span>
+                  <span className="text-cyan-300 font-bold text-sm">
+                    {scopeStats.vrms > 0 ? `${scopeStats.vrms.toFixed(2)} V` : '--'}
+                  </span>
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-900">
                   <span className="text-slate-500 block text-[9px]">Frequency</span>
-                  <span className="text-amber-300 font-bold text-sm">1.72 Hz</span>
+                  <span className="text-amber-300 font-bold text-sm">
+                    {scopeStats.freq >= 1000
+                      ? `${(scopeStats.freq / 1000).toFixed(2)} kHz`
+                      : scopeStats.freq > 0
+                      ? `${scopeStats.freq.toFixed(2)} Hz`
+                      : '--'}
+                  </span>
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-900">
                   <span className="text-slate-500 block text-[9px]">Period (T)</span>
-                  <span className="text-amber-300 font-bold text-sm">581.4 ms</span>
+                  <span className="text-amber-300 font-bold text-sm">
+                    {scopeStats.periodMs >= 1
+                      ? `${scopeStats.periodMs.toFixed(1)} ms`
+                      : scopeStats.periodMs > 0
+                      ? `${(scopeStats.periodMs * 1000).toFixed(1)} µs`
+                      : '--'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -427,6 +488,73 @@ export function InstrumentPanel({
                 }
                 className="w-full accent-purple-500"
               />
+            </div>
+          </div>
+        )}
+
+        {/* 8-Channel Digital Logic Analyzer */}
+        {activeTab === 'logic' && (
+          <div className="bg-[#050B14] border-2 border-slate-800 rounded-xl p-4 flex flex-col shadow-2xl h-full font-mono text-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-400">
+              <div className="flex items-center gap-2">
+                <Binary className="w-4 h-4 text-rose-400" />
+                <span className="font-bold text-slate-100 uppercase tracking-wider text-[11px]">
+                  8-Channel Synchronous Digital Logic Analyzer
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="text-emerald-400 font-semibold">Sample Rate: 1 MSa/s</span>
+                <span className="text-slate-500">Threshold: TTL 2.0V / 0.8V</span>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-slate-950 border border-slate-900 rounded-lg p-3 overflow-y-auto space-y-2">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((ch) => {
+                const waveKey = keys[ch % keys.length];
+                const pts = waveKey ? waveformData[waveKey] : undefined;
+                const lastVal = pts && pts.length > 0 ? pts[pts.length - 1].value : 0;
+                const isHigh = lastVal >= 2.0;
+
+                return (
+                  <div key={ch} className="flex items-center gap-3 p-1.5 bg-slate-900/60 rounded border border-slate-800/80">
+                    <div className="w-16 shrink-0 flex items-center justify-between">
+                      <span className="text-slate-400 font-bold">D{ch}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        isHigh ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-950 text-slate-500'
+                      }`}>
+                        {isHigh ? '1' : '0'}
+                      </span>
+                    </div>
+
+                    {/* Digital Trace Polyline SVG */}
+                    <div className="flex-1 h-7 bg-[#020617] rounded border border-slate-900 relative overflow-hidden flex items-center">
+                      <svg className="w-full h-full" preserveAspectRatio="none" viewBox="0 0 400 24">
+                        <line x1="0" y1="20" x2="400" y2="20" stroke="#1E293B" strokeWidth="1" strokeDasharray="4 4" />
+                        <line x1="0" y1="4" x2="400" y2="4" stroke="#1E293B" strokeWidth="1" strokeDasharray="4 4" />
+                        {pts && pts.length > 1 ? (
+                          <path
+                            d={pts.reduce((acc, p, idx) => {
+                              const x = (idx / (pts.length - 1)) * 400;
+                              const y = p.value >= 2.0 ? 4 : 20;
+                              if (idx === 0) return `M ${x} ${y}`;
+                              const prevY = pts[idx - 1].value >= 2.0 ? 4 : 20;
+                              if (prevY !== y) {
+                                return `${acc} L ${x} ${prevY} L ${x} ${y}`;
+                              }
+                              return `${acc} L ${x} ${y}`;
+                            }, '')}
+                            fill="none"
+                            stroke={isHigh ? '#10B981' : '#64748B'}
+                            strokeWidth="2"
+                          />
+                        ) : (
+                          <line x1="0" y1={isHigh ? 4 : 20} x2="400" y2={isHigh ? 4 : 20} stroke={isHigh ? '#10B981' : '#64748B'} strokeWidth="2" />
+                        )}
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -312,6 +312,64 @@ export function EngineeringLabApp() {
     toast.info('Component deleted');
   };
 
+  // Component Clipboard state for Copy/Paste & Duplicate
+  const [componentClipboard, setComponentClipboard] = useState<CircuitComponent | null>(null);
+
+  const handleDuplicateComponent = (id: string) => {
+    const target = project.components.find((c) => c.id === id);
+    if (!target) return;
+    recordHistory();
+    const prefix = (target.designator || 'COMP1').replace(/[0-9]/g, '') || 'COMP';
+    const samePrefixCount = project.components.filter((c) => (c.designator || '').startsWith(prefix)).length;
+    const newDesignator = `${prefix}${samePrefixCount + 1}`;
+    const newComp: CircuitComponent = {
+      ...JSON.parse(JSON.stringify(target)),
+      id: `c_${Math.random().toString(36).substring(2, 9)}`,
+      designator: newDesignator,
+      label: newDesignator,
+      x: target.x + 30,
+      y: target.y + 30,
+    };
+    setProject((prev) => ({
+      ...prev,
+      components: [...prev.components, newComp],
+    }));
+    setSelectedCompId(newComp.id);
+    toast.success(`Duplicated ${target.designator || 'Component'} as ${newDesignator}`);
+  };
+
+  const handleCopyComponent = (id: string) => {
+    const target = project.components.find((c) => c.id === id);
+    if (!target) return;
+    setComponentClipboard(JSON.parse(JSON.stringify(target)));
+    toast.info(`Copied ${target.designator || 'Component'} to clipboard`);
+  };
+
+  const handlePasteComponent = (atX?: number, atY?: number) => {
+    if (!componentClipboard) {
+      toast.error('Clipboard is empty. Select a component and press Ctrl+C first.');
+      return;
+    }
+    recordHistory();
+    const prefix = (componentClipboard.designator || 'COMP1').replace(/[0-9]/g, '') || 'COMP';
+    const samePrefixCount = project.components.filter((c) => (c.designator || '').startsWith(prefix)).length;
+    const newDesignator = `${prefix}${samePrefixCount + 1}`;
+    const newComp: CircuitComponent = {
+      ...JSON.parse(JSON.stringify(componentClipboard)),
+      id: `c_${Math.random().toString(36).substring(2, 9)}`,
+      designator: newDesignator,
+      label: newDesignator,
+      x: typeof atX === 'number' ? Math.round(atX / 10) * 10 : componentClipboard.x + 40,
+      y: typeof atY === 'number' ? Math.round(atY / 10) * 10 : componentClipboard.y + 40,
+    };
+    setProject((prev) => ({
+      ...prev,
+      components: [...prev.components, newComp],
+    }));
+    setSelectedCompId(newComp.id);
+    toast.success(`Pasted ${newDesignator}`);
+  };
+
   // ----------------------------------------------------------------
   // Wire Actions
   // ----------------------------------------------------------------
@@ -577,6 +635,9 @@ export function EngineeringLabApp() {
                 isSimulating={isSimulating}
                 simulationStates={simStates}
                 wireCurrents={wireCurrents}
+                onDuplicateComponent={handleDuplicateComponent}
+                onCopyComponent={handleCopyComponent}
+                onPasteComponent={handlePasteComponent}
               />
             </main>
 
@@ -586,6 +647,7 @@ export function EngineeringLabApp() {
               onRotateComponent={handleRotateComponent}
               onMirrorComponent={handleMirrorComponent}
               onDeleteComponent={handleDeleteComponent}
+              onDuplicateComponent={handleDuplicateComponent}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}
               onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}

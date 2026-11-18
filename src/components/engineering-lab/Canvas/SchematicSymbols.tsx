@@ -195,19 +195,38 @@ export function SchematicSymbol({
 
       case 'LED': {
         const isConducting = Boolean(simState?.on);
+        const ledParamColor = String(component.parameters?.color || 'Red');
+        const colorLower = ledParamColor.toLowerCase();
+        let ledHex = '#EF4444'; // Red default
+        if (ledParamColor.startsWith('#')) {
+          ledHex = ledParamColor;
+        } else if (colorLower.includes('blue')) {
+          ledHex = '#3B82F6';
+        } else if (colorLower.includes('green')) {
+          ledHex = '#10B981';
+        } else if (colorLower.includes('amber') || colorLower.includes('yellow')) {
+          ledHex = '#F59E0B';
+        } else if (colorLower.includes('white')) {
+          ledHex = '#F8FAFC';
+        } else if (colorLower.includes('purple') || colorLower.includes('violet')) {
+          ledHex = '#A855F7';
+        } else if (colorLower.includes('cyan')) {
+          ledHex = '#06B6D4';
+        }
+
         return (
           <g>
             {/* Active Luminescence Glow Aura */}
             {isSimulating && isConducting && (
-              <circle cx="0" cy="0" r="22" fill="#F43F5E" opacity="0.35" filter="blur(3px)" />
+              <circle cx="0" cy="0" r="24" fill={ledHex} opacity="0.45" filter="blur(3px)" />
             )}
             {/* Anode lead */}
             <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
             {/* Diode Triangle */}
             <polygon
               points="-10,-10 10,0 -10,10"
-              fill={isConducting ? '#F43F5E' : fillColor}
-              stroke={isConducting ? '#FDA4AF' : strokeColor}
+              fill={isConducting ? ledHex : fillColor}
+              stroke={isConducting ? ledHex : strokeColor}
               strokeWidth="2"
               strokeLinejoin="round"
             />
@@ -215,10 +234,10 @@ export function SchematicSymbol({
             <line x1="10" y1="-10" x2="10" y2="10" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
             {/* Cathode lead */}
             <line x1="10" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
-            {/* Emitted Photon Arrows */}
+            {/* Emitted Photon Arrows in active LED color */}
             <path
               d="M 2,-8 L 10,-16 M 8,-16 L 10,-16 L 10,-14 M 8,-4 L 16,-12 M 14,-12 L 16,-12 L 16,-10"
-              stroke="#F59E0B"
+              stroke={isConducting ? ledHex : '#F59E0B'}
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"

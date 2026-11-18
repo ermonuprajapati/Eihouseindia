@@ -46,6 +46,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
   const [copperLayers, setCopperLayers] = useState<2 | 4 | 6 | 8>(pcb.copperLayers || 2);
   const [boardThicknessMm, setBoardThicknessMm] = useState<number>(pcb.boardThicknessMm || 1.6);
   const [copperWeightOz, setCopperWeightOz] = useState<number>(1);
+  const [units, setUnits] = useState<'mm' | 'mil'>(pcb.units || 'mm');
 
   const [visibleLayers, setVisibleLayers] = useState({
     topCopper: true,
@@ -74,11 +75,36 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         if (!is3DMode) {
           setIsRoutingMode((m) => !m);
         }
+      } else if (e.key === 'v' || e.key === 'V') {
+        if (!is3DMode && mousePos) {
+          e.preventDefault();
+          const snapX = Math.round(mousePos.mmX * 2) / 2;
+          const snapY = Math.round(mousePos.mmY * 2) / 2;
+          const viaPad = {
+            id: `via_${Date.now()}`,
+            componentId: 'VIA',
+            pinId: 'VIA',
+            x: snapX,
+            y: snapY,
+            diameterMm: 0.8,
+            holeMm: 0.4,
+            shape: 'round' as const,
+            layer: 'all' as const,
+          };
+          const nextLayer = activeCopperLayer === 'top_copper' ? 'bottom_copper' : 'top_copper';
+          setActiveCopperLayer(nextLayer);
+          if (onUpdatePcb) {
+            onUpdatePcb({
+              ...pcb,
+              pads: [...pcb.pads, viaPad],
+            });
+          }
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, onUpdatePcb, pcb, is3DMode]);
+  }, [selectedTrackId, onUpdatePcb, pcb, is3DMode, mousePos, activeCopperLayer]);
 
   // 3D Orbit, Tilt & Camera State
   const [rotY, setRotY] = useState(0.5); // horizontal angle
@@ -408,7 +434,28 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
       return;
     }
 
-    // 2. Check if clicked near an existing track to select it
+    // 2. If actively routing and clicked empty space on board: insert intermediate routing waypoint
+    if (routingStartPad) {
+      const snapX = Math.round(mmX * 2) / 2;
+      const snapY = Math.round(mmY * 2) / 2;
+      const segTrack: PcbTrack = {
+        id: `trk_seg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        layer: activeCopperLayer,
+        from: { x: routingStartPad.x, y: routingStartPad.y },
+        to: { x: snapX, y: snapY },
+        widthMm: 0.35,
+      };
+      if (onUpdatePcb) {
+        onUpdatePcb({
+          ...pcb,
+          tracks: [...pcb.tracks, segTrack],
+        });
+      }
+      setRoutingStartPad({ id: `wp_${Date.now()}`, x: snapX, y: snapY });
+      return;
+    }
+
+    // 3. Check if clicked near an existing track to select it
     let clickedTrack: PcbTrack | null = null;
     for (const track of pcb.tracks) {
       const dx = track.to.x - track.from.x;
@@ -965,6 +1012,18 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                 />
                 Drill
               </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextUnit = units === 'mm' ? 'mil' : 'mm';
+                  setUnits(nextUnit);
+                  if (onUpdatePcb) onUpdatePcb({ ...pcb, units: nextUnit });
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-[10px] font-bold border border-slate-700 transition-colors"
+                title="Toggle coordinate units between Millimeters and Mils (Thou)"
+              >
+                {units.toUpperCase()}
+              </button>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 pr-3 border-r border-slate-800 text-xs">

@@ -452,6 +452,31 @@ export class CircuitSolver {
             sumGV[ePin] += gce * (vc - 0.2);
             sumG[ePin] += gce;
           }
+        } else if (comp.type === 'MOSFET_N') {
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:1`);
+          const dPin = this.netMap.get(`${comp.id}:d`) || this.netMap.get(`${comp.id}:D`) || this.netMap.get(`${comp.id}:2`);
+          const sPin = this.netMap.get(`${comp.id}:s`) || this.netMap.get(`${comp.id}:S`) || this.netMap.get(`${comp.id}:3`);
+          if (gPin && dPin && sPin) {
+            const vg = nodeVoltages[gPin] || 0;
+            const vd = nodeVoltages[dPin] || 0;
+            const vs = nodeVoltages[sPin] || 0;
+            const vgs = vg - vs;
+            const vds = vd - vs;
+            const vth = Number(comp.parameters?.vgsTh ?? 3.0);
+            const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
+
+            const isConducting = vgs >= vth && vds > 0.01;
+            const gds = isConducting ? Math.min(1.0 / rdsOn, Math.max(0.1, (vgs - vth) * 10.0)) : 1e-9;
+
+            // Insulated gate leakage resistance for MNA numerical stability
+            sumG[gPin] += 1e-9;
+
+            // Drain-Source conduction channel
+            sumGV[dPin] += gds * vs;
+            sumG[dPin] += gds;
+            sumGV[sPin] += gds * vd;
+            sumG[sPin] += gds;
+          }
         } else if (comp.type.startsWith('REGULATOR_')) {
           const inPin = this.netMap.get(`${comp.id}:in`);
           const outPin = this.netMap.get(`${comp.id}:out`);
@@ -672,7 +697,7 @@ export class CircuitSolver {
         const netB = this.netMap.get(`${comp.id}:${comp.pins[1].id}`);
         const vA = netA ? (nodeVoltages[netA] || 0) : 0;
         const vB = netB ? (nodeVoltages[netB] || 0) : 0;
-        const vDiff = vA - vB;
+        let vDiff = vA - vB;
 
         let current = 0;
         let on = false;
@@ -743,6 +768,20 @@ export class CircuitSolver {
           const rLdr = Math.max(Number(comp.parameters?.lightResistance ?? 500), 10);
           current = vDiff / rLdr;
           on = true;
+        } else if (comp.type === 'MOSFET_N') {
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:1`);
+          const dPin = this.netMap.get(`${comp.id}:d`) || this.netMap.get(`${comp.id}:2`);
+          const sPin = this.netMap.get(`${comp.id}:s`) || this.netMap.get(`${comp.id}:3`);
+          const vg = gPin ? (nodeVoltages[gPin] || 0) : 0;
+          const vd = dPin ? (nodeVoltages[dPin] || 0) : 0;
+          const vs = sPin ? (nodeVoltages[sPin] || 0) : 0;
+          const vgs = vg - vs;
+          const vds = vd - vs;
+          const vth = Number(comp.parameters?.vgsTh ?? 3.0);
+          const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
+          on = vgs >= vth && vds > 0.05;
+          current = on ? vds / rdsOn : 0;
+          vDiff = vds;
         } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
           current = Math.abs(vDiff) / 1000;
         }
