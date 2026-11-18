@@ -1809,6 +1809,11 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       id: 'led_test',
       type: 'LED',
       label: 'LED1',
+      value: color,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      footprint: 'LED_D5.0mm',
       category: 'actuators',
       pins: [
         { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
@@ -1843,6 +1848,11 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         id: 'dc1',
         type: 'DC_VOLTAGE',
         label: 'VCC',
+        value: '5V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'HDR',
         category: 'sources',
         pins: [
           { id: 'pos', name: '+', x: 0, y: -20, pinType: 'power' },
@@ -1854,14 +1864,25 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         id: 'gnd',
         type: 'GROUND',
         label: 'GND',
+        value: '0V',
+        x: 0,
+        y: 100,
+        rotation: 0,
+        footprint: 'PAD',
         category: 'sources',
         pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+        parameters: {},
       },
       {
         id: 'r_lim',
         type: 'RESISTOR',
         label: 'R1',
-        category: 'passives',
+        value: '220Ω',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'R-AXIAL',
+        category: 'passive',
         pins: [
           { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
           { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
@@ -1872,6 +1893,11 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         id: 'rgb1',
         type: 'ACTUATOR_RGB_LED',
         label: 'RGB1',
+        value: 'RGB',
+        x: 200,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_D5.0mm-4',
         category: 'actuators',
         pins: [
           { id: 'r', name: 'R', x: -30, y: -20, pinType: 'passive' },
@@ -1904,5 +1930,109 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(rgbState.onBlue).toBe(false);
     expect(rgbState.on).toBe(true);
     expect(rgbState.current).toBeGreaterThan(0.005); // ~13.6mA forward current
+  });
+
+  // =========================================================================
+  // TEST AH: Potentiometer Pin Resolution & Model Fidelity (A, Wiper, B)
+  // =========================================================================
+  it('TEST AH: Potentiometer accurately solves 3-terminal voltage divider with A, Wiper, B pin mapping', () => {
+    const solver = new CircuitSolver();
+
+    const components: CircuitComponent[] = [
+      {
+        id: 'dc1',
+        type: 'DC_VOLTAGE',
+        label: 'V1',
+        value: '10V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'HDR',
+        category: 'sources',
+        pins: [
+          { id: 'pos', name: '+', x: 0, y: -20, pinType: 'power' },
+          { id: 'neg', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        parameters: { voltage: 10.0 },
+      },
+      {
+        id: 'gnd',
+        type: 'GROUND',
+        label: 'GND',
+        value: '0V',
+        x: 0,
+        y: 100,
+        rotation: 0,
+        footprint: 'PAD',
+        category: 'sources',
+        pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+        parameters: {},
+      },
+      {
+        id: 'pot1',
+        type: 'POTENTIOMETER',
+        label: 'RV1',
+        value: '10kΩ',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'Potentiometer_THT:Potentiometer_Bourns_3386P_Vertical',
+        category: 'passive',
+        pins: [
+          { id: 'A', name: 'A', x: -30, y: -15, pinType: 'passive' },
+          { id: 'Wiper', name: 'Wiper', x: 0, y: 20, pinType: 'passive' },
+          { id: 'B', name: 'B', x: 30, y: -15, pinType: 'passive' },
+        ],
+        parameters: { resistance: 10000, wiperPosition: 0.5 },
+      },
+      {
+        id: 'vm1',
+        type: 'METER_VOLTMETER',
+        label: 'VM1',
+        value: '0V',
+        x: 200,
+        y: 0,
+        rotation: 0,
+        footprint: 'PAD',
+        category: 'instruments',
+        pins: [
+          { id: 'p', name: '+', x: 0, y: -20, pinType: 'passive' },
+          { id: 'n', name: '-', x: 0, y: 20, pinType: 'passive' },
+        ],
+        parameters: {},
+      },
+    ];
+
+    const wires: CircuitWire[] = [
+      // DC neg to GND
+      { id: 'w1', fromCompId: 'dc1', fromPinId: 'neg', toCompId: 'gnd', toPinId: '1' },
+      // Pot A (0% terminal) to GND
+      { id: 'w2', fromCompId: 'pot1', fromPinId: 'A', toCompId: 'gnd', toPinId: '1' },
+      // DC pos (10V) to Pot B (100% terminal)
+      { id: 'w3', fromCompId: 'dc1', fromPinId: 'pos', toCompId: 'pot1', toPinId: 'B' },
+      // Voltmeter + to Wiper, - to GND
+      { id: 'w4', fromCompId: 'vm1', fromPinId: 'p', toCompId: 'pot1', toPinId: 'Wiper' },
+      { id: 'w5', fromCompId: 'vm1', fromPinId: 'n', toCompId: 'gnd', toPinId: '1' },
+    ];
+
+    // At 50% wiper position: Wiper should be 5.0V
+    const step1 = solver.step(components, wires, 0.001, 1.0);
+    const potState1 = step1.componentStates['pot1'];
+    expect(potState1).toBeDefined();
+    expect(potState1.voltage).toBeCloseTo(5.0, 1);
+    expect(potState1.current).toBeCloseTo(0.001, 3); // 10V / 10k = 1mA
+    expect(potState1.on).toBe(true);
+
+    // At 25% wiper position: Wiper should be 2.5V
+    components[2].parameters = { resistance: 10000, wiperPosition: 0.25 };
+    const step2 = solver.step(components, wires, 0.001, 1.0);
+    const potState2 = step2.componentStates['pot1'];
+    expect(potState2.voltage).toBeCloseTo(2.5, 1);
+
+    // At 80% wiper position: Wiper should be 8.0V
+    components[2].parameters = { resistance: 10000, wiperPosition: 0.8 };
+    const step3 = solver.step(components, wires, 0.001, 1.0);
+    const potState3 = step3.componentStates['pot1'];
+    expect(potState3.voltage).toBeCloseTo(8.0, 1);
   });
 });

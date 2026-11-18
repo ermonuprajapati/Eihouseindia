@@ -232,6 +232,47 @@ export class PcbGenerator {
   }
 
   /**
+   * Generates standard RS-274X Gerber Bottom Copper (.gbl) file content
+   */
+  public static exportGerberBottomCopper(pcb: PcbLayout): string {
+    const dateStr = new Date().toISOString();
+    let gerber = `%TF.GenerationSoftware,EI-House-Universal-Engineering-Lab,1.0*%\n`;
+    gerber += `%TF.CreationDate,${dateStr}*%\n`;
+    gerber += `%FSLAX35Y35*%\n`;
+    gerber += `%MOMM*%\n`;
+    gerber += `%LPD*%\n`;
+    gerber += `%ADD10C,0.350000*%\n`; // 0.35mm round aperture for signal tracks
+    gerber += `%ADD11C,1.800000*%\n`; // 1.8mm round pad aperture
+    gerber += `G04 Layer: Bottom Copper*\n`;
+    gerber += `D10*\n`;
+
+    // Write Bottom Copper Tracks
+    pcb.tracks
+      .filter((t) => t.layer === 'bottom_copper')
+      .forEach((t) => {
+        const x1 = Math.round(t.from.x * 100000);
+        const y1 = Math.round(t.from.y * 100000);
+        const x2 = Math.round(t.to.x * 100000);
+        const y2 = Math.round(t.to.y * 100000);
+        gerber += `X${x1}Y${y1}D02*\n`; // Move to start
+        gerber += `X${x2}Y${y2}D01*\n`; // Interpolate to end
+      });
+
+    // Write Through-hole & Bottom Pads
+    gerber += `D11*\n`;
+    pcb.pads
+      .filter((p) => p.layer === 'all' || p.layer === 'bottom')
+      .forEach((p) => {
+        const px = Math.round(p.x * 100000);
+        const py = Math.round(p.y * 100000);
+        gerber += `X${px}Y${py}D03*\n`; // Flash pad
+      });
+
+    gerber += `M02*\n`;
+    return gerber;
+  }
+
+  /**
    * Generates standard Excellon NC Drill file format
    */
   public static exportExcellonDrill(pcb: PcbLayout): string {

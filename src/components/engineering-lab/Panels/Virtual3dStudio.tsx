@@ -535,7 +535,7 @@ export function Virtual3dStudio({
   };
 
   // Preset Camera Angles
-  const setCameraPreset = (preset: 'iso' | 'top' | 'front' | 'reset') => {
+  const setCameraPreset = (preset: 'iso' | 'top' | 'front' | 'side' | 'reset') => {
     if (preset === 'iso') {
       setRotX(0.65);
       setRotY(-0.45);
@@ -550,6 +550,12 @@ export function Virtual3dStudio({
       setRotX(1.3); // Low angle looking forward
       setRotY(0);
       setPan({ x: 0, y: 0 });
+      setZoom(1.0);
+    } else if (preset === 'side') {
+      setRotX(1.3); // Side elevation
+      setRotY(Math.PI / 2);
+      setPan({ x: 0, y: 0 });
+      setZoom(1.0);
     } else {
       setRotX(0.65);
       setRotY(-0.45);
@@ -1441,6 +1447,17 @@ export function Virtual3dStudio({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (activeWireStart) {
+          setActiveWireStart(null);
+          toast.info('Cancelled wiring [Esc]');
+        } else if (selectedWireId) {
+          onSelectWire?.(null);
+        } else if (selectedCompId) {
+          onSelectComponent?.(null);
+        }
+      }}
     >
       {/* Interactive 3D Canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing" />
@@ -1496,17 +1513,31 @@ export function Virtual3dStudio({
         <div className="flex items-center gap-1 pointer-events-auto bg-[#0B1528]/90 backdrop-blur-md border border-slate-800 p-1 rounded-lg shadow-xl text-xs">
           <button
             onClick={() => setCameraPreset('iso')}
-            className="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
+            className="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
             title="Isometric 3D Perspective"
           >
             3D Orbit
           </button>
           <button
             onClick={() => setCameraPreset('top')}
-            className="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
+            className="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
             title="Top-Down Breadboard View"
           >
-            Top View
+            Top
+          </button>
+          <button
+            onClick={() => setCameraPreset('front')}
+            className="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
+            title="Front Elevation Angle"
+          >
+            Front
+          </button>
+          <button
+            onClick={() => setCameraPreset('side')}
+            className="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded font-mono text-[11px] cursor-pointer"
+            title="Side Profile View"
+          >
+            Side
           </button>
           <button
             onClick={() => setCameraPreset('reset')}

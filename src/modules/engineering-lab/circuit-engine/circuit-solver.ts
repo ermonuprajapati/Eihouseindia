@@ -33,6 +33,49 @@ export function getLedForwardVoltage(comp: CircuitComponent): number {
   return 1.9; // Standard Red LED forward drop
 }
 
+export function getPotentiometerPins(comp: CircuitComponent, netMap: Map<string, string>): {
+  pinA?: string;
+  pinWiper?: string;
+  pinB?: string;
+} {
+  let pinA: string | undefined;
+  let pinWiper: string | undefined;
+  let pinB: string | undefined;
+
+  for (const pin of comp.pins) {
+    const idLower = (pin.id || '').toLowerCase();
+    const nameLower = (pin.name || '').toLowerCase();
+    const net = netMap.get(`${comp.id}:${pin.id}`);
+    if (idLower === 'a' || idLower === '1' || nameLower === 'a' || nameLower === '1') {
+      pinA = net;
+    } else if (
+      idLower === 'wiper' ||
+      idLower === 'w' ||
+      idLower === '2' ||
+      nameLower === 'wiper' ||
+      nameLower === 'w' ||
+      nameLower === '2'
+    ) {
+      pinWiper = net;
+    } else if (idLower === 'b' || idLower === '3' || nameLower === 'b' || nameLower === '3') {
+      pinB = net;
+    }
+  }
+
+  // Fallbacks by pin order if unmapped
+  if (!pinA && comp.pins.length > 0) {
+    pinA = netMap.get(`${comp.id}:${comp.pins[0].id}`);
+  }
+  if (!pinWiper && comp.pins.length > 1) {
+    pinWiper = netMap.get(`${comp.id}:${comp.pins[1].id}`);
+  }
+  if (!pinB && comp.pins.length > 2) {
+    pinB = netMap.get(`${comp.id}:${comp.pins[2].id}`);
+  }
+
+  return { pinA, pinWiper, pinB };
+}
+
 export class CircuitSolver {
   private netMap: Map<string, string> = new Map(); // pinKey -> netId
   private nets: Set<string> = new Set();
@@ -229,14 +272,13 @@ export class CircuitSolver {
             sumG[pin2] += g;
           }
         } else if (comp.type === 'POTENTIOMETER') {
-          // Resolve pins either as A, Wiper, B or 1, 2, 3
-          const pinA = this.netMap.get(`${comp.id}:A`) || this.netMap.get(`${comp.id}:1`);
-          const pinWiper = this.netMap.get(`${comp.id}:Wiper`) || this.netMap.get(`${comp.id}:2`);
-          const pinB = this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:3`);
+          // Robust 3-terminal Potentiometer resolution: Terminal A (0%), Wiper, and Terminal B (100%)
+          const { pinA, pinWiper, pinB } = getPotentiometerPins(comp, this.netMap);
           const rTotal = Math.max(Number(comp.parameters?.resistance ?? 10000), 1.0);
           const alpha = Math.max(0.001, Math.min(0.999, Number(comp.parameters?.wiperPosition ?? 0.5)));
-          const r1 = Math.max(rTotal * alpha, 0.01);
-          const r2 = Math.max(rTotal * (1.0 - alpha), 0.01);
+          // Standard convention: alpha = 0.0 is Terminal A (Pin 1), alpha = 1.0 is Terminal B (Pin 3)
+          const r1 = Math.max(rTotal * alpha, 0.01);         // Resistance between Terminal A and Wiper
+          const r2 = Math.max(rTotal * (1.0 - alpha), 0.01); // Resistance between Wiper and Terminal B
 
           if (pinA && pinWiper && pinA !== pinWiper) {
             const g1 = 1.0 / r1;
@@ -251,6 +293,13 @@ export class CircuitSolver {
             sumG[pinB] += g2;
             sumGV[pinWiper] += g2 * (nodeVoltages[pinB] || 0);
             sumG[pinWiper] += g2;
+          }
+          if (pinA && pinB && pinA !== pinB && (!pinWiper || (pinWiper !== pinA && pinWiper !== pinB))) {
+            const gTotal = 1.0 / (r1 + r2);
+            sumGV[pinA] += gTotal * (nodeVoltages[pinB] || 0);
+            sumG[pinA] += gTotal;
+            sumGV[pinB] += gTotal * (nodeVoltages[pinA] || 0);
+            sumG[pinB] += gTotal;
           }
         } else if (comp.type === 'INDUCTOR') {
           const pin1 = this.netMap.get(`${comp.id}:1`);
@@ -754,6 +803,32 @@ export class CircuitSolver {
     const componentStates: SolverStepResult['componentStates'] = {};
 
     for (const comp of components) {
+      if (comp.type === 'POTENTIOMETER') {
+        const { pinA, pinWiper, pinB } = getPotentiometerPins(comp, this.netMap);
+        const vA = pinA ? (nodeVoltages[pinA] || 0) : 0;
+        const vWiper = pinWiper ? (nodeVoltages[pinWiper] || 0) : 0;
+        const vB = pinB ? (nodeVoltages[pinB] || 0) : 0;
+
+        const rTotal = Math.max(Number(comp.parameters?.resistance ?? 10000), 1.0);
+        const alpha = Math.max(0.001, Math.min(0.999, Number(comp.parameters?.wiperPosition ?? 0.5)));
+        const r1 = Math.max(rTotal * alpha, 0.01);
+        const r2 = Math.max(rTotal * (1.0 - alpha), 0.01);
+
+        const iA_W = (vA - vWiper) / r1;
+        const iW_B = (vWiper - vB) / r2;
+        const totalCurrent = Math.max(Math.abs(iA_W), Math.abs(iW_B));
+
+        // Output wiper voltage relative to Terminal A (0% reference)
+        const vDiff = pinWiper && pinA ? vWiper - vA : vB - vA;
+
+        componentStates[comp.id] = {
+          voltage: Math.round(vDiff * 1000) / 1000,
+          current: Math.round(totalCurrent * 100000) / 100000,
+          on: Math.abs(vA - vB) > 0.01 || Math.abs(vWiper - vB) > 0.01,
+        };
+        continue;
+      }
+
       if (comp.pins.length >= 2) {
         const netA = this.netMap.get(`${comp.id}:${comp.pins[0].id}`);
         const netB = this.netMap.get(`${comp.id}:${comp.pins[1].id}`);
@@ -767,12 +842,6 @@ export class CircuitSolver {
         if (comp.type === 'RESISTOR') {
           const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
           current = vDiff / r;
-        } else if (comp.type === 'POTENTIOMETER') {
-          const rTotal = Math.max(Number(comp.parameters?.resistance ?? 10000), 1.0);
-          const alpha = Math.max(0.001, Math.min(0.999, Number(comp.parameters?.wiperPosition ?? 0.5)));
-          const rW = rTotal * alpha;
-          current = vDiff / rW;
-          on = true;
         } else if (comp.type === 'INDUCTOR') {
           current = this.inductorCurrents.get(comp.id) ?? 0;
           on = Math.abs(current) > 0.0001;
