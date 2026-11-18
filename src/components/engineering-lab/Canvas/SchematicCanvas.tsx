@@ -75,6 +75,28 @@ export function SchematicCanvas({
   // Current flow animation tick
   const [animOffset, setAnimOffset] = useState(0);
 
+  // Selected Wire State for professional wiring editor
+  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedWireId) {
+          onDeleteWire(selectedWireId);
+          setSelectedWireId(null);
+        } else if (selectedCompId) {
+          onDeleteComponent(selectedCompId);
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedWireId(null);
+        setActiveWireStart(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedWireId, selectedCompId, onDeleteWire, onDeleteComponent]);
+
   useEffect(() => {
     if (!isSimulating) return;
     let animId: number;
@@ -93,6 +115,7 @@ export function SchematicCanvas({
         setIsPanning(true);
         setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         onSelectComponent(null);
+        setSelectedWireId(null);
       }
     }
   };
@@ -250,26 +273,41 @@ export function SchematicCanvas({
 
             // Manhattan orthogonal wire path: horizontal then vertical
             const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
             const pathData = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+            const isWireSelected = selectedWireId === wire.id;
 
             return (
               <g key={wire.id} className="group">
-                {/* Invisible wide hit area for easy wire clicking / deletion */}
+                {/* Invisible wide hit area for easy wire selection */}
                 <path
                   d={pathData}
                   fill="none"
                   stroke="transparent"
-                  strokeWidth={14}
+                  strokeWidth={16}
                   className="cursor-pointer"
-                  onClick={() => onDeleteWire(wire.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedWireId(wire.id);
+                    onSelectComponent(null);
+                  }}
                 />
-                {/* Visual Wire */}
+                {/* Visual Wire with Selection Halo */}
+                {isWireSelected && (
+                  <path
+                    d={pathData}
+                    fill="none"
+                    stroke="#F59E0B"
+                    strokeWidth={5}
+                    opacity={0.4}
+                  />
+                )}
                 <path
                   d={pathData}
                   fill="none"
-                  stroke="#10B981"
-                  strokeWidth={2}
-                  className="transition-colors group-hover:stroke-rose-400"
+                  stroke={isWireSelected ? '#F59E0B' : '#10B981'}
+                  strokeWidth={isWireSelected ? 2.5 : 2}
+                  className="transition-colors group-hover:stroke-amber-400"
                 />
 
                 {/* Animated Conventional Current Flow Dots with Polarity Direction */}
@@ -295,8 +333,23 @@ export function SchematicCanvas({
                 )}
 
                 {/* Pin Terminal End Dots */}
-                <circle cx={x1} cy={y1} r={3} fill="#10B981" />
-                <circle cx={x2} cy={y2} r={3} fill="#10B981" />
+                <circle cx={x1} cy={y1} r={3} fill={isWireSelected ? '#F59E0B' : '#10B981'} />
+                <circle cx={x2} cy={y2} r={3} fill={isWireSelected ? '#F59E0B' : '#10B981'} />
+
+                {/* Wire Deletion Badge when Wire is Selected */}
+                {isWireSelected && (
+                  <g
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteWire(wire.id);
+                      setSelectedWireId(null);
+                    }}
+                  >
+                    <circle cx={midX} cy={midY} r={10} fill="#E11D48" stroke="#FFFFFF" strokeWidth={1.5} />
+                    <text x={midX} y={midY + 3.5} fill="#FFFFFF" fontSize="10" fontWeight="bold" textAnchor="middle">✕</text>
+                  </g>
+                )}
               </g>
             );
           })}

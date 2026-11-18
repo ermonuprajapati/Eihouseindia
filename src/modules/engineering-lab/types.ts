@@ -11,15 +11,28 @@ export type WorkspaceMode =
 
 export type ComponentCategory =
   | 'passive'
-  | 'active'
+  | 'power'
   | 'sources'
+  | 'active'
+  | 'semiconductors'
+  | 'analog_ics'
+  | 'digital_logic'
   | 'logic'
   | 'microcontrollers'
   | 'sensors'
   | 'displays'
   | 'actuators'
-  | 'modules'
-  | 'instruments';
+  | 'communication'
+  | 'connectors'
+  | 'instruments'
+  | 'industrial'
+  | 'modules';
+
+export type SimulationSupportStatus =
+  | 'full_mna'
+  | 'behavioral'
+  | 'transpiled_mcu'
+  | 'design_only';
 
 export interface ComponentPin {
   id: string;
@@ -35,6 +48,11 @@ export interface CircuitComponent {
   label: string;
   designator?: string;
   category: ComponentCategory;
+  subCategory?: string;
+  simulationStatus?: SimulationSupportStatus;
+  packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  manufacturerPartNumber?: string;
+  datasheetUrl?: string;
   x: number;
   y: number;
   rotation: 0 | 90 | 180 | 270;

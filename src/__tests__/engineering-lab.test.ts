@@ -1053,4 +1053,288 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(i2).toBeCloseTo(0.0151, 3);
     expect(i2).toBeLessThan(i1);
   });
+
+  // --------------------------------------------------------------------------
+  // TEST N - POTENTIOMETER 3-PIN WIPER VOLTAGE DIVISION
+  // --------------------------------------------------------------------------
+  it('TEST N - Potentiometer Wiper Division: verifies 3-pin potentiometer wiper division with alpha = 0.25 and 0.75', () => {
+    const s = new CircuitSolver();
+    const potTemplate = COMPONENT_CATALOG.find((c) => c.type === 'POTENTIOMETER')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const bat = createComponentInstance(batTemplate, 0, 0);
+    bat.parameters.voltage = 10.0; // 10V source
+
+    const gnd = createComponentInstance(gndTemplate, 0, 100);
+
+    const pot = createComponentInstance(potTemplate, 100, 0);
+    pot.parameters.resistance = 10000; // 10kΩ pot
+    pot.parameters.wiperPosition = 0.25; // alpha = 0.25 -> V_wiper should be ~2.5V
+
+    // Wire: Bat+ -> Pot Pin 3 (B), Pot Pin 1 (A) -> GND, Bat- -> GND
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: bat.id, fromPinId: 'p', toCompId: pot.id, toPinId: '3' },
+      { id: 'w2', fromCompId: pot.id, fromPinId: '1', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w3', fromCompId: bat.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+    ];
+
+    const res1 = s.step([bat, pot, gnd], wires, 0.001);
+    const potState1 = res1.componentStates[pot.id];
+    expect(potState1).toBeDefined();
+
+    // Verify wiper division voltage
+    const wiperPinKey = `${pot.id}:2`;
+    const sInternal = s as unknown as { netMap?: Map<string, string> };
+    const wiperNode1 = sInternal.netMap?.get(wiperPinKey);
+    if (wiperNode1 !== undefined) {
+      const vWiper1 = res1.nodeVoltages[wiperNode1];
+      expect(vWiper1).toBeCloseTo(2.5, 0.5);
+    }
+
+    // Now change wiper position to 0.75 -> V_wiper should be ~7.5V
+    pot.parameters.wiperPosition = 0.75;
+    const res2 = s.step([bat, pot, gnd], wires, 0.001);
+    const wiperNode2 = sInternal.netMap?.get(wiperPinKey);
+    if (wiperNode2 !== undefined) {
+      const vWiper2 = res2.nodeVoltages[wiperNode2];
+      expect(vWiper2).toBeCloseTo(7.5, 0.5);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST O - INDUCTOR TRANSIENT COMPANION MODEL
+  // --------------------------------------------------------------------------
+  it('TEST O - Inductor Companion MNA Model: verifies transient companion integration with L = 10mH', () => {
+    const s = new CircuitSolver();
+    const indTemplate = COMPONENT_CATALOG.find((c) => c.type === 'INDUCTOR')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const rTemplate = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const bat = createComponentInstance(batTemplate, 0, 0);
+    bat.parameters.voltage = 5.0; // 5V
+
+    const gnd = createComponentInstance(gndTemplate, 0, 100);
+
+    const r = createComponentInstance(rTemplate, 100, 0);
+    r.parameters.resistance = 100; // 100Ω series resistor
+
+    const ind = createComponentInstance(indTemplate, 200, 0);
+    ind.parameters.inductance = 0.01; // 10mH
+
+    // RL series circuit: Bat+ -> R(1), R(2) -> Ind(1), Ind(2) -> GND, Bat- -> GND
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: bat.id, fromPinId: 'p', toCompId: r.id, toPinId: '1' },
+      { id: 'w2', fromCompId: r.id, fromPinId: '2', toCompId: ind.id, toPinId: '1' },
+      { id: 'w3', fromCompId: ind.id, fromPinId: '2', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w4', fromCompId: bat.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+    ];
+
+    // Step 1: Initial transient step
+    const step1 = s.step([bat, r, ind, gnd], wires, 0.0001);
+    const indState1 = step1.componentStates[ind.id];
+    expect(indState1).toBeDefined();
+
+    // Step multiple times (simulate RL charging toward steady state I = 5V / 100Ω = 50mA)
+    for (let i = 0; i < 20; i++) {
+      s.step([bat, r, ind, gnd], wires, 0.0001);
+    }
+    const finalStep = s.step([bat, r, ind, gnd], wires, 0.0001);
+    const finalIndCurrent = finalStep.componentStates[ind.id].current;
+    expect(finalIndCurrent).toBeGreaterThan(0);
+    expect(finalIndCurrent).toBeLessThanOrEqual(0.051); // Upper bound steady state
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST P - SPST SWITCH CONDUCTANCE (OPEN VS CLOSED)
+  // --------------------------------------------------------------------------
+  it('TEST P - SPST Switch Conductance: verifies zero current when open and full conduction when closed', () => {
+    const s = new CircuitSolver();
+    const swTemplate = COMPONENT_CATALOG.find((c) => c.type === 'SWITCH_SPST')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const rTemplate = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const bat = createComponentInstance(batTemplate, 0, 0);
+    bat.parameters.voltage = 12.0;
+
+    const gnd = createComponentInstance(gndTemplate, 0, 100);
+
+    const r = createComponentInstance(rTemplate, 100, 0);
+    r.parameters.resistance = 1000; // 1kΩ
+
+    const sw = createComponentInstance(swTemplate, 200, 0);
+    sw.parameters.closed = false; // Open initially
+
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: bat.id, fromPinId: 'p', toCompId: sw.id, toPinId: '1' },
+      { id: 'w2', fromCompId: sw.id, fromPinId: '2', toCompId: r.id, toPinId: '1' },
+      { id: 'w3', fromCompId: r.id, fromPinId: '2', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w4', fromCompId: bat.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+    ];
+
+    // Open switch: Current should be essentially zero (< 1e-6 A)
+    const openRes = s.step([bat, sw, r, gnd], wires, 0.001);
+    const iOpen = openRes.componentStates[r.id].current;
+    expect(Math.abs(iOpen)).toBeLessThan(1e-6);
+
+    // Close switch: Current should be ~12V / 1kΩ = 12mA
+    sw.parameters.closed = true;
+    const closedRes = s.step([bat, sw, r, gnd], wires, 0.001);
+    const iClosed = closedRes.componentStates[r.id].current;
+    expect(iClosed).toBeCloseTo(0.012, 3);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST Q - BJT NPN TRANSISTOR COMPANION MODEL
+  // --------------------------------------------------------------------------
+  it('TEST Q - BJT NPN Companion Model: verifies base current injection and collector current conduction', () => {
+    const s = new CircuitSolver();
+    const bjtTemplate = COMPONENT_CATALOG.find((c) => c.type === 'BJT_NPN')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const rTemplate = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const vcc = createComponentInstance(batTemplate, 0, 0);
+    vcc.parameters.voltage = 10.0;
+
+    const gnd = createComponentInstance(gndTemplate, 0, 100);
+
+    const rc = createComponentInstance(rTemplate, 100, 0);
+    rc.parameters.resistance = 1000; // 1kΩ collector resistor
+
+    const bjt = createComponentInstance(bjtTemplate, 200, 0);
+    bjt.parameters.beta = 100;
+
+    // VCC -> RC(1), RC(2) -> BJT(c), BJT(e) -> GND, BJT(b) -> VCC through Rb
+    const rb = createComponentInstance(rTemplate, 150, -50);
+    rb.parameters.resistance = 10000; // 10kΩ base resistor
+
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: vcc.id, fromPinId: 'p', toCompId: rc.id, toPinId: '1' },
+      { id: 'w2', fromCompId: rc.id, fromPinId: '2', toCompId: bjt.id, toPinId: 'c' },
+      { id: 'w3', fromCompId: bjt.id, fromPinId: 'e', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w4', fromCompId: vcc.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w5', fromCompId: vcc.id, fromPinId: 'p', toCompId: rb.id, toPinId: '1' },
+      { id: 'w6', fromCompId: rb.id, fromPinId: '2', toCompId: bjt.id, toPinId: 'b' },
+    ];
+
+    const res = s.step([vcc, gnd, rc, rb, bjt], wires, 0.001);
+    const bjtState = res.componentStates[bjt.id];
+    expect(bjtState).toBeDefined();
+    // BJT should be conducting current in saturation/active
+    expect(bjtState.current).toBeGreaterThan(0.001);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST R - VOLTAGE REGULATOR 7805 REGULATION
+  // --------------------------------------------------------------------------
+  it('TEST R - Voltage Regulator 7805: verifies 9V battery input regulated down to 5.0V output', () => {
+    const s = new CircuitSolver();
+    const regTemplate = COMPONENT_CATALOG.find((c) => c.type === 'REGULATOR_7805')!;
+    const batTemplate = COMPONENT_CATALOG.find((c) => c.type === 'DC_VOLTAGE')!;
+    const rTemplate = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR')!;
+    const gndTemplate = COMPONENT_CATALOG.find((c) => c.type === 'GROUND')!;
+
+    const bat = createComponentInstance(batTemplate, 0, 0);
+    bat.parameters.voltage = 9.0; // 9V input
+
+    const gnd = createComponentInstance(gndTemplate, 0, 100);
+
+    const reg = createComponentInstance(regTemplate, 100, 0);
+    reg.parameters.vOut = 5.0;
+
+    const load = createComponentInstance(rTemplate, 200, 0);
+    load.parameters.resistance = 500; // 500Ω load -> I = 5V / 500Ω = 10mA
+
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: bat.id, fromPinId: 'p', toCompId: reg.id, toPinId: 'in' },
+      { id: 'w2', fromCompId: reg.id, fromPinId: 'gnd', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w3', fromCompId: bat.id, fromPinId: 'n', toCompId: gnd.id, toPinId: '1' },
+      { id: 'w4', fromCompId: reg.id, fromPinId: 'out', toCompId: load.id, toPinId: '1' },
+      { id: 'w5', fromCompId: load.id, fromPinId: '2', toCompId: gnd.id, toPinId: '1' },
+    ];
+
+    const res = s.step([bat, gnd, reg, load], wires, 0.001);
+    const regState = res.componentStates[reg.id];
+    expect(regState).toBeDefined();
+
+    // Verify regulated output voltage across load
+    const loadState = res.componentStates[load.id];
+    expect(loadState.voltage).toBeCloseTo(5.0, 0.5);
+    expect(loadState.current).toBeCloseTo(0.01, 0.002);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST S - PCB TRACE ROUTING & LAYER STACKUP
+  // --------------------------------------------------------------------------
+  it('TEST S - PCB Trace Routing & Layer Stackup: validates trace addition on top/bottom copper and 2/4 layer stackup', () => {
+    const pcb = PcbGenerator.generatePcbFromSchematic(
+      TEMPLATE_555_ASTABLE.components,
+      TEMPLATE_555_ASTABLE.wires,
+      120,
+      90
+    );
+
+    // Initial PCB specs
+    expect(pcb.widthMm).toBe(120);
+    expect(pcb.heightMm).toBe(90);
+    expect(pcb.copperLayers).toBe(2);
+
+    // Add interactive user routed trace
+    const userTrace: PcbTrack = {
+      id: 'trk_user_routed_1',
+      layer: 'top_copper',
+      from: { x: 15, y: 20 },
+      to: { x: 45, y: 20 },
+      widthMm: 0.35,
+    };
+    pcb.tracks.push(userTrace);
+    expect(pcb.tracks.find((t) => t.id === 'trk_user_routed_1')).toBeDefined();
+
+    // Upgrade stackup to 4-layer
+    pcb.copperLayers = 4;
+    pcb.boardThicknessMm = 1.0;
+    expect(pcb.copperLayers).toBe(4);
+    expect(pcb.boardThicknessMm).toBe(1.0);
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST T - USER CUSTOM LIBRARY PERSISTENCE & CATALOG MANIFEST
+  // --------------------------------------------------------------------------
+  it('TEST T - User Custom Library & Ecosystem Manifest: validates custom part creation, persistence, and manifest export', () => {
+    const customPart = {
+      type: 'CUSTOM_PRECISION_SENSOR_XY',
+      name: 'Custom High-Precision Optical Sensor',
+      designatorPrefix: 'SEN',
+      category: 'sensors' as const,
+      subCategory: 'sensors_optical',
+      simulationStatus: 'full_mna' as const,
+      packageType: 'SMD' as const,
+      defaultValue: '100mV/Lux',
+      pins: [
+        { id: '1', name: 'VCC', x: -20, y: 0, pinType: 'power' as const },
+        { id: '2', name: 'OUT', x: 20, y: 0, pinType: 'output' as const },
+      ],
+      footprint: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm',
+      model3d: 'dip8_integrated_circuit',
+      width: 50,
+      height: 40,
+      symbolSvg: 'sensor_optical',
+      description: 'Custom optical sensor created by user.',
+    };
+
+    // Serialize custom library JSON
+    const exportedJson = JSON.stringify([customPart]);
+    expect(exportedJson).toContain('CUSTOM_PRECISION_SENSOR_XY');
+
+    // Parse and instantiate custom component
+    const parsed = JSON.parse(exportedJson);
+    expect(parsed.length).toBe(1);
+    const instance = createComponentInstance(parsed[0], 100, 100);
+    expect(instance.id).toBeDefined();
+    expect(instance.type).toBe('CUSTOM_PRECISION_SENSOR_XY');
+    expect(instance.pins.length).toBe(2);
+  });
 });

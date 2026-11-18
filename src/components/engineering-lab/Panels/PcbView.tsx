@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { PcbLayout } from '@/modules/engineering-lab/types';
+import { PcbLayout, PcbTrack } from '@/modules/engineering-lab/types';
 import {
   Layers,
   Box,
@@ -12,6 +12,10 @@ import {
   Compass,
   Play,
   Pause,
+  Route,
+  Trash2,
+  Sliders,
+  X,
 } from 'lucide-react';
 
 interface PcbViewProps {
@@ -19,15 +23,29 @@ interface PcbViewProps {
   onExportGerber: () => void;
   is3DMode?: boolean;
   onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
+  onUpdatePcb?: (updated: PcbLayout) => void;
 }
 
-export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensions }: PcbViewProps) {
+export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensions, onUpdatePcb }: PcbViewProps) {
   const canvas2dRef = useRef<HTMLCanvasElement>(null);
   const canvas3dRef = useRef<HTMLCanvasElement>(null);
 
   const [activeCopperLayer, setActiveCopperLayer] = useState<'top_copper' | 'bottom_copper'>('top_copper');
   const [boardWidth, setBoardWidth] = useState(pcb.widthMm);
   const [boardHeight, setBoardHeight] = useState(pcb.heightMm);
+
+  // Interactive PCB CAD Routing & Selection State
+  const [isRoutingMode, setIsRoutingMode] = useState(false);
+  const [routingStartPad, setRoutingStartPad] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hoveredPadId, setHoveredPadId] = useState<string | null>(null);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState<{ canvasX: number; canvasY: number; mmX: number; mmY: number } | null>(null);
+
+  // Layer Stackup & Fab Specs Modal
+  const [showStackupModal, setShowStackupModal] = useState(false);
+  const [copperLayers, setCopperLayers] = useState<2 | 4>(pcb.copperLayers || 2);
+  const [boardThicknessMm, setBoardThicknessMm] = useState<number>(pcb.boardThicknessMm || 1.6);
+  const [copperWeightOz, setCopperWeightOz] = useState<number>(1);
 
   const [visibleLayers, setVisibleLayers] = useState({
     topCopper: true,
@@ -36,6 +54,31 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
     drillHoles: true,
     components3D: true,
   });
+
+  // Keyboard shortcut listener for track deletion and escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedTrackId && onUpdatePcb) {
+          e.preventDefault();
+          const nextTracks = pcb.tracks.filter((t) => t.id !== selectedTrackId);
+          onUpdatePcb({ ...pcb, tracks: nextTracks });
+          setSelectedTrackId(null);
+        }
+      } else if (e.key === 'Escape') {
+        setRoutingStartPad(null);
+        setSelectedTrackId(null);
+        setIsRoutingMode(false);
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (!is3DMode) {
+          setIsRoutingMode((m) => !m);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTrackId, onUpdatePcb, pcb, is3DMode]);
 
   // 3D Orbit, Tilt & Camera State
   const [rotY, setRotY] = useState(0.5); // horizontal angle
@@ -125,11 +168,20 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
     // 3. Draw Bottom Copper Tracks (Blue)
     if (visibleLayers.bottomCopper) {
-      ctx.strokeStyle = '#3B82F6';
       ctx.lineCap = 'round';
       pcb.tracks
         .filter((t) => t.layer === 'bottom_copper')
         .forEach((t) => {
+          const isSelected = t.id === selectedTrackId;
+          if (isSelected) {
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = Math.max(t.widthMm * scale, 1.8) + 4;
+            ctx.beginPath();
+            ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
+            ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = '#3B82F6';
           ctx.lineWidth = Math.max(t.widthMm * scale, 1.8);
           ctx.beginPath();
           ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
@@ -140,11 +192,20 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
 
     // 4. Draw Top Copper Tracks (Red)
     if (visibleLayers.topCopper) {
-      ctx.strokeStyle = '#EF4444';
       ctx.lineCap = 'round';
       pcb.tracks
         .filter((t) => t.layer === 'top_copper')
         .forEach((t) => {
+          const isSelected = t.id === selectedTrackId;
+          if (isSelected) {
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = Math.max(t.widthMm * scale, 1.8) + 4;
+            ctx.beginPath();
+            ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
+            ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = '#EF4444';
           ctx.lineWidth = Math.max(t.widthMm * scale, 1.8);
           ctx.beginPath();
           ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
@@ -153,13 +214,58 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         });
     }
 
+    // Interactive Rubberband Trace in Progress
+    if (routingStartPad && mousePos) {
+      const sx = offsetX + routingStartPad.x * scale;
+      const sy = offsetY + routingStartPad.y * scale;
+
+      // Start pad pulsating highlight
+      ctx.strokeStyle = '#10B981';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 5 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Rubberband line in active copper color
+      ctx.strokeStyle = activeCopperLayer === 'top_copper' ? '#EF4444' : '#3B82F6';
+      ctx.lineWidth = Math.max(0.35 * scale, 2);
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(mousePos.canvasX, mousePos.canvasY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Millimeter distance badge
+      const distMm = Math.hypot(mousePos.mmX - routingStartPad.x, mousePos.mmY - routingStartPad.y);
+      ctx.fillStyle = '#020617';
+      ctx.fillRect((sx + mousePos.canvasX) / 2 + 5, (sy + mousePos.canvasY) / 2 - 16, 52, 16);
+      ctx.strokeStyle = '#38BDF8';
+      ctx.lineWidth = 1;
+      ctx.strokeRect((sx + mousePos.canvasX) / 2 + 5, (sy + mousePos.canvasY) / 2 - 16, 52, 16);
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(`${distMm.toFixed(1)} mm`, (sx + mousePos.canvasX) / 2 + 8, (sy + mousePos.canvasY) / 2 - 4);
+    }
+
     // 5. Draw Copper Pads (Gold / Tin Plated Annular Rings)
     pcb.pads.forEach((pad) => {
       const px = offsetX + pad.x * scale;
       const py = offsetY + pad.y * scale;
       const radius = (pad.diameterMm * scale) / 2;
+      const isHovered = pad.id === hoveredPadId;
+      const isStart = routingStartPad?.id === pad.id;
 
-      ctx.fillStyle = '#F59E0B'; // Copper pad annular ring
+      // Hover / Route selection ring
+      if (isHovered || isStart) {
+        ctx.strokeStyle = isStart ? '#10B981' : '#38BDF8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = isHovered ? '#FDE047' : '#F59E0B'; // Copper pad annular ring
       ctx.strokeStyle = '#D97706';
       ctx.lineWidth = 1;
 
@@ -239,7 +345,94 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
         });
       }
     }
-  }, [pcb, visibleLayers, is3DMode]);
+  }, [pcb, visibleLayers, is3DMode, routingStartPad, mousePos, hoveredPadId, selectedTrackId, activeCopperLayer]);
+
+  // ----------------------------------------------------
+  // Interactive 2D Routing & Track Selection Handlers
+  // ----------------------------------------------------
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvas2dRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const scale = Math.min((canvas.width - 90) / pcb.widthMm, (canvas.height - 90) / pcb.heightMm);
+    const offsetX = (canvas.width - pcb.widthMm * scale) / 2;
+    const offsetY = (canvas.height - pcb.heightMm * scale) / 2;
+
+    const mmX = (canvasX - offsetX) / scale;
+    const mmY = (canvasY - offsetY) / scale;
+
+    setMousePos({ canvasX, canvasY, mmX, mmY });
+
+    const hovered = pcb.pads.find((p) => {
+      const d = Math.hypot(p.x - mmX, p.y - mmY);
+      return d <= Math.max(p.diameterMm, 2.5);
+    });
+    setHoveredPadId(hovered ? hovered.id : null);
+  };
+
+  const handleCanvasClick = () => {
+    if (!mousePos) return;
+    const { mmX, mmY } = mousePos;
+
+    // 1. Check if clicked on a copper pad
+    const clickedPad = pcb.pads.find((p) => {
+      const d = Math.hypot(p.x - mmX, p.y - mmY);
+      return d <= Math.max(p.diameterMm, 2.5);
+    });
+
+    if (clickedPad) {
+      if (!routingStartPad) {
+        // Start interactive routing trace from this pad
+        setRoutingStartPad({ id: clickedPad.id, x: clickedPad.x, y: clickedPad.y });
+        setSelectedTrackId(null);
+      } else if (routingStartPad.id !== clickedPad.id) {
+        // Complete the track connection
+        const newTrack: PcbTrack = {
+          id: `trk_manual_${Date.now()}`,
+          layer: activeCopperLayer,
+          from: { x: routingStartPad.x, y: routingStartPad.y },
+          to: { x: clickedPad.x, y: clickedPad.y },
+          widthMm: 0.35,
+        };
+        if (onUpdatePcb) {
+          onUpdatePcb({
+            ...pcb,
+            tracks: [...pcb.tracks, newTrack],
+          });
+        }
+        setRoutingStartPad(null);
+      }
+      return;
+    }
+
+    // 2. Check if clicked near an existing track to select it
+    let clickedTrack: PcbTrack | null = null;
+    for (const track of pcb.tracks) {
+      const dx = track.to.x - track.from.x;
+      const dy = track.to.y - track.from.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) continue;
+      const t = Math.max(0, Math.min(1, ((mmX - track.from.x) * dx + (mmY - track.from.y) * dy) / lenSq));
+      const projX = track.from.x + t * dx;
+      const projY = track.from.y + t * dy;
+      const dist = Math.hypot(mmX - projX, mmY - projY);
+      if (dist < 1.5) {
+        clickedTrack = track;
+        break;
+      }
+    }
+
+    if (clickedTrack) {
+      setSelectedTrackId(clickedTrack.id);
+      setRoutingStartPad(null);
+    } else {
+      setSelectedTrackId(null);
+      setRoutingStartPad(null);
+    }
+  };
 
   // ----------------------------------------------------
   // Native 3D PCB Canvas Projection & Orbit Engine
@@ -666,6 +859,7 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                     ? 'bg-red-950 border border-red-600 text-red-300 font-bold'
                     : 'text-slate-400 hover:text-white'
                 }`}
+                title="Top Copper Layer (Red)"
               >
                 F.Cu (Top)
               </button>
@@ -676,8 +870,56 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                     ? 'bg-blue-950 border border-blue-600 text-blue-300 font-bold'
                     : 'text-slate-400 hover:text-white'
                 }`}
+                title="Bottom Copper Layer (Blue)"
               >
                 B.Cu (Bot)
+              </button>
+
+              {/* Interactive Trace Router Toggle */}
+              <button
+                onClick={() => {
+                  setIsRoutingMode((m) => !m);
+                  setRoutingStartPad(null);
+                }}
+                className={`ml-2 px-2.5 py-0.5 rounded flex items-center gap-1 font-bold transition-colors ${
+                  isRoutingMode || routingStartPad
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+                title="Click pads to interactively route copper tracks [Shortcut: R]"
+              >
+                <Route className="w-3 h-3" />
+                <span>{routingStartPad ? 'Routing Active...' : 'Route [R]'}</span>
+              </button>
+
+              {/* Delete Selected Track Button */}
+              {selectedTrackId && (
+                <button
+                  onClick={() => {
+                    if (onUpdatePcb) {
+                      onUpdatePcb({
+                        ...pcb,
+                        tracks: pcb.tracks.filter((t) => t.id !== selectedTrackId),
+                      });
+                      setSelectedTrackId(null);
+                    }
+                  }}
+                  className="px-2 py-0.5 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700 rounded flex items-center gap-1"
+                  title="Delete selected track [Delete]"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Del Track</span>
+                </button>
+              )}
+
+              {/* Stackup & Fab Specs Modal Toggle */}
+              <button
+                onClick={() => setShowStackupModal(true)}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded flex items-center gap-1"
+                title="Configure PCB Layer Stack & Fabrication Specs"
+              >
+                <Sliders className="w-3 h-3 text-cyan-400" />
+                <span>Stackup</span>
               </button>
             </div>
           )}
@@ -820,12 +1062,26 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
               </div>
             </div>
           ) : (
-            <canvas
-              ref={canvas2dRef}
-              width={800}
-              height={550}
-              className="max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
-            />
+            <div className="relative flex items-center justify-center">
+              <canvas
+                ref={canvas2dRef}
+                width={800}
+                height={550}
+                onMouseMove={handleCanvasMouseMove}
+                onClick={handleCanvasClick}
+                style={{ cursor: isRoutingMode || routingStartPad ? 'crosshair' : 'default' }}
+                className="max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
+              />
+              {/* Floating Routing Helper Banner */}
+              {routingStartPad && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-emerald-500/60 text-emerald-300 font-mono text-[11px] px-3 py-1 rounded-full shadow-lg backdrop-blur flex items-center gap-2 pointer-events-none">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>
+                    Routing on {activeCopperLayer === 'top_copper' ? 'Top Copper (F.Cu)' : 'Bottom Copper (B.Cu)'}: Click destination pad to connect (Esc to cancel)
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -863,6 +1119,14 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
                 <span>Min Drill Hole:</span>
                 <span className="text-emerald-400 font-bold">0.3 mm / 12 mil</span>
               </div>
+              <div className="flex justify-between text-slate-300">
+                <span>Layer Count:</span>
+                <span className="text-cyan-400 font-bold">{copperLayers} Layers (FR-4)</span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span>Board Thickness:</span>
+                <span className="text-cyan-400 font-bold">{boardThicknessMm} mm</span>
+              </div>
             </div>
 
             {pcb.drcErrors.length === 0 ? (
@@ -879,6 +1143,127 @@ export function PcbView({ pcb, onExportGerber, is3DMode = false, onUpdateDimensi
           </div>
         </div>
       </div>
+
+      {/* Layer Stackup & Fabrication Specs Modal */}
+      {showStackupModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0B1528] border border-slate-700 rounded-xl shadow-2xl w-full max-w-md p-5 text-slate-200 font-mono text-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-cyan-400" />
+                <h3 className="font-bold text-sm text-slate-100">PCB Layer Stack &amp; Fabrication Specs</h3>
+              </div>
+              <button
+                onClick={() => setShowStackupModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Copper Layer Count */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Copper Layer Count</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCopperLayers(2)}
+                    className={`py-2 px-3 rounded border text-center font-bold transition-all ${
+                      copperLayers === 2
+                        ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    2 Layers (Top / Bot)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCopperLayers(4)}
+                    className={`py-2 px-3 rounded border text-center font-bold transition-all ${
+                      copperLayers === 4
+                        ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    4 Layers (Internal GND/PWR)
+                  </button>
+                </div>
+              </div>
+
+              {/* Board Thickness */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Board Substrate Thickness</label>
+                <select
+                  value={boardThicknessMm}
+                  onChange={(e) => setBoardThicknessMm(parseFloat(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-200"
+                >
+                  <option value={0.8}>0.8 mm (Ultra Thin)</option>
+                  <option value={1.0}>1.0 mm (Thin FR-4)</option>
+                  <option value={1.6}>1.6 mm (Standard IPC-2221 FR-4)</option>
+                  <option value={2.0}>2.0 mm (Heavy Duty)</option>
+                </select>
+              </div>
+
+              {/* Copper Weight */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Finished Copper Weight</label>
+                <select
+                  value={copperWeightOz}
+                  onChange={(e) => setCopperWeightOz(parseInt(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-200"
+                >
+                  <option value={1}>1 oz (35 µm standard signal)</option>
+                  <option value={2}>2 oz (70 µm high current / power)</option>
+                </select>
+              </div>
+
+              {/* Surface Finish */}
+              <div className="p-2.5 rounded bg-slate-950 border border-slate-800 text-[11px] space-y-1 text-slate-400">
+                <div className="flex justify-between">
+                  <span>Dielectric Constant (εr):</span>
+                  <span className="text-slate-200 font-bold">4.5 (FR-4 Glass Epoxy)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Surface Finish:</span>
+                  <span className="text-slate-200 font-bold">ENIG (Electroless Nickel Gold)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Solder Mask:</span>
+                  <span className="text-emerald-400 font-bold">Green Matte LPI</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowStackupModal(false)}
+                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onUpdatePcb) {
+                    onUpdatePcb({
+                      ...pcb,
+                      copperLayers,
+                      boardThicknessMm,
+                    });
+                  }
+                  setShowStackupModal(false);
+                }}
+                className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+              >
+                Apply Stackup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,8 @@ export class CircuitSolver {
   private nets: Set<string> = new Set();
   private gndNetId: string = 'GND';
   private capacitorVoltages: Map<string, number> = new Map();
+  private inductorCurrents: Map<string, number> = new Map();
+  private bjtCurrents: Map<string, { ib: number; ic: number }> = new Map();
   private timer555State: Map<string, { flipFlop: boolean; outV: number }> = new Map();
   private waveformHistory: Map<string, SimulationWaveformPoint[]> = new Map();
   private currentTime: number = 0;
@@ -19,6 +21,8 @@ export class CircuitSolver {
 
   public reset() {
     this.capacitorVoltages.clear();
+    this.inductorCurrents.clear();
+    this.bjtCurrents.clear();
     this.timer555State.clear();
     this.waveformHistory.clear();
     this.currentTime = 0;
@@ -182,7 +186,7 @@ export class CircuitSolver {
       }
 
       for (const comp of components) {
-        if (comp.type === 'RESISTOR' || comp.type === 'POTENTIOMETER') {
+        if (comp.type === 'RESISTOR') {
           const pin1 = this.netMap.get(`${comp.id}:1`);
           const pin2 = this.netMap.get(`${comp.id}:2`);
           if (pin1 && pin2 && pin1 !== pin2) {
@@ -197,6 +201,129 @@ export class CircuitSolver {
 
             sumGV[pin2] += g * v1;
             sumG[pin2] += g;
+          }
+        } else if (comp.type === 'POTENTIOMETER') {
+          // Resolve pins either as A, Wiper, B or 1, 2, 3
+          const pinA = this.netMap.get(`${comp.id}:A`) || this.netMap.get(`${comp.id}:1`);
+          const pinWiper = this.netMap.get(`${comp.id}:Wiper`) || this.netMap.get(`${comp.id}:2`);
+          const pinB = this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:3`);
+          const rTotal = Math.max(Number(comp.parameters?.resistance ?? 10000), 1.0);
+          const alpha = Math.max(0.001, Math.min(0.999, Number(comp.parameters?.wiperPosition ?? 0.5)));
+          const r1 = Math.max(rTotal * alpha, 0.01);
+          const r2 = Math.max(rTotal * (1.0 - alpha), 0.01);
+
+          if (pinA && pinWiper && pinA !== pinWiper) {
+            const g1 = 1.0 / r1;
+            sumGV[pinA] += g1 * (nodeVoltages[pinWiper] || 0);
+            sumG[pinA] += g1;
+            sumGV[pinWiper] += g1 * (nodeVoltages[pinA] || 0);
+            sumG[pinWiper] += g1;
+          }
+          if (pinB && pinWiper && pinB !== pinWiper) {
+            const g2 = 1.0 / r2;
+            sumGV[pinB] += g2 * (nodeVoltages[pinWiper] || 0);
+            sumG[pinB] += g2;
+            sumGV[pinWiper] += g2 * (nodeVoltages[pinB] || 0);
+            sumG[pinWiper] += g2;
+          }
+        } else if (comp.type === 'INDUCTOR') {
+          const pin1 = this.netMap.get(`${comp.id}:1`);
+          const pin2 = this.netMap.get(`${comp.id}:2`);
+          if (pin1 && pin2 && pin1 !== pin2) {
+            const lVal = Math.max(Number(comp.parameters?.inductance ?? 0.01), 0.000001); // 10mH default
+            const gEq = dt / lVal;
+            const prevIl = this.inductorCurrents.get(comp.id) ?? 0;
+
+            sumGV[pin1] -= prevIl;
+            sumG[pin1] += gEq;
+
+            sumGV[pin2] += prevIl;
+            sumG[pin2] += gEq;
+
+            const v1 = nodeVoltages[pin1] || 0;
+            const v2 = nodeVoltages[pin2] || 0;
+            const newIl = prevIl + (v1 - v2) * gEq;
+            this.inductorCurrents.set(comp.id, newIl * 0.999);
+          }
+        } else if (comp.type === 'SWITCH_SPST') {
+          const pin1 = this.netMap.get(`${comp.id}:1`);
+          const pin2 = this.netMap.get(`${comp.id}:2`);
+          if (pin1 && pin2 && pin1 !== pin2) {
+            const isClosed = comp.parameters?.closed !== false;
+            const g = isClosed ? 100.0 : 1e-9;
+            const v1 = nodeVoltages[pin1] || 0;
+            const v2 = nodeVoltages[pin2] || 0;
+            sumGV[pin1] += g * v2;
+            sumG[pin1] += g;
+            sumGV[pin2] += g * v1;
+            sumG[pin2] += g;
+          }
+        } else if (comp.type === 'BJT_NPN') {
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:1`);
+          const cPin = this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`);
+          const ePin = this.netMap.get(`${comp.id}:e`) || this.netMap.get(`${comp.id}:E`) || this.netMap.get(`${comp.id}:3`);
+          if (bPin && cPin && ePin) {
+            const vb = nodeVoltages[bPin] || 0;
+            const vc = nodeVoltages[cPin] || 0;
+            const ve = nodeVoltages[ePin] || 0;
+            const vbe = vb - ve;
+            const vce = vc - ve;
+            const beta = Math.max(Number(comp.parameters?.beta ?? 100), 1);
+
+            const isConducting = vbe > 0.65;
+            const gbe = isConducting ? 0.04 : 1e-6;
+            const ib = isConducting ? Math.max(0, (vbe - 0.65) * gbe) : 0;
+
+            const icTarget = beta * ib;
+            const gce = isConducting && vce > 0.2 ? Math.min(10.0, Math.max(0.001, icTarget / Math.max(vce - 0.2, 0.1))) : 1e-6;
+            const ic = isConducting && vce > 0.2 ? gce * (vce - 0.2) : 0;
+
+            this.bjtCurrents.set(comp.id, { ib, ic });
+
+            // Base-Emitter Diode Formulation
+            sumGV[bPin] += gbe * (ve + 0.65);
+            sumG[bPin] += gbe;
+            sumGV[ePin] += gbe * (vb - 0.65);
+            sumG[ePin] += gbe;
+
+            // Collector-Emitter Controlled Channel Formulation
+            sumGV[cPin] += gce * (ve + 0.2);
+            sumG[cPin] += gce;
+            sumGV[ePin] += gce * (vc - 0.2);
+            sumG[ePin] += gce;
+          }
+        } else if (comp.type.startsWith('REGULATOR_')) {
+          const inPin = this.netMap.get(`${comp.id}:in`);
+          const outPin = this.netMap.get(`${comp.id}:out`);
+          const gndPin = this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:adj`);
+          const vIn = inPin ? (nodeVoltages[inPin] || 0) : 0;
+          const vGnd = gndPin ? (nodeVoltages[gndPin] || 0) : 0;
+
+          let targetV = 5.0;
+          if (comp.type === 'REGULATOR_7812') targetV = 12.0;
+          else if (comp.type === 'REGULATOR_LM317') targetV = vGnd + 1.25;
+          else targetV = vGnd + 5.0;
+
+          const regulatedV = Math.max(0, Math.min(targetV, vIn - 1.5));
+          if (outPin) {
+            nodeVoltages[outPin] = regulatedV;
+            fixedNodes.add(outPin);
+          }
+        } else if (comp.type.startsWith('COMPARATOR_')) {
+          const inNegPin = this.netMap.get(`${comp.id}:in_neg`);
+          const inPosPin = this.netMap.get(`${comp.id}:in_pos`);
+          const outPin = this.netMap.get(`${comp.id}:out`);
+          const veePin = this.netMap.get(`${comp.id}:vee`);
+          const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
+          const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
+          const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+
+          if (outPin) {
+            if (vPos < vNeg) {
+              // Open-collector pulled down to negative rail
+              nodeVoltages[outPin] = vee;
+              fixedNodes.add(outPin);
+            }
           }
         } else if (comp.type === 'METER_AMMETER') {
           // Ammeter acts as an ultra-low resistance shunt (0.001Ω)
@@ -262,7 +389,7 @@ export class CircuitSolver {
             sumGV[kPin] += gDiode * (va - vf);
             sumG[kPin] += gDiode;
           }
-        } else if (comp.type === 'OPAMP_LM358') {
+        } else if (comp.type.startsWith('OPAMP_')) {
           // Operational Amplifier (Inverting / Non-inverting / Comparator)
           const inNegPin = this.netMap.get(`${comp.id}:in_neg`);
           const inPosPin = this.netMap.get(`${comp.id}:in_pos`);
@@ -390,9 +517,28 @@ export class CircuitSolver {
         let current = 0;
         let on = false;
 
-        if (comp.type === 'RESISTOR' || comp.type === 'POTENTIOMETER') {
+        if (comp.type === 'RESISTOR') {
           const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
           current = vDiff / r;
+        } else if (comp.type === 'POTENTIOMETER') {
+          const rTotal = Math.max(Number(comp.parameters?.resistance ?? 10000), 1.0);
+          const alpha = Math.max(0.001, Math.min(0.999, Number(comp.parameters?.wiperPosition ?? 0.5)));
+          const rW = rTotal * alpha;
+          current = vDiff / rW;
+          on = true;
+        } else if (comp.type === 'INDUCTOR') {
+          current = this.inductorCurrents.get(comp.id) ?? 0;
+          on = Math.abs(current) > 0.0001;
+        } else if (comp.type === 'SWITCH_SPST') {
+          on = comp.parameters?.closed !== false;
+          current = on ? vDiff / 0.01 : 0;
+        } else if (comp.type === 'BJT_NPN') {
+          const bjt = this.bjtCurrents.get(comp.id) ?? { ib: 0, ic: 0 };
+          current = bjt.ic > 0 ? bjt.ic : bjt.ib;
+          on = current > 0.0001;
+        } else if (comp.type.startsWith('REGULATOR_')) {
+          current = Math.abs(vDiff) > 1.0 ? 0.02 : 0;
+          on = Math.abs(vDiff) > 3.0;
         } else if (comp.type === 'METER_VOLTMETER' || comp.type === 'METER_MULTIMETER') {
           current = vDiff / 10000000;
           on = Math.abs(vDiff) > 0.05;

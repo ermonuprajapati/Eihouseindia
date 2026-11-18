@@ -21,15 +21,22 @@ interface PropertiesInspectorProps {
 const FOOTPRINT_OPTIONS = [
   { value: 'Resistor_SMD:R_0805_2012Metric', label: 'SMD 0805 (2012 Metric)' },
   { value: 'Resistor_SMD:R_1206_3216Metric', label: 'SMD 1206 (3216 Metric)' },
-  { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial (1/4W, 7.62mm)' },
+  { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial Resistor (1/4W, 7.62mm)' },
+  { value: 'Inductor_THT:L_Axial_L7.0mm_D3.3mm_P10.16mm_Horizontal', label: 'Through-Hole Axial Inductor (10.16mm)' },
+  { value: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', label: 'Through-Hole Diode DO-35 (1N4148)' },
+  { value: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', label: 'Through-Hole Diode DO-41 (1N4007)' },
+  { value: 'Potentiometer_THT:Potentiometer_Bourns_3386P_Vertical', label: 'Bourns 3386P 3-Pin Trimmer' },
   { value: 'Capacitor_SMD:C_0805_2012Metric', label: 'Capacitor SMD 0805' },
   { value: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', label: 'Capacitor Radial Electrolytic (6.3mm)' },
   { value: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', label: 'Capacitor Disc Ceramic (5.0mm)' },
   { value: 'Package_DIP:DIP-8_W7.62mm', label: 'DIP-8 (Through-Hole, 7.62mm pitch)' },
   { value: 'Package_TO_SOT_THT:TO-92_Inline', label: 'TO-92 Transistor Package' },
-  { value: 'Package_TO_SOT_THT:TO-220-3_Vertical', label: 'TO-220 Power Package' },
+  { value: 'Package_TO_SOT_THT:TO-220-3_Vertical', label: 'TO-220 Power Package (7805/MOSFET)' },
   { value: 'LED_THT:LED_D5.0mm', label: 'LED 5mm Through-Hole' },
+  { value: 'LED_THT:LED_D5.0mm-4', label: 'RGB LED 4-Pin Through-Hole' },
+  { value: 'Relay_THT:Relay_SPDT_Songle_SRD-Series', label: 'Songle SRD SPDT Relay' },
   { value: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical', label: 'Pin Header 1x02 (2.54mm)' },
+  { value: 'TerminalBlock:TerminalBlock_bornier-2_P5.08mm', label: 'Terminal Block 2-Pin 5.08mm' },
   { value: 'BatteryHolder_Keystone_2460_1xAA', label: 'Battery Clip / Holder 9V' },
   { value: 'TestPoint_Pad_D1.0mm', label: 'GND Test Point Pad (1.0mm)' },
 ];
@@ -390,6 +397,31 @@ export function PropertiesInspector({
                   </select>
                 </div>
               </div>
+
+              {type === 'POTENTIOMETER' && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span className="font-semibold uppercase font-mono">Wiper Division (Terminal A ↔ B)</span>
+                    <span className="font-mono text-cyan-400 font-bold">
+                      {Math.round(Number(parameters.wiperPosition ?? 0.5) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={Number(parameters.wiperPosition ?? 0.5)}
+                    onChange={(e) => updateParameter('wiperPosition', parseFloat(e.target.value))}
+                    className="w-full accent-cyan-400 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                    <span>Pin 1 (A: 0%)</span>
+                    <span>Wiper (Mid)</span>
+                    <span>Pin 3 (B: 100%)</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -533,6 +565,153 @@ export function PropertiesInspector({
                 <option value="TLC555">TLC555 (CMOS Low-Power, 2V-15V)</option>
                 <option value="LM555CN">LM555CN (National Semi)</option>
               </select>
+            </div>
+          )}
+
+          {/* INDUCTOR */}
+          {type === 'INDUCTOR' && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Inductance</span>
+                  <span className="font-mono text-cyan-400 font-bold">{component.value}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.001"
+                    value={
+                      Number(parameters.inductance ?? 0.01) >= 1
+                        ? Number(parameters.inductance ?? 0.01)
+                        : Number(parameters.inductance ?? 0.01) >= 0.001
+                        ? Number(parameters.inductance ?? 0.01) * 1000
+                        : Number(parameters.inductance ?? 0.01) * 1000000
+                    }
+                    onChange={(e) => {
+                      const raw = parseFloat(e.target.value);
+                      if (isNaN(raw) || raw <= 0) return;
+                      const isUh = component.value.includes('µ') || component.value.includes('u');
+                      const isMh = component.value.includes('m') || (!component.value.includes('µ') && !component.value.includes('H'));
+                      const mult = isUh ? 1e-6 : isMh ? 1e-3 : 1;
+                      const unitStr = isUh ? 'µH' : isMh ? 'mH' : 'H';
+                      updateParameter('inductance', raw * mult, `${raw}${unitStr}`);
+                    }}
+                    className="col-span-2 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono font-bold focus:outline-none focus:border-cyan-500"
+                  />
+                  <select
+                    value={
+                      component.value.includes('µ') || component.value.includes('u')
+                        ? 'uH'
+                        : component.value.endsWith('H') && !component.value.includes('m')
+                        ? 'H'
+                        : 'mH'
+                    }
+                    onChange={(e) => {
+                      const cur = Number(parameters.inductance ?? 0.01);
+                      let base = cur * 1000;
+                      if (e.target.value === 'uH') base = cur * 1e6;
+                      else if (e.target.value === 'H') base = cur;
+                      const mult = e.target.value === 'uH' ? 1e-6 : e.target.value === 'H' ? 1 : 1e-3;
+                      const raw = parseFloat(base.toFixed(1));
+                      const unitStr = e.target.value === 'uH' ? 'µH' : e.target.value;
+                      updateParameter('inductance', raw * mult, `${raw}${unitStr}`);
+                    }}
+                    className="col-span-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-300 font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="uH">µH</option>
+                    <option value="mH">mH</option>
+                    <option value="H">H</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SWITCHES & BUTTONS */}
+          {(type === 'SWITCH_SPST' || type === 'SWITCH_PUSHBUTTON' || type === 'INDUSTRIAL_ESTOP') && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span className="font-semibold uppercase font-mono">Contact State</span>
+                <span className={`font-mono font-bold ${parameters.closed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {parameters.closed ? 'CLOSED (Conducting)' : 'OPEN (Isolated)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateParameter('closed', !parameters.closed, parameters.closed ? 'Open' : 'Closed')}
+                className={`w-full py-2 px-3 rounded font-mono text-xs font-bold transition-all border ${
+                  parameters.closed
+                    ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300 hover:bg-emerald-900/80'
+                    : 'bg-amber-950/60 border-amber-600 text-amber-300 hover:bg-amber-900/80'
+                }`}
+              >
+                {parameters.closed ? 'Switch is CLOSED (Click to Open)' : 'Switch is OPEN (Click to Close)'}
+              </button>
+            </div>
+          )}
+
+          {/* BJT TRANSISTOR */}
+          {(type === 'BJT_NPN' || type === 'TRANSISTOR_BJT_NPN') && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Current Gain (β / hFE)</span>
+                  <span className="font-mono text-cyan-400 font-bold">{Number(parameters.beta ?? 100)}</span>
+                </div>
+                <input
+                  type="number"
+                  min="10"
+                  max="1000"
+                  value={Number(parameters.beta ?? 100)}
+                  onChange={(e) => updateParameter('beta', Math.max(10, parseInt(e.target.value) || 100))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono font-bold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* VOLTAGE REGULATORS */}
+          {type.startsWith('REGULATOR_') && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold uppercase font-mono">Regulated VOUT</span>
+                  <span className="font-mono text-cyan-400 font-bold">
+                    {Number(parameters.vOut ?? (type.includes('7805') ? 5.0 : type.includes('7812') ? 12.0 : 3.3)).toFixed(1)} V
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={Number(parameters.vOut ?? (type.includes('7805') ? 5.0 : type.includes('7812') ? 12.0 : 3.3))}
+                  onChange={(e) => updateParameter('vOut', parseFloat(e.target.value) || 5.0)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono font-bold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* RELAY ACTUATOR & INDUSTRIAL RELAY */}
+          {(type.includes('RELAY') || type.includes('CONTACTOR')) && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span className="font-semibold uppercase font-mono">Coil Excitation</span>
+                <span className={`font-mono font-bold ${parameters.energized ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {parameters.energized ? 'ENERGIZED (Active)' : 'DE-ENERGIZED (Relaxed)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateParameter('energized', !parameters.energized)}
+                className={`w-full py-2 px-3 rounded font-mono text-xs font-bold transition-all border ${
+                  parameters.energized
+                    ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300'
+                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {parameters.energized ? 'Coil Active (Click to De-energize)' : 'Coil Relaxed (Click to Energize)'}
+              </button>
             </div>
           )}
         </div>

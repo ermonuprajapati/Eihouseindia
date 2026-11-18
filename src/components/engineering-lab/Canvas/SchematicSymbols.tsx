@@ -620,6 +620,53 @@ export function SchematicSymbol({
           </g>
         );
 
+      case 'ACTUATOR_RGB_LED':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
+            <circle cx="-6" cy="-4" r="3.5" fill="#EF4444" />
+            <circle cx="6" cy="-4" r="3.5" fill="#10B981" />
+            <circle cx="0" cy="6" r="3.5" fill="#3B82F6" />
+            <text x="0" y="-12" fill="#94A3B8" fontSize="6.5" fontFamily="monospace" textAnchor="middle">
+              RGB LED
+            </text>
+          </g>
+        );
+
+      case 'DISPLAY_7SEG':
+        return (
+          <g>
+            <rect x="-24" y="-30" width="48" height="60" rx="3" stroke={strokeColor} strokeWidth="2" fill="#030712" />
+            {/* 7-Segment segments in faint red */}
+            <line x1="-12" y1="-20" x2="12" y2="-20" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="-14" y1="-18" x2="-14" y2="-4" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="14" y1="-18" x2="14" y2="-4" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="-12" y1="-2" x2="12" y2="-2" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="-14" y1="0" x2="-14" y2="14" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="14" y1="0" x2="14" y2="14" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <line x1="-12" y1="16" x2="12" y2="16" stroke="#EF4444" strokeWidth="3" strokeLinecap="round" />
+            <circle cx="18" cy="18" r="2" fill="#EF4444" />
+          </g>
+        );
+
+      case 'REGULATOR_7805':
+      case 'REGULATOR_7812':
+      case 'REGULATOR_LM317':
+        return (
+          <g>
+            <rect x="-35" y="-22" width="70" height="44" rx="3" stroke="#0284C7" strokeWidth="2" fill="#0B1E36" />
+            <text x="0" y="-4" fill="#38BDF8" fontSize="9" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              {type.replace('REGULATOR_', '')}
+            </text>
+            <text x="0" y="9" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">
+              LDO REG
+            </text>
+            <text x="-28" y="-12" fill="#10B981" fontSize="6" fontFamily="monospace">IN</text>
+            <text x="18" y="-12" fill="#38BDF8" fontSize="6" fontFamily="monospace">OUT</text>
+            <text x="-8" y="18" fill="#64748B" fontSize="6" fontFamily="monospace">GND</text>
+          </g>
+        );
+
       case 'ARDUINO_UNO':
       case 'ARDUINO_MEGA':
       case 'ARDUINO_NANO':

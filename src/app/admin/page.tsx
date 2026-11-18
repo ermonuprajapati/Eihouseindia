@@ -32,11 +32,13 @@ import {
   ShieldCheck,
   FileText,
   Edit3,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { UserTrafficAnalytics } from '@/components/admin/UserTrafficAnalytics';
+import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -150,7 +152,8 @@ type AdminSection =
   | 'media'
   | 'reports'
   | 'analytics'
-  | 'settings';
+  | 'settings'
+  | 'engineering-lab';
 
 export default function AdminPanelPage() {
   const router = useRouter();
@@ -158,6 +161,11 @@ export default function AdminPanelPage() {
 
   const [section, setSection] = useState<AdminSection>('dashboard');
   const [loadingData, setLoadingData] = useState(true);
+
+  // Engineering Lab Admin filters
+  const [labSearchTerm, setLabSearchTerm] = useState('');
+  const [labCategoryFilter, setLabCategoryFilter] = useState('all');
+  const [labStatusFilter, setLabStatusFilter] = useState('all');
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -948,6 +956,7 @@ export default function AdminPanelPage() {
     { id: 'tools', label: `Engineering Tools (${toolsList.length})` },
     { id: 'library', label: `Engineering Library (${libraryList.length})` },
     { id: 'datasheets', label: `Datasheet Finder (${datasheetsList.length})` },
+    { id: 'engineering-lab', label: `Engineering Lab Ecosystem (${COMPONENT_CATALOG.length})` },
     { id: 'suppliers', label: `Suppliers (Not in Store) (${suppliersList.length})` },
     { id: 'all-articles', label: 'All Articles' },
     { id: 'published', label: 'Published Articles' },
@@ -1979,6 +1988,230 @@ export default function AdminPanelPage() {
                               </tr>
                             ))
                           )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'engineering-lab' && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                            <Cpu className="h-6 w-6 text-primary" />
+                            Engineering Lab Ecosystem ({COMPONENT_CATALOG.length} Verified Components)
+                          </h2>
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 gap-1 border-slate-300"
+                          >
+                            <Link href="/engineering-lab" target="_blank" rel="noopener noreferrer">
+                              <span>Open Engineering Lab</span>
+                              <ExternalLink className="h-3 w-3 text-slate-400" />
+                            </Link>
+                          </Button>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Central verification and curation console for all electronics, embedded MCU, digital logic, and industrial components.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const blob = new Blob([JSON.stringify(COMPONENT_CATALOG, null, 2)], {
+                              type: 'application/json',
+                            });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `ei_house_component_catalog_${new Date().toISOString().slice(0, 10)}.json`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                            toast.success(`Exported ${COMPONENT_CATALOG.length} verified components manifest.`);
+                          }}
+                        >
+                          <FileText className="h-4 w-4 mr-1.5 text-slate-500" />
+                          <span>Export Catalog JSON</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Architectural Solver & Hardware Telemetry Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-xs font-semibold uppercase text-slate-500">MNA SPICE Solvers</div>
+                        <div className="mt-1 text-2xl font-bold text-emerald-600 font-mono">
+                          {COMPONENT_CATALOG.filter((c) => c.simulationStatus === 'full_mna').length}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">Nodal matrix transient analysis</div>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-xs font-semibold uppercase text-slate-500">MCU Target Boards</div>
+                        <div className="mt-1 text-2xl font-bold text-purple-600 font-mono">
+                          {COMPONENT_CATALOG.filter((c) => c.simulationStatus === 'transpiled_mcu').length}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">AVR, ESP32, STM32, RP2040</div>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-xs font-semibold uppercase text-slate-500">Behavioral ICs</div>
+                        <div className="mt-1 text-2xl font-bold text-blue-600 font-mono">
+                          {COMPONENT_CATALOG.filter((c) => c.simulationStatus === 'behavioral').length}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">Digital logic &amp; state machines</div>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-xs font-semibold uppercase text-slate-500">IPC Footprints</div>
+                        <div className="mt-1 text-2xl font-bold text-cyan-600 font-mono">
+                          {COMPONENT_CATALOG.length}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">IPC-7351 2D PCB &amp; 3D models</div>
+                      </div>
+                    </div>
+
+                    {/* Filter and Search Bar */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          placeholder="Search component by name, MPN (e.g. 1N4148, NE555), or designator..."
+                          value={labSearchTerm}
+                          onChange={(e) => setLabSearchTerm(e.target.value)}
+                          className="pl-9 bg-white"
+                        />
+                      </div>
+                      <select
+                        value={labCategoryFilter}
+                        onChange={(e) => setLabCategoryFilter(e.target.value)}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                      >
+                        <option value="all">All Categories</option>
+                        <option value="passive">Passives</option>
+                        <option value="power">Power Sources</option>
+                        <option value="semiconductors">Semiconductors</option>
+                        <option value="analog_ics">Analog ICs</option>
+                        <option value="digital_logic">Digital Logic</option>
+                        <option value="microcontrollers">Microcontrollers</option>
+                        <option value="sensors">Sensors</option>
+                        <option value="displays">Displays</option>
+                        <option value="actuators">Actuators</option>
+                        <option value="instruments">Virtual Instruments</option>
+                        <option value="industrial">Industrial Electrical</option>
+                      </select>
+
+                      <select
+                        value={labStatusFilter}
+                        onChange={(e) => setLabStatusFilter(e.target.value)}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                      >
+                        <option value="all">All Simulation Tiers</option>
+                        <option value="full_mna">SPICE MNA</option>
+                        <option value="transpiled_mcu">MCU VM</option>
+                        <option value="behavioral">Behavioral</option>
+                        <option value="design_only">CAD Only</option>
+                      </select>
+                    </div>
+
+                    {/* Components Table */}
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Component / Part</th>
+                            <th className="px-4 py-3">Category</th>
+                            <th className="px-4 py-3">Simulation Status</th>
+                            <th className="px-4 py-3">Pins</th>
+                            <th className="px-4 py-3">IPC Footprint</th>
+                            <th className="px-4 py-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 font-mono text-xs">
+                          {COMPONENT_CATALOG.filter((c) => {
+                            if (labSearchTerm) {
+                              const q = labSearchTerm.toLowerCase();
+                              const matchName = c.name.toLowerCase().includes(q);
+                              const matchType = c.type.toLowerCase().includes(q);
+                              const matchMpn = c.manufacturerPartNumber?.toLowerCase().includes(q);
+                              if (!matchName && !matchType && !matchMpn) return false;
+                            }
+                            if (labCategoryFilter !== 'all' && c.category !== labCategoryFilter) return false;
+                            if (labStatusFilter !== 'all' && c.simulationStatus !== labStatusFilter) return false;
+                            return true;
+                          }).map((comp) => (
+                            <tr key={comp.type} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-sans font-semibold text-slate-900">{comp.name}</div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono text-emerald-600 font-bold">{comp.type}</span>
+                                  {comp.manufacturerPartNumber && (
+                                    <span className="bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                      MPN: {comp.manufacturerPartNumber}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 capitalize text-slate-700">
+                                {comp.category.replace(/_/g, ' ')}
+                                {comp.subCategory && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {comp.subCategory.replace(/_/g, ' ')}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {comp.simulationStatus === 'full_mna' && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                                    <Zap className="h-3 w-3" />
+                                    SPICE MNA
+                                  </span>
+                                )}
+                                {comp.simulationStatus === 'transpiled_mcu' && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 border border-purple-200">
+                                    <Cpu className="h-3 w-3" />
+                                    MCU VM
+                                  </span>
+                                )}
+                                {comp.simulationStatus === 'behavioral' && (
+                                  <span className="inline-flex items-center rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                                    Behavioral
+                                  </span>
+                                )}
+                                {comp.simulationStatus === 'design_only' && (
+                                  <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 border border-slate-200">
+                                    CAD Only
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 font-bold">
+                                {comp.pins.length} Pins
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 text-[11px]">
+                                {comp.footprint.split(':')[1] || comp.footprint}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs text-primary"
+                                >
+                                  <Link href={`/engineering-lab?add=${comp.type}`} target="_blank">
+                                    <span>Simulate</span>
+                                    <ExternalLink className="h-3 w-3 ml-1" />
+                                  </Link>
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>

@@ -637,6 +637,9 @@ export function EngineeringLabApp() {
               }));
               toast.info(`Updated PCB dimensions to ${widthMm}x${heightMm} mm`);
             }}
+            onUpdatePcb={(updatedPcb) => {
+              setProject((p) => ({ ...p, pcb: updatedPcb }));
+            }}
             is3DMode={false}
           />
         )}
@@ -651,6 +654,9 @@ export function EngineeringLabApp() {
                 ...p,
                 pcb: { ...p.pcb, widthMm, heightMm },
               }));
+            }}
+            onUpdatePcb={(updatedPcb) => {
+              setProject((p) => ({ ...p, pcb: updatedPcb }));
             }}
             is3DMode={true}
           />
