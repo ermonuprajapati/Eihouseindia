@@ -30,7 +30,7 @@ export class DrcEngine {
       minEdgeClearanceMm = 1.0,
       minTrackWidthMm = 0.15,
       minClearanceMm = 0.2,
-      minHoleClearanceMm: _minHoleClearanceMm = 0.3,
+      minHoleClearanceMm = 0.3,
     } = opts;
 
     const violations: DrcViolation[] = [];
@@ -116,6 +116,26 @@ export class DrcEngine {
               location: m1,
             });
           }
+        }
+      }
+    }
+
+    // 4. Drill Hole Clearance Check (< minHoleClearanceMm)
+    for (let i = 0; i < pads.length; i++) {
+      for (let j = i + 1; j < pads.length; j++) {
+        const p1 = pads[i];
+        const p2 = pads[j];
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        const minAllowed = (p1.holeMm + p2.holeMm) / 2 + minHoleClearanceMm;
+        if (dist < minAllowed && dist > 0.001) {
+          violations.push({
+            id: `drc_hole_clear_${p1.id}_${p2.id}`,
+            rule: 'hole_clearance',
+            message: `Hole clearance between pad ${p1.id} and ${p2.id} is below ${minHoleClearanceMm}mm.`,
+            severity: 'error',
+            targetId: p1.id,
+            location: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
+          });
         }
       }
     }
