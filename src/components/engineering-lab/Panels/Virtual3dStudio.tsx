@@ -16,6 +16,8 @@ import {
   Plus,
   Trash2,
   RotateCw,
+  Scissors,
+  Unplug,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,6 +34,7 @@ interface Virtual3dStudioProps {
   onDeleteComponent?: (id: string) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire?: (wireId: string) => void;
+  onDisconnectWire?: (wireId: string) => void;
   isSimulating: boolean;
   simulationStates: Record<string, { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean }>;
   wireCurrents?: Record<string, number>;
@@ -62,6 +65,7 @@ export function Virtual3dStudio({
   onDeleteComponent,
   onAddWire,
   onDeleteWire,
+  onDisconnectWire,
   isSimulating,
   simulationStates,
   wireCurrents,
@@ -112,6 +116,13 @@ export function Virtual3dStudio({
 
   // Breadboard visual presence state
   const [hasBreadboard, setHasBreadboard] = useState<boolean>(true);
+
+  // 3D Wire Context Menu State
+  const [wireContextMenu, setWireContextMenu] = useState<{
+    wireId: string;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
 
   // Dynamic animation loop for 3D current flow and animated actuators
   useEffect(() => {
@@ -295,6 +306,59 @@ export function Virtual3dStudio({
       if (d < minDist) minDist = d;
     }
     return minDist;
+  };
+
+  // Disconnect start pin and immediately start re-wiring from end pin
+  const handleDisconnectStart = (wire: CircuitWire) => {
+    const toComp = components.find((c) => c.id === wire.toCompId);
+    const toPin = toComp?.pins.find((p) => p.id === wire.toPinId);
+    if (onDeleteWire) onDeleteWire(wire.id);
+    if (toComp) {
+      const p3d = getComponentPinWorld3D(toComp, wire.toPinId);
+      setActiveWireStart({
+        compId: toComp.id,
+        pinId: wire.toPinId,
+        pinName: toPin?.name || wire.toPinId,
+        x3d: p3d.x,
+        y3d: p3d.y,
+        z3d: p3d.z,
+      });
+      setActiveWireColor(wire.color || '#3B82F6');
+      onSelectWire?.(null);
+      toast.info(`Disconnected from start. Click any pin in 3D to re-connect from ${toComp.label} [${toPin?.name || wire.toPinId}].`);
+    }
+  };
+
+  // Disconnect end pin and immediately start re-wiring from start pin
+  const handleDisconnectEnd = (wire: CircuitWire) => {
+    const fromComp = components.find((c) => c.id === wire.fromCompId);
+    const fromPin = fromComp?.pins.find((p) => p.id === wire.fromPinId);
+    if (onDeleteWire) onDeleteWire(wire.id);
+    if (fromComp) {
+      const p3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
+      setActiveWireStart({
+        compId: fromComp.id,
+        pinId: wire.fromPinId,
+        pinName: fromPin?.name || wire.fromPinId,
+        x3d: p3d.x,
+        y3d: p3d.y,
+        z3d: p3d.z,
+      });
+      setActiveWireColor(wire.color || '#3B82F6');
+      onSelectWire?.(null);
+      toast.info(`Disconnected from end. Click any pin in 3D to re-connect from ${fromComp.label} [${fromPin?.name || wire.fromPinId}].`);
+    }
+  };
+
+  // Disconnect / Unplug wire completely
+  const handleUnplugWire = (wireId: string) => {
+    if (onDisconnectWire) {
+      onDisconnectWire(wireId);
+    } else if (onDeleteWire) {
+      onDeleteWire(wireId);
+    }
+    onSelectWire?.(null);
+    toast.success('Disconnected jumper wire in 3D');
   };
 
   // Keyboard shortcut listener for deletion and rotation in 3D
@@ -1449,10 +1513,54 @@ export function Virtual3dStudio({
       onWheel={handleWheel}
       onContextMenu={(e) => {
         e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
         if (activeWireStart) {
           setActiveWireStart(null);
           toast.info('Cancelled wiring [Esc]');
-        } else if (selectedWireId) {
+          return;
+        }
+
+        // Check if right-clicked on an existing wire in 3D
+        let hitWire: CircuitWire | null = null;
+        for (const wire of wires) {
+          const fromComp = components.find((c) => c.id === wire.fromCompId);
+          const toComp = components.find((c) => c.id === wire.toCompId);
+          if (!fromComp || !toComp) continue;
+
+          const p1_3d = getComponentPinWorld3D(fromComp, wire.fromPinId);
+          const p2_3d = getComponentPinWorld3D(toComp, wire.toPinId);
+          const pt1 = project3D(p1_3d.x, p1_3d.y, p1_3d.z, canvas.width, canvas.height);
+          const pt2 = project3D(p2_3d.x, p2_3d.y, p2_3d.z, canvas.width, canvas.height);
+          const midX = (p1_3d.x + p2_3d.x) / 2;
+          const midY = Math.min(p1_3d.y, p2_3d.y) - 35;
+          const midZ = (p1_3d.z + p2_3d.z) / 2;
+          const ptMid = project3D(midX, midY, midZ, canvas.width, canvas.height);
+
+          const dist = distanceToCurve(mx, my, pt1, ptMid, pt2);
+          if (dist <= 18) {
+            hitWire = wire;
+            break;
+          }
+        }
+
+        if (hitWire) {
+          onSelectWire?.(hitWire.id);
+          onSelectComponent?.(null);
+          setWireContextMenu({
+            wireId: hitWire.id,
+            screenX: mx,
+            screenY: my,
+          });
+          return;
+        }
+
+        setWireContextMenu(null);
+        if (selectedWireId) {
           onSelectWire?.(null);
         } else if (selectedCompId) {
           onSelectComponent?.(null);
@@ -1643,6 +1751,36 @@ export function Virtual3dStudio({
               </div>
             )}
 
+            {/* Disconnect Endpoints and Re-route */}
+            <div className="flex items-center gap-1.5 border-l border-slate-700 pl-3">
+              <button
+                onClick={() => handleDisconnectStart(selWire)}
+                className="px-2.5 py-1.5 bg-sky-950/80 hover:bg-sky-850 border border-sky-600/70 text-sky-200 hover:text-white rounded font-semibold flex items-center gap-1 text-[11px] shadow transition-all cursor-pointer"
+                title={`Disconnect from ${fromComp?.label || 'Pin 1'} and re-route in 3D`}
+              >
+                <Scissors className="w-3 h-3 text-sky-400" />
+                <span>Disconnect Pin 1</span>
+              </button>
+
+              <button
+                onClick={() => handleDisconnectEnd(selWire)}
+                className="px-2.5 py-1.5 bg-sky-950/80 hover:bg-sky-850 border border-sky-600/70 text-sky-200 hover:text-white rounded font-semibold flex items-center gap-1 text-[11px] shadow transition-all cursor-pointer"
+                title={`Disconnect from ${toComp?.label || 'Pin 2'} and re-route in 3D`}
+              >
+                <Scissors className="w-3 h-3 text-sky-400" />
+                <span>Disconnect Pin 2</span>
+              </button>
+
+              <button
+                onClick={() => handleUnplugWire(selWire.id)}
+                className="px-2.5 py-1.5 bg-amber-950/80 hover:bg-amber-850 border border-amber-600/70 text-amber-200 hover:text-white rounded font-semibold flex items-center gap-1 text-[11px] shadow transition-all cursor-pointer"
+                title="Disconnect both ends (unplug jumper wire)"
+              >
+                <Unplug className="w-3 h-3 text-amber-400" />
+                <span>Disconnect Wire</span>
+              </button>
+            </div>
+
             {/* Primary Action: Delete Wire */}
             {onDeleteWire && (
               <button
@@ -1663,6 +1801,80 @@ export function Virtual3dStudio({
               className="text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800 text-xs cursor-pointer"
             >
               Deselect
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* 3D Wire Context Menu */}
+      {wireContextMenu && (() => {
+        const wire = wires.find((w) => w.id === wireContextMenu.wireId);
+        if (!wire) return null;
+        const fromComp = components.find((c) => c.id === wire.fromCompId);
+        const toComp = components.find((c) => c.id === wire.toCompId);
+
+        return (
+          <div
+            className="absolute z-40 bg-[#0B1528]/95 backdrop-blur-xl border border-slate-700/80 rounded-xl shadow-2xl p-1.5 min-w-[210px] text-xs font-mono space-y-1"
+            style={{
+              left: Math.min(wireContextMenu.screenX, (containerRef.current?.clientWidth || 600) - 230),
+              top: Math.min(wireContextMenu.screenY, (containerRef.current?.clientHeight || 400) - 210),
+            }}
+          >
+            <div className="px-2 py-1 text-[10px] text-slate-400 uppercase font-bold border-b border-slate-800 flex items-center justify-between">
+              <span>3D Jumper Options</span>
+              <button
+                onClick={() => setWireContextMenu(null)}
+                className="text-slate-500 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                handleDisconnectStart(wire);
+                setWireContextMenu(null);
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-slate-800/80 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Scissors className="w-3.5 h-3.5 text-sky-400" />
+              <span>Disconnect Pin 1 ({fromComp?.label || 'Start'})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                handleDisconnectEnd(wire);
+                setWireContextMenu(null);
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-slate-800/80 text-sky-400 hover:text-sky-300 rounded flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Scissors className="w-3.5 h-3.5 text-sky-400" />
+              <span>Disconnect Pin 2 ({toComp?.label || 'End'})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                handleUnplugWire(wire.id);
+                setWireContextMenu(null);
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-amber-950/60 text-amber-400 hover:text-amber-300 rounded flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Unplug className="w-3.5 h-3.5 text-amber-400" />
+              <span>Disconnect / Unplug Wire</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onDeleteWire?.(wire.id);
+                setWireContextMenu(null);
+                onSelectWire?.(null);
+                toast.success('Deleted wire in 3D');
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-red-950/60 text-red-400 hover:text-red-300 rounded flex items-center gap-2 cursor-pointer border-t border-slate-800 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              <span>Delete Wire [Del]</span>
             </button>
           </div>
         );

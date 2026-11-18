@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check } from 'lucide-react';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check, Unplug } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
@@ -299,16 +299,29 @@ export function PropertiesInspector({
           <div className="space-y-2 pt-2 border-t border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Wire Actions</span>
 
-            {/* Disconnect and Reconnect Button */}
+            {/* Disconnect and Reconnect Buttons */}
             {onDisconnectWire && (
-              <button
-                type="button"
-                onClick={() => onDisconnectWire(selectedWire.id)}
-                className="w-full py-2 px-3 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <Scissors className="w-3.5 h-3.5 text-sky-400" />
-                <span>Disconnect &amp; Re-route End</span>
-              </button>
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => onDisconnectWire(selectedWire.id)}
+                  className="w-full py-2 px-3 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  title="Disconnect wire and re-route connection"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Disconnect &amp; Re-route</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onDisconnectWire(selectedWire.id)}
+                  className="w-full py-2 px-3 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/60 text-amber-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  title="Unplug and disconnect wire"
+                >
+                  <Unplug className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Disconnect Wire (Unplug)</span>
+                </button>
+              </div>
             )}
 
             {/* Delete Wire Button */}

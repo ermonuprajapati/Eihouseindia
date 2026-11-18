@@ -776,6 +776,7 @@ export function EngineeringLabApp() {
               onDeleteComponent={handleDeleteComponent}
               onAddWire={handleAddWire}
               onDeleteWire={handleDeleteWire}
+              onDisconnectWire={handleDisconnectWire}
               isSimulating={isSimulating}
               simulationStates={simStates}
               wireCurrents={wireCurrents}
