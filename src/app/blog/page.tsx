@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description:
     'Explore peer-reviewed articles across electronics components, semiconductor technology, embedded systems, robotics, and AI.',
   alternates: {
-    canonical: `${SITE_CONFIG.url}/blog`,
+    canonical: `${SITE_CONFIG.url}/articles`,
   },
 };
 

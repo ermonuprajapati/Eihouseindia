@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   description:
     'Planned electronics component parametric catalog architecture for EIHOUSE INDIA covering passive, discrete, IC, MCU, and sensor families.',
   alternates: { canonical: `${SITE_CONFIG.url}/components` },
+  robots: {
+    index: false,
+    follow: true,
+  },
 };
 
 export default function ComponentsRoadmapPage() {

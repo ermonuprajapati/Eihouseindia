@@ -22,10 +22,23 @@ export async function generateMetadata({
     return { title: 'Category Not Found' };
   }
   const canonical = `${SITE_CONFIG.url}/category/${category.slug}`;
+
+  // Check if category has articles to prevent Google from indexing thin/empty taxonomy pages
+  const feed = await getPublishedPostsFeed({
+    categoryId: category.id,
+    limit: 1,
+    offset: 0,
+  });
+  const hasArticles = feed.total > 0;
+
   return {
     title: category.name,
     description: category.description,
     alternates: { canonical },
+    robots: {
+      index: hasArticles,
+      follow: true,
+    },
     openGraph: {
       title: `${category.name} — ${SITE_CONFIG.name}`,
       description: category.description,

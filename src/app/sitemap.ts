@@ -31,16 +31,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ],
     },
     {
-      url: `${baseUrl}/blog`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.95,
-    },
-    {
       url: `${baseUrl}/articles`,
       lastModified: now,
       changeFrequency: 'daily',
-      priority: 0.90,
+      priority: 0.95,
     },
     {
       url: `${baseUrl}/products`,
@@ -97,12 +91,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ],
     },
     {
-      url: `${baseUrl}/components`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.80,
-    },
-    {
       url: `${baseUrl}/community`,
       lastModified: now,
       changeFrequency: 'daily',
@@ -146,29 +134,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     getPublishedPosts({ limitCount: 2500 }),
   ]);
 
-  // 3. Category Routes with dynamic lastModified based on latest post
-  const categoryRoutes: MetadataRoute.Sitemap = categories.map((cat) => {
-    const postsInCat = publishedPosts.filter(
-      (p) => p.categoryId === cat.id || p.categorySlug === cat.slug
-    );
+  // 3. Category Routes: Strictly include ONLY categories with >= 1 published article
+  // Prevents Google Search Console "Crawled - currently not indexed" on empty taxonomy archives
+  const categoryRoutes: MetadataRoute.Sitemap = categories
+    .map((cat) => {
+      const postsInCat = publishedPosts.filter(
+        (p) => p.categoryId === cat.id || p.categorySlug === cat.slug
+      );
+      if (postsInCat.length === 0) return null;
 
-    let catLastMod = now;
-    if (postsInCat.length > 0) {
       const latestPost = postsInCat.reduce((latest, p) => {
         const pDate = new Date(p.updatedAt || p.publishedAt || p.createdAt).getTime();
         const lDate = new Date(latest.updatedAt || latest.publishedAt || latest.createdAt).getTime();
         return pDate > lDate ? p : latest;
       }, postsInCat[0]);
-      catLastMod = new Date(latestPost.updatedAt || latestPost.publishedAt || latestPost.createdAt);
-    }
 
-    return {
-      url: `${baseUrl}/category/${cat.slug}`,
-      lastModified: catLastMod,
-      changeFrequency: 'daily',
-      priority: 0.85,
-    };
-  });
+      return {
+        url: `${baseUrl}/category/${cat.slug}`,
+        lastModified: new Date(latestPost.updatedAt || latestPost.publishedAt || latestPost.createdAt),
+        changeFrequency: 'daily' as const,
+        priority: 0.85,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   // 4. Article Routes: Strictly include ONLY published posts with actual dates and image URLs
   const articleRoutes: MetadataRoute.Sitemap = publishedPosts
