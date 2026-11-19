@@ -195,7 +195,7 @@ export function ArduinoMega3D({
       ledOnActive: new THREE.MeshStandardMaterial({
         color: '#22C55E',
         emissive: new THREE.Color('#22C55E'),
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 2.5,
       }),
       ledOnInactive: new THREE.MeshStandardMaterial({
         color: '#14532D',
@@ -204,7 +204,7 @@ export function ArduinoMega3D({
       ledLActive: new THREE.MeshStandardMaterial({
         color: '#F59E0B',
         emissive: new THREE.Color('#F59E0B'),
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 2.0,
       }),
       ledLInactive: new THREE.MeshStandardMaterial({
         color: '#78350F',
@@ -277,6 +277,7 @@ export function ArduinoMega3D({
         position={[-44, 5.5, -14]}
         material={materials.usbMetal}
         castShadow
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggleUsb?.();
@@ -294,6 +295,7 @@ export function ArduinoMega3D({
       {isUsbPlugged ? (
         <group
           position={[-44, 5.5, -14]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -322,6 +324,7 @@ export function ArduinoMega3D({
         /* Unplugged Disconnected Indicator */
         <group
           position={[-52, 5.5, -14]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -400,7 +403,7 @@ export function ArduinoMega3D({
         <boxGeometry args={[1.6, 0.6, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[-16, 3.0, 12]} color="#22C55E" intensity={0.4} distance={20} />
+        <pointLight position={[-16, 3.0, 12]} color="#22C55E" intensity={1.8} distance={30} />
       )}
 
       {/* 2. L (Pin 13) Builtin Amber LED */}
@@ -408,7 +411,7 @@ export function ArduinoMega3D({
         <boxGeometry args={[1.6, 0.6, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[1, 3.0, -16]} color="#F59E0B" intensity={0.4} distance={20} />
+        <pointLight position={[1, 3.0, -16]} color="#F59E0B" intensity={1.2} distance={25} />
       )}
 
       {/* TX / RX SMD LEDs */}
@@ -478,6 +481,7 @@ export function ArduinoMega3D({
             {/* Invisible Responsive Click & Hover Target */}
             <mesh
               position={[0, 4.0, 0]}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

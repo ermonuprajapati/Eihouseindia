@@ -19,7 +19,7 @@ export function LabStatusBar({
   selectedCompLabel,
 }: LabStatusBarProps) {
   return (
-    <footer className="h-7 bg-[#070D18] text-slate-400 border-t border-slate-800/80 flex items-center justify-between px-3 text-[11px] font-mono select-none z-30">
+    <footer className="h-7 bg-[#070D18] text-slate-400 border-t border-slate-800/80 flex items-center justify-between px-3 text-[11px] font-mono select-none z-30 shrink-0">
       {/* Left Status Indicators */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">

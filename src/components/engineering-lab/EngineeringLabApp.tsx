@@ -143,6 +143,12 @@ export function EngineeringLabApp() {
         if (typeof parsed.inspectorWidth === 'number' && parsed.inspectorWidth >= 200) setInspectorWidth(parsed.inspectorWidth);
       }
 
+      // Responsive auto-collapse on screens < 1024px (Mobile, Tablet, Laptop mini)
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        setIsBrowserOpen(false);
+        setIsInspectorOpen(false);
+      }
+
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const shareParam = params.get('share') || params.get('data');
@@ -729,7 +735,7 @@ export function EngineeringLabApp() {
   const selectedWire = project.wires.find((w) => w.id === selectedWireId) || null;
 
   return (
-    <div className="flex flex-col h-screen h-[100dvh] w-full max-w-full overflow-hidden bg-[#070D18]">
+    <div className="flex flex-col h-[100dvh] w-full max-w-[100vw] overflow-hidden bg-[#070D18]">
       {/* Top Application Header */}
       <LabHeader
         projectTitle={project.title}
@@ -772,10 +778,16 @@ export function EngineeringLabApp() {
       />
 
       {/* Main Workspace Body */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 min-h-0 flex overflow-hidden relative">
         {/* Schematic Mode */}
         {activeMode === 'schematic' && (
           <>
+            {isBrowserOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                onClick={() => setIsBrowserOpen(false)}
+              />
+            )}
             <ComponentBrowser
               onAddComponent={handleAddComponent}
               existingComponents={project.components}
@@ -785,7 +797,7 @@ export function EngineeringLabApp() {
               onWidthChange={setBrowserWidth}
             />
 
-            <main className="flex-1 h-full relative overflow-hidden">
+            <main className="flex-1 min-h-0 min-w-0 h-full relative overflow-hidden">
               <SchematicCanvas
                 components={project.components}
                 wires={project.wires}
@@ -862,6 +874,12 @@ export function EngineeringLabApp() {
               />
             </main>
 
+            {isInspectorOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                onClick={() => setIsInspectorOpen(false)}
+              />
+            )}
             <PropertiesInspector
               component={selectedComponent}
               selectedWire={selectedWire}

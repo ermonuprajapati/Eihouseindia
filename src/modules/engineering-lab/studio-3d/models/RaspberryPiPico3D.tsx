@@ -105,7 +105,7 @@ export function RaspberryPiPico3D({
       ledOnActive: new THREE.MeshStandardMaterial({
         color: '#22C55E',
         emissive: new THREE.Color('#22C55E'),
-        emissiveIntensity: 1.0,
+        emissiveIntensity: 2.5,
       }),
       ledOnInactive: new THREE.MeshStandardMaterial({
         color: '#14532D',
@@ -113,6 +113,55 @@ export function RaspberryPiPico3D({
       }),
     };
   }, [isSelected, usbHovered]);
+
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 420;
+    canvas.height = 1020;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 420, 1020);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Board Branding
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText('Raspberry Pi', 210, 510);
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText('Pico (RP2040)', 210, 545);
+
+    // Left row pin labels (from top to bottom)
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'left';
+    const leftNames = [
+      'GP0', 'GP1', 'GND', 'GP2', 'GP3', 'GP4', 'GP5', 'GND',
+      'GP6', 'GP7', 'GP8', 'GP9', 'GND', 'GP10', 'GP11', 'GP12',
+      'GP13', 'GND', 'GP14', 'GP15'
+    ];
+    leftNames.forEach((name, i) => {
+      const y = 50 + i * 48;
+      ctx.fillText(name, 35, y);
+    });
+
+    // Right row pin labels (from bottom to top)
+    ctx.textAlign = 'right';
+    const rightNames = [
+      'GP16', 'GP17', 'GND', 'GP18', 'GP19', 'GP20', 'GP21', 'GND',
+      'GP22', 'RUN', 'GP26', 'GP27', 'GND', 'GP28', 'ADC_REF', '3V3',
+      '3V3_EN', 'GND', 'VSYS', 'VBUS'
+    ];
+    rightNames.forEach((name, i) => {
+      const y = 962 - i * 48;
+      ctx.fillText(name, 385, y);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
 
   const activePowered = isUsbPlugged || isPowered;
 
@@ -131,6 +180,14 @@ export function RaspberryPiPico3D({
         <boxGeometry args={[21, 1.0, 51]} />
       </mesh>
 
+      {/* Silkscreen Pin Labels Texture Overlay */}
+      {silkscreenTexture && (
+        <mesh position={[0, 1.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[20.8, 50.8]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+        </mesh>
+      )}
+
       {/* RP2040 Dual-Core MCU (7mm x 7mm QFN-56) */}
       <mesh position={[0, 1.8, 3]} material={materials.rp2040} castShadow>
         <boxGeometry args={[7, 0.8, 7]} />
@@ -146,6 +203,7 @@ export function RaspberryPiPico3D({
         position={[0, 2.2, -24.5]}
         material={materials.usbMetal}
         castShadow
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggleUsb?.();
@@ -163,6 +221,7 @@ export function RaspberryPiPico3D({
       {isUsbPlugged && (
         <group
           position={[0, 2.2, -27]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -196,7 +255,7 @@ export function RaspberryPiPico3D({
         <boxGeometry args={[1.2, 0.5, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[-5, 2.5, -21]} color="#22C55E" intensity={0.4} distance={15} />
+        <pointLight position={[-5, 2.5, -21]} color="#22C55E" intensity={1.8} distance={25} />
       )}
 
       {/* Header Receptacles with Recessed Sockets & Cyan Hover (2 x 20 pins) */}
@@ -229,6 +288,7 @@ export function RaspberryPiPico3D({
             {/* Interactive Click & Hover Target */}
             <mesh
               position={[0, 0.5, 0]}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

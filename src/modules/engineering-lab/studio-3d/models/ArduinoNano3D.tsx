@@ -77,7 +77,7 @@ export function ArduinoNano3D({
       ledOnActive: new THREE.MeshStandardMaterial({
         color: '#22C55E',
         emissive: new THREE.Color('#22C55E'),
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 2.5,
       }),
       ledOnInactive: new THREE.MeshStandardMaterial({
         color: '#14532D',
@@ -86,10 +86,49 @@ export function ArduinoNano3D({
       ledLActive: new THREE.MeshStandardMaterial({
         color: '#F59E0B',
         emissive: new THREE.Color('#F59E0B'),
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 2.0,
       }),
     };
   }, [isSelected, usbHovered]);
+
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 864;
+    canvas.height = 356;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 864, 356);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Center branding
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('NANO V3', 520, 160);
+    ctx.font = '16px monospace';
+    ctx.fillText('ATmega328P', 520, 195);
+
+    // Left row pin labels
+    ctx.font = 'bold 16px monospace';
+    const leftLabels = ['TX', 'RX', 'RST', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'];
+    leftLabels.forEach((lbl, i) => {
+      const x = 70 + i * 51;
+      ctx.fillText(lbl, x, 40);
+    });
+
+    // Right row pin labels
+    const rightLabels = ['D13', '3V3', 'REF', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', '5V', 'RST', 'GND', 'VIN'];
+    rightLabels.forEach((lbl, i) => {
+      const x = 70 + i * 51;
+      ctx.fillText(lbl, x, 316);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
 
   const activePowered = isUsbPlugged || isPowered;
 
@@ -100,10 +139,19 @@ export function ArduinoNano3D({
         <boxGeometry args={[43.2, 1.6, 17.8]} />
       </mesh>
 
+      {/* Silkscreen Pin Labels Texture Overlay */}
+      {silkscreenTexture && (
+        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[43.0, 17.6]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+        </mesh>
+      )}
+
       {/* Mini-USB Port */}
       <mesh
         position={[-20, 2.5, 0]}
         material={materials.usbMetal}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggleUsb?.();
@@ -121,6 +169,7 @@ export function ArduinoNano3D({
       {isUsbPlugged ? (
         <group
           position={[-20, 2.5, 0]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -175,11 +224,14 @@ export function ArduinoNano3D({
         <boxGeometry args={[1.2, 0.4, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[-5, 2.5, 4.5]} color="#22C55E" intensity={0.5} distance={15} />
+        <pointLight position={[-5, 2.5, 4.5]} color="#22C55E" intensity={1.8} distance={25} />
       )}
       <mesh position={[-5, 1.7, -4.5]} material={activePowered ? materials.ledLActive : materials.ledOnInactive}>
         <boxGeometry args={[1.2, 0.4, 0.8]} />
       </mesh>
+      {activePowered && (
+        <pointLight position={[-5, 2.5, -4.5]} color="#F59E0B" intensity={1.2} distance={20} />
+      )}
 
       {/* 30 DIP Header Pins with Recessed Sockets & Cyan Hover */}
       {NANO_PINS.map((pin) => {
@@ -210,6 +262,7 @@ export function ArduinoNano3D({
             {/* Interactive Click & Hover Target */}
             <mesh
               position={[0, 0.5, 0]}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

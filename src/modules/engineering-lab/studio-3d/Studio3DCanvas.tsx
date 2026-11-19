@@ -397,6 +397,7 @@ export function Studio3DCanvas({
   const [hoveredPinInfo, setHoveredPinInfo] = useState<{ compId: string; pinName: string } | null>(null);
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
   const draggingCompRef = useRef<{ id: string; startPos: [number, number, number] } | null>(null);
+  const pointerDownPosRef = useRef<{ clientX: number; clientY: number; compId: string } | null>(null);
 
   // Compute occupied breadboard hole IDs for collision-free snapping (1 hole = 1 pin)
   const occupiedHoleIds = useMemo(() => {
@@ -414,18 +415,40 @@ export function Studio3DCanvas({
     return set;
   }, [wires3d, components3d, draggingCompId]);
 
-  // Window pointerup listener guarantees OrbitControls are always re-enabled after drag
+  // Window pointer listeners enforce 6px drag threshold and re-enable OrbitControls after drag
   useEffect(() => {
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      if (pointerDownPosRef.current && !draggingCompRef.current) {
+        const dx = e.clientX - pointerDownPosRef.current.clientX;
+        const dy = e.clientY - pointerDownPosRef.current.clientY;
+        if (Math.hypot(dx, dy) >= 6) {
+          const compId = pointerDownPosRef.current.compId;
+          const comp = components3d.find((c) => c.id === compId);
+          if (comp) {
+            if (controlsRef.current) controlsRef.current.enabled = false;
+            draggingCompRef.current = { id: compId, startPos: [comp.x3d, comp.y3d, comp.z3d] };
+            setDraggingCompId(compId);
+          }
+        }
+      }
+    };
+
     const handleGlobalPointerUp = () => {
+      pointerDownPosRef.current = null;
       if (draggingCompRef.current) {
         draggingCompRef.current = null;
         setDraggingCompId(null);
         if (controlsRef.current) controlsRef.current.enabled = true;
       }
     };
+
+    window.addEventListener('pointermove', handleGlobalPointerMove);
     window.addEventListener('pointerup', handleGlobalPointerUp);
-    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
-  }, []);
+    return () => {
+      window.removeEventListener('pointermove', handleGlobalPointerMove);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+  }, [components3d]);
 
   const toggleUsb = useCallback((compId: string) => {
     if (onToggleMcuUsb) {
@@ -798,10 +821,37 @@ export function Studio3DCanvas({
         />
         <directionalLight position={[-80, 80, -60]} intensity={0.8} color="#94A3B8" />
 
+        {/* Grounded ESD Antistatic Workbench Mat */}
+        <group position={[0, -0.1, 0]}>
+          {/* Main ESD Mat Body */}
+          <mesh receiveShadow position={[0, 0, 0]}>
+            <boxGeometry args={[440, 0.2, 280]} />
+            <meshStandardMaterial
+              color="#0f172a"
+              roughness={0.85}
+              metalness={0.08}
+            />
+          </mesh>
+          {/* Mat Bevel Outer Rim */}
+          <mesh receiveShadow position={[0, -0.05, 0]}>
+            <boxGeometry args={[444, 0.2, 284]} />
+            <meshStandardMaterial color="#090d16" roughness={0.9} />
+          </mesh>
+          {/* Brass Grounding Snap Stud in Corner */}
+          <mesh position={[205, 0.15, -125]}>
+            <cylinderGeometry args={[4, 4, 0.4, 24]} />
+            <meshStandardMaterial color="#d97706" metalness={0.85} roughness={0.25} />
+          </mesh>
+          <mesh position={[205, 0.35, -125]}>
+            <cylinderGeometry args={[2, 2, 0.4, 16]} />
+            <meshStandardMaterial color="#f59e0b" metalness={0.9} roughness={0.2} />
+          </mesh>
+        </group>
+
         {/* Workbench Grid Plane */}
         <Grid
           infiniteGrid
-          position={[0, -0.05, 0]}
+          position={[0, 0.05, 0]}
           cellSize={10}
           sectionSize={50}
           fadeDistance={400}
@@ -815,13 +865,16 @@ export function Studio3DCanvas({
           makeDefault
           enableDamping
           dampingFactor={0.08}
+          rotateSpeed={0.55}
+          panSpeed={0.75}
+          zoomSpeed={0.85}
           enablePan={true}
           screenSpacePanning={true}
           enableZoom={true}
           enableRotate={true}
-          maxPolarAngle={Math.PI / 2 - 0.02}
+          maxPolarAngle={Math.PI / 2 - 0.04}
           minDistance={15}
-          maxDistance={500}
+          maxDistance={350}
         />
 
         {/* Stable Frame Drag Controller */}
@@ -857,9 +910,11 @@ export function Studio3DCanvas({
             e.stopPropagation();
             onSelectComponent(comp.id);
             onSelectWire(null);
-            if (controlsRef.current) controlsRef.current.enabled = false;
-            draggingCompRef.current = { id: comp.id, startPos: [comp.x3d, comp.y3d, comp.z3d] };
-            setDraggingCompId(comp.id);
+            pointerDownPosRef.current = {
+              clientX: e.nativeEvent.clientX,
+              clientY: e.nativeEvent.clientY,
+              compId: comp.id,
+            };
           };
 
           if (comp.type === 'ARDUINO_MEGA') {
@@ -1921,8 +1976,20 @@ export function Studio3DCanvas({
         </div>
       )}
 
+      {/* MCU / Component Pin Hover HUD Badge */}
+      {hoveredPinInfo && (
+        <div className="absolute bottom-4 left-4 bg-slate-900/95 border border-cyan-500/80 rounded-lg px-3 py-1.5 text-xs font-mono text-white pointer-events-none z-20 shadow-xl flex items-center gap-2 backdrop-blur animate-in fade-in duration-100">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+          <span className="text-cyan-400 font-bold">
+            {components3d.find((c) => c.id === hoveredPinInfo.compId)?.label || hoveredPinInfo.compId}
+          </span>
+          <span className="text-slate-500">➔</span>
+          <span className="text-amber-300 font-bold">Pin: {hoveredPinInfo.pinName}</span>
+        </div>
+      )}
+
       {/* Breadboard Hole Hover Overlay */}
-      {hoveredHole && (
+      {hoveredHole && !hoveredPinInfo && (
         <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-700 rounded px-2.5 py-1 text-[11px] font-mono text-cyan-300 pointer-events-none z-20">
           📍 {hoveredHole.name} ({hoveredHole.tieGroup})
         </div>

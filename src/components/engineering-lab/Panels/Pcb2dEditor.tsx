@@ -1100,11 +1100,11 @@ export function Pcb2dEditor({
   const selectedComp = pcb.components?.find((c) => c.componentId === selectedCompId);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* ---------------------------------------------------- */}
       {/* Top Context-Aware PCB Toolbar */}
       {/* ---------------------------------------------------- */}
-      <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 gap-2 flex-wrap text-xs">
+      <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 gap-2 text-xs shrink-0 overflow-x-auto no-scrollbar">
         {/* Left Section: Modes & Tools */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 font-mono text-slate-300 pr-2 border-r border-slate-800">
@@ -1370,9 +1370,9 @@ export function Pcb2dEditor({
       {/* ---------------------------------------------------- */}
       {/* Main Canvas & Right Inspector */}
       {/* ---------------------------------------------------- */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Canvas Area */}
-        <div className="flex-1 relative flex items-center justify-center p-2 bg-[#050D1A] overflow-hidden">
+        <div className="flex-1 min-h-0 min-w-0 relative flex items-center justify-center p-2 bg-[#050D1A] overflow-hidden">
           {/* Canvas Viewport Controls Overlay */}
           <div className="absolute top-4 left-4 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur border border-slate-800 rounded-lg p-1 text-slate-300">
             <button
@@ -1687,7 +1687,7 @@ export function Pcb2dEditor({
         {/* ---------------------------------------------------- */}
         {/* Right Sidebar: DRC & Stackup Inspector */}
         {/* ---------------------------------------------------- */}
-        <div className="w-full lg:w-80 bg-slate-900 border-l border-slate-800 flex flex-col font-mono text-xs overflow-hidden">
+        <div className="w-full lg:w-72 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col font-mono text-xs overflow-y-auto">
           {/* Tab Navigation */}
           <div className="flex border-b border-slate-800 bg-slate-950 text-[11px]">
             <button

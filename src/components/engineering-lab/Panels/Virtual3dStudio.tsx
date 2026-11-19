@@ -735,10 +735,10 @@ export function Virtual3dStudio({
   return (
     <div className="relative w-full h-full flex flex-col bg-[#070D18] select-none overflow-hidden">
       {/* Top 3D Studio Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-10 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 z-10 shrink-0 overflow-hidden">
+        <div className="flex items-center gap-2 shrink-0">
           <Box className="w-4 h-4 text-cyan-400" />
-          <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider">
+          <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider hidden sm:inline">
             3D Virtual Studio
           </span>
           <button
@@ -751,14 +751,14 @@ export function Virtual3dStudio({
             }`}
             title={hasBreadboard ? 'Click to Remove 830-Point Solderless Breadboard' : 'Click to Add 830-Point Breadboard to Workbench'}
           >
-            <span>{hasBreadboard ? '✓ 830-Point Breadboard' : '+ Add Breadboard'}</span>
+            <span>{hasBreadboard ? '✓ 830-Pt Board' : '+ Breadboard'}</span>
           </button>
         </div>
 
         {/* Independent 3D Studio Action Controls */}
-        <div className="flex items-center gap-2 font-mono text-xs">
+        <div className="flex items-center gap-1.5 sm:gap-2 font-mono text-xs shrink-0">
           {/* Undo / Redo */}
-          <div className="flex items-center gap-1 border-r border-slate-700/60 pr-2">
+          <div className="flex items-center gap-0.5 border-r border-slate-700/60 pr-1.5">
             <button
               type="button"
               onClick={handleUndo3D}
@@ -790,31 +790,33 @@ export function Virtual3dStudio({
           <button
             type="button"
             onClick={handleNewBlank3D}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors cursor-pointer shrink-0"
             title="Start a fresh blank 3D circuit on breadboard"
           >
             <FilePlus className="w-3.5 h-3.5 text-cyan-400" />
-            <span>New Blank 3D</span>
+            <span className="hidden sm:inline">New Blank 3D</span>
           </button>
 
           <button
             type="button"
             onClick={handleImportFromSchematic}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors cursor-pointer shrink-0"
             title="Import all components and connections from 2D Schematic"
           >
             <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-            <span>Import from Schematic</span>
+            <span className="hidden md:inline">Import from Schematic</span>
+            <span className="md:hidden hidden sm:inline">Import</span>
           </button>
 
           <button
             type="button"
             onClick={handleSave3DProject}
-            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition-colors cursor-pointer shrink-0"
             title="Save 3D circuit locally and export as JSON"
           >
             <Save className="w-3.5 h-3.5" />
-            <span>Save 3D / Export JSON</span>
+            <span className="hidden sm:inline">Save 3D</span>
+            <span className="sm:hidden">Save</span>
           </button>
         </div>
       </div>

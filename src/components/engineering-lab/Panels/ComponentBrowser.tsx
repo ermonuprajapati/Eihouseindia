@@ -272,7 +272,7 @@ export function ComponentBrowser({
   return (
     <aside
       style={{ width }}
-      className="h-full bg-[#08101E] border-r border-slate-800 flex flex-col relative select-none z-20 shrink-0 text-slate-200"
+      className="h-full bg-[#08101E] border-r border-slate-800 flex flex-col fixed lg:relative inset-y-0 left-0 z-40 lg:z-20 select-none shrink-0 text-slate-200 shadow-2xl lg:shadow-none max-w-[85vw]"
     >
       {/* Header */}
       <div className="h-10 border-b border-slate-800/80 px-3 flex items-center justify-between bg-slate-900/70">

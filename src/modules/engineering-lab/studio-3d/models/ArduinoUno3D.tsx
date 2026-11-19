@@ -122,7 +122,7 @@ export function ArduinoUno3D({
       ledOnActive: new THREE.MeshStandardMaterial({
         color: '#22C55E',
         emissive: new THREE.Color('#22C55E'),
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 2.5,
       }),
       ledOnInactive: new THREE.MeshStandardMaterial({
         color: '#14532D',
@@ -348,7 +348,7 @@ export function ArduinoUno3D({
         <boxGeometry args={[1.6, 0.6, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[-14, 3.0, -8]} color="#22C55E" intensity={0.6} distance={25} />
+        <pointLight position={[-14, 3.0, -8]} color="#22C55E" intensity={1.8} distance={30} />
       )}
 
       {/* 2. L (Pin 13) Builtin Amber LED at [12, 1.8, -16] */}
@@ -408,6 +408,9 @@ export function ArduinoUno3D({
             {/* Invisible Responsive Click & Hover Target */}
             <mesh
               position={[0, 4.0, 0]}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

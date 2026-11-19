@@ -81,7 +81,7 @@ export function Esp32DevKit3D({
       ledPwrActive: new THREE.MeshStandardMaterial({
         color: '#EF4444', // Red power LED on ESP32
         emissive: new THREE.Color('#EF4444'),
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 2.5,
       }),
       ledInactive: new THREE.MeshStandardMaterial({
         color: '#7F1D1D',
@@ -89,6 +89,45 @@ export function Esp32DevKit3D({
       }),
     };
   }, [isSelected, usbHovered]);
+
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 570;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 1024, 570);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Branding
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('ESP32 DEVKIT V1', 400, 260);
+    ctx.font = '16px monospace';
+    ctx.fillText('DOIT / NodeMCU 30-Pin', 400, 300);
+
+    // Left row pin labels
+    ctx.font = 'bold 15px monospace';
+    const leftLabels = ['EN', 'VP', 'VN', '34', '35', '32', '33', '25', '26', '27', '14', '12', '13', 'GND', 'VIN'];
+    leftLabels.forEach((lbl, i) => {
+      const x = 70 + i * 62;
+      ctx.fillText(lbl, x, 40);
+    });
+
+    // Right row pin labels
+    const rightLabels = ['3V3', 'GND', 'D15', 'D2', 'D4', 'RX2', 'TX2', 'D5', 'D18', 'D19', 'D21', 'RX0', 'TX0', 'D22', 'D23'];
+    rightLabels.forEach((lbl, i) => {
+      const x = 70 + i * 62;
+      ctx.fillText(lbl, x, 530);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
 
   const activePowered = isUsbPlugged || isPowered;
 
@@ -98,6 +137,14 @@ export function Esp32DevKit3D({
       <mesh position={[0, 0.8, 0]} material={materials.pcb} castShadow receiveShadow>
         <boxGeometry args={[51.5, 1.6, 28.5]} />
       </mesh>
+
+      {/* Silkscreen Pin Labels Texture Overlay */}
+      {silkscreenTexture && (
+        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[51.2, 28.2]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+        </mesh>
+      )}
 
       {/* ESP-WROOM-32 Metallic RF Shield */}
       <mesh position={[8, 2.5, 0]} material={materials.rfShield} castShadow>
@@ -112,6 +159,7 @@ export function Esp32DevKit3D({
       <mesh
         position={[-23, 2.5, 0]}
         material={materials.usbMetal}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggleUsb?.();
@@ -129,6 +177,7 @@ export function Esp32DevKit3D({
       {isUsbPlugged ? (
         <group
           position={[-23, 2.5, 0]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -177,7 +226,7 @@ export function Esp32DevKit3D({
         <boxGeometry args={[1.2, 0.4, 0.8]} />
       </mesh>
       {activePowered && (
-        <pointLight position={[-12, 2.8, -5]} color="#EF4444" intensity={0.6} distance={20} />
+        <pointLight position={[-12, 2.8, -5]} color="#EF4444" intensity={1.8} distance={25} />
       )}
 
       {/* 30 Header Pins with Recessed Sockets & Cyan Hover */}
@@ -209,6 +258,7 @@ export function Esp32DevKit3D({
             {/* Interactive Click & Hover Target */}
             <mesh
               position={[0, 0.5, 0]}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

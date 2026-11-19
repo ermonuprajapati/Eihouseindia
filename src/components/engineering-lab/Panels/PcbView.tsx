@@ -75,11 +75,12 @@ export function PcbView({
   return (
     <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* 3D Top Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 shrink-0 overflow-hidden">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="flex items-center gap-1.5 font-mono text-xs text-slate-300">
             <Box className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold">3D Photorealistic PCB Visualizer</span>
+            <span className="font-bold hidden sm:inline">3D PCB Visualizer</span>
+            <span className="font-bold sm:hidden">PCB 3D</span>
           </div>
 
           <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800 font-mono text-[11px]">

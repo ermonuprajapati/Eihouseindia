@@ -246,7 +246,7 @@ export function PropertiesInspector({
     return (
       <aside
         style={{ width: `${width}px` }}
-        className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full text-slate-200 text-xs select-none relative shrink-0 overflow-y-auto"
+        className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full text-slate-200 text-xs select-none fixed lg:relative inset-y-0 right-0 z-40 lg:z-20 shrink-0 overflow-y-auto max-w-[85vw] shadow-2xl lg:shadow-none"
       >
         <div
           onMouseDown={(e) => {
@@ -427,7 +427,7 @@ export function PropertiesInspector({
     return (
       <aside
         style={{ width: `${width}px` }}
-        className="bg-[#0B1528] border-l border-slate-800 flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs select-none relative shrink-0"
+        className="bg-[#0B1528] border-l border-slate-800 flex flex-col items-center justify-center p-6 text-center text-slate-500 text-xs select-none fixed lg:relative inset-y-0 right-0 z-40 lg:z-20 shrink-0 max-w-[85vw] shadow-2xl lg:shadow-none"
       >
         <div
           onMouseDown={(e) => {
@@ -487,7 +487,7 @@ export function PropertiesInspector({
   return (
     <aside
       style={{ width: `${width}px` }}
-      className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full z-20 select-none shadow-2xl text-slate-200 relative shrink-0 transition-[width] duration-75"
+      className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full z-40 lg:z-20 select-none shadow-2xl lg:shadow-none text-slate-200 fixed lg:relative inset-y-0 right-0 shrink-0 transition-[width] duration-75 max-w-[85vw]"
     >
       {/* Draggable Resize Handle on Left Edge */}
       <div
