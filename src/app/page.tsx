@@ -34,6 +34,7 @@ import {
   getToolHeroImageUrl,
 } from '@/modules/tools/tool-service';
 import { SiliconCircuitMatrixAnimation } from '@/components/animations/SiliconCircuitMatrixAnimation';
+import { CoreEcosystemHub } from '@/components/home/CoreEcosystemHub';
 
 export const revalidate = 60;
 
@@ -241,18 +242,8 @@ export default async function HomePage() {
               </p>
             </div>
 
-            {/* Ecosystem Showcase Visual Infographic */}
-            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-lg max-w-4xl mx-auto bg-white p-2 sm:p-4 flex items-center justify-center">
-              <Image
-                src="/images/ecosystem/integrated-ecosystem.jpg"
-                alt="Integrated Engineering Education, Innovation, Products, Services and Technology Community Ecosystem"
-                width={460}
-                height={460}
-                sizes="(max-width: 500px) 92vw, 460px"
-                loading="lazy"
-                className="w-full h-auto max-h-[460px] object-contain rounded-xl"
-              />
-            </div>
+            {/* Ecosystem Showcase Visual Infographic: Interactive Core Hub */}
+            <CoreEcosystemHub />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-7 space-y-4 hover:shadow-xl hover:-translate-y-1.5 hover:border-slate-300 duration-300 transition-all flex flex-col justify-between">
