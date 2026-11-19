@@ -36,6 +36,19 @@ import {
   runElectricalRulesCheck,
   ErcViolation,
 } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+import {
+  Point,
+  ElbowOrientation,
+  getFullWireVertices,
+  extractWireSegments,
+  slideWireSegment,
+  dragWireCornerVertex,
+  calculateJunctionDots,
+  simplifyCollinearPoints,
+  computeOrthogonalVertices,
+  compute45Vertices,
+  verticesToSvgPath,
+} from '@/modules/engineering-lab/circuit-engine/wire-router';
 
 export interface SchematicCanvasProps {
   components: CircuitComponent[];
@@ -106,8 +119,24 @@ export function computeWireSvgPath(
   p1: { x: number; y: number },
   p2: { x: number; y: number },
   waypoints?: { x: number; y: number }[],
-  style: WireRoutingStyle = 'orthogonal'
+  style: WireRoutingStyle = 'orthogonal',
+  elbow: ElbowOrientation = 'horizontal-first',
+  isDrawingLive = false
 ): string {
+  if (isDrawingLive) {
+    const lastPt = waypoints && waypoints.length > 0 ? waypoints[waypoints.length - 1] : p1;
+    let liveLeg: { x: number; y: number }[] = [];
+    if (style === 'straight') {
+      liveLeg = [lastPt, p2];
+    } else if (style === 'diagonal45') {
+      liveLeg = compute45Vertices(lastPt, p2, elbow);
+    } else {
+      liveLeg = computeOrthogonalVertices(lastPt, p2, elbow);
+    }
+    const allPts = [p1, ...(waypoints || []), ...liveLeg.slice(1)];
+    return verticesToSvgPath(allPts);
+  }
+
   const points = [p1, ...(waypoints || []), p2];
   if (points.length < 2) return '';
 
@@ -154,6 +183,12 @@ export function computeWireSvgPath(
     d += ` L ${p2.x} ${p2.y}`;
     return d;
   }
+
+  if (elbow === 'vertical-first') {
+    const midY = (p1.y + p2.y) / 2;
+    return `M ${p1.x} ${p1.y} L ${p1.x} ${midY} L ${p2.x} ${midY} L ${p2.x} ${p2.y}`;
+  }
+
   const midX = (p1.x + p2.x) / 2;
   return `M ${p1.x} ${p1.y} L ${midX} ${p1.y} L ${midX} ${p2.y} L ${p2.x} ${p2.y}`;
 }
@@ -186,9 +221,24 @@ export function SchematicCanvas({
 }: SchematicCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // STEP 2: Strict Mode Separation ('select' | 'wire' | 'pan' | 'delete' | 'net_highlight')
+  // Tool Modes ('select' | 'wire' | 'pan' | 'delete' | 'net_highlight')
   const [toolMode, setToolMode] = useState<WireInteractionMode>('select');
-  const [activeRoutingStyle] = useState<WireRoutingStyle>('orthogonal');
+  const [activeRoutingStyle, setActiveRoutingStyle] = useState<WireRoutingStyle>('orthogonal');
+  const [elbowOrientation, setElbowOrientation] = useState<ElbowOrientation>('horizontal-first');
+
+  // Interactive Wire Segment & Vertex Dragging
+  const [draggingSegment, setDraggingSegment] = useState<{
+    wireId: string;
+    segmentIndex: number;
+    isHorizontal: boolean;
+    startCoord: number;
+    initialWaypoints: { x: number; y: number }[];
+  } | null>(null);
+
+  const [draggingVertex, setDraggingVertex] = useState<{
+    wireId: string;
+    vertexIndex: number;
+  } | null>(null);
 
   // Zoom & Pan transforms
   const [zoom, setZoom] = useState(1.0);
@@ -442,6 +492,11 @@ export function SchematicCanvas({
         setIsMarqueeSelecting(false);
         setSelectedCompIds(new Set());
         setSelectedWireIds(new Set());
+      } else if (e.key === ' ' || e.code === 'Space') {
+        if (activeWireStart && toolMode === 'wire') {
+          e.preventDefault();
+          setElbowOrientation((prev) => (prev === 'horizontal-first' ? 'vertical-first' : 'horizontal-first'));
+        }
       } else if (e.key === 'v' || e.key === 'V') {
         setToolMode('select');
       } else if (e.key === 'w' || e.key === 'W') {
@@ -506,11 +561,23 @@ export function SchematicCanvas({
     const curY = (e.clientY - rect.top - pan.y) / zoom;
 
     if (e.button === 0) {
-      // If drawing a wire, clicking canvas adds a waypoint
+      // If drawing a wire, clicking canvas locks a clean 90° corner waypoint
       if (activeWireStart && toolMode === 'wire') {
+        const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
         const snapX = Math.round(curX / 10) * 10;
         const snapY = Math.round(curY / 10) * 10;
-        setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+        if (activeRoutingStyle === 'orthogonal') {
+          const corner = elbowOrientation === 'horizontal-first'
+            ? { x: snapX, y: lastPt.y }
+            : { x: lastPt.x, y: snapY };
+          if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
+            setActiveWaypoints((prev) => [...prev, corner]);
+          } else {
+            setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+          }
+        } else {
+          setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+        }
         return;
       }
 
@@ -595,6 +662,73 @@ export function SchematicCanvas({
       return;
     }
 
+    // Interactive Wire Segment Dragging (Short / Long adjustment)
+    if (draggingSegment && onUpdateWire) {
+      const targetWire = wires.find((w) => w.id === draggingSegment.wireId);
+      if (targetWire) {
+        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
+        const toComp = components.find((c) => c.id === targetWire.toCompId);
+        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
+        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
+        if (fromComp && toComp && fromPin && toPin) {
+          const p1 = getPinWorldCoord(fromComp, fromPin);
+          const p2 = getPinWorldCoord(toComp, toPin);
+          const currentVertices = getFullWireVertices(
+            p1,
+            p2,
+            targetWire.points,
+            targetWire.style || activeRoutingStyle,
+            elbowOrientation
+          );
+          const targetCoord = draggingSegment.isHorizontal ? curCanvasY : curCanvasX;
+          const updatedWaypoints = slideWireSegment(
+            currentVertices,
+            draggingSegment.segmentIndex,
+            targetCoord,
+            10
+          );
+          onUpdateWire({
+            ...targetWire,
+            points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+          });
+          return;
+        }
+      }
+    }
+
+    // Interactive Corner Vertex Dragging
+    if (draggingVertex && onUpdateWire) {
+      const targetWire = wires.find((w) => w.id === draggingVertex.wireId);
+      if (targetWire) {
+        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
+        const toComp = components.find((c) => c.id === targetWire.toCompId);
+        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
+        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
+        if (fromComp && toComp && fromPin && toPin) {
+          const p1 = getPinWorldCoord(fromComp, fromPin);
+          const p2 = getPinWorldCoord(toComp, toPin);
+          const currentVertices = getFullWireVertices(
+            p1,
+            p2,
+            targetWire.points,
+            targetWire.style || activeRoutingStyle,
+            elbowOrientation
+          );
+          const updatedWaypoints = dragWireCornerVertex(
+            currentVertices,
+            draggingVertex.vertexIndex,
+            { x: curCanvasX, y: curCanvasY },
+            10
+          );
+          onUpdateWire({
+            ...targetWire,
+            points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+          });
+          return;
+        }
+      }
+    }
+
     // Multi-Component Dragging
     if (draggingCompId && dragInitialPositions.size > 0) {
       const deltaX = Math.round((curCanvasX - dragStartPoint.x) / gridSnapSize) * gridSnapSize;
@@ -609,6 +743,8 @@ export function SchematicCanvas({
   const handleMouseUp = () => {
     setIsPanning(false);
     setDraggingCompId(null);
+    setDraggingSegment(null);
+    setDraggingVertex(null);
     setIsMarqueeSelecting(false);
     setMarqueeStart(null);
     setMarqueeEnd(null);
@@ -637,12 +773,14 @@ export function SchematicCanvas({
       setActiveWaypoints([]);
     } else {
       if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
+        const cleanedWaypoints =
+          activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
         onAddWire({
           fromCompId: activeWireStart.compId,
           fromPinId: activeWireStart.pinId,
           toCompId: compId,
           toPinId: pinId,
-          points: activeWaypoints.length > 0 ? activeWaypoints : undefined,
+          points: cleanedWaypoints && cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
           style: activeRoutingStyle,
         });
       }
@@ -678,43 +816,32 @@ export function SchematicCanvas({
     setWireContextMenu(null);
   };
 
-  // Calculate Solder Junction Dots
+  // Calculate Electrical Solder Junction Dots (T-junctions & 3+ wire meeting nodes)
   const junctionDots = useMemo(() => {
-    const pointCounts = new Map<string, { count: number; x: number; y: number }>();
+    const wiresWithVertices = wires
+      .map((w) => {
+        const fromComp = components.find((c) => c.id === w.fromCompId);
+        const toComp = components.find((c) => c.id === w.toCompId);
+        const fromPin = fromComp?.pins.find((p) => p.id === w.fromPinId);
+        const toPin = toComp?.pins.find((p) => p.id === w.toPinId);
+        if (!fromComp || !toComp || !fromPin || !toPin) {
+          return { id: w.id, vertices: [] as Point[], netName: w.netName };
+        }
+        const p1 = getPinWorldCoord(fromComp, fromPin);
+        const p2 = getPinWorldCoord(toComp, toPin);
+        const vertices = getFullWireVertices(
+          p1,
+          p2,
+          w.points,
+          w.style || activeRoutingStyle,
+          elbowOrientation
+        );
+        return { id: w.id, vertices, netName: w.netName };
+      })
+      .filter((w) => w.vertices.length > 0);
 
-    for (const wire of wires) {
-      const fromComp = components.find((c) => c.id === wire.fromCompId);
-      const toComp = components.find((c) => c.id === wire.toCompId);
-      if (!fromComp || !toComp) continue;
-
-      const fromPin = fromComp.pins.find((p) => p.id === wire.fromPinId);
-      const toPin = toComp.pins.find((p) => p.id === wire.toPinId);
-      if (!fromPin || !toPin) continue;
-
-      const p1 = getPinWorldCoord(fromComp, fromPin);
-      const p2 = getPinWorldCoord(toComp, toPin);
-
-      const k1 = `${p1.x},${p1.y}`;
-      const k2 = `${p2.x},${p2.y}`;
-
-      const e1 = pointCounts.get(k1) || { count: 0, x: p1.x, y: p1.y };
-      e1.count += 1;
-      pointCounts.set(k1, e1);
-
-      const e2 = pointCounts.get(k2) || { count: 0, x: p2.x, y: p2.y };
-      e2.count += 1;
-      pointCounts.set(k2, e2);
-    }
-
-    const junctions: { x: number; y: number }[] = [];
-    pointCounts.forEach((val) => {
-      if (val.count >= 3) {
-        junctions.push({ x: val.x, y: val.y });
-      }
-    });
-
-    return junctions;
-  }, [wires, components]);
+    return calculateJunctionDots(wiresWithVertices);
+  }, [wires, components, activeRoutingStyle, elbowOrientation]);
 
   return (
     <div
@@ -765,6 +892,59 @@ export function SchematicCanvas({
         >
           <Spline className="w-3.5 h-3.5" />
           <span>Wire (W)</span>
+        </button>
+
+        {/* Wire Routing Style Toggle: 90° Ortho | 45° Chamfer | Straight */}
+        <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+          <button
+            onClick={() => setActiveRoutingStyle('orthogonal')}
+            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+              activeRoutingStyle === 'orthogonal'
+                ? 'bg-amber-600 text-white font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="90° Orthogonal Routing (Manhattan EDA Standard)"
+          >
+            90° Ortho
+          </button>
+          <button
+            onClick={() => setActiveRoutingStyle('diagonal45')}
+            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+              activeRoutingStyle === 'diagonal45'
+                ? 'bg-amber-600 text-white font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="45° Chamfered Routing"
+          >
+            45° Chamfer
+          </button>
+          <button
+            onClick={() => setActiveRoutingStyle('straight')}
+            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+              activeRoutingStyle === 'straight'
+                ? 'bg-amber-600 text-white font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="Straight Pin-to-Pin Direct Routing"
+          >
+            Straight
+          </button>
+        </div>
+
+        {/* Flip Elbow [Space] Toggle */}
+        <button
+          onClick={() => {
+            setElbowOrientation((prev) => (prev === 'horizontal-first' ? 'vertical-first' : 'horizontal-first'));
+            toast.info(elbowOrientation === 'horizontal-first' ? 'Elbow: Vertical-first' : 'Elbow: Horizontal-first');
+          }}
+          className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-colors border ${
+            elbowOrientation === 'horizontal-first'
+              ? 'text-cyan-400 bg-cyan-950/40 border-cyan-800/60 hover:bg-cyan-900/40'
+              : 'text-purple-400 bg-purple-950/40 border-purple-800/60 hover:bg-purple-900/40'
+          }`}
+          title="Flip Elbow Direction [Space] (Horizontal-first vs Vertical-first)"
+        >
+          <span>Flip [Space]</span>
         </button>
 
         {/* Net Label (N) */}
@@ -1030,7 +1210,9 @@ export function SchematicCanvas({
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)
             );
             const routingStyle = wire.style || activeRoutingStyle;
-            const pathData = computeWireSvgPath(p1, p2, wire.points, routingStyle);
+            const fullVertices = getFullWireVertices(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const segments = extractWireSegments(wire.id, fullVertices);
+            const pathData = computeWireSvgPath(p1, p2, wire.points, routingStyle, elbowOrientation);
             const isWireSelected = selectedWireId === wire.id || selectedWireIds.has(wire.id);
             const isHighlighted = highlightedNetId === wire.id;
             const wireBaseColor = isShorted
@@ -1084,6 +1266,111 @@ export function SchematicCanvas({
                   strokeWidth={isWireSelected ? 2.8 : 2}
                   className="transition-colors group-hover:stroke-amber-400"
                 />
+
+                {/* Interactive Draggable Segments & Midpoint Handles */}
+                {segments.map((seg, sIdx) => {
+                  const isH = seg.isHorizontal;
+                  const isV = seg.isVertical;
+                  const segMidX = (seg.p1.x + seg.p2.x) / 2;
+                  const segMidY = (seg.p1.y + seg.p2.y) / 2;
+                  return (
+                    <g key={`seg_${wire.id}_${sIdx}`}>
+                      <line
+                        x1={seg.p1.x}
+                        y1={seg.p1.y}
+                        x2={seg.p2.x}
+                        y2={seg.p2.y}
+                        stroke="transparent"
+                        strokeWidth={14}
+                        className={
+                          toolMode === 'select'
+                            ? isH
+                              ? 'cursor-ns-resize'
+                              : isV
+                              ? 'cursor-ew-resize'
+                              : 'cursor-pointer'
+                            : 'cursor-pointer'
+                        }
+                        onMouseDown={(e) => {
+                          if (e.button === 0 && toolMode === 'select') {
+                            e.stopPropagation();
+                            setWireSelected(wire.id);
+                            onSelectComponent(null);
+                            const rect = containerRef.current?.getBoundingClientRect();
+                            const cX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
+                            const cY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
+                            setDraggingSegment({
+                              wireId: wire.id,
+                              segmentIndex: sIdx,
+                              isHorizontal: isH,
+                              startCoord: isH ? cY : cX,
+                              initialWaypoints: wire.points ? [...wire.points] : [],
+                            });
+                          }
+                        }}
+                      />
+                      {/* Midpoint handle for selected wire */}
+                      {isWireSelected && seg.length > 20 && (
+                        <circle
+                          cx={segMidX}
+                          cy={segMidY}
+                          r={3.5}
+                          fill="#10B981"
+                          stroke="#0B1528"
+                          strokeWidth={1.5}
+                          className={
+                            isH
+                              ? 'cursor-ns-resize hover:scale-150 transition-transform'
+                              : 'cursor-ew-resize hover:scale-150 transition-transform'
+                          }
+                          onMouseDown={(e) => {
+                            if (e.button === 0 && toolMode === 'select') {
+                              e.stopPropagation();
+                              const rect = containerRef.current?.getBoundingClientRect();
+                              const cX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
+                              const cY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
+                              setDraggingSegment({
+                                wireId: wire.id,
+                                segmentIndex: sIdx,
+                                isHorizontal: isH,
+                                startCoord: isH ? cY : cX,
+                                initialWaypoints: wire.points ? [...wire.points] : [],
+                              });
+                            }
+                          }}
+                        >
+                          <title>Drag to slide wire segment</title>
+                        </circle>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Draggable Corner Vertex Handles for Selected Wire */}
+                {isWireSelected &&
+                  fullVertices.slice(1, -1).map((v, vIdx) => (
+                    <circle
+                      key={`vertex_${wire.id}_${vIdx}`}
+                      cx={v.x}
+                      cy={v.y}
+                      r={4.5}
+                      fill="#06B6D4"
+                      stroke="#FFFFFF"
+                      strokeWidth={1.5}
+                      className="cursor-move hover:scale-125 transition-transform"
+                      onMouseDown={(e) => {
+                        if (e.button === 0 && toolMode === 'select') {
+                          e.stopPropagation();
+                          setDraggingVertex({
+                            wireId: wire.id,
+                            vertexIndex: vIdx + 1,
+                          });
+                        }
+                      }}
+                    >
+                      <title>Drag corner vertex</title>
+                    </circle>
+                  ))}
 
                 {/* Electron Flow */}
                 {isSimulating && (
@@ -1169,7 +1456,9 @@ export function SchematicCanvas({
                   activeWireStart,
                   snappedPin ? { x: snappedPin.x, y: snappedPin.y } : mousePos,
                   activeWaypoints,
-                  activeRoutingStyle
+                  activeRoutingStyle,
+                  elbowOrientation,
+                  true
                 )}
                 fill="none"
                 stroke="#F59E0B"
