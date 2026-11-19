@@ -9,6 +9,7 @@ import {
   Sliders,
   X,
   Compass,
+  Layers,
 } from 'lucide-react';
 
 const Pcb3dViewer = dynamic(
@@ -48,7 +49,8 @@ export function PcbView({
   onUpdatePcb,
 }: PcbViewProps) {
   // 3D Visualizer Mode State
-  const [solderMaskColor, setSolderMaskColor] = useState<string>('#065F46');
+  const [solderMaskColor, setSolderMaskColor] = useState<string>('#0B4F28');
+  const [show3dComponents, setShow3dComponents] = useState<boolean>(true);
   const [cameraPreset, setCameraPreset] = useState<'iso' | 'top' | 'bot' | 'front' | 'reset' | null>(null);
   const [isStackupHudOpen, setIsStackupHudOpen] = useState(false);
   const [showStackupModal, setShowStackupModal] = useState(false);
@@ -141,6 +143,19 @@ export function PcbView({
               <Sliders className="w-3 h-3 text-cyan-400" />
               <span>Stackup</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setShow3dComponents((prev) => !prev)}
+              className={`ml-2 px-2.5 py-0.5 rounded flex items-center gap-1 font-mono text-[11px] transition-colors cursor-pointer ${
+                show3dComponents
+                  ? 'bg-emerald-950 border border-emerald-500 text-emerald-300 font-bold'
+                  : 'bg-cyan-950 border border-cyan-500 text-cyan-300 font-bold'
+              }`}
+              title="Toggle 3D Populated Components vs Bare Board"
+            >
+              <Layers className="w-3 h-3" />
+              <span>{show3dComponents ? 'Populated' : 'Bare PCB'}</span>
+            </button>
           </div>
         </div>
 
@@ -150,10 +165,11 @@ export function PcbView({
             <span className="text-slate-400 font-mono text-[11px] mr-1">Mask:</span>
             <div className="flex items-center gap-1">
               {[
-                { name: 'Green', color: '#065F46' },
-                { name: 'Black', color: '#0F172A' },
-                { name: 'Blue', color: '#1E40AF' },
-                { name: 'Red', color: '#991B1B' },
+                { name: 'Green', color: '#0B4F28' },
+                { name: 'Black', color: '#141619' },
+                { name: 'Blue', color: '#0E3A75' },
+                { name: 'Red', color: '#7A1216' },
+                { name: 'White', color: '#EAECEF' },
               ].map((c) => (
                 <button
                   key={c.name}
@@ -205,7 +221,12 @@ export function PcbView({
         )}
 
         <div className="w-full h-full relative">
-          <Pcb3dViewer pcb={pcb} solderMaskColor={solderMaskColor} cameraPreset={cameraPreset} />
+          <Pcb3dViewer
+            pcb={pcb}
+            solderMaskColor={solderMaskColor}
+            cameraPreset={cameraPreset}
+            show3dComponents={show3dComponents}
+          />
         </div>
       </div>
 

@@ -8,7 +8,7 @@ import {
   CircuitComponent,
   CircuitWire,
 } from '@/modules/engineering-lab/types';
-import { PcbAutoRouter } from '@/modules/engineering-lab/pcb-engine/autorouter';
+import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/pcb-engine/autorouter';
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
@@ -248,7 +248,6 @@ export function Pcb2dEditor({
       } else if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         const nextLayer = activeLayer === 'top_copper' ? 'bottom_copper' : 'top_copper';
-        setActiveLayer(nextLayer);
 
         if (routingStartPad && mouseCoord && onUpdatePcb) {
           const viaX = snapCoord(mouseCoord.mmX);
@@ -264,18 +263,39 @@ export function Pcb2dEditor({
             shape: 'round',
             layer: 'all',
           };
+
+          // Route trace on current active layer up to the via
+          const pts = compute45RoutePoints(routingStartPad, { x: viaX, y: viaY });
+          const newTracks: PcbTrack[] = [];
+          for (let i = 0; i < pts.length - 1; i++) {
+            newTracks.push({
+              id: `trk_via_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+              layer: activeLayer,
+              from: pts[i],
+              to: pts[i + 1],
+              widthMm: traceWidth,
+            });
+          }
+
+          setActiveLayer(nextLayer);
           onUpdatePcb({
             ...pcb,
             pads: [...pcb.pads, viaPad],
+            tracks: [...pcb.tracks, ...newTracks],
           });
-          toast.info(`Placed Via at (${viaX.toFixed(1)}, ${viaY.toFixed(1)}) mm & flipped to ${nextLayer === 'top_copper' ? 'F.Cu' : 'B.Cu'}`);
+
+          // Continue routing seamlessly from this via on nextLayer
+          setRoutingStartPad({ id: viaPad.id, x: viaX, y: viaY });
+          toast.info(`Placed Via at (${viaX.toFixed(1)}, ${viaY.toFixed(1)}) mm & switched to ${nextLayer === 'top_copper' ? 'F.Cu' : 'B.Cu'}`);
+        } else {
+          setActiveLayer(nextLayer);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent]);
+  }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent, traceWidth]);
 
   // Run full Auto-Router with Manhattan 45-chamfered tracks
   const handleAutoRoute = () => {
@@ -731,29 +751,89 @@ export function Pcb2dEditor({
             rotation: comp.rotation || 0,
           });
 
-          if (layout.boxBounds) {
+          // Draw authentic IPC-7351 EDA silkscreen symbols
+          if (layout.outlineType === 'electrolytic_cap') {
+            const r = (layout.radius || 4.2) * scale;
+            // Circular outline
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Polarized '+' mark near Pin 1 (anode at -X)
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText('+', -r + 2, -r / 2);
+
+            // Shaded/hatched negative crescent on cathode side (+X)
+            ctx.beginPath();
+            ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
+            ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
+            ctx.fillStyle = isCompSelected ? 'rgba(56, 189, 248, 0.3)' : 'rgba(248, 250, 252, 0.25)';
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = isCompSelected ? '#38BDF8' : '#F8FAFC';
+            ctx.font = 'bold 8px monospace';
+          } else if (layout.outlineType === 'ceramic_cap' && layout.boxBounds) {
+            // Compact rounded-pill outline between pads
+            const bb = layout.boxBounds;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale, 1.8 * scale);
+            } else {
+              ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            }
+            ctx.stroke();
+          } else if (layout.outlineType === 'axial_resistor' && layout.boxBounds) {
+            const bb = layout.boxBounds;
+            // Axial body rectangle
+            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            // Lead lines extending to pads
+            ctx.beginPath();
+            ctx.moveTo(bb.x * scale, 0);
+            ctx.lineTo((bb.x - 2.8) * scale, 0);
+            ctx.moveTo((bb.x + bb.width) * scale, 0);
+            ctx.lineTo((bb.x + bb.width + 2.8) * scale, 0);
+            ctx.stroke();
+          } else if (layout.outlineType === 'led') {
+            const r = (layout.radius || 4.0) * scale;
+            // Circular silkscreen with flat cathode bar on right (+X)
+            ctx.beginPath();
+            ctx.arc(0, 0, r, -0.6 * Math.PI, 0.6 * Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(r * Math.cos(0.6 * Math.PI), r * Math.sin(0.6 * Math.PI));
+            ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
+            ctx.stroke();
+            // Cathode flat bar 'K' indicator
+            ctx.font = 'bold 7px sans-serif';
+            ctx.fillText('K', r - 2, 2.5 * scale);
+            ctx.font = 'bold 8px monospace';
+          } else if (layout.outlineType === 'dip' && layout.boxBounds) {
+            const bb = layout.boxBounds;
+            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            // Semicircular notch on the left side (-X)
+            ctx.beginPath();
+            ctx.arc(bb.x * scale, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
+            ctx.stroke();
+            // Pin 1 indicator dot at top-left
+            ctx.beginPath();
+            ctx.arc((bb.x + 1.8) * scale, (bb.y + 1.8) * scale, 1.0 * scale, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (layout.outlineType === 'transistor') {
+            // TO-92 flat-face D-shape
+            const r = 3.5 * scale;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, -0.4 * Math.PI, 0.4 * Math.PI);
+            ctx.lineTo(-r * 0.7, r * 0.8);
+            ctx.lineTo(-r * 0.7, -r * 0.8);
+            ctx.closePath();
+            ctx.stroke();
+          } else if (layout.boxBounds) {
             ctx.strokeRect(
               layout.boxBounds.x * scale,
               layout.boxBounds.y * scale,
               layout.boxBounds.width * scale,
               layout.boxBounds.height * scale
             );
-            if (layout.outlineType === 'dip') {
-              // Semicircular notch on the left side (-X)
-              ctx.beginPath();
-              ctx.arc(layout.boxBounds.x * scale, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
-              ctx.stroke();
-              // Pin 1 indicator dot
-              ctx.beginPath();
-              ctx.arc(
-                (layout.boxBounds.x + 1.8) * scale,
-                (layout.boxBounds.y + 1.8) * scale,
-                1.0 * scale,
-                0,
-                Math.PI * 2
-              );
-              ctx.fill();
-            }
           }
 
           // Designator text
@@ -982,17 +1062,21 @@ export function Pcb2dEditor({
         if (!routingStartPad) {
           setRoutingStartPad({ id: clickedPad.id, x: clickedPad.x, y: clickedPad.y });
         } else if (routingStartPad.id !== clickedPad.id) {
-          const newTrack: PcbTrack = {
-            id: `trk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            layer: activeLayer,
-            from: { x: routingStartPad.x, y: routingStartPad.y },
-            to: { x: clickedPad.x, y: clickedPad.y },
-            widthMm: traceWidth,
-          };
+          const pts = compute45RoutePoints(routingStartPad, { x: clickedPad.x, y: clickedPad.y });
+          const newTracks: PcbTrack[] = [];
+          for (let i = 0; i < pts.length - 1; i++) {
+            newTracks.push({
+              id: `trk_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+              layer: activeLayer,
+              from: pts[i],
+              to: pts[i + 1],
+              widthMm: traceWidth,
+            });
+          }
           if (onUpdatePcb) {
             onUpdatePcb({
               ...pcb,
-              tracks: [...pcb.tracks, newTrack],
+              tracks: [...pcb.tracks, ...newTracks],
             });
           }
           setRoutingStartPad(null);
@@ -1005,17 +1089,21 @@ export function Pcb2dEditor({
     if (routingStartPad) {
       const snapX = snapCoord(mmX);
       const snapY = snapCoord(mmY);
-      const segTrack: PcbTrack = {
-        id: `trk_seg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        layer: activeLayer,
-        from: { x: routingStartPad.x, y: routingStartPad.y },
-        to: { x: snapX, y: snapY },
-        widthMm: traceWidth,
-      };
+      const pts = compute45RoutePoints(routingStartPad, { x: snapX, y: snapY });
+      const newTracks: PcbTrack[] = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        newTracks.push({
+          id: `trk_seg_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+          layer: activeLayer,
+          from: pts[i],
+          to: pts[i + 1],
+          widthMm: traceWidth,
+        });
+      }
       if (onUpdatePcb) {
         onUpdatePcb({
           ...pcb,
-          tracks: [...pcb.tracks, segTrack],
+          tracks: [...pcb.tracks, ...newTracks],
         });
       }
       setRoutingStartPad({ id: `wp_${Date.now()}`, x: snapX, y: snapY });

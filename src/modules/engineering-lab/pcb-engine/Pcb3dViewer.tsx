@@ -1,27 +1,114 @@
 'use client';
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
+import { Box, Layers } from 'lucide-react';
 import { PcbLayout } from '../types';
+
+export interface SolderMaskTheme {
+  name: string;
+  board: string;
+  trackTop: string;
+  trackBottom: string;
+  silkscreen: string;
+  metalness: number;
+  roughness: number;
+}
+
+/**
+ * Standard IPC / Manufacturing Solder Mask and Copper Track Themes
+ * In real PCBs, traces run beneath the solder mask and match its resin tint
+ */
+export function getSolderMaskTheme(solderMaskColor: string): SolderMaskTheme {
+  const c = (solderMaskColor || '').toLowerCase();
+  if (c.includes('black') || c === '#0f172a' || c === '#141619') {
+    return {
+      name: 'Matte Black',
+      board: '#141619',
+      trackTop: '#2A2E35',
+      trackBottom: '#22262C',
+      silkscreen: '#E2E8F0',
+      metalness: 0.35,
+      roughness: 0.35,
+    };
+  }
+  if (c.includes('blue') || c === '#1e40af' || c === '#0e3a75') {
+    return {
+      name: 'Royal Blue',
+      board: '#0E3A75',
+      trackTop: '#1D5BB0',
+      trackBottom: '#17498C',
+      silkscreen: '#FFFFFF',
+      metalness: 0.35,
+      roughness: 0.35,
+    };
+  }
+  if (c.includes('red') || c === '#991b1b' || c === '#7a1216') {
+    return {
+      name: 'Signal Red',
+      board: '#7A1216',
+      trackTop: '#A82026',
+      trackBottom: '#8A171D',
+      silkscreen: '#FFFFFF',
+      metalness: 0.35,
+      roughness: 0.35,
+    };
+  }
+  if (c.includes('white') || c === '#eaecef' || c === '#ffffff') {
+    return {
+      name: 'Gloss White',
+      board: '#EAECEF',
+      trackTop: '#D2D6DC',
+      trackBottom: '#C5C9D0',
+      silkscreen: '#1E293B',
+      metalness: 0.35,
+      roughness: 0.35,
+    };
+  }
+  // Default: Official FR-4 Green
+  return {
+    name: 'FR-4 Green',
+    board: '#0B4F28',
+    trackTop: '#1A7A42',
+    trackBottom: '#146335',
+    silkscreen: '#FFFFFF',
+    metalness: 0.35,
+    roughness: 0.35,
+  };
+}
 
 export interface Pcb3dViewerProps {
   pcb: PcbLayout;
-  solderMaskColor?: string; // e.g. '#065F46' (Green), '#0F172A' (Black), '#1E40AF' (Blue), '#991B1B' (Red)
+  solderMaskColor?: string; // e.g. '#0B4F28' (Green), '#141619' (Black), '#0E3A75' (Blue), '#7A1216' (Red), '#EAECEF' (White)
   cameraPreset?: 'iso' | 'top' | 'bot' | 'front' | 'reset' | null;
+  show3dComponents?: boolean;
 }
 
 export function Pcb3dViewer({
   pcb,
-  solderMaskColor = '#065F46',
+  solderMaskColor = '#0B4F28',
   cameraPreset,
+  show3dComponents = true,
 }: Pcb3dViewerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const thickness = pcb.boardThicknessMm || 1.6;
   const halfW = pcb.widthMm / 2;
   const halfH = pcb.heightMm / 2;
+
+  // Populated vs Bare PCB State
+  const [showComponents, setShowComponents] = useState<boolean>(show3dComponents);
+
+  useEffect(() => {
+    if (show3dComponents !== undefined) {
+      setShowComponents(show3dComponents);
+    }
+  }, [show3dComponents]);
+
+  // Solder mask theme
+  const theme = useMemo(() => getSolderMaskTheme(solderMaskColor), [solderMaskColor]);
 
   // Camera preset handler triggered from toolbar
   useEffect(() => {
@@ -54,20 +141,21 @@ export function Pcb3dViewer({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const scale = canvas.width / pcb.widthMm;
+    const silkColor = theme.silkscreen;
 
     // Outer border silkscreen
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeStyle = silkColor;
     ctx.lineWidth = 3;
     ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
 
     // Board branding & metadata
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = silkColor;
     ctx.font = 'bold 16px monospace';
     ctx.fillText('EI HOUSE ENG LAB', 18, 28);
     ctx.font = '13px monospace';
     ctx.fillText(`REV 1.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 16);
 
-    // Component Silkscreen reference designators & outlines
+    // Component Silkscreen reference designators & IPC-7351 outlines
     pcb.components?.forEach((comp) => {
       const cx = comp.x * scale;
       const cy = comp.y * scale;
@@ -78,39 +166,85 @@ export function Pcb3dViewer({
         ctx.rotate(((comp.rotation || 0) * Math.PI) / 180);
       }
 
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = silkColor;
+      ctx.fillStyle = silkColor;
       ctx.lineWidth = 2;
-      ctx.font = 'bold 15px monospace';
+      ctx.font = 'bold 14px monospace';
 
-      if (comp.type.includes('LED') || comp.type === 'DIODE') {
-        // LED circular rim with cathode flat bar
+      const upperType = comp.type.toUpperCase();
+      const upperVal = (comp.value || '').toUpperCase();
+
+      if (upperType.includes('LED')) {
+        // LED circular rim with cathode flat bar & 'K' marker
+        const r = 4.0 * scale;
         ctx.beginPath();
-        ctx.arc(0, 0, 4.0 * scale, -0.6 * Math.PI, 0.6 * Math.PI);
+        ctx.arc(0, 0, r, -0.6 * Math.PI, 0.6 * Math.PI);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(4.0 * scale * Math.cos(0.6 * Math.PI), 4.0 * scale * Math.sin(0.6 * Math.PI));
-        ctx.lineTo(4.0 * scale * Math.cos(-0.6 * Math.PI), 4.0 * scale * Math.sin(-0.6 * Math.PI));
+        ctx.moveTo(r * Math.cos(0.6 * Math.PI), r * Math.sin(0.6 * Math.PI));
+        ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
         ctx.stroke();
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('K', r - 2, 2.5 * scale);
+        ctx.font = 'bold 13px monospace';
         ctx.fillText(comp.designator, -12, 6 * scale);
-      } else if (comp.type.includes('RESISTOR')) {
-        // Axial resistor bounding box
-        ctx.strokeRect(-6 * scale, -2.5 * scale, 12 * scale, 5 * scale);
-        ctx.fillText(comp.designator, -12, -4 * scale);
-      } else if (comp.type.includes('CAPACITOR')) {
-        // Polarized capacitor circle with + indicator
+      } else if (upperType.includes('DIODE')) {
+        // Rectifier diode body with cathode bar
+        ctx.strokeRect(-4.0 * scale, -2.0 * scale, 8.0 * scale, 4.0 * scale);
+        ctx.fillRect(2.0 * scale, -2.0 * scale, 1.6 * scale, 4.0 * scale);
+        ctx.fillText(comp.designator, -12, -3.5 * scale);
+      } else if (
+        upperType.includes('ELECTROLYTIC') ||
+        upperType.includes('RADIAL') ||
+        (upperType.includes('CAPACITOR') && (upperVal.includes('UF') || upperVal.includes('µF') || upperVal.includes('MF')))
+      ) {
+        // Polarized electrolytic capacitor circle with + mark & shaded crescent
+        const r = 4.2 * scale;
         ctx.beginPath();
-        ctx.arc(0, 0, 4.5 * scale, 0, Math.PI * 2);
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillText('+', -7 * scale, -1 * scale);
-        ctx.fillText(comp.designator, -10, 7 * scale);
-      } else if (comp.type.includes('IC') || comp.type.includes('TIMER') || comp.footprint?.includes('DIP')) {
-        // DIP package outline matching physical package orientation and dimensions
+        ctx.font = 'bold 15px sans-serif';
+        ctx.fillText('+', -r + 2, -r / 2 + 1);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
+        ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
+        ctx.fillStyle = silkColor === '#FFFFFF' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(30, 41, 59, 0.35)';
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = silkColor;
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(comp.designator, -12, 7 * scale);
+      } else if (upperType.includes('CAPACITOR')) {
+        // Ceramic disc / SMD capacitor rounded pill
+        const pw = 7.0 * scale;
+        const ph = 3.6 * scale;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 1.8 * scale);
+        } else {
+          ctx.strokeRect(-pw / 2, -ph / 2, pw, ph);
+        }
+        ctx.stroke();
+        ctx.fillText(comp.designator, -12, -3.5 * scale);
+      } else if (upperType.includes('RESISTOR') || upperType.includes('POTENTIOMETER') || upperType.includes('LDR')) {
+        // Axial resistor body with lead lines
+        const bw = 9.0 * scale;
+        const bh = 3.8 * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.beginPath();
+        ctx.moveTo(-bw / 2, 0);
+        ctx.lineTo(-bw / 2 - 2.8 * scale, 0);
+        ctx.moveTo(bw / 2, 0);
+        ctx.lineTo(bw / 2 + 2.8 * scale, 0);
+        ctx.stroke();
+        ctx.fillText(comp.designator, -12, -3.5 * scale);
+      } else if (upperType.includes('IC') || upperType.includes('TIMER') || comp.footprint?.includes('DIP') || upperType.includes('555')) {
+        // DIP IC with Pin 1 notch and Pin 1 dot
         const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16');
         const bLen = (isDip14Or16 ? 19.5 : 10.0) * scale;
         const bWid = 6.8 * scale;
         ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
-        // Semicircular notch on the left (-X) side where Pin 1 is
+        // Semicircular notch on the left (-X) side
         ctx.beginPath();
         ctx.arc(-bLen / 2, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
         ctx.stroke();
@@ -119,9 +253,21 @@ export function Pcb3dViewer({
         ctx.arc(-bLen / 2 + 1.8 * scale, -bWid / 2 + 1.6 * scale, 1.0 * scale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillText(comp.designator, -10, 2);
-      } else if (comp.type.includes('BATTERY') || comp.type.includes('VOLTAGE')) {
-        ctx.strokeRect(-8 * scale, -5 * scale, 16 * scale, 10 * scale);
-        ctx.fillText(comp.designator, -12, -7 * scale);
+      } else if (
+        upperType.includes('HEADER') ||
+        upperType.includes('CONNECTOR') ||
+        upperType.includes('TERMINAL') ||
+        upperType.includes('BATTERY')
+      ) {
+        const hw = 12.0 * scale;
+        const hh = 7.0 * scale;
+        ctx.strokeRect(-hw / 2, -hh / 2, hw, hh);
+        ctx.strokeRect(-hw / 2 + 1.0 * scale, -hh / 2 + 1.0 * scale, 2.2 * scale, 2.2 * scale);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('+', -hw / 2 + 1.2 * scale, hh / 2 - 1.2 * scale);
+        ctx.fillText('-', hw / 2 - 3.5 * scale, hh / 2 - 1.2 * scale);
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(comp.designator, -12, -5.5 * scale);
       } else {
         ctx.strokeRect(-5 * scale, -5 * scale, 10 * scale, 10 * scale);
         ctx.fillText(comp.designator, -12, -7 * scale);
@@ -132,33 +278,33 @@ export function Pcb3dViewer({
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     return texture;
-  }, [pcb]);
+  }, [pcb, theme]);
 
   const materials = useMemo(() => {
     return {
       fr4Core: new THREE.MeshPhysicalMaterial({
-        color: solderMaskColor === '#065F46' ? '#04442A' : solderMaskColor,
-        roughness: 0.22,
+        color: theme.board,
+        roughness: 0.28,
         metalness: 0.08,
         clearcoat: 0.35,
         clearcoatRoughness: 0.25,
       }),
       copperTop: new THREE.MeshPhysicalMaterial({
-        color: '#DC2626',
-        metalness: 0.88,
-        roughness: 0.22,
+        color: theme.trackTop,
+        metalness: theme.metalness,
+        roughness: theme.roughness,
         clearcoat: 0.3,
       }),
       copperBottom: new THREE.MeshPhysicalMaterial({
-        color: '#2563EB',
-        metalness: 0.88,
-        roughness: 0.22,
+        color: theme.trackBottom,
+        metalness: theme.metalness,
+        roughness: theme.roughness,
         clearcoat: 0.3,
       }),
       goldPad: new THREE.MeshStandardMaterial({
-        color: '#F59E0B',
-        metalness: 0.94,
-        roughness: 0.16,
+        color: '#D4AF37', // Official ENIG Gold (Electroless Nickel Immersion Gold)
+        metalness: 0.85,
+        roughness: 0.2,
       }),
       drillHole: new THREE.MeshBasicMaterial({
         color: '#020617',
@@ -216,7 +362,7 @@ export function Pcb3dViewer({
         roughness: 0.2,
       }),
     };
-  }, [solderMaskColor]);
+  }, [theme]);
 
   return (
     <div className="relative w-full h-full bg-[#070D18] select-none overflow-hidden">
@@ -315,7 +461,7 @@ export function Pcb3dViewer({
           const midX = (x1 + x2) / 2;
           const midZ = (z1 + z2) / 2;
           const isTop = track.layer === 'top_copper';
-          const yPos = isTop ? thickness / 2 + 0.03 : -thickness / 2 - 0.03;
+          const yPos = isTop ? thickness / 2 + 0.015 : -thickness / 2 - 0.015;
 
           return (
             <mesh
@@ -324,13 +470,13 @@ export function Pcb3dViewer({
               rotation={[0, -angle, 0]}
               material={isTop ? materials.copperTop : materials.copperBottom}
             >
-              <boxGeometry args={[len, 0.04, track.widthMm || 0.35]} />
+              <boxGeometry args={[len, 0.025, track.widthMm || 0.35]} />
             </mesh>
           );
         })}
 
         {/* Authentic 3D Component Models (NO Generic Black Boxes) */}
-        {pcb.components?.map((pComp) => {
+        {showComponents && pcb.components?.map((pComp) => {
           const cx = pComp.x - halfW;
           const cz = pComp.y - halfH;
           const rotY = ((pComp.rotation || 0) * Math.PI) / 180;
@@ -551,6 +697,36 @@ export function Pcb3dViewer({
           );
         })}
       </Canvas>
+
+      {/* Populated vs Bare Board Floating Mode Switcher */}
+      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-1.5 bg-[#0B1528]/90 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 shadow-2xl font-mono text-[11px] pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => setShowComponents(true)}
+          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all cursor-pointer ${
+            showComponents
+              ? 'bg-emerald-600 text-white font-bold shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Display board with all 3D components placed"
+        >
+          <Box className="w-3.5 h-3.5" />
+          <span>Populated (With 3D Parts)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowComponents(false)}
+          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all cursor-pointer ${
+            !showComponents
+              ? 'bg-cyan-600 text-white font-bold shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Display bare manufactured PCB (tracks, pads and silkscreen only)"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Bare PCB (Tracks &amp; Pads Only)</span>
+        </button>
+      </div>
     </div>
   );
 }

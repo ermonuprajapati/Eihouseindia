@@ -14,6 +14,44 @@ export interface AutoRouteOptions {
   clearanceMm?: number;
 }
 
+/**
+ * Computes a clean 45°-chamfered Manhattan waypoint sequence between two points.
+ * Ensures either horizontal-then-45° or vertical-then-45° corner bevels with |dx| == |dy|.
+ */
+export function compute45RoutePoints(
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): { x: number; y: number }[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return [from];
+  if (Math.abs(dx) < 0.01 || Math.abs(dy) < 0.01) return [from, to];
+
+  const signX = Math.sign(dx) || 1;
+  const signY = Math.sign(dy) || 1;
+  const chamfer = Math.min(Math.abs(dx), Math.abs(dy));
+
+  let midX = from.x;
+  let midY = from.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal lead-in, then 45° chamfer to destination
+    midX = from.x + (Math.abs(dx) - chamfer) * signX;
+    midY = from.y;
+  } else {
+    // Vertical lead-in, then 45° chamfer to destination
+    midX = from.x;
+    midY = from.y + (Math.abs(dy) - chamfer) * signY;
+  }
+
+  const points: { x: number; y: number }[] = [from];
+  if (Math.hypot(midX - from.x, midY - from.y) > 0.05 && Math.hypot(to.x - midX, to.y - midY) > 0.05) {
+    points.push({ x: Math.round(midX * 100) / 100, y: Math.round(midY * 100) / 100 });
+  }
+  points.push(to);
+  return points;
+}
+
 export class PcbAutoRouter {
   /**
    * Run automated PCB routing for given components, pads, and schematic wires
@@ -103,36 +141,9 @@ export class PcbAutoRouter {
       const x2 = endPad.x;
       const y2 = endPad.y;
 
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-
       // 45°-chamfered Manhattan Waypoints:
-      // Instead of harsh 90° or raw diagonal spiderwebs, route via 45° corner beveled path
-      const waypoints: { x: number; y: number }[] = [];
-      waypoints.push({ x: x1, y: y1 });
-
-      const chamfer = Math.min(Math.abs(dx) * 0.4, Math.abs(dy) * 0.4, 3.0);
-      const signX = Math.sign(dx) || 1;
-      const signY = Math.sign(dy) || 1;
-
-      if (Math.abs(dx) > 1 && Math.abs(dy) > 1) {
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          // Horizontal-major path with 45° lead-in/lead-out
-          const midX = x1 + dx * 0.5;
-          waypoints.push({ x: midX - chamfer * signX, y: y1 });
-          waypoints.push({ x: midX + chamfer * signX, y: y1 + chamfer * signY });
-          waypoints.push({ x: midX + chamfer * signX, y: y2 - chamfer * signY });
-          waypoints.push({ x: midX + chamfer * 2 * signX, y: y2 });
-        } else {
-          // Vertical-major path with 45° lead-in/lead-out
-          const midY = y1 + dy * 0.5;
-          waypoints.push({ x: x1, y: midY - chamfer * signY });
-          waypoints.push({ x: x1 + chamfer * signX, y: midY + chamfer * signY });
-          waypoints.push({ x: x2 - chamfer * signX, y: midY + chamfer * signY });
-          waypoints.push({ x: x2, y: midY + chamfer * 2 * signY });
-        }
-      }
-      waypoints.push({ x: x2, y: y2 });
+      // Strictly enforces 45° corner bevels (|dx| == |dy|) with no diagonal crossings across pads
+      const waypoints = compute45RoutePoints({ x: x1, y: y1 }, { x: x2, y: y2 });
 
       // Determine layer: prefer top_copper. If blocked, route on bottom_copper or split with via
       let chosenLayer: 'top_copper' | 'bottom_copper' = 'top_copper';
