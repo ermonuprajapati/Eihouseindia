@@ -1046,9 +1046,19 @@ export class CircuitSolver {
           on = Math.abs(current) > 0.0001;
         } else if (comp.type === 'LED') {
           const vf = getLedForwardVoltage(comp);
-          if (vDiff > vf) {
-            current = (vDiff - vf) / 20; // 20 ohm diode forward dynamic resistance
+          const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:anode`) || this.netMap.get(`${comp.id}:1`) || netA;
+          const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:2`) || netB;
+          const vAnode = aPin ? (nodeVoltages[aPin] || 0) : 0;
+          const vCathode = kPin ? (nodeVoltages[kPin] || 0) : 0;
+          const forwardDrop = vAnode - vCathode;
+          if (forwardDrop > vf) {
+            current = (forwardDrop - vf) / 20; // 20 ohm diode forward dynamic resistance
             on = current > 0.001; // illuminated when forward current > 1mA
+            vDiff = forwardDrop;
+          } else {
+            current = 0;
+            on = false;
+            vDiff = Math.max(0, forwardDrop);
           }
         } else if (comp.type === 'ACTUATOR_RGB_LED') {
           const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);

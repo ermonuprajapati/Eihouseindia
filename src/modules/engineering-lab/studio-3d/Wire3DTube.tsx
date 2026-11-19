@@ -122,11 +122,11 @@ export function Wire3DTube({
       {/* --- START DUPONT CONNECTOR --- */}
       {/* Black Plastic 2.54mm Dupont Housing */}
       <mesh position={[dupontStartPos.x, dupontStartPos.y, dupontStartPos.z]} material={materials.dupontHousing}>
-        <boxGeometry args={[2.5, 8.0, 2.5]} />
+        <boxGeometry args={[2.2, 7.5, 2.2]} />
       </mesh>
       {/* Top strain-relief collar */}
-      <mesh position={[dupontStartPos.x, dupontStartPos.y + 4.1, dupontStartPos.z]} material={materials.dupontCollar}>
-        <cylinderGeometry args={[1.3, 1.3, 0.4, 12]} />
+      <mesh position={[dupontStartPos.x, dupontStartPos.y + 3.85, dupontStartPos.z]} material={materials.dupontCollar}>
+        <cylinderGeometry args={[1.1, 1.1, 0.4, 12]} />
       </mesh>
       {/* Metallic Pin Tip entering breadboard hole */}
       <mesh position={[start.x, start.y - 1.5, start.z]} material={materials.pinTip}>
@@ -136,11 +136,11 @@ export function Wire3DTube({
       {/* --- END DUPONT CONNECTOR --- */}
       {/* Black Plastic 2.54mm Dupont Housing */}
       <mesh position={[dupontEndPos.x, dupontEndPos.y, dupontEndPos.z]} material={materials.dupontHousing}>
-        <boxGeometry args={[2.5, 8.0, 2.5]} />
+        <boxGeometry args={[2.2, 7.5, 2.2]} />
       </mesh>
       {/* Top strain-relief collar */}
-      <mesh position={[dupontEndPos.x, dupontEndPos.y + 4.1, dupontEndPos.z]} material={materials.dupontCollar}>
-        <cylinderGeometry args={[1.3, 1.3, 0.4, 12]} />
+      <mesh position={[dupontEndPos.x, dupontEndPos.y + 3.85, dupontEndPos.z]} material={materials.dupontCollar}>
+        <cylinderGeometry args={[1.1, 1.1, 0.4, 12]} />
       </mesh>
       {/* Metallic Pin Tip entering breadboard hole */}
       <mesh position={[end.x, end.y - 1.5, end.z]} material={materials.pinTip}>

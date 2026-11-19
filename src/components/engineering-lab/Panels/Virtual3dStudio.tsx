@@ -130,7 +130,12 @@ export function Virtual3dStudio({
     let batteryIdx = 0;
     let sensorIdx = 0;
 
-    return components.map((comp) => {
+    // Filter out virtual schematic rails (GND / VCC) - they are physically routed via breadboard power rails
+    const physicalComponents = components.filter(
+      (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd')
+    );
+
+    return physicalComponents.map((comp) => {
       let mappedType = comp.type;
       if (comp.type.includes('MEGA') || comp.model3d?.includes('mega')) {
         mappedType = 'ARDUINO_MEGA';
@@ -242,8 +247,9 @@ export function Virtual3dStudio({
 
       // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
       // Straddle breadboard center isolation trench directly at y = 5.0
+      // Col 25 center aligns pins exactly with breadboard columns 24..27
       if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
-        const colX = -50 + (breadboardCol % 4) * 30;
+        const colX = -19.05 + (breadboardCol % 3) * 35.56;
         breadboardCol++;
         return {
           id: comp.id,
@@ -253,14 +259,14 @@ export function Virtual3dStudio({
           parameters: comp.parameters || {},
           x3d: colX,
           y3d: 5.0, // Placed firmly on breadboard
-          z3d: 0,   // Straddling center isolation trench
+          z3d: 0,   // Straddling center isolation trench (pins in rows E and F)
           rotY: 0,
         };
       }
 
       // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs):
       // Snap directly into breadboard 5-hole terminal rows at y = 5.0
-      const colX = -65 + (breadboardCol * 12.7) % 130;
+      const colX = -55 + (breadboardCol * 15.24) % 110;
       const isTopStrip = breadboardCol % 2 === 0;
       breadboardCol++;
       return {
@@ -271,41 +277,152 @@ export function Virtual3dStudio({
         parameters: comp.parameters || {},
         x3d: colX,
         y3d: 5.0, // Firmly plugged into breadboard holes
-        z3d: isTopStrip ? -3.34 : 3.34,
+        z3d: isTopStrip ? -8.42 : 8.42, // Seated in terminal rows
         rotY: 0,
       };
     });
   }, [components]);
 
+  // Authentic Breadboard Power Rail Routing & Standard Wire Color Coding
   const schematicTo3DWires = useCallback((): Wire3D[] => {
-    return wires.map((w) => {
+    const battery = components.find(
+      (c) => c.type === 'BATTERY' || c.type === 'BATTERY_9V' || c.id.toLowerCase().startsWith('bat')
+    );
+    const gndCompIds = new Set(
+      components
+        .filter((c) => c.type === 'GROUND' || c.id.toLowerCase().startsWith('gnd'))
+        .map((c) => c.id)
+    );
+
+    const outWires: Wire3D[] = [];
+    const SIGNAL_COLORS = ['#3B82F6', '#10B981', '#EAB308', '#F97316'];
+    let sigColorIdx = 0;
+    let posRailHoleIdx = 3;
+    let negRailHoleIdx = 3;
+
+    // Strict Rule 1: Battery has STRICTLY 2 physical terminals:
+    // Route 1 Red wire from Battery + to Breadboard Top Red + Power Rail (bb_rail_top_pos_1)
+    // Route 1 Black wire from Battery - to Breadboard Top Blue - Ground Rail (bb_rail_top_neg_1)
+    if (battery) {
+      outWires.push({
+        id: `wire_bat_pos_${battery.id}`,
+        fromPin: { compId: battery.id, pinId: '+' },
+        toPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_1' },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: `wire_bat_neg_${battery.id}`,
+        fromPin: { compId: battery.id, pinId: '-' },
+        toPin: { compId: 'breadboard', pinId: 'bb_rail_top_neg_1' },
+        color: '#1E293B',
+      });
+    }
+
+    wires.forEach((w) => {
+      const fromIsBat = battery && w.fromCompId === battery.id;
+      const toIsBat = battery && w.toCompId === battery.id;
+      const fromIsGnd = gndCompIds.has(w.fromCompId);
+      const toIsGnd = gndCompIds.has(w.toCompId);
+
+      const fPin = (w.fromPinId || '').toLowerCase();
+      const tPin = (w.toPinId || '').toLowerCase();
+
+      // Skip direct battery-to-gnd wires since battery - is already connected to blue rail
+      if ((fromIsBat && toIsGnd) || (toIsBat && fromIsGnd)) {
+        return;
+      }
+
+      // If one end connects to battery negative, skip extra battery connections (1 hole = 1 pin)
+      if ((fromIsBat && (fPin === 'n' || fPin === '-')) || (toIsBat && (tPin === 'n' || tPin === '-'))) {
+        return;
+      }
+
+      // If one end connects to battery positive, route it as tapping from the Red (+) breadboard rail
+      if (fromIsBat && (fPin === 'p' || fPin === '+')) {
+        const railHole = `bb_rail_top_pos_${posRailHoleIdx}`;
+        posRailHoleIdx += 2;
+        outWires.push({
+          id: w.id,
+          fromPin: { compId: 'breadboard', pinId: railHole },
+          toPin: { compId: w.toCompId, pinId: w.toPinId },
+          color: '#EF4444',
+          current: w.current,
+        });
+        return;
+      }
+      if (toIsBat && (tPin === 'p' || tPin === '+')) {
+        const railHole = `bb_rail_top_pos_${posRailHoleIdx}`;
+        posRailHoleIdx += 2;
+        outWires.push({
+          id: w.id,
+          fromPin: { compId: 'breadboard', pinId: railHole },
+          toPin: { compId: w.fromCompId, pinId: w.fromPinId },
+          color: '#EF4444',
+          current: w.current,
+        });
+        return;
+      }
+
+      // If one end connects to a schematic GND symbol, tap from the Blue (-) breadboard ground rail
+      if (fromIsGnd) {
+        const railHole = `bb_rail_top_neg_${negRailHoleIdx}`;
+        negRailHoleIdx += 2;
+        outWires.push({
+          id: w.id,
+          fromPin: { compId: 'breadboard', pinId: railHole },
+          toPin: { compId: w.toCompId, pinId: w.toPinId },
+          color: '#1E293B',
+          current: w.current,
+        });
+        return;
+      }
+      if (toIsGnd) {
+        const railHole = `bb_rail_top_neg_${negRailHoleIdx}`;
+        negRailHoleIdx += 2;
+        outWires.push({
+          id: w.id,
+          fromPin: { compId: 'breadboard', pinId: railHole },
+          toPin: { compId: w.fromCompId, pinId: w.fromPinId },
+          color: '#1E293B',
+          current: w.current,
+        });
+        return;
+      }
+
+      // Circuit jumper between components: assign standard wire colors
       let wireColor = w.color;
       if (!wireColor || wireColor === '#EF4444') {
-        const f = (w.fromPinId || '').toLowerCase();
-        const t = (w.toPinId || '').toLowerCase();
-        if (f.includes('gnd') || t.includes('gnd') || f === '-' || t === '-') {
-          wireColor = '#1E293B'; // Standard Ground: Black
+        if (fPin.includes('gnd') || tPin.includes('gnd') || fPin === '-' || tPin === '-') {
+          wireColor = '#1E293B'; // Ground: Black
         } else if (
-          f.includes('vcc') || t.includes('vcc') ||
-          f.includes('5v') || t.includes('5v') ||
-          f.includes('3v3') || t.includes('3v3') ||
-          f.includes('vin') || t.includes('vin') ||
-          f === '+' || t === '+'
+          fPin.includes('vcc') || tPin.includes('vcc') ||
+          fPin.includes('5v') || tPin.includes('5v') ||
+          fPin.includes('3v3') || tPin.includes('3v3') ||
+          fPin.includes('vin') || tPin.includes('vin') ||
+          fPin === '+' || tPin === '+'
         ) {
-          wireColor = '#EF4444'; // Standard VCC/Power: Red
+          wireColor = '#EF4444'; // Power: Red
+        } else if ((fPin === '2' && tPin === '6') || (fPin === '6' && tPin === '2')) {
+          wireColor = '#EAB308'; // 555 Trigger-Threshold Tie: Yellow
+        } else if ((fPin === '4' && tPin === '8') || (fPin === '8' && tPin === '4')) {
+          wireColor = '#EF4444'; // 555 Reset-VCC Tie: Red
         } else {
-          wireColor = '#3B82F6'; // Standard Signals: Blue
+          wireColor = SIGNAL_COLORS[sigColorIdx % SIGNAL_COLORS.length];
+          sigColorIdx++;
         }
       }
-      return {
+
+      outWires.push({
         id: w.id,
         fromPin: { compId: w.fromCompId, pinId: w.fromPinId },
         toPin: { compId: w.toCompId, pinId: w.toPinId },
         color: wireColor,
         current: w.current,
-      };
+      });
     });
-  }, [wires]);
+
+    return outWires;
+  }, [wires, components]);
 
   // Active 3D components and wires in the workbench
   const activeComponents3d: Component3D[] = useMemo(() => {

@@ -64,6 +64,19 @@ export function ArduinoUno3D({
 }: ArduinoUno3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
 
+  // Smooth continuous CatmullRomCurve3 USB Cable Tube
+  const usbCableTubeGeo = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-14, 0, 0),
+      new THREE.Vector3(-22, -0.5, -0.5),
+      new THREE.Vector3(-36, -2.0, -2.0),
+      new THREE.Vector3(-52, -4.0, -6.0),
+      new THREE.Vector3(-75, -5.2, -15.0),
+      new THREE.Vector3(-105, -5.2, -30.0),
+    ]);
+    return new THREE.TubeGeometry(curve, 32, 2.2, 12, false);
+  }, []);
+
   // Common materials
   const materials = useMemo(() => {
     return {
@@ -257,21 +270,19 @@ export function ArduinoUno3D({
           onPointerOut={() => setUsbHovered(false)}
         >
           {/* Nickel Shroud Plug entering socket */}
-          <mesh position={[-8, 0, 0]} material={materials.usbPlugMetal}>
+          <mesh position={[-3, 0, 0]} material={materials.usbPlugMetal}>
             <boxGeometry args={[6, 9.5, 10.5]} />
           </mesh>
           {/* Molded Blue PVC Plug Body */}
-          <mesh position={[-19, 0, 0]} material={materials.usbCablePvc} castShadow>
-            <boxGeometry args={[16, 12, 13]} />
+          <mesh position={[-10, 0, 0]} material={materials.usbCablePvc} castShadow>
+            <boxGeometry args={[10, 11, 12]} />
           </mesh>
           {/* Strain Relief Boot Collar */}
-          <mesh position={[-29, 0, 0]} material={materials.usbCablePvc}>
-            <cylinderGeometry args={[4, 5, 6, 16]} />
+          <mesh position={[-15, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
+            <cylinderGeometry args={[3.2, 4.2, 4, 16]} />
           </mesh>
-          {/* Flexible Blue Cable extending towards power supply */}
-          <mesh position={[-42, -2.5, -3]} rotation={[0, 0.2, Math.PI / 2]} material={materials.usbCablePvc}>
-            <cylinderGeometry args={[2.5, 2.5, 22, 16]} />
-          </mesh>
+          {/* Continuous Flexible Blue USB Cable trailing across workbench */}
+          <mesh geometry={usbCableTubeGeo} material={materials.usbCablePvc} castShadow />
         </group>
       ) : (
         /* Unplugged USB cable resting near socket - click to plug in */

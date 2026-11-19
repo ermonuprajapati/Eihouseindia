@@ -199,19 +199,36 @@ export function RaspberryPiPico3D({
         <pointLight position={[-5, 2.5, -21]} color="#22C55E" intensity={0.4} distance={15} />
       )}
 
-      {/* Male Pin Header Strips & Receptacles (2 x 20 pins) */}
+      {/* Header Receptacles with Recessed Sockets & Cyan Hover (2 x 20 pins) */}
       {PICO_PINS.map((pin) => {
         const isHovered = hoveredPin === pin.name;
         return (
           <group key={pin.name} position={pin.localPos}>
-            {/* Header Pin Body */}
-            <mesh position={[0, -2.5, 0]} material={materials.goldPin}>
-              <cylinderGeometry args={[0.32, 0.32, 6, 8]} />
+            {/* Black Plastic Header Housing */}
+            <mesh position={[0, 1.2, 0]}>
+              <boxGeometry args={[2.4, 2.2, 2.4]} />
+              <meshStandardMaterial color="#0B0F19" roughness={0.6} metalness={0.1} />
             </mesh>
-            {/* Pin Clickable Target Sphere */}
+            {/* Recessed Square Socket Opening */}
+            <mesh position={[0, 2.25, 0]}>
+              <boxGeometry args={[1.2, 0.4, 1.2]} />
+              <meshBasicMaterial color="#09090B" />
+            </mesh>
+            {/* Glowing Cyan Hover Rim Indicator */}
+            {isHovered && (
+              <mesh position={[0, 2.35, 0]}>
+                <boxGeometry args={[2.3, 0.15, 2.3]} />
+                <meshBasicMaterial color="#00F0FF" />
+              </mesh>
+            )}
+            {/* Downward Silver Pin Leg into Breadboard Hole */}
+            <mesh position={[0, -1.8, 0]}>
+              <boxGeometry args={[0.6, 4.0, 0.6]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+            </mesh>
+            {/* Interactive Click & Hover Target */}
             <mesh
               position={[0, 0.5, 0]}
-              material={isHovered ? materials.pinHover : materials.goldPin}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();
@@ -224,7 +241,8 @@ export function RaspberryPiPico3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[isHovered ? 1.4 : 0.85, 12, 12]} />
+              <boxGeometry args={[2.4, 6.0, 2.4]} />
+              <meshBasicMaterial transparent opacity={0} />
             </mesh>
           </group>
         );

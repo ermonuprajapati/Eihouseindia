@@ -181,24 +181,35 @@ export function ArduinoNano3D({
         <boxGeometry args={[1.2, 0.4, 0.8]} />
       </mesh>
 
-      {/* 30 DIP Header Pins extending downwards */}
+      {/* 30 DIP Header Pins with Recessed Sockets & Cyan Hover */}
       {NANO_PINS.map((pin) => {
         const isHovered = hoveredPin === pin.name;
         return (
           <group key={pin.name} position={pin.localPos}>
-            {/* Square pin base */}
-            <mesh position={[0, 1.5, 0]}>
-              <boxGeometry args={[2.0, 2.0, 2.0]} />
-              <meshStandardMaterial color="#0F172A" />
+            {/* Black Plastic Header Housing */}
+            <mesh position={[0, 1.2, 0]}>
+              <boxGeometry args={[2.4, 2.2, 2.4]} />
+              <meshStandardMaterial color="#0B0F19" roughness={0.6} metalness={0.1} />
             </mesh>
-            {/* Pin leg */}
-            <mesh position={[0, -1.5, 0]} material={materials.pinSilver}>
-              <boxGeometry args={[0.6, 5.0, 0.6]} />
+            {/* Recessed Square Socket Opening */}
+            <mesh position={[0, 2.25, 0]}>
+              <boxGeometry args={[1.2, 0.4, 1.2]} />
+              <meshBasicMaterial color="#09090B" />
             </mesh>
-            {/* Click target sphere */}
+            {/* Glowing Cyan Hover Rim Indicator */}
+            {isHovered && (
+              <mesh position={[0, 2.35, 0]}>
+                <boxGeometry args={[2.3, 0.15, 2.3]} />
+                <meshBasicMaterial color="#00F0FF" />
+              </mesh>
+            )}
+            {/* Downward Silver Pin Leg into Breadboard Hole */}
+            <mesh position={[0, -1.8, 0]} material={materials.pinSilver}>
+              <boxGeometry args={[0.6, 4.0, 0.6]} />
+            </mesh>
+            {/* Interactive Click & Hover Target */}
             <mesh
-              position={[0, 1.8, 0]}
-              material={isHovered ? materials.pinHover : materials.pinSilver}
+              position={[0, 0.5, 0]}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();
@@ -211,7 +222,8 @@ export function ArduinoNano3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[isHovered ? 1.4 : 0.8, 10, 10]} />
+              <boxGeometry args={[2.4, 6.0, 2.4]} />
+              <meshBasicMaterial transparent opacity={0} />
             </mesh>
           </group>
         );

@@ -138,6 +138,19 @@ export function ArduinoMega3D({
 }: ArduinoMega3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
 
+  // Smooth continuous CatmullRomCurve3 USB Cable Tube
+  const usbCableTubeGeo = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-14, 0, 0),
+      new THREE.Vector3(-22, -0.5, -0.5),
+      new THREE.Vector3(-36, -2.0, -2.0),
+      new THREE.Vector3(-52, -4.0, -6.0),
+      new THREE.Vector3(-75, -5.2, -15.0),
+      new THREE.Vector3(-105, -5.2, -30.0),
+    ]);
+    return new THREE.TubeGeometry(curve, 32, 2.2, 12, false);
+  }, []);
+
   const materials = useMemo(() => {
     return {
       pcb: new THREE.MeshStandardMaterial({
@@ -292,22 +305,18 @@ export function ArduinoMega3D({
           onPointerOut={() => setUsbHovered(false)}
         >
           {/* Metal USB Plug Shell */}
-          <mesh position={[-7.5, 0, 0]} material={materials.usbPlugMetal} castShadow>
-            <boxGeometry args={[9, 10.5, 11.5]} />
+          <mesh position={[-4, 0, 0]} material={materials.usbPlugMetal} castShadow>
+            <boxGeometry args={[7, 10.5, 11.5]} />
           </mesh>
           {/* Blue Molded Strain Relief Boot */}
-          <mesh position={[-17, 0, 0]} material={materials.usbCablePvc} castShadow>
-            <boxGeometry args={[12, 11.5, 13.5]} />
+          <mesh position={[-11, 0, 0]} material={materials.usbCablePvc} castShadow>
+            <boxGeometry args={[10, 11.5, 13]} />
           </mesh>
-          {/* Flexible Blue USB Cable trailing off workbench */}
-          <mesh position={[-38, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[2.4, 2.4, 32, 16]} />
-            <primitive object={materials.usbCablePvc} attach="material" />
+          <mesh position={[-16, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
+            <cylinderGeometry args={[3.2, 4.2, 4, 16]} />
           </mesh>
-          <mesh position={[-58, -6, 0]} rotation={[0, 0, Math.PI / 3]}>
-            <cylinderGeometry args={[2.4, 2.4, 20, 16]} />
-            <primitive object={materials.usbCablePvc} attach="material" />
-          </mesh>
+          {/* Continuous Flexible Blue USB Cable trailing off workbench */}
+          <mesh geometry={usbCableTubeGeo} material={materials.usbCablePvc} castShadow />
         </group>
       ) : (
         /* Unplugged Disconnected Indicator */

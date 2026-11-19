@@ -126,7 +126,7 @@ export function DipPackage3D({
     const list: { id: string; num: number; name: string; pos: [number, number, number] }[] = [];
     const startX = -((halfPins - 1) * pitch) / 2;
 
-    // Bottom row (Pins 1..halfPins, along row E: Z = -3.81)
+    // Bottom row (Pins 1..halfPins, along row E: Z = -3.34)
     for (let i = 0; i < halfPins; i++) {
       const pinNum = i + 1;
       const px = startX + i * pitch;
@@ -134,11 +134,11 @@ export function DipPackage3D({
         id: String(pinNum),
         num: pinNum,
         name: pinNames[pinNum] || `P${pinNum}`,
-        pos: [px, -0.6, -3.81],
+        pos: [px, -0.6, -3.34],
       });
     }
 
-    // Top row (Pins pinCount..halfPins+1, along row F: Z = 3.81)
+    // Top row (Pins pinCount..halfPins+1, along row F: Z = 3.34)
     for (let i = 0; i < halfPins; i++) {
       const pinNum = pinCount - i;
       const px = startX + i * pitch;
@@ -146,7 +146,7 @@ export function DipPackage3D({
         id: String(pinNum),
         num: pinNum,
         name: pinNames[pinNum] || `P${pinNum}`,
-        pos: [px, -0.6, 3.81],
+        pos: [px, -0.6, 3.34],
       });
     }
 

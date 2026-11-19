@@ -600,7 +600,8 @@ export function Studio3DCanvas({
         lz = pp.localPos[2];
       }
     } else if (comp.type === 'LED') {
-      if (pinId === 'anode' || pinId === '1') lx = -1.27;
+      const p = (pinId || '').toLowerCase();
+      if (p === 'anode' || p === 'a' || p === '1' || p === '+') lx = -1.27;
       else lx = 1.27;
       ly = -5;
     } else if (comp.type === 'LED_RGB') {
@@ -639,18 +640,19 @@ export function Studio3DCanvas({
       if (pinId === '1' || pinId === '+') lx = -1.27;
       else lx = 1.27;
       ly = -5;
-    } else if (comp.type === 'TIMER_555') {
+    } else if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
       const pNum = parseInt(pinId) || 1;
       if (pNum >= 1 && pNum <= 4) {
         lx = -3.81 + (pNum - 1) * 2.54;
-        lz = -3.81;
+        lz = -3.34;
       } else {
         lx = 3.81 - (pNum - 5) * 2.54;
-        lz = 3.81;
+        lz = 3.34;
       }
       ly = -3;
-    } else if (comp.type === 'BATTERY_9V') {
-      if (pinId === '+') lx = -6.5;
+    } else if (comp.type === 'BATTERY_9V' || comp.type === 'BATTERY') {
+      const p = (pinId || '').toLowerCase();
+      if (p === '+' || p === 'p' || p === 'pos' || p === '1') lx = -6.5;
       else lx = 6.5;
       ly = 27;
     } else if (comp.type === 'PUSHBUTTON') {
@@ -954,7 +956,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'LED') {
-            const isPowered = Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
+            const isPowered = Boolean(isSimulating && (simState?.on || (simState?.current && Math.abs(simState.current) > 0.001)));
             return (
               <group
                 key={comp.id}
@@ -1644,21 +1646,6 @@ export function Studio3DCanvas({
           </button>
         )}
 
-        {/* Board Power Supply Quick Toggle */}
-        {anyMcu && (
-          <button
-            onClick={() => toggleUsb(anyMcu.id)}
-            className={`px-3 py-1 rounded text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all ${
-              anyMcu.parameters?.usbPlugged !== false
-                ? 'bg-emerald-950/90 border border-emerald-400 text-emerald-300 hover:bg-emerald-900'
-                : 'bg-rose-950/90 border border-rose-500 text-rose-300 hover:bg-rose-900 animate-pulse'
-            }`}
-            title={anyMcu.parameters?.usbPlugged !== false ? "Board Power: Click to Disconnect USB Cable" : "Board Power: Click to Connect USB Cable"}
-          >
-            <Zap className={`w-3.5 h-3.5 ${anyMcu.parameters?.usbPlugged !== false ? 'text-emerald-400' : 'text-rose-400'}`} />
-            <span>{anyMcu.parameters?.usbPlugged !== false ? '⚡ USB: 5V Active' : '⚡ Connect USB Power'}</span>
-          </button>
-        )}
       </div>
 
       {/* Top Right Add Component Drawer Trigger */}
@@ -1672,13 +1659,13 @@ export function Studio3DCanvas({
         </button>
       </div>
 
-      {/* Expanded Searchable 3D Component Library Panel */}
+      {/* Expanded Pro 3D Component Library Grid Drawer */}
       {isAddDrawerOpen && (
-        <div className="absolute top-14 right-4 w-80 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl z-30 font-mono text-xs space-y-3 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-14 right-4 w-96 bg-slate-900/98 border border-slate-700/80 rounded-xl p-3.5 shadow-2xl z-30 font-mono text-xs space-y-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-200 font-bold uppercase text-[11px]">
             <span className="flex items-center gap-1.5 text-cyan-400">
               <Cpu className="w-4 h-4" />
-              3D Component Library
+              3D Component Palette
             </span>
             <button onClick={() => setIsAddDrawerOpen(false)} className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded">
               <X className="w-4 h-4" />
@@ -1692,18 +1679,18 @@ export function Studio3DCanvas({
               type="text"
               value={libSearch}
               onChange={(e) => setLibSearch(e.target.value)}
-              placeholder="Search 15+ 3D components..."
+              placeholder="Search 3D components..."
               className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
-          {/* Category Filter Pills */}
+          {/* Category Filter Pills Matching Schematic Categories */}
           <div className="flex flex-wrap gap-1 text-[10px]">
             {[
               { id: 'all', label: 'All' },
-              { id: 'boards', label: 'Boards' },
-              { id: 'passive', label: 'Passive' },
-              { id: 'semiconductors', label: 'ICs' },
+              { id: 'boards', label: 'MCUs & Power' },
+              { id: 'passive', label: 'Passives' },
+              { id: 'semiconductors', label: 'Active & ICs' },
               { id: 'sensors', label: 'Sensors' },
             ].map((tab) => (
               <button
@@ -1720,14 +1707,14 @@ export function Studio3DCanvas({
             ))}
           </div>
 
-          {/* Component List */}
-          <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+          {/* 2-Column Compact Component-Type Grid with Click-to-Place */}
+          <div className="max-h-80 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
             {filteredLibrary.map((item) => (
               <button
                 key={item.type}
                 onClick={() => {
                   const countOfType = components3d.filter((c) => c.type === item.type).length;
-                  const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 40 : -countOfType * 40) : 0;
+                  const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 35 : -countOfType * 35) : 0;
                   const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
                   const newComp: Component3D = {
                     id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -1744,19 +1731,25 @@ export function Studio3DCanvas({
                   setIsAddDrawerOpen(false);
                   onSelectComponent(newComp.id);
                 }}
-                className="w-full text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-colors cursor-pointer group"
+                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 hover:border-cyan-500/50 transition-all cursor-pointer group flex flex-col justify-between"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-white group-hover:text-cyan-400">{item.label}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-cyan-300 font-mono">
-                    {item.value}
-                  </span>
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono">
+                      {item.value}
+                    </span>
+                  </div>
+                  <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight">
+                    {item.label}
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{item.desc}</div>
+                <div className="text-[9px] text-slate-400 mt-1 line-clamp-1">
+                  {item.desc}
+                </div>
               </button>
             ))}
             {filteredLibrary.length === 0 && (
-              <div className="text-center py-6 text-slate-500 text-xs">
+              <div className="col-span-2 text-center py-6 text-slate-500 text-xs">
                 No matching 3D components found.
               </div>
             )}
@@ -1764,7 +1757,7 @@ export function Studio3DCanvas({
         </div>
       )}
 
-      {/* Floating Wire HUD when wire is selected */}
+      {/* Floating Wire HUD when wire is selected: Single Disconnect Button + Color Swatches */}
       {selectedWire && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center gap-2">
@@ -1776,9 +1769,9 @@ export function Studio3DCanvas({
 
           <div className="h-4 w-px bg-slate-700" />
 
-          {/* Color picker */}
-          <div className="flex items-center gap-1">
-            {['#EF4444', '#3B82F6', '#10B981', '#F59E0B', '#1E293B', '#F8FAFC'].map((hex) => (
+          {/* Color picker swatches */}
+          <div className="flex items-center gap-1.5" title="Change wire color">
+            {['#EF4444', '#3B82F6', '#10B981', '#EAB308', '#1E293B', '#F8FAFC'].map((hex) => (
               <button
                 key={hex}
                 onClick={() => onUpdateWire3D({ ...selectedWire, color: hex })}
@@ -1796,26 +1789,11 @@ export function Studio3DCanvas({
               onDeleteWire3D(selectedWire.id);
               onSelectWire(null);
             }}
-            className="flex items-center gap-1 px-2.5 py-1 bg-amber-950/60 border border-amber-600/80 text-amber-300 hover:bg-amber-900 rounded text-[11px] font-bold cursor-pointer transition-colors"
-            title="Cleanly disconnect this jumper wire from both terminals"
+            className="flex items-center gap-1.5 px-3 py-1 bg-rose-950/60 border border-rose-600/80 text-rose-300 hover:bg-rose-900 rounded text-[11px] font-bold cursor-pointer transition-colors"
+            title="Cleanly disconnect this jumper wire from breadboard / terminals"
           >
             <Unplug className="w-3.5 h-3.5" />
             <span>Disconnect</span>
-          </button>
-
-          <div className="h-4 w-px bg-slate-700" />
-
-          {/* Delete Wire */}
-          <button
-            onClick={() => {
-              onDeleteWire3D(selectedWire.id);
-              onSelectWire(null);
-            }}
-            className="flex items-center gap-1 text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
-            title="Delete this jumper wire [Delete]"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete [Del]</span>
           </button>
         </div>
       )}
@@ -1900,21 +1878,6 @@ export function Studio3DCanvas({
               <MoveDown className="w-3 h-3 text-cyan-400" />
             </button>
           </div>
-
-          {/* USB Power Toggle (if MCU) */}
-          {(selectedComp.type.startsWith('ARDUINO_') || selectedComp.type.startsWith('ESP32') || selectedComp.type.startsWith('STM32') || selectedComp.type.startsWith('RASPBERRY_PI')) && onToggleMcuUsb && (
-            <button
-              onClick={() => onToggleMcuUsb(selectedComp.id)}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-colors ${
-                selectedComp.parameters?.usbPlugged !== false
-                  ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-600/60'
-              }`}
-              title="Toggle USB 5.0V Power Cable"
-            >
-              <span>{selectedComp.parameters?.usbPlugged !== false ? '🔌 USB: 5V ON' : '⚡ Plug USB'}</span>
-            </button>
-          )}
 
           <div className="h-4 w-px bg-slate-700" />
 
