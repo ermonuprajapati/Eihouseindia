@@ -175,9 +175,11 @@ export function CoreEcosystemHub() {
   const activePillar = PILLARS[activeIndex];
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-1 sm:px-0">
+    <div className="w-full max-w-5xl mx-auto">
       <style>{`
-        /* 16:10 RESPONSIVE HUB CONTAINER */
+        /* =========================================
+           16:10 RESPONSIVE HUB CONTAINER (TABLET & DESKTOP)
+           ========================================= */
         .eih-hub-stage {
           position: relative;
           width: 100%;
@@ -279,7 +281,7 @@ export function CoreEcosystemHub() {
         }
 
         .eih-core-eyebrow {
-          font-size: max(7.5px, 1.15cqw);
+          font-size: 1.15cqw;
           font-weight: 700;
           letter-spacing: 0.24em;
           color: #f59e0b;
@@ -287,7 +289,7 @@ export function CoreEcosystemHub() {
         }
 
         .eih-core-title {
-          font-size: max(13px, 2.35cqw);
+          font-size: 2.35cqw;
           font-weight: 800;
           letter-spacing: 0.04em;
           color: #ffffff;
@@ -296,7 +298,7 @@ export function CoreEcosystemHub() {
 
         .eih-core-active {
           margin-top: 0.9cqw;
-          font-size: max(8px, 1.15cqw);
+          font-size: 1.15cqw;
           font-weight: 700;
           letter-spacing: 0.14em;
           color: #38bdf8;
@@ -308,12 +310,12 @@ export function CoreEcosystemHub() {
           color: #fbbf24;
         }
 
-        /* 8 PILLAR CARDS */
+        /* 8 ORBITAL PILLAR CARDS */
         .eih-card {
           position: absolute;
           transform: translate(-50%, -50%);
-          width: 17cqw;
-          padding: 1.55cqw 1.2cqw;
+          width: 16.5cqw;
+          padding: 1.35cqw 1cqw;
           border-radius: max(8px, 1.25cqw);
           background: rgba(6, 13, 26, 0.92);
           border: 1px solid rgba(56, 189, 248, 0.24);
@@ -322,7 +324,7 @@ export function CoreEcosystemHub() {
           align-items: center;
           justify-content: center;
           text-align: center;
-          gap: 0.8cqw;
+          gap: 0.7cqw;
           z-index: 4;
           cursor: pointer;
           text-decoration: none;
@@ -338,9 +340,9 @@ export function CoreEcosystemHub() {
         }
 
         .eih-card-icon {
-          width: max(20px, 3.4cqw);
-          height: max(20px, 3.4cqw);
-          border-radius: max(5px, 0.85cqw);
+          width: 3.2cqw;
+          height: 3.2cqw;
+          border-radius: max(6px, 0.85cqw);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -355,13 +357,13 @@ export function CoreEcosystemHub() {
         }
 
         .eih-card-icon svg {
-          width: max(12px, 1.85cqw);
-          height: max(12px, 1.85cqw);
+          width: 1.8cqw;
+          height: 1.8cqw;
           stroke-width: 1.9;
         }
 
         .eih-card-label {
-          font-size: max(8.5px, 1.38cqw);
+          font-size: 1.28cqw;
           font-weight: 700;
           line-height: 1.25;
           color: #f1f5f9;
@@ -374,8 +376,8 @@ export function CoreEcosystemHub() {
           background: linear-gradient(180deg, rgba(12, 34, 56, 0.96) 0%, rgba(6, 16, 30, 0.96) 100%);
           border-color: rgba(56, 189, 248, 0.88);
           box-shadow:
-            0 0 2.6cqw rgba(56, 189, 248, 0.38),
-            inset 0 0 1.4cqw rgba(56, 189, 248, 0.14);
+            0 0 2.4cqw rgba(56, 189, 248, 0.38),
+            inset 0 0 1.2cqw rgba(56, 189, 248, 0.14);
           transform: translate(-50%, -50%) scale(1.045);
           z-index: 6;
         }
@@ -385,8 +387,8 @@ export function CoreEcosystemHub() {
           background: linear-gradient(180deg, rgba(46, 32, 12, 0.94) 0%, rgba(22, 16, 9, 0.96) 100%);
           border-color: rgba(251, 191, 36, 0.92);
           box-shadow:
-            0 0 2.8cqw rgba(245, 158, 11, 0.42),
-            inset 0 0 1.4cqw rgba(251, 191, 36, 0.16);
+            0 0 2.6cqw rgba(245, 158, 11, 0.42),
+            inset 0 0 1.2cqw rgba(251, 191, 36, 0.16);
           transform: translate(-50%, -50%) scale(1.045);
           z-index: 6;
         }
@@ -408,8 +410,12 @@ export function CoreEcosystemHub() {
         }
       `}</style>
 
+      {/* ==============================================================
+          1. DESKTOP & TABLET VIEW (>= 640px)
+          Authentic 16:10 Vector Orbital Hub with rotating rings and glowing spokes
+          ============================================================== */}
       <div
-        className="eih-hub-stage"
+        className="hidden sm:block eih-hub-stage"
         onMouseLeave={startAutoCycle}
         role="region"
         aria-label="EI House Core Ecosystem Hub"
@@ -472,26 +478,26 @@ export function CoreEcosystemHub() {
 
           {/* Static Base Spokes (Center to 8 Nodes) */}
           <g strokeWidth="2" strokeOpacity="0.28">
-            <line x1="800" y1="500" x2="800" y2="135" stroke="#38BDF8" />
+            <line x1="800" y1="500" x2="800"  y2="135" stroke="#38BDF8" />
             <line x1="800" y1="500" x2="1130" y2="242" stroke="#F59E0B" />
             <line x1="800" y1="500" x2="1272" y2="500" stroke="#38BDF8" />
             <line x1="800" y1="500" x2="1130" y2="758" stroke="#F59E0B" />
-            <line x1="800" y1="500" x2="800" y2="865" stroke="#38BDF8" />
-            <line x1="800" y1="500" x2="470" y2="758" stroke="#F59E0B" />
-            <line x1="800" y1="500" x2="328" y2="500" stroke="#38BDF8" />
-            <line x1="800" y1="500" x2="470" y2="242" stroke="#F59E0B" />
+            <line x1="800" y1="500" x2="800"  y2="865" stroke="#38BDF8" />
+            <line x1="800" y1="500" x2="470"  y2="758" stroke="#F59E0B" />
+            <line x1="800" y1="500" x2="328"  y2="500" stroke="#38BDF8" />
+            <line x1="800" y1="500" x2="470"  y2="242" stroke="#F59E0B" />
           </g>
 
           {/* Animated Glowing Data Pulses Along Spokes */}
           <g strokeWidth="3.2">
-            <line x1="800" y1="500" x2="800" y2="135" stroke="#38BDF8" className="spoke-pulse" />
+            <line x1="800" y1="500" x2="800"  y2="135" stroke="#38BDF8" className="spoke-pulse" />
             <line x1="800" y1="500" x2="1130" y2="242" stroke="#FBBF24" className="spoke-pulse delay-1" />
             <line x1="800" y1="500" x2="1272" y2="500" stroke="#38BDF8" className="spoke-pulse delay-2" />
             <line x1="800" y1="500" x2="1130" y2="758" stroke="#FBBF24" className="spoke-pulse delay-3" />
-            <line x1="800" y1="500" x2="800" y2="865" stroke="#38BDF8" className="spoke-pulse delay-1" />
-            <line x1="800" y1="500" x2="470" y2="758" stroke="#FBBF24" className="spoke-pulse delay-2" />
-            <line x1="800" y1="500" x2="328" y2="500" stroke="#38BDF8" className="spoke-pulse delay-3" />
-            <line x1="800" y1="500" x2="470" y2="242" stroke="#FBBF24" className="spoke-pulse" />
+            <line x1="800" y1="500" x2="800"  y2="865" stroke="#38BDF8" className="spoke-pulse delay-1" />
+            <line x1="800" y1="500" x2="470"  y2="758" stroke="#FBBF24" className="spoke-pulse delay-2" />
+            <line x1="800" y1="500" x2="328"  y2="500" stroke="#38BDF8" className="spoke-pulse delay-3" />
+            <line x1="800" y1="500" x2="470"  y2="242" stroke="#FBBF24" className="spoke-pulse" />
           </g>
         </svg>
 
@@ -534,6 +540,113 @@ export function CoreEcosystemHub() {
             </Link>
           );
         })}
+      </div>
+
+      {/* ==============================================================
+          2. MOBILE PHONE VIEW (< 640px)
+          Zero-Overlap Grid Architecture with Active Glowing Cyber Core
+          ============================================================== */}
+      <div className="block sm:hidden rounded-2xl bg-[#050a14] border border-sky-500/25 p-4 sm:p-5 relative overflow-hidden shadow-2xl user-select-none">
+        {/* Subtle Cyber Grid Background */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(14,165,233,0.18)_0%,transparent_65%)] pointer-events-none"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(rgba(56,189,248,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(56,189,248,0.04)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"
+        />
+
+        {/* Mobile Center Core Hub Banner */}
+        <div className="relative z-10 flex flex-col items-center text-center pb-4 pt-1 border-b border-sky-500/15">
+          <div className="relative flex items-center justify-center my-2">
+            {/* Outer Subtle Orbit */}
+            <div className="absolute w-32 h-32 rounded-full border border-sky-400/20 border-dashed animate-[spin_40s_linear_infinite]" />
+            <div className="absolute w-28 h-28 rounded-full border border-amber-400/25 border-dashed animate-[spin_24s_linear_infinite_reverse]" />
+
+            {/* Core Circle */}
+            <div
+              className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center transition-all duration-300 border ${
+                activePillar.theme === 'gold'
+                  ? 'border-amber-400/70 bg-gradient-to-b from-[#1c1409] via-[#0c101c] to-[#050a14] shadow-[0_0_24px_rgba(245,158,11,0.3)]'
+                  : 'border-sky-400/70 bg-gradient-to-b from-[#0e233b] via-[#071120] to-[#050a14] shadow-[0_0_24px_rgba(34,211,238,0.3)]'
+              }`}
+            >
+              <span className="text-[9px] font-bold tracking-widest text-[#F59E0B] uppercase">CORE HUB</span>
+              <span className="text-sm font-extrabold text-white tracking-wider">EI HOUSE</span>
+              <span
+                className={`text-[11px] font-bold tracking-wider uppercase mt-0.5 transition-colors duration-200 ${
+                  activePillar.theme === 'gold' ? 'text-amber-400' : 'text-sky-400'
+                }`}
+              >
+                {activePillar.short}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] text-slate-300 mt-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-medium">8 Integrated Pillars · Tap any to explore</span>
+          </div>
+        </div>
+
+        {/* Mobile 8 Pillars in 2-Column Clean Grid (Zero Overlap Guaranteed) */}
+        <div className="relative z-10 grid grid-cols-2 gap-2.5 pt-3.5">
+          {PILLARS.map((pillar, idx) => {
+            const isActive = idx === activeIndex;
+            const isGold = pillar.theme === 'gold';
+            return (
+              <Link
+                key={pillar.id}
+                href={pillar.href}
+                prefetch={false}
+                onClick={() => {
+                  stopAutoCycle();
+                  setActiveIndex(idx);
+                }}
+                className={`relative p-3 rounded-xl border flex flex-col items-center text-center gap-1.5 transition-all duration-200 ${
+                  isActive
+                    ? isGold
+                      ? 'bg-gradient-to-b from-amber-950/60 to-[#070e1b] border-amber-400/90 shadow-[0_0_16px_rgba(245,158,11,0.28)] scale-[1.02]'
+                      : 'bg-gradient-to-b from-sky-950/60 to-[#070e1b] border-sky-400/90 shadow-[0_0_16px_rgba(56,189,248,0.28)] scale-[1.02]'
+                    : 'bg-[#07101f]/80 border-slate-800/90 hover:border-slate-700 active:scale-98'
+                }`}
+              >
+                {/* Icon Box */}
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                    isGold
+                      ? isActive
+                        ? 'bg-amber-400/25 text-amber-300'
+                        : 'bg-amber-400/10 text-amber-400'
+                      : isActive
+                        ? 'bg-sky-400/25 text-sky-300'
+                        : 'bg-sky-400/10 text-sky-400'
+                  }`}
+                  aria-hidden="true"
+                >
+                  <div className="w-4 h-4 [&>svg]:w-full [&>svg]:h-full [&>svg]:stroke-[1.9]">
+                    {pillar.icon}
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <p className="text-[11px] font-bold text-slate-100 leading-tight">
+                    {pillar.labelTop} {pillar.labelBottom}
+                  </p>
+                  <span
+                    className={`text-[9px] font-mono font-semibold uppercase tracking-wider ${
+                      isGold ? 'text-amber-400/90' : 'text-sky-400/90'
+                    }`}
+                  >
+                    {pillar.short}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
