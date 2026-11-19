@@ -19,6 +19,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
   background-color: var(--bg-canvas);
   color: var(--ink-primary);
   -webkit-text-size-adjust: 100%;
@@ -32,7 +33,6 @@ body {
   color: var(--ink-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: clip;
   min-width: 320px;
   width: 100%;
   touch-action: manipulation;
@@ -230,14 +230,6 @@ body {
   }
 }
 
-.animate-float-slow {
-  animation: floatSlow 4s ease-in-out infinite;
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 5s ease-in-out infinite;
-}
-
 .animate-marquee-slow {
   display: flex;
   width: max-content;
@@ -248,181 +240,6 @@ body {
 
 .animate-marquee-slow:hover {
   animation-play-state: paused;
-}
-
-/* Custom Engineering, Silicon & Hardware Animations */
-@keyframes pcbTraceDash {
-  to {
-    stroke-dashoffset: -120;
-  }
-}
-
-@keyframes pcbTraceDashFast {
-  to {
-    stroke-dashoffset: -80;
-  }
-}
-
-@keyframes chipHeartbeat {
-  0%, 100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.95;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes signalPacketFlow {
-  0% {
-    offset-distance: 0%;
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    offset-distance: 100%;
-    opacity: 0;
-  }
-}
-
-@keyframes spectrumBar {
-  0%, 100% {
-    transform: scaleY(0.2);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-@keyframes laserScanVertical {
-  0% {
-    transform: translateY(-5%);
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.7;
-  }
-  85% {
-    opacity: 0.7;
-  }
-  100% {
-    transform: translateY(105%);
-    opacity: 0;
-  }
-}
-
-@keyframes radarPulse {
-  0% {
-    transform: scale(0.25);
-    opacity: 0.85;
-  }
-  60% {
-    opacity: 0.35;
-  }
-  100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-}
-
-@keyframes waveOscilloscope {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.animate-pcb-trace {
-  stroke-dasharray: 8 6;
-  animation: pcbTraceDash 2.4s linear infinite;
-}
-
-.animate-pcb-trace-fast {
-  stroke-dasharray: 6 4;
-  animation: pcbTraceDashFast 1.4s linear infinite;
-}
-
-@media (max-width: 768px) {
-  .animate-pcb-trace,
-  .animate-pcb-trace-fast,
-  .animate-radar-ring-1,
-  .animate-radar-ring-2,
-  .animate-radar-ring-3,
-  .animate-laser-scan,
-  .animate-chip-heartbeat,
-  .animate-float-slow,
-  .animate-pulse-glow {
-    animation: none !important;
-  }
-}
-
-.animate-chip-heartbeat {
-  animation: chipHeartbeat 3s ease-in-out infinite;
-  transform-origin: center;
-}
-
-.animate-laser-scan {
-  animation: laserScanVertical 3.5s ease-in-out infinite;
-}
-
-.animate-radar-ring-1 {
-  animation: radarPulse 3.2s cubic-bezier(0.1, 0.4, 0.6, 1) infinite;
-  transform-origin: center;
-  transform-box: fill-box;
-  will-change: transform, opacity;
-}
-
-.animate-radar-ring-2 {
-  animation: radarPulse 3.2s cubic-bezier(0.1, 0.4, 0.6, 1) infinite 1.1s;
-  transform-origin: center;
-  transform-box: fill-box;
-  will-change: transform, opacity;
-}
-
-.animate-radar-ring-3 {
-  animation: radarPulse 3.2s cubic-bezier(0.1, 0.4, 0.6, 1) infinite 2.2s;
-  transform-origin: center;
-  transform-box: fill-box;
-  will-change: transform, opacity;
-}
-
-.animate-wave-oscilloscope {
-  display: flex;
-  width: 200%;
-  animation: waveOscilloscope 10s linear infinite;
-}
-
-.animate-spectrum-1 {
-  animation: spectrumBar 1.2s ease-in-out infinite;
-  transform-origin: bottom;
-}
-
-.animate-spectrum-2 {
-  animation: spectrumBar 1.5s ease-in-out infinite 0.2s;
-  transform-origin: bottom;
-}
-
-.animate-spectrum-3 {
-  animation: spectrumBar 0.9s ease-in-out infinite 0.4s;
-  transform-origin: bottom;
-}
-
-.animate-spectrum-4 {
-  animation: spectrumBar 1.3s ease-in-out infinite 0.1s;
-  transform-origin: bottom;
-}
-
-.animate-spectrum-5 {
-  animation: spectrumBar 1.7s ease-in-out infinite 0.5s;
-  transform-origin: bottom;
 }
 
 .content-auto {

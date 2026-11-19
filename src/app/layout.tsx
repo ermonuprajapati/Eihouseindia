@@ -8,6 +8,7 @@ import { SITE_CONFIG } from '@/config/site';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { SiteTrafficTracker } from '@/components/analytics/SiteTrafficTracker';
 import { RouteProgressBar } from '@/components/layout/RouteProgressBar';
+import { AppLayoutShell } from '@/components/layout/AppLayoutShell';
 import { buildOrganizationJsonLd, buildWebsiteJsonLd } from '@/lib/seo';
 import './globals.css';
 
@@ -167,7 +168,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
       </head>
-      <body suppressHydrationWarning className="min-h-screen bg-[#FAFBFD] text-[#0B1528] antialiased overflow-x-clip min-w-0 w-full">
+      <body suppressHydrationWarning className="min-h-screen bg-[#FAFBFD] text-[#0B1528] antialiased min-w-0 w-full">
         <Suspense fallback={null}>
           <RouteProgressBar />
         </Suspense>
@@ -183,7 +184,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={buildWebsiteJsonLd()} />
         <AuthProvider>
           <SiteTrafficTracker />
-          {children}
+          <AppLayoutShell>{children}</AppLayoutShell>
           <Toaster position="bottom-right" richColors closeButton />
         </AuthProvider>
       </body>

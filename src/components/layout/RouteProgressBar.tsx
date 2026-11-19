@@ -58,7 +58,7 @@ export function RouteProgressBar() {
   return (
     <div
       aria-hidden="true"
-      className="fixed top-0 left-0 right-0 z-50 h-[2.5px] pointer-events-none transition-all duration-300 ease-out"
+      className="fixed top-0 left-0 right-0 z-[100] h-[2.5px] pointer-events-none transition-all duration-300 ease-out"
       style={{
         width: `${progress}%`,
         background: 'linear-gradient(90deg, #1D4ED8 0%, #06B6D4 50%, #3B82F6 100%)',
