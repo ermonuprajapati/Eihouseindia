@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
-import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Scissors, Cable, Check, Unplug, Cpu } from 'lucide-react';
+import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Cable, Check, Unplug, Cpu } from 'lucide-react';
 
 interface PropertiesInspectorProps {
   component: CircuitComponent | null;
   selectedWire?: CircuitWire | null;
   components?: CircuitComponent[];
+  wires?: CircuitWire[];
   onUpdateComponent: (updated: CircuitComponent) => void;
   onUpdateWire?: (updated: CircuitWire) => void;
   onRotateComponent: (id: string) => void;
@@ -118,6 +119,7 @@ export function PropertiesInspector({
   component,
   selectedWire,
   components,
+  wires,
   onUpdateComponent,
   onUpdateWire,
   onRotateComponent,
@@ -125,7 +127,6 @@ export function PropertiesInspector({
   onDeleteComponent,
   onDeleteWire,
   onDisconnectWire,
-  onDisconnectWireEndpoint,
   onDuplicateComponent,
   onClose,
   simState,
@@ -136,6 +137,7 @@ export function PropertiesInspector({
   onWidthChange,
 }: PropertiesInspectorProps) {
   const isResizingRef = useRef(false);
+  const [pinFilterMode, setPinFilterMode] = useState<'all' | 'connected'>('all');
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -343,62 +345,20 @@ export function PropertiesInspector({
           <div className="space-y-2 pt-2 border-t border-slate-800">
             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Wire Actions</span>
 
-            {/* Disconnect Endpoints and Reconnect */}
-            {onDisconnectWireEndpoint ? (
-              <div className="space-y-1.5">
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onDisconnectWireEndpoint(selectedWire.id, 'start')}
-                    className="py-1.5 px-2 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    title="Disconnect start pin and re-route from end pin"
-                  >
-                    <Scissors className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Disconnect Start</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDisconnectWireEndpoint(selectedWire.id, 'end')}
-                    className="py-1.5 px-2 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    title="Disconnect end pin and re-route from start pin"
-                  >
-                    <Scissors className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Disconnect End</span>
-                  </button>
-                </div>
-                {onDisconnectWire && (
-                  <button
-                    type="button"
-                    onClick={() => onDisconnectWire(selectedWire.id)}
-                    className="w-full py-1.5 px-3 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/60 text-amber-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    title="Detach wire completely"
-                  >
-                    <Unplug className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Disconnect Wire (Unplug)</span>
-                  </button>
-                )}
-              </div>
-            ) : onDisconnectWire && (
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => onDisconnectWire(selectedWire.id)}
-                  className="w-full py-2 px-3 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 text-sky-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  title="Disconnect wire and re-route connection"
-                >
-                  <Scissors className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Disconnect &amp; Re-route</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDisconnectWire(selectedWire.id)}
-                  className="w-full py-2 px-3 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/60 text-amber-200 font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  title="Unplug and disconnect wire"
-                >
-                  <Unplug className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Disconnect Wire (Unplug)</span>
-                </button>
-              </div>
+            {/* Single Disconnect Wire Button */}
+            {(onDisconnectWire || onDeleteWire) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDisconnectWire) onDisconnectWire(selectedWire.id);
+                  else if (onDeleteWire) onDeleteWire(selectedWire.id);
+                }}
+                className="w-full py-2 px-3 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/70 text-amber-200 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                title="Disconnect wire completely from both terminal pins"
+              >
+                <Unplug className="w-3.5 h-3.5 text-amber-400" />
+                <span>Disconnect Wire</span>
+              </button>
             )}
 
             {/* Delete Wire Button */}
@@ -1702,25 +1662,90 @@ export function PropertiesInspector({
           </div>
         </div>
 
-        {/* SECTION 5: ELECTRICAL PIN CONNECTIONS */}
+        {/* SECTION 5: ELECTRICAL PIN CONNECTIONS & NETLIST MAP */}
         <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 space-y-2">
-          <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
-            <span>Terminal Pins ({component.pins.length})</span>
-            <span className="text-slate-500">Netlist Nodes</span>
-          </label>
-          <div className="bg-slate-950 border border-slate-800 rounded divide-y divide-slate-800/80 font-mono text-[10px]">
-            {component.pins.map((pin) => (
-              <div key={pin.id} className="p-2 flex items-center justify-between text-slate-300">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="font-bold">{pin.name}</span>
-                  <span className="text-slate-500">[{pin.id}]</span>
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Terminal Pins &amp; Netlist ({component.pins.length})</span>
+            </label>
+            <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded border border-slate-800 text-[9px] font-mono">
+              <button
+                type="button"
+                onClick={() => setPinFilterMode('all')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  pinFilterMode === 'all'
+                    ? 'bg-slate-800 text-white font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All ({component.pins.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPinFilterMode('connected')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  pinFilterMode === 'connected'
+                    ? 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-700/60'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Connected
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 rounded divide-y divide-slate-800/80 font-mono text-[10px] max-h-56 overflow-y-auto">
+            {component.pins
+              .map((pin) => {
+                const connectedWire = wires?.find(
+                  (w) =>
+                    (w.fromCompId === component.id && w.fromPinId === pin.id) ||
+                    (w.toCompId === component.id && w.toPinId === pin.id)
+                );
+                let targetDesc = 'NC (Floating)';
+                let netLabel = 'Unconnected';
+                let isConnected = false;
+
+                if (connectedWire) {
+                  isConnected = true;
+                  const isFrom = connectedWire.fromCompId === component.id && connectedWire.fromPinId === pin.id;
+                  const otherCompId = isFrom ? connectedWire.toCompId : connectedWire.fromCompId;
+                  const otherPinId = isFrom ? connectedWire.toPinId : connectedWire.fromPinId;
+                  const otherComp = components?.find((c) => c.id === otherCompId);
+                  const otherPin = otherComp?.pins.find((p) => p.id === otherPinId);
+                  targetDesc = `${otherComp?.designator || otherComp?.label || otherCompId} (${otherPin?.name || otherPinId})`;
+                  netLabel = connectedWire.netName || `Net_${connectedWire.id.slice(0, 5)}`;
+                }
+
+                return { pin, connectedWire, targetDesc, netLabel, isConnected };
+              })
+              .filter((item) => (pinFilterMode === 'connected' ? item.isConnected : true))
+              .map(({ pin, isConnected, netLabel, targetDesc }) => (
+                <div key={pin.id} className="p-2 flex items-center justify-between text-slate-300 gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        isConnected ? 'bg-emerald-400 ring-2 ring-emerald-500/30' : 'bg-slate-600'
+                      }`}
+                    />
+                    <span className="font-bold text-slate-200 shrink-0">{pin.name}</span>
+                    <span className="text-slate-500 text-[9px] shrink-0">[{pin.id}]</span>
+                  </div>
+
+                  {isConnected ? (
+                    <div className="flex items-center gap-1 text-[9px] truncate text-right">
+                      <span className="text-amber-400 font-bold bg-amber-950/60 px-1 py-0.2 rounded border border-amber-800/40 shrink-0">
+                        {netLabel}
+                      </span>
+                      <span className="text-slate-500">➔</span>
+                      <span className="text-emerald-300 font-semibold truncate">{targetDesc}</span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-500 text-[9px] italic">NC (Floating)</span>
+                  )}
                 </div>
-                <span className="text-slate-400 uppercase text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
-                  {pin.pinType}
-                </span>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       </div>

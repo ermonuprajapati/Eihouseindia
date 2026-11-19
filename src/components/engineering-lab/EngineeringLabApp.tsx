@@ -14,6 +14,7 @@ import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starte
 import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 
 import { LabHeader } from './Header/LabHeader';
 import { SchematicCanvas } from './Canvas/SchematicCanvas';
@@ -393,6 +394,42 @@ export function EngineeringLabApp() {
     toast.success(`Pasted ${newDesignator}`);
   };
 
+  const handleBatchUpdatePositions = (updates: { id: string; x: number; y: number }[]) => {
+    const updateMap = new Map(updates.map((u) => [u.id, { x: u.x, y: u.y }]));
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.map((c) => {
+        const pos = updateMap.get(c.id);
+        return pos ? { ...c, x: pos.x, y: pos.y } : c;
+      }),
+    }));
+  };
+
+  const handleBatchDelete = (compIds: string[], wireIds: string[]) => {
+    recordHistory();
+    const compIdSet = new Set(compIds);
+    const wireIdSet = new Set(wireIds);
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.filter((c) => !compIdSet.has(c.id)),
+      wires: prev.wires.filter(
+        (w) => !wireIdSet.has(w.id) && !compIdSet.has(w.fromCompId) && !compIdSet.has(w.toCompId)
+      ),
+    }));
+    setSelectedCompId(null);
+    setSelectedWireId(null);
+    toast.info(`Deleted ${compIds.length + wireIds.length} items`);
+  };
+
+  const handleAutoAnnotate = () => {
+    recordHistory();
+    setProject((prev) => ({
+      ...prev,
+      components: autoAnnotateComponents(prev.components),
+    }));
+    toast.success('Schematic auto-annotated sequentially');
+  };
+
   // ----------------------------------------------------------------
   // Wire Actions
   // ----------------------------------------------------------------
@@ -741,6 +778,11 @@ export function EngineeringLabApp() {
                 onDuplicateComponent={handleDuplicateComponent}
                 onCopyComponent={handleCopyComponent}
                 onPasteComponent={handlePasteComponent}
+                projectTitle={project.title}
+                onAddComponent={handleAddComponent}
+                onBatchUpdatePositions={handleBatchUpdatePositions}
+                onBatchDelete={handleBatchDelete}
+                onAutoAnnotate={handleAutoAnnotate}
               />
             </main>
 
@@ -748,6 +790,7 @@ export function EngineeringLabApp() {
               component={selectedComponent}
               selectedWire={selectedWire}
               components={project.components}
+              wires={project.wires}
               onUpdateComponent={handleUpdateComponent}
               onUpdateWire={(updatedWire) => {
                 recordHistory();
@@ -808,6 +851,7 @@ export function EngineeringLabApp() {
               component={selectedComponent}
               selectedWire={selectedWire}
               components={project.components}
+              wires={project.wires}
               onUpdateComponent={handleUpdateComponent}
               onUpdateWire={(updatedWire) => {
                 recordHistory();

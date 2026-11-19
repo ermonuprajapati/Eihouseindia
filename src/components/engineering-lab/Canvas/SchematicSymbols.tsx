@@ -961,20 +961,84 @@ export function SchematicSymbol({
       }
 
       case 'ARDUINO_MEGA': {
+        const leftPins = [
+          { name: 'VIN', y: -180 }, { name: '5V', y: -165 }, { name: '3V3', y: -150 },
+          { name: 'GND', y: -135 }, { name: 'RESET', y: -120 }, { name: 'IOREF', y: -105 },
+          { name: 'A0', y: -80 }, { name: 'A1', y: -65 }, { name: 'A2', y: -50 }, { name: 'A3', y: -35 },
+          { name: 'A4', y: -20 }, { name: 'A5', y: -5 }, { name: 'A6', y: 10 }, { name: 'A7', y: 25 },
+          { name: 'A8', y: 40 }, { name: 'A9', y: 55 }, { name: 'A10', y: 70 }, { name: 'A11', y: 85 },
+          { name: 'A12', y: 100 }, { name: 'A13', y: 115 }, { name: 'A14', y: 130 }, { name: 'A15', y: 145 },
+        ];
+
+        const rightPins = [
+          { name: 'D0 (RX0)', y: -180 }, { name: 'D1 (TX0)', y: -165 }, { name: 'D2 (PWM)', y: -150 },
+          { name: 'D3 (PWM)', y: -135 }, { name: 'D4 (PWM)', y: -120 }, { name: 'D5 (PWM)', y: -105 },
+          { name: 'D6 (PWM)', y: -90 }, { name: 'D7 (PWM)', y: -75 }, { name: 'D8 (PWM)', y: -60 },
+          { name: 'D9 (PWM)', y: -45 }, { name: 'D10 (PWM)', y: -30 }, { name: 'D11 (PWM)', y: -15 },
+          { name: 'D12 (PWM)', y: 0 }, { name: 'D13 (LED)', y: 15 }, { name: 'D14 (TX3)', y: 35 },
+          { name: 'D15 (RX3)', y: 50 }, { name: 'D16 (TX2)', y: 65 }, { name: 'D17 (RX2)', y: 80 },
+          { name: 'D18 (TX1)', y: 95 }, { name: 'D19 (RX1)', y: 110 }, { name: 'D20 (SDA)', y: 125 },
+          { name: 'D21 (SCL)', y: 140 }, { name: 'AREF', y: 155 },
+        ];
+
         return (
           <g>
-            <rect x="-70" y="-80" width="140" height="160" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
-            <rect x="-73" y="-70" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" />
-            <rect x="-73" y="-15" width="18" height="22" rx="3" fill="#1E293B" />
-            {/* ATmega2560 Square TQFP in center */}
-            <g transform="translate(0, -6) rotate(45)">
-              <rect x="-14" y="-14" width="28" height="28" rx="2" fill="#0F172A" stroke="#334155" />
+            {/* Main PCB Chassis */}
+            <rect x="-85" y="-195" width="170" height="430" rx="8" fill="#04121A" stroke="#00878F" strokeWidth="2.5" />
+
+            {/* Top Connectors: USB-B & DC Jack */}
+            <rect x="-35" y="-203" width="22" height="14" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1" />
+            <rect x="15" y="-203" width="20" height="15" rx="2" fill="#1E293B" stroke="#0F172A" strokeWidth="1" />
+
+            {/* Header Titles */}
+            <text x="0" y="-184" fill="#00C4CC" fontSize="8.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ARDUINO MEGA 2560 R3
+            </text>
+            <text x="0" y="-174" fill="#64748B" fontSize="5.5" fontFamily="sans-serif" textAnchor="middle">
+              ATmega2560 • 54 DIGITAL I/O • 16 ADC • 4 UART
+            </text>
+
+            {/* Left Header Strip (Power & Analog) */}
+            <rect x="-84" y="-186" width="8" height="340" fill="#0B1320" stroke="#1E293B" strokeWidth="0.5" />
+            {leftPins.map((lp, i) => (
+              <g key={`lp-${i}`}>
+                <circle cx="-80" cy={lp.y} r="2" fill="#F59E0B" />
+                <text x="-74" y={lp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold">
+                  {lp.name}
+                </text>
+              </g>
+            ))}
+
+            {/* Right Header Strip (Digital & Comm) */}
+            <rect x="76" y="-186" width="8" height="350" fill="#0B1320" stroke="#1E293B" strokeWidth="0.5" />
+            {rightPins.map((rp, i) => (
+              <g key={`rp-${i}`}>
+                <circle cx="80" cy={rp.y} r="2" fill="#38BDF8" />
+                <text x="73" y={rp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                  {rp.name}
+                </text>
+              </g>
+            ))}
+
+            {/* Center: ATmega2560 TQFP IC Package */}
+            <g transform="translate(0, -20) rotate(45)">
+              <rect x="-18" y="-18" width="36" height="36" rx="3" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
+              <circle cx="-13" cy="-13" r="1.5" fill="#64748B" />
             </g>
-            <text x="0" y="3" fill="#94A3B8" fontSize="6" fontFamily="monospace" fontWeight="bold" textAnchor="middle">ATmega2560</text>
-            <rect x="-69" y="-60" width="8" height="120" fill="#0F172A" />
-            <rect x="61" y="-60" width="8" height="120" fill="#0F172A" />
-            <text x="0" y="-64" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
-              MEGA 2560
+            <text x="0" y="-17" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ATmega2560
+            </text>
+            <text x="0" y="-9" fill="#00878F" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
+              16.000 MHz
+            </text>
+
+            {/* Bottom: Extended Digital I/O Header (D22 - D53) */}
+            <rect x="-72" y="166" width="144" height="62" rx="4" fill="#0B1320" stroke="#334155" strokeWidth="1" />
+            <text x="0" y="174" fill="#F59E0B" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              EXTENDED DIGITAL I/O (D22 - D53)
+            </text>
+            <text x="0" y="224" fill="#64748B" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
+              D50(MISO) • D51(MOSI) • D52(SCK) • D53(SS)
             </text>
           </g>
         );
