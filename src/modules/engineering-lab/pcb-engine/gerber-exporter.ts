@@ -1,8 +1,11 @@
 /**
  * Industrial RS-274X Gerber & Excellon NC Drill Exporter
+ * Generates full manufacturing package for JLCPCB, PCBWay, and standard fab houses.
  */
 
 import { PcbLayout, CircuitComponent } from '../types';
+import { DrillExporter } from './drill-export';
+import { ZipBuilder } from './zip-builder';
 
 export class GerberExporter {
   /**
@@ -122,6 +125,49 @@ export class GerberExporter {
   }
 
   /**
+   * Generates Top Silkscreen (.gto) with designator and outline vectors
+   */
+  public static exportTopSilkscreen(pcb: PcbLayout): string {
+    let out = `%TF.FileFunction,Legend,Top*%\n`;
+    out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
+    out += `%ADD13C,0.150000*%\n`; // 0.15mm silkscreen stroke
+    out += `G04 Layer: Top Silkscreen (F.SilkS)*\n`;
+    out += `D13*\n`;
+
+    if (pcb.components) {
+      pcb.components.forEach((comp) => {
+        const cx = Math.round(comp.x * 100000);
+        const cy = Math.round(comp.y * 100000);
+        const hw = Math.round(5 * 100000);
+        const hh = Math.round(4 * 100000);
+
+        // Component boundary box
+        out += `X${cx - hw}Y${cy - hh}D02*\n`;
+        out += `X${cx + hw}Y${cy - hh}D01*\n`;
+        out += `X${cx + hw}Y${cy + hh}D01*\n`;
+        out += `X${cx - hw}Y${cy + hh}D01*\n`;
+        out += `X${cx - hw}Y${cy - hh}D01*\n`;
+      });
+    }
+
+    out += `M02*\n`;
+    return out;
+  }
+
+  /**
+   * Generates Bottom Silkscreen (.gbo)
+   */
+  public static exportBottomSilkscreen(_pcb: PcbLayout): string {
+    let out = `%TF.FileFunction,Legend,Bot*%\n`;
+    out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
+    out += `%ADD13C,0.150000*%\n`;
+    out += `G04 Layer: Bottom Silkscreen (B.SilkS)*\n`;
+    out += `D13*\n`;
+    out += `M02*\n`;
+    return out;
+  }
+
+  /**
    * Generates Board Outline Edge.Cuts (.gko)
    */
   public static exportEdgeCuts(pcb: PcbLayout): string {
@@ -146,14 +192,24 @@ export class GerberExporter {
    * Generates Excellon NC Drill file (.drl)
    */
   public static exportExcellonDrill(pcb: PcbLayout): string {
-    let drill = `M48\nMETRIC,TZ\nFMAT,2\nT01C0.900\n%\nG05\nG90\nT01\n`;
+    return DrillExporter.exportExcellonDrill(pcb);
+  }
 
-    pcb.pads.forEach((p) => {
-      drill += `X${p.x.toFixed(3)}Y${p.y.toFixed(3)}\n`;
-    });
-
-    drill += `M30\n`;
-    return drill;
+  /**
+   * Generates Pick and Place Centroid CSV file (SMT Assembly)
+   */
+  public static exportPickAndPlaceCsv(pcb: PcbLayout): string {
+    let csv = `Designator,Val,Package,Mid X,Mid Y,Rotation,Layer\n`;
+    if (pcb.components) {
+      pcb.components.forEach((c) => {
+        const des = c.designator || c.label;
+        const val = c.value || '-';
+        const pkg = c.footprint || c.type;
+        const rot = c.rotation || 0;
+        csv += `"${des}","${val}","${pkg}",${c.x.toFixed(3)},${c.y.toFixed(3)},${rot},"Top"\n`;
+      });
+    }
+    return csv;
   }
 
   /**
@@ -193,9 +249,29 @@ export class GerberExporter {
       'Bottom_Copper.gbl': this.exportBottomCopper(pcb),
       'Top_SolderMask.gts': this.exportTopSolderMask(pcb),
       'Bottom_SolderMask.gbs': this.exportBottomSolderMask(pcb),
+      'Top_Silkscreen.gto': this.exportTopSilkscreen(pcb),
+      'Bottom_Silkscreen.gbo': this.exportBottomSilkscreen(pcb),
       'Board_Outline.gko': this.exportEdgeCuts(pcb),
       'Drill_Plated.drl': this.exportExcellonDrill(pcb),
+      'PickAndPlace.csv': this.exportPickAndPlaceCsv(pcb),
       'Bill_of_Materials.csv': this.exportBomCsv(components),
     };
+  }
+
+  /**
+   * Exports full Gerber & Drill bundle as standard .ZIP archive and triggers download
+   */
+  public static exportGerberZip(
+    pcb: PcbLayout,
+    components: CircuitComponent[],
+    projectTitle: string = 'EI_House_PCB'
+  ): void {
+    const bundle = this.generateManufacturingBundle(pcb, components);
+    const zip = new ZipBuilder();
+    for (const [filename, content] of Object.entries(bundle)) {
+      zip.addFile(filename, content);
+    }
+    const cleanTitle = projectTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
+    zip.download(`${cleanTitle}_Gerbers.zip`);
   }
 }

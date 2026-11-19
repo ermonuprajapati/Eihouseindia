@@ -278,37 +278,41 @@ export function LabHeader({
           )}
         </div>
 
-        {/* Master Simulation Run / Stop Button */}
-        <button
-          onClick={onToggleSimulation}
-          className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-semibold text-xs shadow-md transition-all ${
-            isSimulating
-              ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
-              : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-          }`}
-          title="Toggle Simulation (Spacebar)"
-        >
-          {isSimulating ? (
-            <>
-              <Square className="w-3.5 h-3.5 fill-current" />
-              Stop Sim
-            </>
-          ) : (
-            <>
-              <Play className="w-3.5 h-3.5 fill-current" />
-              Run Sim
-            </>
-          )}
-        </button>
+        {/* Master Simulation Run / Stop Button (Hidden on PCB 2D & PCB 3D tabs) */}
+        {activeMode !== 'pcb2d' && activeMode !== 'pcb3d' && (
+          <>
+            <button
+              onClick={onToggleSimulation}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-semibold text-xs shadow-md transition-all ${
+                isSimulating
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+              }`}
+              title="Toggle Simulation (Spacebar)"
+            >
+              {isSimulating ? (
+                <>
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop Sim
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  Run Sim
+                </>
+              )}
+            </button>
 
-        {/* Reset Sim */}
-        <button
-          onClick={onResetSimulation}
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-700/80 transition-colors"
-          title="Reset Simulation Clock & Nodes"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
+            {/* Reset Sim */}
+            <button
+              onClick={onResetSimulation}
+              className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-700/80 transition-colors"
+              title="Reset Simulation Clock & Nodes"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
 
         {/* New Project */}
         <button

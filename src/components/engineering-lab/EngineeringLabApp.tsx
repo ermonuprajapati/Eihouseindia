@@ -14,6 +14,7 @@ import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starte
 import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 
 import { LabHeader } from './Header/LabHeader';
@@ -550,36 +551,8 @@ export function EngineeringLabApp() {
       downloadAnchor.remove();
       toast.success('Project JSON exported');
     } else if (format === 'gerber') {
-      const baseName = project.title.toLowerCase().replace(/\s+/g, '_');
-      const gtl = PcbGenerator.exportGerberTopCopper(project.pcb);
-      const a = document.createElement('a');
-      a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(gtl);
-      a.download = `${baseName}_top.gtl`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      // If bottom copper tracks exist, download bottom layer Gerber (.gbl)
-      if (project.pcb.tracks.some((t) => t.layer === 'bottom_copper')) {
-        const gbl = PcbGenerator.exportGerberBottomCopper(project.pcb);
-        const b = document.createElement('a');
-        b.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(gbl);
-        b.download = `${baseName}_bottom.gbl`;
-        document.body.appendChild(b);
-        b.click();
-        b.remove();
-      }
-
-      // Excellon NC Drill file
-      const drl = PcbGenerator.exportExcellonDrill(project.pcb);
-      const c = document.createElement('a');
-      c.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(drl);
-      c.download = `${baseName}_drill.drl`;
-      document.body.appendChild(c);
-      c.click();
-      c.remove();
-
-      toast.success('RS-274X Gerber & Excellon Drill package generated');
+      GerberExporter.exportGerberZip(project.pcb, project.components, project.title);
+      toast.success('RS-274X Gerber & Excellon Drill ZIP package generated');
     } else if (format === 'bom') {
       const bom = PcbGenerator.generateBom(project.components);
       let csv = 'Designator,Component Type,Value,Footprint,Quantity\n';
@@ -948,6 +921,9 @@ export function EngineeringLabApp() {
         {activeMode === 'pcb2d' && (
           <PcbView
             pcb={project.pcb}
+            components={project.components}
+            wires={project.wires}
+            projectTitle={project.title}
             onExportGerber={() => handleExportProject('gerber')}
             onUpdateDimensions={(widthMm, heightMm) => {
               setProject((p) => ({
@@ -967,6 +943,9 @@ export function EngineeringLabApp() {
         {activeMode === 'pcb3d' && (
           <PcbView
             pcb={project.pcb}
+            components={project.components}
+            wires={project.wires}
+            projectTitle={project.title}
             onExportGerber={() => handleExportProject('gerber')}
             onUpdateDimensions={(widthMm, heightMm) => {
               setProject((p) => ({

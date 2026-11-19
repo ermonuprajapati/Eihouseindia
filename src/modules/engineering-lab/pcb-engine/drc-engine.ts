@@ -1,12 +1,13 @@
 /**
  * Professional Real-Time Design Rule Check (DRC) Engine
+ * Validates PCB layout against IPC-2221 manufacturing clearance, drill, and trace rules.
  */
 
-import { PcbLayout } from '../types';
+import { PcbLayout, PcbTrack, CircuitWire } from '../types';
 
 export interface DrcViolation {
   id: string;
-  rule: 'edge_clearance' | 'min_track_width' | 'track_clearance' | 'unrouted_nets' | 'hole_clearance';
+  rule: 'edge_clearance' | 'min_track_width' | 'track_clearance' | 'pad_clearance' | 'unrouted_nets' | 'hole_clearance';
   message: string;
   severity: 'error' | 'warning';
   targetId?: string;
@@ -24,13 +25,15 @@ export class DrcEngine {
       minTrackWidthMm?: number;
       minClearanceMm?: number;
       minHoleClearanceMm?: number;
+      wires?: CircuitWire[];
     } = {}
   ): DrcViolation[] {
     const {
       minEdgeClearanceMm = 1.0,
       minTrackWidthMm = 0.15,
       minClearanceMm = 0.2,
-      minHoleClearanceMm = 0.3,
+      minHoleClearanceMm = 0.5,
+      wires = [],
     } = opts;
 
     const violations: DrcViolation[] = [];
@@ -48,7 +51,7 @@ export class DrcEngine {
         violations.push({
           id: `drc_edge_pad_${pad.id}`,
           rule: 'edge_clearance',
-          message: `Pad ${pad.pinId} on ${pad.componentId} is within ${minEdgeClearanceMm}mm of the board edge.`,
+          message: `Pad ${pad.pinId} (${pad.componentId}) is within ${minEdgeClearanceMm}mm of board edge.`,
           severity: 'error',
           targetId: pad.id,
           location: { x: pad.x, y: pad.y },
@@ -72,7 +75,7 @@ export class DrcEngine {
         violations.push({
           id: `drc_edge_track_${track.id}`,
           rule: 'edge_clearance',
-          message: `Track ${track.id} violates the ${minEdgeClearanceMm}mm board edge clearance limit.`,
+          message: `Track ${track.id} violates ${minEdgeClearanceMm}mm board edge clearance limit.`,
           severity: 'warning',
           targetId: track.id,
           location: { x: (track.from.x + track.to.x) / 2, y: (track.from.y + track.to.y) / 2 },
@@ -110,7 +113,7 @@ export class DrcEngine {
             violations.push({
               id: `drc_clearance_${t1.id}_${t2.id}`,
               rule: 'track_clearance',
-              message: `Clearance between track ${t1.id} and ${t2.id} is below ${minClearanceMm}mm on ${t1.layer}.`,
+              message: `Clearance between track ${t1.id} and ${t2.id} is below ${minClearanceMm}mm on ${t1.layer === 'top_copper' ? 'F.Cu' : 'B.Cu'}.`,
               severity: 'error',
               targetId: t1.id,
               location: m1,
@@ -120,7 +123,40 @@ export class DrcEngine {
       }
     }
 
-    // 4. Drill Hole Clearance Check (< minHoleClearanceMm)
+    // 4. Pad-to-Track Clearance Check (< minClearanceMm)
+    pads.forEach((pad) => {
+      tracks.forEach((track) => {
+        // Only check if track does not terminate on this pad
+        const dFrom = Math.hypot(track.from.x - pad.x, track.from.y - pad.y);
+        const dTo = Math.hypot(track.to.x - pad.x, track.to.y - pad.y);
+        if (dFrom > 0.3 && dTo > 0.3) {
+          // Point to line segment distance
+          const dx = track.to.x - track.from.x;
+          const dy = track.to.y - track.from.y;
+          const lenSq = dx * dx + dy * dy;
+          if (lenSq > 0) {
+            const t = Math.max(0, Math.min(1, ((pad.x - track.from.x) * dx + (pad.y - track.from.y) * dy) / lenSq));
+            const projX = track.from.x + t * dx;
+            const projY = track.from.y + t * dy;
+            const dist = Math.hypot(pad.x - projX, pad.y - projY);
+            const padRadius = pad.diameterMm / 2;
+            const trackHalf = track.widthMm / 2;
+            if (dist < padRadius + trackHalf + minClearanceMm && dist > 0.01) {
+              violations.push({
+                id: `drc_pad_track_${pad.id}_${track.id}`,
+                rule: 'pad_clearance',
+                message: `Clearance between Pad ${pad.pinId} and Track ${track.id} is below ${minClearanceMm}mm.`,
+                severity: 'warning',
+                targetId: pad.id,
+                location: { x: pad.x, y: pad.y },
+              });
+            }
+          }
+        }
+      });
+    });
+
+    // 5. Drill Hole Clearance Check (< minHoleClearanceMm)
     for (let i = 0; i < pads.length; i++) {
       for (let j = i + 1; j < pads.length; j++) {
         const p1 = pads[i];
@@ -140,6 +176,62 @@ export class DrcEngine {
       }
     }
 
+    // 6. Unrouted Nets / Airwires Check
+    if (wires.length > 0) {
+      const padLookup = new Map<string, { x: number; y: number }>();
+      pads.forEach((p) => padLookup.set(`${p.componentId}:${p.pinId}`, { x: p.x, y: p.y }));
+
+      let unroutedCount = 0;
+      wires.forEach((wire) => {
+        const p1 = padLookup.get(`${wire.fromCompId}:${wire.fromPinId}`);
+        const p2 = padLookup.get(`${wire.toCompId}:${wire.toPinId}`);
+        if (p1 && p2) {
+          // Check if any track or chain connects near p1 and p2
+          const isConnected = tracks.some((t) => {
+            const near1 = Math.hypot(t.from.x - p1.x, t.from.y - p1.y) < 0.5 || Math.hypot(t.to.x - p1.x, t.to.y - p1.y) < 0.5;
+            const near2 = Math.hypot(t.from.x - p2.x, t.from.y - p2.y) < 0.5 || Math.hypot(t.to.x - p2.x, t.to.y - p2.y) < 0.5;
+            return near1 && near2;
+          });
+          if (!isConnected) {
+            unroutedCount++;
+          }
+        }
+      });
+
+      if (unroutedCount > 0) {
+        violations.push({
+          id: `drc_unrouted_nets`,
+          rule: 'unrouted_nets',
+          message: `${unroutedCount} unrouted connection airwire(s) remaining in schematic netlist.`,
+          severity: 'warning',
+        });
+      }
+    }
+
     return violations;
+  }
+
+  /**
+   * Automatically repairs common clearance errors (e.g. tracks below min width or minor edge clearance)
+   */
+  public static autoFixClearances(layout: PcbLayout, minTrackWidthMm: number = 0.25): PcbLayout {
+    const fixedTracks: PcbTrack[] = layout.tracks.map((t) => ({
+      ...t,
+      widthMm: Math.max(t.widthMm, minTrackWidthMm),
+    }));
+
+    // Re-run DRC
+    const violations = this.runChecks({ ...layout, tracks: fixedTracks }, { minTrackWidthMm });
+    const drcErrors = violations.map((v) => ({
+      id: v.id,
+      message: v.message,
+      severity: v.severity,
+    }));
+
+    return {
+      ...layout,
+      tracks: fixedTracks,
+      drcErrors,
+    };
   }
 }

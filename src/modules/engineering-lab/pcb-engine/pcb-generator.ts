@@ -1,4 +1,5 @@
 import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
+import { PcbAutoRouter } from './autorouter';
 
 export class PcbGenerator {
   /**
@@ -11,7 +12,6 @@ export class PcbGenerator {
     boardHeightMm: number = 60
   ): PcbLayout {
     const pads: PcbPad[] = [];
-    const tracks: PcbTrack[] = [];
     const placedComponents: PcbComponentPlacement[] = [];
 
     // Scale schematic coordinates down to PCB millimeter space
@@ -71,26 +71,23 @@ export class PcbGenerator {
       });
     });
 
-    // Generate tracks between connected pads
-    wires.forEach((wire, idx) => {
-      const fromPos = padLookup.get(`${wire.fromCompId}:${wire.fromPinId}`);
-      const toPos = padLookup.get(`${wire.toCompId}:${wire.toPinId}`);
+    // Auto-route traces using pro 45-chamfered router
+    const { tracks: routedTracks, vias } = PcbAutoRouter.route(
+      pads,
+      wires,
+      boardWidthMm,
+      boardHeightMm,
+      { defaultSignalWidthMm: 0.35, powerTrackWidthMm: 0.8 },
+      components
+    );
 
-      if (fromPos && toPos) {
-        // Alternate between top and bottom copper layer to minimize track collisions
-        const layer = idx % 2 === 0 ? 'top_copper' : 'bottom_copper';
-        tracks.push({
-          id: `trk_${wire.id}`,
-          layer,
-          from: { x: fromPos.x, y: fromPos.y },
-          to: { x: toPos.x, y: toPos.y },
-          widthMm: 0.35, // 0.35mm / 14 mil signal trace
-        });
-      }
-    });
+    // If auto-router returned vias, add them to pads array
+    if (vias.length > 0) {
+      pads.push(...vias);
+    }
 
     // Run Design Rule Checks
-    const drcErrors = this.runDrc(pads, tracks, boardWidthMm, boardHeightMm);
+    const drcErrors = this.runDrc(pads, routedTracks, boardWidthMm, boardHeightMm);
 
     return {
       widthMm: boardWidthMm,
@@ -98,7 +95,7 @@ export class PcbGenerator {
       boardThicknessMm: 1.6,
       copperLayers: 2,
       pads,
-      tracks,
+      tracks: routedTracks,
       components: placedComponents,
       drcErrors,
     };
