@@ -39,6 +39,7 @@
     "@tiptap/starter-kit": "^3.34.0",
     "@types/katex": "^0.16.8",
     "@types/three": "^0.187.0",
+    "@vercel/analytics": "^2.0.1",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.11.0",
