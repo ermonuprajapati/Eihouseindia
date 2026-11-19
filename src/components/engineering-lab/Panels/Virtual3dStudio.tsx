@@ -98,7 +98,9 @@ export function Virtual3dStudio({
 
     return components.map((comp) => {
       let mappedType = comp.type;
-      if (comp.type.includes('ARDUINO_NANO')) {
+      if (comp.type.includes('MEGA')) {
+        mappedType = 'ARDUINO_MEGA';
+      } else if (comp.type.includes('ARDUINO_NANO')) {
         mappedType = 'ARDUINO_NANO';
       } else if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO') {
         mappedType = 'ARDUINO_UNO';
@@ -395,7 +397,8 @@ export function Virtual3dStudio({
     record3DHistory(activeComponents3d, activeWires3d);
     // Correctly map 3D component types to catalog templates without falling back to Resistor
     let catalogType = c3d.type;
-    if (c3d.type === 'ARDUINO_UNO') catalogType = 'ARDUINO_UNO';
+    if (c3d.type === 'ARDUINO_MEGA') catalogType = 'ARDUINO_MEGA';
+    else if (c3d.type === 'ARDUINO_UNO') catalogType = 'ARDUINO_UNO';
     else if (c3d.type === 'ARDUINO_NANO') catalogType = 'ARDUINO_NANO';
     else if (c3d.type === 'ESP32_DEVKIT') catalogType = 'ESP32_DEVKIT';
     else if (c3d.type === 'LED') catalogType = 'LED';

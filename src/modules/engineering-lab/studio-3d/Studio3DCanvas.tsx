@@ -15,11 +15,17 @@ import {
   Zap,
   Layers,
   RotateCw,
+  Unplug,
+  MoveLeft,
+  MoveRight,
+  MoveUp,
+  MoveDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Breadboard3D } from './Breadboard3D';
 import { BreadboardHole3D, HOLE_BY_ID } from './breadboard-topology';
+import { ArduinoMega3D, MEGA_PINS } from './models/ArduinoMega3D';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
 import { ArduinoNano3D, NANO_PINS } from './models/ArduinoNano3D';
 import { Esp32DevKit3D, ESP32_PINS } from './models/Esp32DevKit3D';
@@ -49,6 +55,15 @@ interface Library3DItem {
 
 const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
   // Microcontrollers & Power
+  {
+    type: 'ARDUINO_MEGA',
+    label: 'Arduino Mega 2560 R3',
+    category: 'boards',
+    value: 'ATmega2560',
+    desc: 'High-performance MCU with 54 Digital I/O, 16 Analog Inputs, 4 UARTs, and 16MHz clock',
+    defaultPos: [0, 0, 75] as [number, number, number],
+    params: { mcu: 'ATmega2560', clock: '16MHz', logicVoltage: 5 },
+  },
   {
     type: 'ARDUINO_UNO',
     label: 'Arduino Uno R3',
@@ -304,6 +319,7 @@ export function Studio3DCanvas({
   const anyMcu = useMemo(() => {
     return components3d.find(
       (c) =>
+        c.type === 'ARDUINO_MEGA' ||
         c.type === 'ARDUINO_UNO' ||
         c.type === 'ARDUINO_NANO' ||
         c.type === 'ESP32_DEVKIT'
@@ -322,7 +338,7 @@ export function Studio3DCanvas({
     });
   }, [libCategory, libSearch]);
 
-  // Keyboard shortcut listener (R to rotate, Delete to remove, Esc to cancel wire)
+  // Keyboard shortcut listener (R to rotate, Arrows to nudge, Delete to remove, Esc to cancel wire)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -335,6 +351,25 @@ export function Studio3DCanvas({
             onUpdateComponent3D({
               ...comp,
               rotY: ((comp.rotY || 0) + 90) % 360,
+            });
+          }
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        if (selectedCompId) {
+          const comp = components3d.find((c) => c.id === selectedCompId);
+          if (comp) {
+            e.preventDefault();
+            const step = e.shiftKey ? 5.08 : 2.54;
+            let dx = 0;
+            let dz = 0;
+            if (e.key === 'ArrowLeft') dx = -step;
+            if (e.key === 'ArrowRight') dx = step;
+            if (e.key === 'ArrowUp') dz = -step;
+            if (e.key === 'ArrowDown') dz = step;
+            onUpdateComponent3D({
+              ...comp,
+              x3d: Math.round((comp.x3d + dx) * 100) / 100,
+              z3d: Math.round((comp.z3d + dz) * 100) / 100,
             });
           }
         }
@@ -398,7 +433,14 @@ export function Studio3DCanvas({
     let ly = 0;
     let lz = 0;
 
-    if (comp.type === 'ARDUINO_UNO') {
+    if (comp.type === 'ARDUINO_MEGA') {
+      const mp = MEGA_PINS.find((p) => p.name === pinId || p.altNames?.includes(pinId));
+      if (mp) {
+        lx = mp.localPos[0];
+        ly = mp.localPos[1] + 4.2;
+        lz = mp.localPos[2];
+      }
+    } else if (comp.type === 'ARDUINO_UNO') {
       const ap = ARDUINO_PINS.find((p) => p.name === pinId);
       if (ap) {
         lx = ap.localPos[0];
@@ -533,7 +575,13 @@ export function Studio3DCanvas({
   const selectedComp = components3d.find((c) => c.id === selectedCompId);
 
   return (
-    <div className="relative w-full h-full bg-[#050B14] select-none overflow-hidden">
+    <div
+      className="relative w-full h-full bg-[#050B14] select-none overflow-hidden"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (activeWireStart) setActiveWireStart(null);
+      }}
+    >
       {/* 3D WebGL Canvas */}
       <Canvas
         shadows
@@ -599,6 +647,33 @@ export function Studio3DCanvas({
           const pos: [number, number, number] = [comp.x3d, comp.y3d, comp.z3d];
           const rot: [number, number, number] = [0, ((comp.rotY || 0) * Math.PI) / 180, 0];
           const simState = simulationStates[comp.id];
+
+          if (comp.type === 'ARDUINO_MEGA') {
+            return (
+              <group
+                key={comp.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <ArduinoMega3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  onToggleUsb={() => toggleUsb(comp.id)}
+                  isPowered={comp.parameters?.usbPlugged !== false}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
 
           if (comp.type === 'ARDUINO_UNO') {
             return (
@@ -1418,40 +1493,17 @@ export function Studio3DCanvas({
 
           <div className="h-4 w-px bg-slate-700" />
 
-          {/* Disconnect Pin 1 */}
+          {/* Single Disconnect Wire Button */}
           <button
             onClick={() => {
-              const p2 = getPinWorld3D(selectedWire.toPin.compId, selectedWire.toPin.pinId);
               onDeleteWire3D(selectedWire.id);
               onSelectWire(null);
-              setActiveWireStart({
-                compId: selectedWire.toPin.compId,
-                pinId: selectedWire.toPin.pinId,
-                pos: p2,
-              });
             }}
-            className="px-2 py-0.5 bg-amber-950/60 border border-amber-600 text-amber-300 hover:bg-amber-900 rounded text-[10px] font-bold cursor-pointer transition-colors"
-            title="Detach Pin 1 and route to another hole"
+            className="flex items-center gap-1 px-2.5 py-1 bg-amber-950/60 border border-amber-600/80 text-amber-300 hover:bg-amber-900 rounded text-[11px] font-bold cursor-pointer transition-colors"
+            title="Cleanly disconnect this jumper wire from both terminals"
           >
-            Disconnect Pin 1
-          </button>
-
-          {/* Disconnect Pin 2 */}
-          <button
-            onClick={() => {
-              const p1 = getPinWorld3D(selectedWire.fromPin.compId, selectedWire.fromPin.pinId);
-              onDeleteWire3D(selectedWire.id);
-              onSelectWire(null);
-              setActiveWireStart({
-                compId: selectedWire.fromPin.compId,
-                pinId: selectedWire.fromPin.pinId,
-                pos: p1,
-              });
-            }}
-            className="px-2 py-0.5 bg-amber-950/60 border border-amber-600 text-amber-300 hover:bg-amber-900 rounded text-[10px] font-bold cursor-pointer transition-colors"
-            title="Detach Pin 2 and route to another hole"
-          >
-            Disconnect Pin 2
+            <Unplug className="w-3.5 h-3.5" />
+            <span>Disconnect</span>
           </button>
 
           <div className="h-4 w-px bg-slate-700" />
@@ -1498,6 +1550,59 @@ export function Studio3DCanvas({
             <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
             <span>Rotate [R]</span>
           </button>
+
+          {/* Position Nudge Controls (2.54mm breadboard pitch) */}
+          <div className="flex items-center gap-1 bg-slate-800/80 px-1 py-0.5 rounded border border-slate-700/60" title="Nudge component on workbench [Arrow Keys]">
+            <span className="text-[10px] text-slate-400 font-bold px-0.5">Nudge:</span>
+            <button
+              onClick={() => {
+                onUpdateComponent3D({
+                  ...selectedComp,
+                  x3d: Math.round((selectedComp.x3d - 2.54) * 100) / 100,
+                });
+              }}
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+              title="Nudge Left -2.54mm [Left Arrow]"
+            >
+              <MoveLeft className="w-3 h-3 text-cyan-400" />
+            </button>
+            <button
+              onClick={() => {
+                onUpdateComponent3D({
+                  ...selectedComp,
+                  x3d: Math.round((selectedComp.x3d + 2.54) * 100) / 100,
+                });
+              }}
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+              title="Nudge Right +2.54mm [Right Arrow]"
+            >
+              <MoveRight className="w-3 h-3 text-cyan-400" />
+            </button>
+            <button
+              onClick={() => {
+                onUpdateComponent3D({
+                  ...selectedComp,
+                  z3d: Math.round((selectedComp.z3d - 2.54) * 100) / 100,
+                });
+              }}
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+              title="Nudge Forward -2.54mm [Up Arrow]"
+            >
+              <MoveUp className="w-3 h-3 text-cyan-400" />
+            </button>
+            <button
+              onClick={() => {
+                onUpdateComponent3D({
+                  ...selectedComp,
+                  z3d: Math.round((selectedComp.z3d + 2.54) * 100) / 100,
+                });
+              }}
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+              title="Nudge Backward +2.54mm [Down Arrow]"
+            >
+              <MoveDown className="w-3 h-3 text-cyan-400" />
+            </button>
+          </div>
 
           {/* USB Power Toggle (if MCU) */}
           {(selectedComp.type.startsWith('ARDUINO_') || selectedComp.type.startsWith('ESP32') || selectedComp.type.startsWith('STM32') || selectedComp.type.startsWith('RASPBERRY_PI')) && onToggleMcuUsb && (
