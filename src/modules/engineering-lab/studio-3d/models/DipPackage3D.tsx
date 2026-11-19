@@ -15,6 +15,7 @@ export interface DipPackage3DProps {
   pinCount?: number;
   partName?: string;
   pinNames?: Record<number, string>;
+  isBurned?: boolean;
   isSelected?: boolean;
   onPinClick?: (pinId: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
@@ -38,6 +39,7 @@ export function DipPackage3D({
   pinCount = 8,
   partName = 'NE555P',
   pinNames = DEFAULT_555_PINS,
+  isBurned = false,
   isSelected = false,
   onPinClick,
   hoveredPin,
@@ -103,14 +105,14 @@ export function DipPackage3D({
   const materials = useMemo(() => {
     return {
       icBody: new THREE.MeshStandardMaterial({
-        color: isSelected ? '#38BDF8' : '#18181B',
-        roughness: 0.6,
-        metalness: 0.1,
+        color: isBurned ? '#0F0E0E' : isSelected ? '#38BDF8' : '#18181B',
+        roughness: isBurned ? 0.95 : 0.6,
+        metalness: isBurned ? 0.05 : 0.1,
       }),
       leadSilver: new THREE.MeshStandardMaterial({
-        color: '#E2E8F0',
-        metalness: 0.95,
-        roughness: 0.2,
+        color: isBurned ? '#71717A' : '#E2E8F0',
+        metalness: isBurned ? 0.4 : 0.95,
+        roughness: isBurned ? 0.6 : 0.2,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -119,7 +121,7 @@ export function DipPackage3D({
         color: '#F59E0B',
       }),
     };
-  }, [isSelected]);
+  }, [isSelected, isBurned]);
 
   // Compute pin positions relative to DIP package center
   const pins = useMemo(() => {

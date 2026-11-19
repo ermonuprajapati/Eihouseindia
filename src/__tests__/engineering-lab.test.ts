@@ -2733,4 +2733,292 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(v5VUnplugged).toBeCloseTo(0.0, 1);
     expect(resUnplugged.componentStates['led1']?.on).toBe(false);
   });
+
+  // --------------------------------------------------------------------------
+  // MANDATORY ACCEPTANCE VERIFICATION CASES: SURGICAL ELECTRICAL RULES & DISCONNECT
+  // --------------------------------------------------------------------------
+  describe('Mandatory Acceptance Verification: Wire Disconnect & Realistic Electrical Physics', () => {
+    // CASE A: Wire Disconnect
+    it('Case A: Disconnecting a wire removes connection from netlist and immediately drops circuit power', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: '9V Battery',
+        value: '9V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BAT_9V',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'power' },
+        ],
+        parameters: { voltage: 9.0 },
+      };
+      const resistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: '330Ω Resistor',
+        value: '330Ω',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'R_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 330 },
+      };
+      const led: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_5MM',
+        category: 'semiconductors',
+        pins: [
+          { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardV: 2.0, color: 'Red' },
+      };
+
+      let wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'led1', toPinId: '1' },
+        { id: 'w3', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      // 1. Initial State: Connected & Powered
+      const resConnected = solver.step([battery, resistor, led], wires, 0.001);
+      expect(resConnected.componentStates['led1']?.on).toBe(true);
+      expect(resConnected.componentStates['led1']?.current).toBeGreaterThan(0.015);
+
+      // 2. Action: User clicks Disconnect on wire w2
+      wires = wires.filter((w) => w.id !== 'w2');
+
+      // 3. Post-Disconnect Solve: LED loses connection, current immediately drops to 0
+      const resDisconnected = solver.step([battery, resistor, led], wires, 0.001);
+      expect(resDisconnected.componentStates['led1']?.current).toBe(0);
+      expect(resDisconnected.componentStates['led1']?.on).toBe(false);
+      expect(resDisconnected.componentStates['led1']?.brightness).toBe(0);
+    });
+
+    // CASE B: 9V directly across LED -> Instant Burnout
+    it('Case B: Connecting a 9V battery directly to an LED burns it out instantly with an overcurrent fault alert', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: '9V Battery',
+        value: '9V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BAT_9V',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'power' },
+        ],
+        parameters: { voltage: 9.0 },
+      };
+      const led: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_5MM',
+        category: 'semiconductors',
+        pins: [
+          { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardV: 2.0, color: 'Red' },
+      };
+
+      // Direct connection with NO current-limiting resistor
+      const directWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'led1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      const res = solver.step([battery, led], directWires, 0.001);
+
+      // Verify Burnout Condition
+      expect(res.componentStates['led1']?.status).toBe('BURNED');
+      expect(res.componentStates['led1']?.burned).toBe(true);
+      expect(res.componentStates['led1']?.brightness).toBe(0);
+      expect(res.componentStates['led1']?.on).toBe(false);
+
+      // Verify Fault Alert was triggered
+      expect(res.faults).toBeDefined();
+      expect(res.faults?.length).toBeGreaterThan(0);
+      const ledFault = res.faults?.find((f) => f.compId === 'led1');
+      expect(ledFault).toBeDefined();
+      expect(ledFault?.type).toBe('OVERCURRENT');
+      expect(ledFault?.message).toContain('burned out');
+      expect(ledFault?.message).toContain('exceeded 30mA max rating');
+    });
+
+    // CASE C: 9V + 330Ω + LED -> Nominal ~20mA current & full bright glow
+    it('Case C: 9V battery with 330Ω resistor produces ~20mA forward current, glowing brightly without burning', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: '9V Battery',
+        value: '9V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BAT_9V',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'power' },
+        ],
+        parameters: { voltage: 9.0 },
+      };
+      const resistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: '330Ω Resistor',
+        value: '330Ω',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'R_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 330 },
+      };
+      const led: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_5MM',
+        category: 'semiconductors',
+        pins: [
+          { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardV: 2.0, color: 'Red' },
+      };
+
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'led1', toPinId: '1' },
+        { id: 'w3', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      const res = solver.step([battery, resistor, led], wires, 0.001);
+      const ledState = res.componentStates['led1'];
+
+      expect(ledState).toBeDefined();
+      expect(ledState.status).not.toBe('BURNED');
+      expect(ledState.burned).toBeFalsy();
+      expect(ledState.on).toBe(true);
+
+      // (9V - 2V) / (330Ω + 15Ω) ≈ 20.3mA (0.0203A)
+      expect(ledState.current).toBeGreaterThan(0.018);
+      expect(ledState.current).toBeLessThan(0.025);
+
+      // Normalized brightness should be at or near full (>= 0.9)
+      expect(ledState.brightness).toBeGreaterThanOrEqual(0.9);
+      expect(ledState.brightness).toBeLessThanOrEqual(1.0);
+    });
+
+    // CASE D: Lowering voltage from 9V to 3V with 330Ω resistor -> Smoothly dims (~3mA)
+    it('Case D: Lowering battery voltage to 3V proportionally dims the LED (~3mA) without snapping off', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: '3V Battery Source',
+        value: '3V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BAT_3V',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'power' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'power' },
+        ],
+        parameters: { voltage: 3.0 },
+      };
+      const resistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: '330Ω Resistor',
+        value: '330Ω',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'R_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 330 },
+      };
+      const led: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_5MM',
+        category: 'semiconductors',
+        pins: [
+          { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardV: 2.0, color: 'Red' },
+      };
+
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'led1', toPinId: '1' },
+        { id: 'w3', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      const res = solver.step([battery, resistor, led], wires, 0.001);
+      const ledState = res.componentStates['led1'];
+
+      expect(ledState).toBeDefined();
+      expect(ledState.status).not.toBe('BURNED');
+      expect(ledState.burned).toBeFalsy();
+      expect(ledState.on).toBe(true);
+
+      // (3V - 2V) / (330Ω + 15Ω) ≈ 2.9mA (0.0029A)
+      expect(ledState.current).toBeGreaterThan(0.002);
+      expect(ledState.current).toBeLessThan(0.005);
+
+      // Noticeably dimmed: brightness should be between 0.08 and 0.25 (not off, not full)
+      expect(ledState.brightness).toBeGreaterThan(0.05);
+      expect(ledState.brightness).toBeLessThan(0.30);
+    });
+  });
 });

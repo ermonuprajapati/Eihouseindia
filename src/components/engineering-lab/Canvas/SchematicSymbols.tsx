@@ -7,7 +7,22 @@ interface SchematicSymbolProps {
   component: CircuitComponent;
   isSelected: boolean;
   isSimulating: boolean;
-  simState?: { voltage: number; current: number; on?: boolean; digitalOut?: number; onRed?: boolean; onGreen?: boolean; onBlue?: boolean };
+  simState?: {
+    voltage: number;
+    current: number;
+    on?: boolean;
+    brightness?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
+    digitalOut?: number;
+    onRed?: boolean;
+    onGreen?: boolean;
+    onBlue?: boolean;
+    redBrightness?: number;
+    greenBrightness?: number;
+    blueBrightness?: number;
+  };
 }
 
 /**
@@ -28,20 +43,28 @@ export function SchematicSymbol({
   // Render symbol-specific vector graphics
   const renderSymbolGraphic = () => {
     switch (type) {
-      case 'RESISTOR':
+      case 'RESISTOR': {
+        const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
         return (
           <g>
+            {isBurned && (
+              <text x="0" y="-12" fill="#EF4444" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                💥 BURNED
+              </text>
+            )}
             {/* Standard IEEE Zigzag Waveform */}
             <path
               d="M -30,0 L -18,0 L -14,-7 L -8,7 L -2,-7 L 4,7 L 10,-7 L 14,7 L 18,0 L 30,0"
-              stroke={strokeColor}
+              stroke={isBurned ? '#EF4444' : strokeColor}
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
+              strokeDasharray={isBurned ? '4 2' : undefined}
               fill="none"
             />
           </g>
         );
+      }
 
       case 'POTENTIOMETER':
         return (
@@ -194,7 +217,9 @@ export function SchematicSymbol({
         );
 
       case 'LED': {
-        const isConducting = Boolean(simState?.on);
+        const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
+        const brightness = simState?.brightness !== undefined ? simState.brightness : (simState?.on ? 1.0 : 0);
+        const isConducting = !isBurned && brightness > 0;
         const ledParamColor = String(component.parameters?.color || 'Red');
         const colorLower = ledParamColor.toLowerCase();
         let ledHex = '#EF4444'; // Red default
@@ -214,35 +239,47 @@ export function SchematicSymbol({
           ledHex = '#06B6D4';
         }
 
+        const glowRadius = Math.round(12 + 16 * brightness);
+        const glowOpacity = Math.max(0.15, Math.min(0.85, 0.15 + 0.7 * brightness));
+
         return (
           <g>
-            {/* Active Luminescence Glow Aura */}
+            {/* Active Proportional Luminescence Glow Aura */}
             {isSimulating && isConducting && (
-              <circle cx="0" cy="0" r="24" fill={ledHex} opacity="0.5" filter="blur(3px)" />
+              <circle cx="0" cy="0" r={glowRadius} fill={ledHex} opacity={glowOpacity} filter="blur(3px)" />
+            )}
+            {/* Burned Fault Text */}
+            {isBurned && (
+              <text x="0" y="-14" fill="#EF4444" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                💥 BURNED
+              </text>
             )}
             {/* Anode lead */}
             <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
-            {/* Diode Triangle - dynamically displays selected color at all times */}
+            {/* Diode Triangle */}
             <polygon
               points="-10,-10 10,0 -10,10"
-              fill={ledHex}
-              fillOpacity={isConducting ? 1.0 : 0.35}
-              stroke={ledHex}
+              fill={isBurned ? '#262626' : ledHex}
+              fillOpacity={isBurned ? 0.9 : isConducting ? 0.35 + 0.65 * brightness : 0.35}
+              stroke={isBurned ? '#7F1D1D' : ledHex}
               strokeWidth="2"
               strokeLinejoin="round"
             />
             {/* Cathode Bar */}
-            <line x1="10" y1="-10" x2="10" y2="10" stroke={ledHex} strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="10" y1="-10" x2="10" y2="10" stroke={isBurned ? '#7F1D1D' : ledHex} strokeWidth="2.5" strokeLinecap="round" />
             {/* Cathode lead */}
             <line x1="10" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
             {/* Emitted Photon Arrows in active LED color */}
-            <path
-              d="M 2,-8 L 10,-16 M 8,-16 L 10,-16 L 10,-14 M 8,-4 L 16,-12 M 14,-12 L 16,-12 L 16,-10"
-              stroke={ledHex}
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {!isBurned && (
+              <path
+                d="M 2,-8 L 10,-16 M 8,-16 L 10,-16 L 10,-14 M 8,-4 L 16,-12 M 14,-12 L 16,-12 L 16,-10"
+                stroke={ledHex}
+                strokeWidth="1.5"
+                opacity={isConducting ? 0.4 + 0.6 * brightness : 0.25}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
           </g>
         );
       }
@@ -286,7 +323,8 @@ export function SchematicSymbol({
           </g>
         );
 
-      case 'TIMER_555':
+      case 'TIMER_555': {
+        const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
         return (
           <g>
             {/* Professional DIP-8 IC Body */}
@@ -296,14 +334,27 @@ export function SchematicSymbol({
               width="80"
               height="90"
               rx="4"
-              stroke={strokeColor}
+              stroke={isBurned ? '#EF4444' : strokeColor}
               strokeWidth="2"
-              fill={fillColor}
+              fill={isBurned ? '#1C1917' : fillColor}
             />
+            {isBurned && (
+              <text
+                x="0"
+                y="-14"
+                fill="#EF4444"
+                fontSize="8"
+                fontWeight="bold"
+                fontFamily="monospace"
+                textAnchor="middle"
+              >
+                💥 OVERVOLT
+              </text>
+            )}
             {/* Top Alignment Notch */}
             <path
               d="M -8,-45 A 8,8 0 0,0 8,-45"
-              stroke={strokeColor}
+              stroke={isBurned ? '#EF4444' : strokeColor}
               strokeWidth="1.5"
               fill="none"
             />
@@ -311,7 +362,7 @@ export function SchematicSymbol({
             <text
               x="0"
               y="-28"
-              fill="#F8FAFC"
+              fill={isBurned ? '#EF4444' : '#F8FAFC'}
               fontSize="11"
               fontWeight="bold"
               fontFamily="monospace"
@@ -349,6 +400,7 @@ export function SchematicSymbol({
             )}
           </g>
         );
+      }
 
       case 'SWITCH_SPST': {
         const isClosed = Boolean(component.parameters?.closed);

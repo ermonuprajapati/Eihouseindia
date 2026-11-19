@@ -6,13 +6,27 @@ export interface SolverStepResult {
     voltage: number;
     current: number;
     on?: boolean;
+    brightness?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
     digitalOut?: number;
     onRed?: boolean;
     onGreen?: boolean;
     onBlue?: boolean;
+    redBrightness?: number;
+    greenBrightness?: number;
+    blueBrightness?: number;
   }>;
   waveformData: Record<string, SimulationWaveformPoint[]>;
   wireCurrents?: Record<string, number>;
+  faults?: Array<{
+    compId: string;
+    compLabel: string;
+    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY';
+    message: string;
+    timestamp: number;
+  }>;
 }
 
 export function getLedForwardVoltage(comp: CircuitComponent): number {
@@ -87,6 +101,15 @@ export class CircuitSolver {
   private waveformHistory: Map<string, SimulationWaveformPoint[]> = new Map();
   private currentTime: number = 0;
   private maxHistoryPoints: number = 300;
+  private burnedComponents: Set<string> = new Set();
+  private burnFaultReasons: Map<string, string> = new Map();
+  private recordedFaults: Array<{
+    compId: string;
+    compLabel: string;
+    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY';
+    message: string;
+    timestamp: number;
+  }> = [];
 
   public reset() {
     this.capacitorVoltages.clear();
@@ -94,7 +117,20 @@ export class CircuitSolver {
     this.bjtCurrents.clear();
     this.timer555State.clear();
     this.waveformHistory.clear();
+    this.burnedComponents.clear();
+    this.burnFaultReasons.clear();
+    this.recordedFaults = [];
     this.currentTime = 0;
+  }
+
+  public resetBurntComponent(compId: string) {
+    this.burnedComponents.delete(compId);
+    this.burnFaultReasons.delete(compId);
+    this.recordedFaults = this.recordedFaults.filter((f) => f.compId !== compId);
+  }
+
+  public getBurntComponentIds(): string[] {
+    return Array.from(this.burnedComponents);
   }
 
   /**
@@ -484,17 +520,24 @@ export class CircuitSolver {
           const pin1 = this.netMap.get(`${comp.id}:1`);
           const pin2 = this.netMap.get(`${comp.id}:2`);
           if (pin1 && pin2 && pin1 !== pin2) {
-            const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
-            const g = 1.0 / r;
+            if (this.burnedComponents.has(comp.id)) {
+              // Burned out open circuit: minimal leakage
+              const g = 1e-12;
+              sumG[pin1] += g;
+              sumG[pin2] += g;
+            } else {
+              const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
+              const g = 1.0 / r;
 
-            const v1 = nodeVoltages[pin1] || 0;
-            const v2 = nodeVoltages[pin2] || 0;
+              const v1 = nodeVoltages[pin1] || 0;
+              const v2 = nodeVoltages[pin2] || 0;
 
-            sumGV[pin1] += g * v2;
-            sumG[pin1] += g;
+              sumGV[pin1] += g * v2;
+              sumG[pin1] += g;
 
-            sumGV[pin2] += g * v1;
-            sumG[pin2] += g;
+              sumGV[pin2] += g * v1;
+              sumG[pin2] += g;
+            }
           }
         } else if (comp.type === 'POTENTIOMETER') {
           // Robust 3-terminal Potentiometer resolution: Terminal A (0%), Wiper, and Terminal B (100%)
@@ -863,16 +906,25 @@ export class CircuitSolver {
           const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:cathode`);
           const vf = comp.type === 'LED' ? getLedForwardVoltage(comp) : 0.7;
           if (aPin && kPin && aPin !== kPin) {
-            const va = nodeVoltages[aPin] || 0;
-            const vk = nodeVoltages[kPin] || 0;
-            const isConducting = (va - vk) > vf;
-            const gDiode = isConducting ? 0.05 : 1e-6;
+            if (this.burnedComponents.has(comp.id)) {
+              // Burned out open circuit
+              const gDiode = 1e-12;
+              sumG[aPin] += gDiode;
+              sumG[kPin] += gDiode;
+            } else {
+              const va = nodeVoltages[aPin] || 0;
+              const vk = nodeVoltages[kPin] || 0;
+              const isConducting = (va - vk) > vf;
+              // 15 ohm forward dynamic resistance
+              const rd = 15;
+              const gDiode = isConducting ? (1.0 / rd) : 1e-6;
 
-            sumGV[aPin] += gDiode * (vk + vf);
-            sumG[aPin] += gDiode;
+              sumGV[aPin] += gDiode * (vk + vf);
+              sumG[aPin] += gDiode;
 
-            sumGV[kPin] += gDiode * (va - vf);
-            sumG[kPin] += gDiode;
+              sumGV[kPin] += gDiode * (va - vf);
+              sumG[kPin] += gDiode;
+            }
           }
         } else if (comp.type === 'ACTUATOR_RGB_LED') {
           const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
@@ -986,6 +1038,31 @@ export class CircuitSolver {
           const vcc = vccPin ? (nodeVoltages[vccPin] || 9.0) : 9.0;
           const gnd = gndPin ? (nodeVoltages[gndPin] || 0.0) : 0.0;
           const vSpan = vcc - gnd;
+          if (this.burnedComponents.has(comp.id)) {
+            // Burned out IC: non-functional
+            continue;
+          }
+
+          if (vSpan > 16.0) {
+            // Overvoltage destruction: Absolute Maximum Rating exceeded!
+            this.burnedComponents.add(comp.id);
+            const reason = `FAULT: ${comp.label || 'NE555'} burned out (Supply voltage ${vSpan.toFixed(1)}V exceeded 16V max rating).`;
+            this.burnFaultReasons.set(comp.id, reason);
+            this.recordedFaults.push({
+              compId: comp.id,
+              compLabel: comp.label || 'NE555',
+              type: 'OVERVOLTAGE',
+              message: reason,
+              timestamp: Date.now(),
+            });
+            continue;
+          }
+
+          if (vSpan < 4.5) {
+            // Undervoltage: NE555 inactive below 4.5V minimum supply
+            continue;
+          }
+
           const upperThresh = gnd + (2 / 3) * vSpan;
           const lowerThresh = gnd + (1 / 3) * vSpan;
 
@@ -1028,6 +1105,11 @@ export class CircuitSolver {
     const componentStates: SolverStepResult['componentStates'] = {};
 
     for (const comp of components) {
+      let status: 'NORMAL' | 'WARNING' | 'BURNED' = this.burnedComponents.has(comp.id) ? 'BURNED' : 'NORMAL';
+      let burned = this.burnedComponents.has(comp.id);
+      let fault = this.burnFaultReasons.get(comp.id);
+      let brightness = 0;
+
       if (comp.type === 'POTENTIOMETER') {
         const { pinA, pinWiper, pinB } = getPotentiometerPins(comp, this.netMap);
         const vA = pinA ? (nodeVoltages[pinA] || 0) : 0;
@@ -1050,6 +1132,9 @@ export class CircuitSolver {
           voltage: Math.round(vDiff * 1000) / 1000,
           current: Math.round(totalCurrent * 100000) / 100000,
           on: Math.abs(vA - vB) > 0.01 || Math.abs(vWiper - vB) > 0.01,
+          status,
+          burned,
+          fault,
         };
         continue;
       }
@@ -1065,8 +1150,35 @@ export class CircuitSolver {
         let on = false;
 
         if (comp.type === 'RESISTOR') {
-          const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
-          current = vDiff / r;
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            burned = true;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
+            current = vDiff / r;
+            const p = Math.abs(vDiff * current);
+            const pMax = Number(comp.parameters?.powerRating ?? 0.25);
+            if (p > 4.0 * pMax) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              status = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Resistor'} burned out (Power: ${p.toFixed(2)}W exceeded ${pMax}W rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Resistor',
+                type: 'OVERPOWER',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+            } else if (p > pMax) {
+              status = 'WARNING';
+            }
+          }
         } else if (comp.type === 'INDUCTOR') {
           current = this.inductorCurrents.get(comp.id) ?? 0;
           on = Math.abs(current) > 0.0001;
@@ -1093,14 +1205,74 @@ export class CircuitSolver {
           const vAnode = aPin ? (nodeVoltages[aPin] || 0) : 0;
           const vCathode = kPin ? (nodeVoltages[kPin] || 0) : 0;
           const forwardDrop = vAnode - vCathode;
-          if (forwardDrop > vf) {
-            current = (forwardDrop - vf) / 20; // 20 ohm diode forward dynamic resistance
-            on = current > 0.001; // illuminated when forward current > 1mA
-            vDiff = forwardDrop;
-          } else {
+          vDiff = forwardDrop;
+
+          if (this.burnedComponents.has(comp.id)) {
             current = 0;
             on = false;
-            vDiff = Math.max(0, forwardDrop);
+            brightness = 0;
+            status = 'BURNED';
+            burned = true;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            // Check reverse breakdown: V_rev = vCathode - vAnode = -forwardDrop. Max reverse rating is 5.0V (threshold 5.5V)
+            if (forwardDrop < -5.5) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              status = 'BURNED';
+              fault = `FAULT: ${comp.label || 'LED'} destroyed by reverse breakdown (${(-forwardDrop).toFixed(1)}V exceeded 5V max reverse limit).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'LED',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+              brightness = 0;
+            } else if (forwardDrop > vf) {
+              const rd = 15; // 15 ohm diode forward dynamic resistance
+              current = (forwardDrop - vf) / rd;
+
+              // Max forward current rating is 30mA (0.030 A)
+              if (current > 0.030) {
+                this.burnedComponents.add(comp.id);
+                burned = true;
+                status = 'BURNED';
+                const curMa = (current * 1000).toFixed(0);
+                fault = `FAULT: ${comp.label || 'LED'} burned out (Current: ${curMa}mA exceeded 30mA max rating). Add a current-limiting resistor.`;
+                this.burnFaultReasons.set(comp.id, fault);
+                this.recordedFaults.push({
+                  compId: comp.id,
+                  compLabel: comp.label || 'LED',
+                  type: 'OVERCURRENT',
+                  message: fault,
+                  timestamp: Date.now(),
+                });
+                current = 0;
+                on = false;
+                brightness = 0;
+              } else {
+                // Continuous proportional brightness:
+                // clamp((If - I_min) / (I_nominal - I_min), 0, 1)
+                // I_min = 0.5mA (0.0005A), I_nominal = 20mA (0.020A)
+                const iMin = 0.0005;
+                const iNom = 0.020;
+                brightness = Math.max(0, Math.min(1, (current - iMin) / (iNom - iMin)));
+                on = brightness > 0;
+                if (current > 0.025) {
+                  status = 'WARNING';
+                } else {
+                  status = 'NORMAL';
+                }
+              }
+            } else {
+              current = 0;
+              on = false;
+              brightness = 0;
+            }
           }
         } else if (comp.type === 'ACTUATOR_RGB_LED') {
           const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
@@ -1121,24 +1293,71 @@ export class CircuitSolver {
           const gVf = Number(comp.parameters?.greenVf) || 3.2;
           const bVf = Number(comp.parameters?.blueVf) || 3.2;
 
-          const rCur = rDrop > rVf ? (rDrop - rVf) / 20 : 0;
-          const gCur = gDrop > gVf ? (gDrop - gVf) / 20 : 0;
-          const bCur = bDrop > bVf ? (bDrop - bVf) / 20 : 0;
+          let rCur = 0;
+          let gCur = 0;
+          let bCur = 0;
+          let redBrightness = 0;
+          let greenBrightness = 0;
+          let blueBrightness = 0;
 
-          const onRed = rCur > 0.001;
-          const onGreen = gCur > 0.001;
-          const onBlue = bCur > 0.001;
+          if (this.burnedComponents.has(comp.id)) {
+            status = 'BURNED';
+            burned = true;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const rd = 15;
+            rCur = rDrop > rVf ? (rDrop - rVf) / rd : 0;
+            gCur = gDrop > gVf ? (gDrop - gVf) / rd : 0;
+            bCur = bDrop > bVf ? (bDrop - bVf) / rd : 0;
+
+            if (rCur > 0.030 || gCur > 0.030 || bCur > 0.030) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              status = 'BURNED';
+              const maxCurMa = (Math.max(rCur, gCur, bCur) * 1000).toFixed(0);
+              fault = `FAULT: ${comp.label || 'RGB LED'} burned out (Current: ${maxCurMa}mA exceeded 30mA max rating). Add a current-limiting resistor.`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'RGB LED',
+                type: 'OVERCURRENT',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              rCur = 0;
+              gCur = 0;
+              bCur = 0;
+            } else {
+              const iMin = 0.0005;
+              const iNom = 0.020;
+              redBrightness = Math.max(0, Math.min(1, (rCur - iMin) / (iNom - iMin)));
+              greenBrightness = Math.max(0, Math.min(1, (gCur - iMin) / (iNom - iMin)));
+              blueBrightness = Math.max(0, Math.min(1, (bCur - iMin) / (iNom - iMin)));
+            }
+          }
+
+          const onRed = redBrightness > 0;
+          const onGreen = greenBrightness > 0;
+          const onBlue = blueBrightness > 0;
           on = onRed || onGreen || onBlue;
           current = rCur + gCur + bCur;
+          brightness = Math.max(redBrightness, greenBrightness, blueBrightness);
           vDiff = Math.max(rDrop, gDrop, bDrop, 0);
 
           componentStates[comp.id] = {
             voltage: Math.round(vDiff * 1000) / 1000,
             current: Math.round(current * 1000000) / 1000000,
             on,
+            brightness,
             onRed,
             onGreen,
             onBlue,
+            redBrightness,
+            greenBrightness,
+            blueBrightness,
+            status,
+            burned,
+            fault,
           };
           let waveHist = this.waveformHistory.get(comp.id);
           if (!waveHist) {
@@ -1151,8 +1370,15 @@ export class CircuitSolver {
           current = vDiff > 0.7 ? (vDiff - 0.7) / 10 : 0;
           on = current > 0.001;
         } else if (comp.type === 'TIMER_555') {
-          const state = this.timer555State.get(comp.id);
-          on = Boolean(state?.flipFlop);
+          if (this.burnedComponents.has(comp.id)) {
+            on = false;
+            status = 'BURNED';
+            burned = true;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const state = this.timer555State.get(comp.id);
+            on = Boolean(state?.flipFlop);
+          }
         } else if (comp.type.startsWith('LOGIC_')) {
           const outPin = this.netMap.get(`${comp.id}:out`);
           const outV = outPin ? (nodeVoltages[outPin] || 0) : 0;
@@ -1201,6 +1427,10 @@ export class CircuitSolver {
           voltage: Math.round(vDiff * 1000) / 1000,
           current: Math.round(current * 1000000) / 1000000,
           on,
+          brightness,
+          status,
+          burned,
+          fault,
         };
 
         let waveHist = this.waveformHistory.get(comp.id);
@@ -1318,6 +1548,7 @@ export class CircuitSolver {
       componentStates,
       waveformData: waveformDataObj,
       wireCurrents,
+      faults: [...this.recordedFaults],
     };
   }
 

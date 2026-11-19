@@ -19,7 +19,18 @@ interface PropertiesInspectorProps {
   onDisconnectWireEndpoint?: (wireId: string, endpoint: 'start' | 'end') => void;
   onDuplicateComponent?: (id: string) => void;
   onClose: () => void;
-  simState?: { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean };
+  simState?: {
+    voltage: number;
+    current: number;
+    on?: boolean;
+    brightness?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
+    onRed?: boolean;
+    onGreen?: boolean;
+    onBlue?: boolean;
+  };
   wireCurrent?: number;
   isOpen?: boolean;
   onToggleOpen?: () => void;
@@ -246,6 +257,8 @@ export function PropertiesInspector({
     return (
       <aside
         style={{ width: `${width}px` }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className="bg-[#0B1528] border-l border-slate-800 flex flex-col h-full text-slate-200 text-xs select-none fixed lg:relative inset-y-0 right-0 z-40 lg:z-20 shrink-0 overflow-y-auto max-w-[85vw] shadow-2xl lg:shadow-none"
       >
         <div

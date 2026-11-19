@@ -8,6 +8,8 @@ export interface Led3DProps {
   rotation?: [number, number, number];
   color?: string; // e.g. '#EF4444', 'Red', 'Blue', etc.
   isPowered?: boolean;
+  brightness?: number;
+  isBurned?: boolean;
   isSelected?: boolean;
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
@@ -32,21 +34,43 @@ export function Led3D({
   rotation = [0, 0, 0],
   color = '#EF4444',
   isPowered = false,
+  brightness,
+  isBurned = false,
   isSelected = false,
   onPinClick,
   hoveredPin,
   onHoverPin,
 }: Led3DProps) {
   const hex = parseHexColor(color);
+  const effectiveBrightness = isBurned ? 0 : brightness !== undefined ? brightness : isPowered ? 1.0 : 0;
+  const isIlluminated = effectiveBrightness > 0;
 
   const materials = useMemo(() => {
+    if (isBurned) {
+      return {
+        lens: new THREE.MeshStandardMaterial({
+          color: '#1C1917',
+          roughness: 0.9,
+          metalness: 0.1,
+        }),
+        silverLead: new THREE.MeshStandardMaterial({
+          color: '#78716C',
+          metalness: 0.5,
+          roughness: 0.6,
+        }),
+        leadHover: new THREE.MeshBasicMaterial({
+          color: '#EF4444',
+        }),
+      };
+    }
+
     return {
       lens: new THREE.MeshPhysicalMaterial({
         color: hex,
-        emissive: isPowered ? hex : '#000000',
-        emissiveIntensity: isPowered ? 1.5 : 0,
+        emissive: isIlluminated ? hex : '#000000',
+        emissiveIntensity: isIlluminated ? Math.max(0.2, effectiveBrightness * 2.8) : 0,
         transparent: true,
-        opacity: 0.85,
+        opacity: Math.min(0.95, 0.6 + effectiveBrightness * 0.35),
         roughness: 0.1,
         metalness: 0.05,
         transmission: 0.6,
@@ -60,7 +84,7 @@ export function Led3D({
         color: '#38BDF8',
       }),
     };
-  }, [hex, isPowered]);
+  }, [hex, isIlluminated, effectiveBrightness, isBurned]);
 
   // Lead spacing: 2.54mm between Anode (x = -1.27) and Cathode (x = 1.27)
   const P_ANODE: [number, number, number] = [-1.27, -5, 0];
@@ -96,8 +120,16 @@ export function Led3D({
         <coneGeometry args={[0.8, 1.2, 12]} />
       </mesh>
 
-      {/* Point Light when Powered */}
-      {isPowered && <pointLight color={hex} intensity={2.5} distance={30} decay={2} position={[0, 7, 0]} />}
+      {/* Point Light when Illuminated with proportional intensity */}
+      {isIlluminated && (
+        <pointLight
+          color={hex}
+          intensity={Math.max(0.4, effectiveBrightness * 3.5)}
+          distance={20 + 20 * effectiveBrightness}
+          decay={2}
+          position={[0, 7, 0]}
+        />
+      )}
 
       {/* Anode Lead (+ longer, x = -1.27) */}
       <mesh position={[-1.27, 0, 0]} material={materials.silverLead}>

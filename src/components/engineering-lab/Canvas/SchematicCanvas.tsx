@@ -66,6 +66,7 @@ export interface SchematicCanvasProps {
   onPasteComponent?: (atX?: number, atY?: number) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
   onDeleteWire: (wireId: string) => void;
+  onDisconnectWire?: (wireId: string) => void;
   onUpdateWire?: (wire: CircuitWire) => void;
   onClearSheet?: () => void;
   isSimulating: boolean;
@@ -75,9 +76,17 @@ export interface SchematicCanvasProps {
       voltage: number;
       current: number;
       on?: boolean;
+      brightness?: number;
+      status?: 'NORMAL' | 'WARNING' | 'BURNED';
+      burned?: boolean;
+      fault?: string;
+      digitalOut?: number;
       onRed?: boolean;
       onGreen?: boolean;
       onBlue?: boolean;
+      redBrightness?: number;
+      greenBrightness?: number;
+      blueBrightness?: number;
     }
   >;
   wireCurrents?: Record<string, number>;
@@ -209,6 +218,7 @@ export function SchematicCanvas({
   onPasteComponent,
   onAddWire,
   onDeleteWire,
+  onDisconnectWire,
   onUpdateWire,
   onClearSheet,
   isSimulating,
@@ -1728,14 +1738,28 @@ export function SchematicCanvas({
               top: `${Math.max(45, screenY - 50)}px`,
               transform: 'translateX(-50%)',
             }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
           >
             {/* STEP 2: SINGLE Disconnect Button */}
             <button
               type="button"
-              onClick={() => {
-                onDeleteWire(targetWire.id);
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onDisconnectWire) {
+                  onDisconnectWire(targetWire.id);
+                } else {
+                  onDeleteWire(targetWire.id);
+                }
                 setWireSelected(null);
-                toast.info('Wire disconnected');
               }}
               className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-600/70 text-amber-200 rounded flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer"
               title="Disconnect wire completely from both terminal pins"
@@ -1758,7 +1782,11 @@ export function SchematicCanvas({
                 <button
                   key={c.hex}
                   type="button"
-                  onClick={() => handleChangeWireColor(targetWire.id, c.hex)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChangeWireColor(targetWire.id, c.hex);
+                  }}
                   className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
                     (targetWire.color || '#10B981') === c.hex
                       ? 'border-white scale-125 ring-1 ring-white/50'
@@ -1775,7 +1803,9 @@ export function SchematicCanvas({
             {/* Set Net Label */}
             <button
               type="button"
-              onClick={() => {
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setEditingNetLabelWireId(targetWire.id);
                 setTempNetLabel(targetWire.netName || '');
               }}
@@ -1789,7 +1819,11 @@ export function SchematicCanvas({
             {/* Close */}
             <button
               type="button"
-              onClick={() => setWireSelected(null)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setWireSelected(null);
+              }}
               className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded text-xs leading-none ml-1"
             >
               ✕
@@ -1805,6 +1839,8 @@ export function SchematicCanvas({
           <div
             className="fixed bg-[#0B1528] border border-slate-700 rounded-lg shadow-2xl p-1.5 z-50 font-mono text-xs text-slate-200 space-y-1 w-48 backdrop-blur-md"
             style={{ left: `${wireContextMenu.x}px`, top: `${wireContextMenu.y}px` }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-2 py-1 text-[10px] text-slate-400 uppercase border-b border-slate-800 font-bold flex items-center justify-between">
@@ -1813,7 +1849,9 @@ export function SchematicCanvas({
             </div>
 
             <button
-              onClick={() => {
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
                 setEditingNetLabelWireId(wireContextMenu.wireId);
                 setTempNetLabel(targetWire?.netName || '');
                 setWireContextMenu(null);
@@ -1825,11 +1863,15 @@ export function SchematicCanvas({
             </button>
 
             <button
-              onClick={() => {
-                if (targetWire) onDeleteWire(targetWire.id);
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (targetWire) {
+                  if (onDisconnectWire) onDisconnectWire(targetWire.id);
+                  else onDeleteWire(targetWire.id);
+                }
                 setWireContextMenu(null);
                 setWireSelected(null);
-                toast.info('Wire disconnected');
               }}
               className="w-full text-left px-2 py-1.5 hover:bg-amber-950 text-amber-400 hover:text-amber-300 rounded flex items-center gap-2 border-t border-slate-800 cursor-pointer"
             >
@@ -1838,8 +1880,11 @@ export function SchematicCanvas({
             </button>
 
             <button
-              onClick={() => {
-                onDeleteWire(wireContextMenu.wireId);
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onDisconnectWire) onDisconnectWire(wireContextMenu.wireId);
+                else onDeleteWire(wireContextMenu.wireId);
                 setWireContextMenu(null);
                 setWireSelected(null);
               }}

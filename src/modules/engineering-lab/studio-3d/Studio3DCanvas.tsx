@@ -359,7 +359,18 @@ export interface Studio3DCanvasProps {
   onDeleteWire3D: (id: string) => void;
   onUpdateWire3D: (wire: Wire3D) => void;
   isSimulating?: boolean;
-  simulationStates?: Record<string, { voltage: number; current: number; on?: boolean }>;
+  simulationStates?: Record<
+    string,
+    {
+      voltage: number;
+      current: number;
+      on?: boolean;
+      brightness?: number;
+      status?: 'NORMAL' | 'WARNING' | 'BURNED';
+      burned?: boolean;
+      fault?: string;
+    }
+  >;
 }
 
 export function Studio3DCanvas({
@@ -976,7 +987,9 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'LED') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             const isPowered = Boolean(isSimulating && (simState?.on || (simState?.current && Math.abs(simState.current) > 0.001)));
+            const brightness = simState?.brightness;
             return (
               <group
                 key={comp.id}
@@ -992,6 +1005,8 @@ export function Studio3DCanvas({
                   rotation={rot}
                   color={String(comp.parameters?.color || comp.value || '#EF4444')}
                   isPowered={isPowered}
+                  brightness={brightness}
+                  isBurned={isBurned}
                   isSelected={isSelected}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
@@ -1004,6 +1019,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'RESISTOR') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1018,6 +1034,7 @@ export function Studio3DCanvas({
                   position={pos}
                   rotation={rot}
                   value={comp.value || '1kΩ'}
+                  isBurned={isBurned}
                   isSelected={isSelected}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
@@ -1229,6 +1246,7 @@ export function Studio3DCanvas({
                   rotation={rot}
                   pinCount={8}
                   partName={String(comp.parameters?.ic || comp.value || 'NE555P')}
+                  isBurned={Boolean(simState?.status === 'BURNED' || simState?.burned)}
                   isSelected={isSelected}
                   onPinClick={(pinId, wPos) => handlePinClick(comp.id, pinId, wPos)}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
@@ -1792,7 +1810,12 @@ export function Studio3DCanvas({
 
       {/* Floating Wire HUD when wire is selected: Single Disconnect Button + Color Swatches */}
       {selectedWire && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-amber-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150"
+        >
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-bold uppercase text-[10px]">3D Jumper:</span>
             <span className="text-[11px] text-slate-300">

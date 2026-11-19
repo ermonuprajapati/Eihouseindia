@@ -226,7 +226,26 @@ export function EngineeringLabApp() {
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(true);
   const [simTime, setSimTime] = useState(0);
-  const [simStates, setSimStates] = useState<Record<string, { voltage: number; current: number; on?: boolean }>>({});
+  const [simStates, setSimStates] = useState<
+    Record<
+      string,
+      {
+        voltage: number;
+        current: number;
+        on?: boolean;
+        brightness?: number;
+        status?: 'NORMAL' | 'WARNING' | 'BURNED';
+        burned?: boolean;
+        fault?: string;
+        onRed?: boolean;
+        onGreen?: boolean;
+        onBlue?: boolean;
+        redBrightness?: number;
+        greenBrightness?: number;
+        blueBrightness?: number;
+      }
+    >
+  >({});
   const [wireCurrents, setWireCurrents] = useState<Record<string, number>>({});
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
 
@@ -237,6 +256,7 @@ export function EngineeringLabApp() {
   const solverRef = useRef<CircuitSolver>(new CircuitSolver());
   const mcuRef = useRef<VirtualMcuRuntime>(new VirtualMcuRuntime());
   const firmwareRef = useRef(project.firmware);
+  const notifiedFaultsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     firmwareRef.current = project.firmware;
@@ -313,6 +333,17 @@ export function EngineeringLabApp() {
         );
 
         const now = Date.now();
+        // Fire toast alerts for new component electrical burnout / damage faults
+        if (result.faults && result.faults.length > 0) {
+          result.faults.forEach((fault) => {
+            const faultKey = `${fault.compId}:${fault.type}`;
+            if (!notifiedFaultsRef.current.has(faultKey)) {
+              notifiedFaultsRef.current.add(faultKey);
+              toast.error(fault.message, { id: 'fault-' + fault.compId, duration: 6000 });
+            }
+          });
+        }
+
         // Throttle UI commits to ~30 FPS to prevent memory churn and high CPU usage
         if (now - lastUiUpdate >= 33) {
           lastUiUpdate = now;
@@ -749,6 +780,7 @@ export function EngineeringLabApp() {
         onToggleSimulation={() => setIsSimulating((s) => !s)}
         onResetSimulation={() => {
           solverRef.current.reset();
+          notifiedFaultsRef.current.clear();
           mcuRef.current.resetGpio();
           setSimTime(0);
           toast.info('Simulation reset');
@@ -798,6 +830,31 @@ export function EngineeringLabApp() {
             />
 
             <main className="flex-1 min-h-0 min-w-0 h-full relative overflow-hidden">
+              {/* Circuit Overload / Component Burnout Alert Banner */}
+              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned) && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in duration-200">
+                  <span className="font-bold text-rose-400 flex items-center gap-1.5">
+                    <span>💥</span>
+                    <span>CIRCUIT FAULT:</span>
+                  </span>
+                  <span className="text-rose-100 max-w-md truncate">
+                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned) && s.fault)?.fault ||
+                      'Component burned out due to electrical overload!'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      solverRef.current.reset();
+                      notifiedFaultsRef.current.clear();
+                      toast.info('Faults cleared & simulation reset');
+                    }}
+                    className="px-2.5 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded cursor-pointer transition-colors"
+                  >
+                    Reset Faults
+                  </button>
+                </div>
+              )}
+
               <SchematicCanvas
                 components={project.components}
                 wires={project.wires}
@@ -817,6 +874,7 @@ export function EngineeringLabApp() {
                 onDeleteComponent={handleDeleteComponent}
                 onAddWire={handleAddWire}
                 onDeleteWire={handleDeleteWire}
+                onDisconnectWire={handleDisconnectWire}
                 onUpdateWire={(updatedWire) => {
                   recordHistory();
                   setProject((prev) => ({
@@ -940,6 +998,31 @@ export function EngineeringLabApp() {
             />
 
             <div className="flex-1 h-full w-full relative overflow-hidden">
+              {/* Circuit Overload / Component Burnout Alert Banner (3D Studio) */}
+              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned) && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in duration-200">
+                  <span className="font-bold text-rose-400 flex items-center gap-1.5">
+                    <span>💥</span>
+                    <span>CIRCUIT FAULT:</span>
+                  </span>
+                  <span className="text-rose-100 max-w-md truncate">
+                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned) && s.fault)?.fault ||
+                      'Component burned out due to electrical overload!'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      solverRef.current.reset();
+                      notifiedFaultsRef.current.clear();
+                      toast.info('Faults cleared & simulation reset');
+                    }}
+                    className="px-2.5 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded cursor-pointer transition-colors"
+                  >
+                    Reset Faults
+                  </button>
+                </div>
+              )}
+
               <Virtual3dStudio
                 components={project.components}
                 wires={project.wires}

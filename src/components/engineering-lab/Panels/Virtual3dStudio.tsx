@@ -23,7 +23,21 @@ interface Virtual3dStudioProps {
   onDeleteWire?: (wireId: string) => void;
   onDisconnectWire?: (wireId: string) => void;
   isSimulating: boolean;
-  simulationStates: Record<string, { voltage: number; current: number; on?: boolean; onRed?: boolean; onGreen?: boolean; onBlue?: boolean }>;
+  simulationStates: Record<
+    string,
+    {
+      voltage: number;
+      current: number;
+      on?: boolean;
+      brightness?: number;
+      status?: 'NORMAL' | 'WARNING' | 'BURNED';
+      burned?: boolean;
+      fault?: string;
+      onRed?: boolean;
+      onGreen?: boolean;
+      onBlue?: boolean;
+    }
+  >;
   wireCurrents?: Record<string, number>;
   gpioStates?: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
 }

@@ -8,6 +8,7 @@ export interface Resistor3DProps {
   position?: [number, number, number];
   rotation?: [number, number, number];
   value?: string; // e.g. '220Ω', '10kΩ'
+  isBurned?: boolean;
   isSelected?: boolean;
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
@@ -18,6 +19,7 @@ export function Resistor3D({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   value = '1kΩ',
+  isBurned = false,
   isSelected = false,
   onPinClick,
   hoveredPin,
@@ -28,19 +30,19 @@ export function Resistor3D({
   const materials = useMemo(() => {
     return {
       body: new THREE.MeshStandardMaterial({
-        color: '#D4A373', // Light beige ceramic body
-        roughness: 0.5,
+        color: isBurned ? '#1C1917' : '#D4A373', // Charred black or light beige ceramic body
+        roughness: isBurned ? 0.9 : 0.5,
       }),
       silverLead: new THREE.MeshStandardMaterial({
-        color: '#CBD5E1',
-        metalness: 0.9,
-        roughness: 0.2,
+        color: isBurned ? '#78716C' : '#CBD5E1',
+        metalness: isBurned ? 0.4 : 0.9,
+        roughness: isBurned ? 0.7 : 0.2,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
       }),
     };
-  }, []);
+  }, [isBurned]);
 
   const P_PIN1: [number, number, number] = [-5.08, -5, 0];
   const P_PIN2: [number, number, number] = [5.08, -5, 0];
