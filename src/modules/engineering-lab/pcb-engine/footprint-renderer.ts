@@ -1,6 +1,6 @@
 /**
  * Authentic PCB Footprint & Silkscreen Geometry Engine
- * Computes standard IPC-7351 footprint outlines, pads, and non-overlapping silkscreen labels
+ * Computes standard IPC-7351 footprint outlines, pads, and tight non-overlapping silkscreen labels
  */
 
 export interface ComponentFootprintSpec {
@@ -23,7 +23,8 @@ export interface SilkscreenLabelLayout {
 
 export class FootprintRenderer {
   /**
-   * Calculates non-overlapping silkscreen label positions positioned outside the copper pads
+   * Calculates tight, legible silkscreen label positions positioned right beside its courtyard
+   * without floating away or overlapping solder pads.
    */
   public static calculateSilkscreenLayout(spec: ComponentFootprintSpec): SilkscreenLabelLayout {
     const { designator, type, value, x, y } = spec;
@@ -32,44 +33,44 @@ export class FootprintRenderer {
     if (upperType.includes('555') || upperType.includes('IC') || upperType.includes('DIP')) {
       return {
         designatorText: designator,
-        valueText: value || 'IC',
-        designatorPos: { x: x - 6, y: y - 10 },
-        valuePos: { x: x - 6, y: y + 12 },
+        valueText: value || 'NE555P',
+        designatorPos: { x: x - 5, y: y - 8.5 },
+        valuePos: { x: x - 5, y: y + 9.5 },
         outlineType: 'dip',
-        boxBounds: { x: x - 5, y: y - 8, width: 10, height: 16 },
+        boxBounds: { x: x - 4.5, y: y - 7.5, width: 9, height: 15 },
       };
     }
 
     if (upperType.includes('RESISTOR') || upperType.includes('POTENTIOMETER') || upperType.includes('LDR')) {
       return {
         designatorText: designator,
-        valueText: value,
-        designatorPos: { x: x - 7, y: y - 5 },
-        valuePos: { x: x - 7, y: y + 7 },
+        valueText: value || '10kΩ',
+        designatorPos: { x: x - 5.5, y: y - 3.8 },
+        valuePos: { x: x - 5.5, y: y + 5.2 },
         outlineType: 'axial',
-        boxBounds: { x: x - 6, y: y - 2.5, width: 12, height: 5 },
+        boxBounds: { x: x - 5, y: y - 2, width: 10, height: 4 },
       };
     }
 
     if (upperType.includes('CAPACITOR')) {
       return {
         designatorText: designator,
-        valueText: value,
-        designatorPos: { x: x - 6, y: y - 7 },
-        valuePos: { x: x - 6, y: y + 8 },
+        valueText: value || '100nF',
+        designatorPos: { x: x - 5, y: y - 5.5 },
+        valuePos: { x: x - 5, y: y + 6.8 },
         outlineType: 'radial',
-        boxBounds: { x: x - 4.5, y: y - 4.5, width: 9, height: 9 },
+        boxBounds: { x: x - 4, y: y - 4, width: 8, height: 8 },
       };
     }
 
     if (upperType.includes('LED') || upperType.includes('DIODE')) {
       return {
         designatorText: designator,
-        valueText: value || (upperType.includes('LED') ? 'LED' : '1N4148'),
-        designatorPos: { x: x - 6, y: y - 6 },
-        valuePos: { x: x - 6, y: y + 8 },
+        valueText: value || (upperType.includes('LED') ? 'Red LED' : '1N4148'),
+        designatorPos: { x: x - 5, y: y - 5.2 },
+        valuePos: { x: x - 5, y: y + 6.4 },
         outlineType: 'led',
-        boxBounds: { x: x - 4, y: y - 4, width: 8, height: 8 },
+        boxBounds: { x: x - 3.5, y: y - 3.5, width: 7, height: 7 },
       };
     }
 
@@ -77,21 +78,21 @@ export class FootprintRenderer {
       return {
         designatorText: designator,
         valueText: value || '2N2222',
-        designatorPos: { x: x - 5, y: y - 6 },
-        valuePos: { x: x - 5, y: y + 7 },
+        designatorPos: { x: x - 4.5, y: y - 4.8 },
+        valuePos: { x: x - 4.5, y: y + 5.8 },
         outlineType: 'transistor',
-        boxBounds: { x: x - 4, y: y - 3, width: 8, height: 6 },
+        boxBounds: { x: x - 3.5, y: y - 2.5, width: 7, height: 5 },
       };
     }
 
     // Generic IC / Module outline
     return {
       designatorText: designator,
-      valueText: value,
-      designatorPos: { x: x - 6, y: y - 7 },
-      valuePos: { x: x - 6, y: y + 8 },
+      valueText: value || '',
+      designatorPos: { x: x - 5, y: y - 5.5 },
+      valuePos: { x: x - 5, y: y + 6.8 },
       outlineType: 'box',
-      boxBounds: { x: x - 5, y: y - 5, width: 10, height: 10 },
+      boxBounds: { x: x - 4.5, y: y - 4.5, width: 9, height: 9 },
     };
   }
 }

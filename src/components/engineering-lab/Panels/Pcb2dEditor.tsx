@@ -31,6 +31,12 @@ import {
   Shield,
   Eye,
   Settings,
+  ChevronDown,
+  FileSpreadsheet,
+  FileCode,
+  Printer,
+  GripHorizontal,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -74,7 +80,6 @@ export function Pcb2dEditor({
   projectTitle = 'EI_House_PCB',
   onUpdatePcb,
   onUpdateDimensions,
-  onExportGerber,
 }: Pcb2dEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -128,10 +133,26 @@ export function Pcb2dEditor({
   const [drcViolations, setDrcViolations] = useState<DrcViolation[]>([]);
   const [highlightLocation, setHighlightLocation] = useState<{ x: number; y: number } | null>(null);
 
+  // Draggable Floating Stackup Modal State
+  const [isStackupModalOpen, setIsStackupModalOpen] = useState<boolean>(false);
+  const [stackupModalPos, setStackupModalPos] = useState<{ x: number; y: number }>({ x: 40, y: 65 });
+  const [isDraggingStackup, setIsDraggingStackup] = useState<boolean>(false);
+  const [stackupDragStart, setStackupDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Manufacturing Export Dropdown State
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
+
   // Stackup specs
   const [copperLayers, setCopperLayers] = useState<2 | 4 | 6 | 8>(pcb.copperLayers || 2);
   const [boardThicknessMm, setBoardThicknessMm] = useState<number>(pcb.boardThicknessMm || 1.6);
   const [copperWeightOz, setCopperWeightOz] = useState<number>(1);
+
+  // Net-to-Layer Assignment Map
+  const [netAssignments, setNetAssignments] = useState<Record<string, string>>({
+    VCC: 'top_copper',
+    GND: 'bottom_copper',
+    SIGNALS: 'auto',
+  });
 
   // Run initial and reactive DRC
   useEffect(() => {
@@ -215,6 +236,7 @@ export function Pcb2dEditor({
         setSelectedCompId(null);
         setIsDraggingComp(false);
         setToolMode('select');
+        setIsExportMenuOpen(false);
       } else if (e.key === 'r' || e.key === 'R') {
         if (selectedCompId && pcb.components && onUpdatePcb) {
           e.preventDefault();
@@ -224,7 +246,6 @@ export function Pcb2dEditor({
           setRoutingStartPad(null);
         }
       } else if (e.key === 'v' || e.key === 'V') {
-        // Toggle via drop or layer switch
         e.preventDefault();
         const nextLayer = activeLayer === 'top_copper' ? 'bottom_copper' : 'top_copper';
         setActiveLayer(nextLayer);
@@ -256,7 +277,7 @@ export function Pcb2dEditor({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent]);
 
-  // Run full Auto-Router
+  // Run full Auto-Router with Manhattan 45-chamfered tracks
   const handleAutoRoute = () => {
     if (!onUpdatePcb) return;
     const { tracks: routedTracks, vias } = PcbAutoRouter.route(
@@ -282,7 +303,7 @@ export function Pcb2dEditor({
     toast.success(`Auto-routed ${routedTracks.length} tracks with ${vias.length} layer-hop vias`);
   };
 
-  // Clear all tracks to start fresh
+  // Clear all tracks
   const handleClearAllTraces = () => {
     if (!onUpdatePcb) return;
     onUpdatePcb({
@@ -304,14 +325,32 @@ export function Pcb2dEditor({
     toast.success('Applied automatic minimum trace width & clearance corrections');
   };
 
-  // Trigger Gerber ZIP Download
-  const handleExportZip = () => {
-    if (onExportGerber) {
-      onExportGerber();
-    } else {
-      GerberExporter.exportGerberZip(pcb, components, projectTitle);
-      toast.success(`Exported complete RS-274X Gerber & Drill ZIP package for ${projectTitle}`);
-    }
+  // Multi-Format Manufacturing File Exporters
+  const handleDownloadGerberZip = () => {
+    setIsExportMenuOpen(false);
+    GerberExporter.exportGerberZip(pcb, components, projectTitle);
+    toast.success(`Downloaded Production Gerber ZIP package for ${projectTitle}`);
+  };
+
+  const handleDownloadBomCsv = () => {
+    setIsExportMenuOpen(false);
+    const csv = GerberExporter.exportBomCsv(components);
+    GerberExporter.downloadFile(`${projectTitle}_BOM.csv`, csv, 'text/csv');
+    toast.success('Downloaded Bill of Materials (BOM.csv)');
+  };
+
+  const handleDownloadPickAndPlaceCsv = () => {
+    setIsExportMenuOpen(false);
+    const csv = GerberExporter.exportPickAndPlaceCsv(pcb);
+    GerberExporter.downloadFile(`${projectTitle}_CPL.csv`, csv, 'text/csv');
+    toast.success('Downloaded Pick & Place Centroid (CPL.csv)');
+  };
+
+  const handleDownloadBlueprintSvg = () => {
+    setIsExportMenuOpen(false);
+    const svg = GerberExporter.exportBlueprintSvg(pcb);
+    GerberExporter.downloadFile(`${projectTitle}_Blueprint.svg`, svg, 'image/svg+xml');
+    toast.success('Downloaded 2D Vector Blueprint (Blueprint.svg)');
   };
 
   // ----------------------------------------------------
@@ -330,17 +369,15 @@ export function Pcb2dEditor({
     ctx.fillStyle = '#050D1A';
     ctx.fillRect(0, 0, width, height);
 
-    // Save initial state for zoom & pan transform
     ctx.save();
     ctx.translate(panOffset.x, panOffset.y);
 
-    // Scaling from mm to canvas pixels (centered)
     const baseScale = Math.min((width - 90) / pcb.widthMm, (height - 90) / pcb.heightMm);
     const scale = baseScale * zoomLevel;
     const offsetX = (width - pcb.widthMm * scale) / 2;
     const offsetY = (height - pcb.heightMm * scale) / 2;
 
-    // Draw EDA background grid
+    // EDA background grid
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.lineWidth = 1;
     const gridPx = gridSpacingMm * scale;
@@ -359,7 +396,7 @@ export function Pcb2dEditor({
       }
     }
 
-    // 1. Draw FR4 Board Substrate (Green Soldermask) with rounded corners
+    // 1. Draw FR4 Board Substrate (Green Soldermask)
     ctx.fillStyle = '#064E3B';
     ctx.strokeStyle = '#047857';
     ctx.lineWidth = 2;
@@ -432,7 +469,7 @@ export function Pcb2dEditor({
     ctx.font = 'bold 9px monospace';
     ctx.fillText(`${pcb.heightMm.toFixed(1)} mm`, offsetX - 54, offsetY + pcbH / 2 + 4);
 
-    // 3. Ratsnest (Airwires) - Thin dashed yellow lines between unrouted pads
+    // 3. Ratsnest (Airwires) - Live connection guides
     if (visibleLayers.ratsnest && wires.length > 0) {
       const padLookup = new Map<string, { x: number; y: number }>();
       pcb.pads.forEach((p) => padLookup.set(`${p.componentId}:${p.pinId}`, { x: p.x, y: p.y }));
@@ -535,14 +572,12 @@ export function Pcb2dEditor({
       const sx = offsetX + routingStartPad.x * scale;
       const sy = offsetY + routingStartPad.y * scale;
 
-      // Start pad pulsating highlight
       ctx.strokeStyle = '#10B981';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(sx, sy, 5 * scale, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Compute 45°-chamfered preview segment
       const dx = mouseCoord.mmX - routingStartPad.x;
       const dy = mouseCoord.mmY - routingStartPad.y;
       const signX = Math.sign(dx) || 1;
@@ -571,7 +606,6 @@ export function Pcb2dEditor({
       ctx.lineTo(mouseCoord.canvasX, mouseCoord.canvasY);
       ctx.stroke();
 
-      // Length indicator badge
       const distMm = Math.hypot(dx, dy);
       ctx.fillStyle = '#020617';
       ctx.fillRect(mouseCoord.canvasX + 8, mouseCoord.canvasY - 18, 54, 16);
@@ -583,7 +617,7 @@ export function Pcb2dEditor({
       ctx.fillText(`${distMm.toFixed(1)} mm`, mouseCoord.canvasX + 11, mouseCoord.canvasY - 6);
     }
 
-    // 7. Draw Copper Pads (Gold / Tin Plated Annular Rings)
+    // 7. Copper Pads (Annular Rings & Hole Centers)
     pcb.pads.forEach((pad) => {
       const px = offsetX + pad.x * scale;
       const py = offsetY + pad.y * scale;
@@ -613,7 +647,6 @@ export function Pcb2dEditor({
       ctx.fill();
       ctx.stroke();
 
-      // Drill Hole (Dark Center)
       if (visibleLayers.drillHoles) {
         ctx.fillStyle = '#050D1A';
         ctx.beginPath();
@@ -622,14 +655,13 @@ export function Pcb2dEditor({
       }
     });
 
-    // 8. Silkscreen Outlines and Crisp Non-Overlapping Labels
+    // 8. Silkscreen Outlines and Tight, Legible Labels Right Beside Courtyards
     if (visibleLayers.silkscreen) {
       ctx.fillStyle = '#F8FAFC';
       ctx.strokeStyle = '#E2E8F0';
       ctx.lineWidth = 1;
       ctx.font = 'bold 9px monospace';
 
-      // Header Branding
       ctx.fillText('EI HOUSE ENG LAB', offsetX + 8, offsetY + 16);
       ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, offsetX + 8, offsetY + pcb.heightMm * scale - 8);
 
@@ -661,7 +693,7 @@ export function Pcb2dEditor({
           ctx.lineWidth = 1;
           ctx.font = 'bold 8px monospace';
 
-          // Render component outline and clean silkscreen labels
+          // Layout labels tightly beside silkscreen courtyard
           const layout = FootprintRenderer.calculateSilkscreenLayout({
             designator: comp.designator,
             type: comp.type,
@@ -680,9 +712,9 @@ export function Pcb2dEditor({
             );
           }
 
-          // Designator text (Cleanly offset above/outside pad boundaries)
+          // Designator text
           ctx.fillText(layout.designatorText, layout.designatorPos.x * scale, layout.designatorPos.y * scale);
-          // Value text (Cleanly offset below/outside pad boundaries)
+          // Value text
           if (layout.valueText) {
             ctx.fillStyle = isCompSelected ? '#7DD3FC' : '#94A3B8';
             ctx.fillText(layout.valueText, layout.valuePos.x * scale, layout.valuePos.y * scale);
@@ -693,20 +725,39 @@ export function Pcb2dEditor({
       }
     }
 
-    // 9. Highlight Marker for DRC Violations (Click to locate)
+    // 9. Real Geometric DRC Violation Red Ring Markers on Board
+    drcViolations.forEach((v) => {
+      if (v.location) {
+        const vx = offsetX + v.location.x * scale;
+        const vy = offsetY + v.location.y * scale;
+
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(vx, vy, 8 * zoomLevel, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#EF4444';
+        ctx.beginPath();
+        ctx.arc(vx, vy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // 10. Selected DRC Marker Pulsing Target
     if (highlightLocation) {
       const hx = offsetX + highlightLocation.x * scale;
       const hy = offsetY + highlightLocation.y * scale;
 
-      ctx.strokeStyle = '#EF4444';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#F43F5E';
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(hx, hy, 12, 0, Math.PI * 2);
+      ctx.arc(hx, hy, 14, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.fillStyle = '#EF4444';
+      ctx.fillStyle = '#F43F5E';
       ctx.beginPath();
-      ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+      ctx.arc(hx, hy, 4, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -727,6 +778,7 @@ export function Pcb2dEditor({
     panOffset,
     highlightLocation,
     gridSpacingMm,
+    drcViolations,
   ]);
 
   // ----------------------------------------------------
@@ -755,7 +807,6 @@ export function Pcb2dEditor({
     if (!coords) return;
     setMouseCoord(coords);
 
-    // Pan canvas with middle mouse or while isPanning
     if (isPanning) {
       setPanOffset({
         x: coords.canvasX - panStart.x,
@@ -764,7 +815,7 @@ export function Pcb2dEditor({
       return;
     }
 
-    // Component Dragging
+    // Live Component Dragging with Instant Ratsnest Updates
     if (isDraggingComp && selectedCompId && pcb.components && onUpdatePcb) {
       const targetComp = pcb.components.find((c) => c.componentId === selectedCompId);
       if (targetComp) {
@@ -812,7 +863,6 @@ export function Pcb2dEditor({
       }
     }
 
-    // Hover detection over pads
     const hovered = pcb.pads.find((p) => {
       const d = Math.hypot(p.x - coords.mmX, p.y - coords.mmY);
       return d <= Math.max(p.diameterMm, 2.5);
@@ -821,7 +871,6 @@ export function Pcb2dEditor({
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Middle click pan
     if (e.button === 1) {
       e.preventDefault();
       setIsPanning(true);
@@ -835,7 +884,6 @@ export function Pcb2dEditor({
     if (!coords) return;
     const { mmX, mmY } = coords;
 
-    // In select mode: check if clicked on a component to drag
     if (toolMode === 'select' && !routingStartPad) {
       const clickedComp = pcb.components?.find((c) => Math.hypot(c.x - mmX, c.y - mmY) <= 8);
       if (clickedComp) {
@@ -857,7 +905,6 @@ export function Pcb2dEditor({
 
   const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    // Right click cancels active route or deselects
     if (routingStartPad) {
       setRoutingStartPad(null);
       toast.info('Cancelled track routing');
@@ -876,7 +923,6 @@ export function Pcb2dEditor({
     if (!coords) return;
     const { mmX, mmY } = coords;
 
-    // 1. Check if clicked a copper pad
     const clickedPad = pcb.pads.find((p) => {
       const d = Math.hypot(p.x - mmX, p.y - mmY);
       return d <= Math.max(p.diameterMm, 2.5);
@@ -890,10 +936,8 @@ export function Pcb2dEditor({
 
       if (toolMode === 'route' || routingStartPad) {
         if (!routingStartPad) {
-          // Begin interactive routing
           setRoutingStartPad({ id: clickedPad.id, x: clickedPad.x, y: clickedPad.y });
         } else if (routingStartPad.id !== clickedPad.id) {
-          // Complete track connection to destination pad
           const newTrack: PcbTrack = {
             id: `trk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             layer: activeLayer,
@@ -914,7 +958,6 @@ export function Pcb2dEditor({
       }
     }
 
-    // 2. If routing and clicked empty space: drop intermediate 45-chamfered waypoint
     if (routingStartPad) {
       const snapX = snapCoord(mmX);
       const snapY = snapCoord(mmY);
@@ -935,7 +978,6 @@ export function Pcb2dEditor({
       return;
     }
 
-    // 3. Check if clicked near an existing track to select it
     let clickedTrack: PcbTrack | null = null;
     for (const track of pcb.tracks) {
       const dx = track.to.x - track.from.x;
@@ -962,7 +1004,6 @@ export function Pcb2dEditor({
     }
   };
 
-  // Live update selected track width
   const handleUpdateSelectedTrackWidth = (w: number) => {
     if (!selectedTrackId || !onUpdatePcb) return;
     const nextTracks = pcb.tracks.map((t) => (t.id === selectedTrackId ? { ...t, widthMm: w } : t));
@@ -970,13 +1011,45 @@ export function Pcb2dEditor({
     toast.success(`Updated track width to ${w} mm`);
   };
 
-  // Live update selected pad drill hole
   const handleUpdateSelectedPadHole = (h: number) => {
     if (!selectedPadId || !onUpdatePcb) return;
     const nextPads = pcb.pads.map((p) => (p.id === selectedPadId ? { ...p, holeMm: h } : p));
     onUpdatePcb({ ...pcb, pads: nextPads });
     toast.success(`Updated pad drill diameter to ${h} mm`);
   };
+
+  // Draggable Stackup Header Mouse Handlers
+  const handleStackupMouseDown = (e: React.MouseEvent) => {
+    setIsDraggingStackup(true);
+    setStackupDragStart({
+      x: e.clientX - stackupModalPos.x,
+      y: e.clientY - stackupModalPos.y,
+    });
+  };
+
+  useEffect(() => {
+    const handleMouseMoveWindow = (e: MouseEvent) => {
+      if (isDraggingStackup) {
+        setStackupModalPos({
+          x: Math.max(10, Math.min(window.innerWidth - 380, e.clientX - stackupDragStart.x)),
+          y: Math.max(50, Math.min(window.innerHeight - 300, e.clientY - stackupDragStart.y)),
+        });
+      }
+    };
+
+    const handleMouseUpWindow = () => {
+      setIsDraggingStackup(false);
+    };
+
+    if (isDraggingStackup) {
+      window.addEventListener('mousemove', handleMouseMoveWindow);
+      window.addEventListener('mouseup', handleMouseUpWindow);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMoveWindow);
+      window.removeEventListener('mouseup', handleMouseUpWindow);
+    };
+  }, [isDraggingStackup, stackupDragStart]);
 
   const selectedTrack = pcb.tracks.find((t) => t.id === selectedTrackId);
   const selectedPad = pcb.pads.find((p) => p.id === selectedPadId);
@@ -1133,8 +1206,22 @@ export function Pcb2dEditor({
           </div>
         </div>
 
-        {/* Right Section: Auto-Route, Export & Clear */}
+        {/* Right Section: Auto-Route, Draggable Stackup Toggle & Export Menu */}
         <div className="flex items-center gap-2">
+          {/* Draggable Stackup Toggle */}
+          <button
+            onClick={() => setIsStackupModalOpen((prev) => !prev)}
+            className={`px-2.5 py-1 rounded font-mono text-[11px] font-bold flex items-center gap-1 transition-all ${
+              isStackupModalOpen
+                ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+            }`}
+            title="Open Draggable Stackup & Layer Manager"
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Stackup</span>
+          </button>
+
           {/* Rotate Selected Footprint */}
           {selectedCompId && (
             <button
@@ -1184,15 +1271,55 @@ export function Pcb2dEditor({
             <Trash2 className="w-3.5 h-3.5" />
           </button>
 
-          {/* Export Gerber ZIP */}
-          <button
-            onClick={handleExportZip}
-            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold flex items-center gap-1.5 shadow"
-            title="Download complete RS-274X Gerber & Drill ZIP Package for JLCPCB / PCBWay"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export Gerber ZIP</span>
-          </button>
+          {/* Export Manufacturing Files ▾ Dropdown Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setIsExportMenuOpen((prev) => !prev)}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold flex items-center gap-1.5 shadow"
+              title="Export complete manufacturing files (Gerbers, Drill, BOM, CPL, SVG)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Manufacturing Files</span>
+              <ChevronDown className="w-3 h-3 ml-0.5" />
+            </button>
+
+            {isExportMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-64 bg-[#0B1528] border border-slate-700/80 rounded-xl shadow-2xl py-1.5 z-50 font-mono text-xs animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={handleDownloadGerberZip}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-800 flex items-center gap-2 text-emerald-400 font-bold transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <div>
+                    <div>Production Gerber (.zip)</div>
+                    <div className="text-[10px] text-slate-400 font-normal">JLCPCB / PCBWay RS-274X + DRL</div>
+                  </div>
+                </button>
+                <div className="h-px bg-slate-800 my-1" />
+                <button
+                  onClick={handleDownloadBomCsv}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Bill of Materials (BOM .csv)</span>
+                </button>
+                <button
+                  onClick={handleDownloadPickAndPlaceCsv}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Pick &amp; Place Centroid (CPL .csv)</span>
+                </button>
+                <button
+                  onClick={handleDownloadBlueprintSvg}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-purple-400" />
+                  <span>2D Print Blueprint (.svg)</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1302,6 +1429,188 @@ export function Pcb2dEditor({
               <span>
                 Routing on {activeLayer === 'top_copper' ? 'F.Cu (Top Red)' : 'B.Cu (Bottom Blue)'}: Click destination pad to connect | Press [V] for Via | Right-click to cancel
               </span>
+            </div>
+          )}
+
+          {/* ---------------------------------------------------- */}
+          {/* Draggable Floating Stackup & Layer-Signal Manager */}
+          {/* ---------------------------------------------------- */}
+          {isStackupModalOpen && (
+            <div
+              style={{
+                left: `${stackupModalPos.x}px`,
+                top: `${stackupModalPos.y}px`,
+              }}
+              className="absolute z-40 w-80 bg-[#0B1528]/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl font-mono text-xs flex flex-col pointer-events-auto select-none"
+            >
+              {/* Draggable Title Bar */}
+              <div
+                onMouseDown={handleStackupMouseDown}
+                className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 rounded-t-xl cursor-grab active:cursor-grabbing"
+              >
+                <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-[11px]">
+                  <GripHorizontal className="w-4 h-4 text-slate-500" />
+                  <span>Layer Stackup &amp; Signal Manager</span>
+                </div>
+                <button
+                  onClick={() => setIsStackupModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-3 space-y-3 max-h-[420px] overflow-y-auto">
+                {/* Active Layer Quick Selector */}
+                <div className="space-y-1">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Active Routing Layer</div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setActiveLayer('top_copper');
+                        toast.info('Switched active layer to L1: F.Cu (Top Copper)');
+                      }}
+                      className={`px-2.5 py-1.5 rounded flex items-center justify-between font-bold text-[11px] transition-all cursor-pointer ${
+                        activeLayer === 'top_copper'
+                          ? 'bg-red-950 border border-red-500 text-red-200'
+                          : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>L1: F.Cu (Top Copper)</span>
+                      <span className="text-[10px] font-normal">35 µm / 1 oz</span>
+                    </button>
+
+                    {copperLayers >= 4 && (
+                      <>
+                        <div className="px-2.5 py-1 bg-emerald-950/60 border border-emerald-800/60 rounded text-emerald-300 flex items-center justify-between text-[10px]">
+                          <span>In1.Cu (Internal GND Plane)</span>
+                          <span>35 µm</span>
+                        </div>
+                        <div className="px-2.5 py-1 bg-amber-950/60 border border-amber-800/60 rounded text-amber-300 flex items-center justify-between text-[10px]">
+                          <span>In2.Cu (Internal PWR Plane)</span>
+                          <span>35 µm</span>
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setActiveLayer('bottom_copper');
+                        toast.info('Switched active layer to L2: B.Cu (Bottom Copper)');
+                      }}
+                      className={`px-2.5 py-1.5 rounded flex items-center justify-between font-bold text-[11px] transition-all cursor-pointer ${
+                        activeLayer === 'bottom_copper'
+                          ? 'bg-blue-950 border border-blue-500 text-blue-200'
+                          : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>L{copperLayers}: B.Cu (Bottom Copper)</span>
+                      <span className="text-[10px] font-normal">35 µm / 1 oz</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Layer Count */}
+                <div className="space-y-1">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Stackup Count</div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {[2, 4, 6, 8].map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => {
+                          setCopperLayers(l as 2 | 4 | 6 | 8);
+                          if (onUpdatePcb) onUpdatePcb({ ...pcb, copperLayers: l as 2 | 4 | 6 | 8 });
+                        }}
+                        className={`py-1 rounded font-bold text-[10px] transition-colors ${
+                          copperLayers === l
+                            ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
+                            : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {l}L
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Substrate Thickness & Copper Weight */}
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <label className="text-slate-400 uppercase font-bold block mb-1">Thickness</label>
+                    <select
+                      value={boardThicknessMm}
+                      onChange={(e) => {
+                        const th = parseFloat(e.target.value);
+                        setBoardThicknessMm(th);
+                        if (onUpdatePcb) onUpdatePcb({ ...pcb, boardThicknessMm: th });
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                    >
+                      <option value={0.8}>0.8 mm</option>
+                      <option value={1.0}>1.0 mm</option>
+                      <option value={1.6}>1.6 mm</option>
+                      <option value={2.0}>2.0 mm</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-slate-400 uppercase font-bold block mb-1">Copper Weight</label>
+                    <select
+                      value={copperWeightOz}
+                      onChange={(e) => setCopperWeightOz(parseInt(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200"
+                    >
+                      <option value={1}>1 oz (35 µm)</option>
+                      <option value={2}>2 oz (70 µm)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Signal / Net Layer Assignment Section */}
+                <div className="space-y-1 pt-1 border-t border-slate-800">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Signal &amp; Power Net Routing Rules</div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] p-1.5 rounded bg-slate-950 border border-slate-800/80">
+                      <span className="text-red-400 font-bold">VCC / Power</span>
+                      <select
+                        value={netAssignments.VCC || 'top_copper'}
+                        onChange={(e) => setNetAssignments({ ...netAssignments, VCC: e.target.value })}
+                        className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-300"
+                      >
+                        <option value="top_copper">L1: F.Cu (Top)</option>
+                        <option value="bottom_copper">L2: B.Cu (Bot)</option>
+                        <option value="auto">Auto Router</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] p-1.5 rounded bg-slate-950 border border-slate-800/80">
+                      <span className="text-blue-400 font-bold">GND / Ground</span>
+                      <select
+                        value={netAssignments.GND || 'bottom_copper'}
+                        onChange={(e) => setNetAssignments({ ...netAssignments, GND: e.target.value })}
+                        className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-300"
+                      >
+                        <option value="bottom_copper">L2: B.Cu (GND Plane)</option>
+                        <option value="top_copper">L1: F.Cu (Top)</option>
+                        <option value="auto">Auto Router</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] p-1.5 rounded bg-slate-950 border border-slate-800/80">
+                      <span className="text-emerald-400 font-bold">Digital / Analog Signals</span>
+                      <select
+                        value={netAssignments.SIGNALS || 'auto'}
+                        onChange={(e) => setNetAssignments({ ...netAssignments, SIGNALS: e.target.value })}
+                        className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-300"
+                      >
+                        <option value="auto">Auto / Both Layers</option>
+                        <option value="top_copper">F.Cu Only</option>
+                        <option value="bottom_copper">B.Cu Only</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1528,7 +1837,7 @@ export function Pcb2dEditor({
                           : 'bg-slate-950 border border-slate-800 text-slate-400'
                       }`}
                     >
-                      {l} Layers
+                      {l}L
                     </button>
                   ))}
                 </div>
