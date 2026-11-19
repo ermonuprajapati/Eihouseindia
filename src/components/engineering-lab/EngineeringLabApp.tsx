@@ -12,7 +12,7 @@ import {
 } from '@/modules/engineering-lab/types';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
 import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
+import { VirtualMcuRuntime, GpioState } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
@@ -97,6 +97,16 @@ const LabExperimentsModal = dynamic(
   { ssr: false }
 );
 
+const CommunityProjectsModal = dynamic(
+  () => import('./Panels/CommunityProjectsModal').then((m) => m.CommunityProjectsModal),
+  { ssr: false }
+);
+
+const ShareProjectModal = dynamic(
+  () => import('./Panels/ShareProjectModal').then((m) => m.ShareProjectModal),
+  { ssr: false }
+);
+
 export function EngineeringLabApp() {
   // Project State
   const [project, setProject] = useState<EngineeringProject>(TEMPLATE_555_ASTABLE);
@@ -117,6 +127,8 @@ export function EngineeringLabApp() {
   const [browserWidth, setBrowserWidth] = useState(288);
   const [inspectorWidth, setInspectorWidth] = useState(320);
   const [isExperimentsModalOpen, setIsExperimentsModalOpen] = useState(false);
+  const [isCommunityModalOpen, setIsCommunityModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isQuickProbeOpen, setIsQuickProbeOpen] = useState(false);
 
   // Load layout preferences from localStorage on mount & check for project load URL param
@@ -133,7 +145,30 @@ export function EngineeringLabApp() {
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
+        const shareParam = params.get('share') || params.get('data');
         const loadId = params.get('load') || params.get('project');
+
+        // Check if direct share payload is in URL
+        if (shareParam) {
+          try {
+            let jsonStr = '';
+            try {
+              jsonStr = decodeURIComponent(escape(atob(shareParam)));
+            } catch {
+              jsonStr = decodeURIComponent(shareParam);
+            }
+            const decoded: EngineeringProject = JSON.parse(jsonStr);
+            if (decoded && Array.isArray(decoded.components) && Array.isArray(decoded.wires)) {
+              setProject(decoded);
+              toast.success(`Loaded shared project "${decoded.title}"`);
+              return;
+            }
+          } catch {
+            console.warn('Could not parse share payload from URL');
+          }
+        }
+
+        // Check if project ID is provided in URL
         if (loadId) {
           const raw = localStorage.getItem(`ei_lab_${loadId}`);
           if (raw) {
@@ -141,8 +176,20 @@ export function EngineeringLabApp() {
             if (parsedProject && Array.isArray(parsedProject.components) && Array.isArray(parsedProject.wires)) {
               setProject(parsedProject);
               toast.success(`Loaded project "${parsedProject.title}"`);
+              return;
             }
           }
+
+          // Fetch from cloud API if not in local storage
+          fetch(`/api/engineering-lab/projects?id=${encodeURIComponent(loadId)}`)
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.project && Array.isArray(res.project.components)) {
+                setProject(res.project);
+                toast.success(`Loaded community project "${res.project.title}"`);
+              }
+            })
+            .catch(() => {});
         }
       }
     } catch {}
@@ -180,9 +227,14 @@ export function EngineeringLabApp() {
   // Firmware & MCU State
   const [isFlashing, setIsFlashing] = useState(false);
 
-  // Engines
+  // Engines & References
   const solverRef = useRef<CircuitSolver>(new CircuitSolver());
   const mcuRef = useRef<VirtualMcuRuntime>(new VirtualMcuRuntime());
+  const firmwareRef = useRef(project.firmware);
+
+  useEffect(() => {
+    firmwareRef.current = project.firmware;
+  }, [project.firmware]);
 
   // Save current project state to Undo stack before changes
   const recordHistory = useCallback(() => {
@@ -215,12 +267,44 @@ export function EngineeringLabApp() {
   useEffect(() => {
     let animId: number;
     let lastUiUpdate = Date.now();
+    let lastSerialFlush = Date.now();
+    const pendingSerialLines: string[] = [];
 
     const loop = () => {
       if (isSimulating && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
-        // Step Circuit MNA Solver
+        const curFirmware = firmwareRef.current;
+        let currentGpioStates: Record<string | number, GpioState> | undefined = undefined;
+
+        // Execute MCU slice if MCU is running
+        if (curFirmware.isRunning) {
+          const sonarComp = project.components.find((c) => c.type === 'SENSOR_ULTRASONIC');
+          const dhtComp = project.components.find((c) => c.type === 'SENSOR_DHT11');
+          const ldrComp = project.components.find((c) => c.type === 'SENSOR_LDR');
+
+          const mcuRes = mcuRef.current.executeCycle(curFirmware, {
+            distanceCm: Number(sonarComp?.parameters?.distanceCm ?? 45.0),
+            temperatureC: Number(dhtComp?.parameters?.temperatureC ?? 24.0),
+            humidityPercent: Number(dhtComp?.parameters?.humidityPercent ?? 45.0),
+            lightLux: Number(ldrComp?.parameters?.lightLux ?? 350.0),
+          });
+
+          currentGpioStates = mcuRes.gpioUpdates;
+
+          if (mcuRes.serialLines.length > 0) {
+            pendingSerialLines.push(...mcuRes.serialLines);
+          }
+        }
+
+        // Step Circuit MNA Solver WITH active MCU gpioStates!
         const solver = solverRef.current;
-        const result: SolverStepResult = solver.step(project.components, project.wires, 0.001, 1.0, project.instruments);
+        const result: SolverStepResult = solver.step(
+          project.components,
+          project.wires,
+          0.001,
+          1.0,
+          project.instruments,
+          currentGpioStates || mcuRef.current.getGpioState()
+        );
 
         const now = Date.now();
         // Throttle UI commits to ~30 FPS to prevent memory churn and high CPU usage
@@ -232,28 +316,18 @@ export function EngineeringLabApp() {
           setSimTime((t) => t + 0.033);
         }
 
-        // Execute MCU slice if MCU is running
-        if (project.firmware.isRunning) {
-          const sonarComp = project.components.find((c) => c.type === 'SENSOR_ULTRASONIC');
-          const dhtComp = project.components.find((c) => c.type === 'SENSOR_DHT11');
-          const ldrComp = project.components.find((c) => c.type === 'SENSOR_LDR');
-
-          const mcuRes = mcuRef.current.executeCycle(project.firmware, {
-            distanceCm: Number(sonarComp?.parameters?.distanceCm ?? 45.0),
-            temperatureC: Number(dhtComp?.parameters?.temperatureC ?? 24.0),
-            humidityPercent: Number(dhtComp?.parameters?.humidityPercent ?? 45.0),
-            lightLux: Number(ldrComp?.parameters?.lightLux ?? 350.0),
-          });
-          if (mcuRes.serialLines.length > 0) {
-            setProject((prev) => ({
-              ...prev,
-              firmware: {
-                ...prev.firmware,
-                serialLog: [...prev.firmware.serialLog, ...mcuRes.serialLines].slice(-100),
-                gpioStates: mcuRes.gpioUpdates,
-              },
-            }));
-          }
+        // Throttle serial log update to every 150ms to keep 60 FPS buttery smooth
+        if (pendingSerialLines.length > 0 && now - lastSerialFlush >= 150) {
+          lastSerialFlush = now;
+          const linesToCommit = pendingSerialLines.splice(0, pendingSerialLines.length);
+          setProject((prev) => ({
+            ...prev,
+            firmware: {
+              ...prev.firmware,
+              serialLog: [...prev.firmware.serialLog, ...linesToCommit].slice(-100),
+              gpioStates: currentGpioStates || mcuRef.current.getGpioState(),
+            },
+          }));
         }
       }
 
@@ -262,7 +336,7 @@ export function EngineeringLabApp() {
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [isSimulating, project.components, project.wires, project.firmware, project.instruments]);
+  }, [isSimulating, project.components, project.wires, project.instruments]);
 
   // Sync PCB whenever components or wires change
   useEffect(() => {
@@ -683,6 +757,8 @@ export function EngineeringLabApp() {
         onLoadProject={handleLoadProjectFile}
         onExportProject={handleExportProject}
         onOpenExperiments={() => setIsExperimentsModalOpen(true)}
+        onOpenCommunityProjects={() => setIsCommunityModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
         hasUnsavedChanges={hasUnsavedChanges}
         canUndo={undoStack.length > 0}
         canRedo={redoStack.length > 0}
@@ -997,6 +1073,41 @@ export function EngineeringLabApp() {
         isOpen={isExperimentsModalOpen}
         onClose={() => setIsExperimentsModalOpen(false)}
         onLoadExperiment={handleLoadExperiment}
+      />
+
+      {/* Wokwi-Grade Community Projects Showcase & Discovery Hub */}
+      <CommunityProjectsModal
+        isOpen={isCommunityModalOpen}
+        onClose={() => setIsCommunityModalOpen(false)}
+        onLoadProject={(proj) => {
+          recordHistory();
+          setProject(proj);
+          setSelectedCompId(null);
+          solverRef.current.reset();
+          mcuRef.current.resetGpio();
+          toast.success(`Loaded "${proj.title}"`);
+        }}
+        onOpenPublishModal={() => setIsShareModalOpen(true)}
+        onForkProject={(proj: EngineeringProject) => {
+          recordHistory();
+          const forkedProj = {
+            ...proj,
+            id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            title: `${proj.title} (Fork)`,
+          };
+          setProject(forkedProj);
+          setSelectedCompId(null);
+          solverRef.current.reset();
+          mcuRef.current.resetGpio();
+          toast.success(`Forked "${proj.title}" to your workspace!`);
+        }}
+      />
+
+      {/* Share, Direct Link & Web Publishing Modal */}
+      <ShareProjectModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        project={project}
       />
 
       {/* Bottom Status Bar */}

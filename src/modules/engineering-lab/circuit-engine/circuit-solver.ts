@@ -290,7 +290,8 @@ export class CircuitSolver {
     wires: CircuitWire[],
     dt: number = 0.0001,
     timeScale: number = 1.0,
-    instruments?: VirtualInstrumentState
+    instruments?: VirtualInstrumentState,
+    gpioStates?: Record<string | number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>
   ): SolverStepResult {
     this.currentTime += dt * timeScale;
     this.buildNets(components, wires);
@@ -405,8 +406,36 @@ export class CircuitSolver {
             nodeVoltages[vinPin] = Number(comp.parameters?.dcVoltage ?? 9.0);
             fixedNodes.add(vinPin);
           }
+
+          // Bidirectional Microcontroller Firmware GPIO Pin Driving
+          if (gpioStates) {
+            const logicV =
+              comp.type.includes('ESP32') || comp.type.includes('PICO') || comp.type.includes('STM32')
+                ? 3.3
+                : 5.0;
+            for (const [pinKey, st] of Object.entries(gpioStates)) {
+              if (st.mode === 'OUTPUT') {
+                const targetNet =
+                  this.netMap.get(`${comp.id}:${pinKey}`) ||
+                  this.netMap.get(`${comp.id}:D${pinKey}`) ||
+                  this.netMap.get(`${comp.id}:A${pinKey}`) ||
+                  this.netMap.get(`${comp.id}:pin_${pinKey}`) ||
+                  this.netMap.get(`${comp.id}:pin${pinKey}`);
+                if (targetNet && !fixedNodes.has(targetNet)) {
+                  const outVolt =
+                    st.analogVal > 0
+                      ? (st.analogVal / 255) * logicV
+                      : st.value === 1
+                      ? logicV
+                      : 0.0;
+                  nodeVoltages[targetNet] = outVolt;
+                  fixedNodes.add(targetNet);
+                }
+              }
+            }
+          }
         } else {
-          // Unpowered MCU: USB unplugged and no external power -> 5V, 3.3V, and VIN output 0.0V
+          // Unpowered MCU: USB unplugged and no external power -> 5V, 3.3V, VIN, and all GPIOs output 0.0V
           const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
           const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
           const vinPin = this.netMap.get(`${comp.id}:VIN`);
@@ -421,6 +450,19 @@ export class CircuitSolver {
           if (vinPin && !fixedNodes.has(vinPin)) {
             nodeVoltages[vinPin] = 0.0;
             fixedNodes.add(vinPin);
+          }
+          if (gpioStates) {
+            for (const pinKey of Object.keys(gpioStates)) {
+              const targetNet =
+                this.netMap.get(`${comp.id}:${pinKey}`) ||
+                this.netMap.get(`${comp.id}:D${pinKey}`) ||
+                this.netMap.get(`${comp.id}:A${pinKey}`) ||
+                this.netMap.get(`${comp.id}:pin_${pinKey}`);
+              if (targetNet && !fixedNodes.has(targetNet)) {
+                nodeVoltages[targetNet] = 0.0;
+                fixedNodes.add(targetNet);
+              }
+            }
           }
         }
       }

@@ -24,6 +24,8 @@ import {
   Calculator,
   Sliders,
   LayoutGrid,
+  Globe,
+  Share2,
 } from 'lucide-react';
 import { WorkspaceMode } from '@/modules/engineering-lab/types';
 
@@ -40,6 +42,8 @@ interface LabHeaderProps {
   onLoadProject: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onExportProject: (format: 'json' | 'gerber' | 'bom' | 'firmware') => void;
   onOpenExperiments: () => void;
+  onOpenCommunityProjects?: () => void;
+  onOpenShareModal?: () => void;
   hasUnsavedChanges: boolean;
   canUndo: boolean;
   canRedo: boolean;
@@ -65,6 +69,8 @@ export function LabHeader({
   onLoadProject,
   onExportProject,
   onOpenExperiments,
+  onOpenCommunityProjects,
+  onOpenShareModal,
   hasUnsavedChanges,
   canUndo,
   canRedo,
@@ -213,6 +219,19 @@ export function LabHeader({
           <BookOpen className="w-3.5 h-3.5" />
           Guided Experiments
         </button>
+
+        {onOpenCommunityProjects && (
+          <button
+            onClick={onOpenCommunityProjects}
+            className="px-3 py-1.5 rounded-md flex items-center gap-1.5 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all border-l border-slate-800 relative group"
+            title="Explore Wokwi-grade community projects & open in 1 click"
+          >
+            <Globe className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform" />
+            <span>Community Hub</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute top-1 right-1" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-1 right-1" />
+          </button>
+        )}
       </nav>
 
       {/* Primary Actions: Simulation Controls & File Operations */}
@@ -401,6 +420,18 @@ export function LabHeader({
             </div>
           )}
         </div>
+
+        {/* Share & Cloud Community Button */}
+        {onOpenShareModal && (
+          <button
+            onClick={onOpenShareModal}
+            className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-medium text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/40 border border-emerald-500/30 transition-all hover:scale-102"
+            title="Share Project Link, Embed Snippet or Publish to Community Web"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Share</span>
+          </button>
+        )}
       </div>
     </header>
   );

@@ -1,9 +1,15 @@
 import { FirmwareState } from '../types';
 import { TARGET_BOARDS } from './board-definitions';
 
+export interface GpioState {
+  mode: 'INPUT' | 'OUTPUT';
+  value: 0 | 1;
+  analogVal: number;
+}
+
 export interface McuExecutionResult {
   serialLines: string[];
-  gpioUpdates: Record<string | number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
+  gpioUpdates: Record<string | number, GpioState>;
   executionError?: string;
 }
 
@@ -13,7 +19,7 @@ export class VirtualMcuRuntime {
   private stepCount: number = 0;
   private setupExecuted: boolean = false;
   private serialBuffer: string[] = [];
-  private gpio: Record<string | number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }> = {};
+  private gpio: Record<string | number, GpioState> = {};
   private millisClock: number = 0;
   private lastTickMs: number = Date.now();
 
@@ -49,7 +55,7 @@ export class VirtualMcuRuntime {
     this.isPaused = false;
   }
 
-  public getGpioState(): Record<string | number, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }> {
+  public getGpioState(): Record<string | number, GpioState> {
     return { ...this.gpio };
   }
 
