@@ -1327,37 +1327,81 @@ export function PropertiesInspector({
             );
           })()}
 
-          {/* WOKWI-STYLE MCU POWER PLUG (USB CABLE & DC JACK) */}
-          {(type.startsWith('ARDUINO_') || type.startsWith('ESP32') || type.startsWith('STM32') || type.startsWith('RASPBERRY_PI')) && (
+          {/* BOARD POWER SUPPLY (USB CABLE & DC JACK) */}
+          {(type.startsWith('ARDUINO_') || type.startsWith('ESP32') || type.startsWith('STM32') || type.startsWith('RASPBERRY_PI') || type.includes('MCU')) && (
             <div className="space-y-3 p-2.5 rounded bg-slate-950 border border-slate-800">
               <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400 font-bold uppercase">
-                <span>Wokwi-Style Power Supply</span>
-                <span className={parameters.usbPlugged !== false || parameters.dcJackPlugged ? 'text-emerald-400' : 'text-amber-400'}>
-                  {parameters.usbPlugged !== false || parameters.dcJackPlugged ? '5.0V Active' : 'Unpowered (0V)'}
+                <span className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Board Power Supply</span>
+                </span>
+                <span className={parameters.dcJackPlugged ? 'text-emerald-400 font-bold' : parameters.usbPlugged !== false ? 'text-cyan-400 font-bold' : 'text-slate-500 font-semibold'}>
+                  {parameters.dcJackPlugged ? 'DC 9.0V Active' : parameters.usbPlugged !== false ? 'USB 5.0V Active' : 'Power: OFF (0V)'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900/90 rounded border border-slate-800 font-mono text-[11px] font-bold">
                 <button
                   type="button"
-                  onClick={() => updateParameter('usbPlugged', !(parameters.usbPlugged !== false))}
-                  className={`py-1.5 px-2 rounded font-mono text-[11px] font-bold border transition-all cursor-pointer ${
-                    parameters.usbPlugged !== false
-                      ? 'bg-cyan-950/70 border-cyan-500 text-cyan-300'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                  onClick={() => {
+                    onUpdateComponent({
+                      ...component,
+                      parameters: {
+                        ...parameters,
+                        usbPlugged: false,
+                        dcJackPlugged: false,
+                      },
+                    });
+                  }}
+                  className={`py-1.5 rounded transition-all cursor-pointer ${
+                    parameters.usbPlugged === false && !parameters.dcJackPlugged
+                      ? 'bg-rose-950 border border-rose-600 text-rose-300'
+                      : 'text-slate-400 hover:text-white'
                   }`}
+                  title="Disconnect all power supplies from board"
                 >
-                  {parameters.usbPlugged !== false ? '🔌 USB: Plugged' : '⚡ Plug USB (5V)'}
+                  OFF
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateParameter('dcJackPlugged', !parameters.dcJackPlugged)}
-                  className={`py-1.5 px-2 rounded font-mono text-[11px] font-bold border transition-all cursor-pointer ${
-                    parameters.dcJackPlugged
-                      ? 'bg-emerald-950/70 border-emerald-500 text-emerald-300'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                  onClick={() => {
+                    onUpdateComponent({
+                      ...component,
+                      parameters: {
+                        ...parameters,
+                        usbPlugged: true,
+                        dcJackPlugged: false,
+                      },
+                    });
+                  }}
+                  className={`py-1.5 rounded transition-all cursor-pointer ${
+                    parameters.usbPlugged !== false && !parameters.dcJackPlugged
+                      ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
+                      : 'text-slate-400 hover:text-white'
                   }`}
+                  title="Connect USB 5.0V Power Cable"
                 >
-                  {parameters.dcJackPlugged ? '🔋 DC Jack: 9V' : '🔌 DC Barrel Jack'}
+                  USB (5V)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateComponent({
+                      ...component,
+                      parameters: {
+                        ...parameters,
+                        usbPlugged: false,
+                        dcJackPlugged: true,
+                      },
+                    });
+                  }}
+                  className={`py-1.5 rounded transition-all cursor-pointer ${
+                    parameters.dcJackPlugged
+                      ? 'bg-emerald-950 border border-emerald-500 text-emerald-300'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Connect 9V/12V DC Barrel Jack Adapter"
+                >
+                  DC (9V)
                 </button>
               </div>
             </div>
@@ -1605,8 +1649,16 @@ export function PropertiesInspector({
               onChange={(e) => {
                 const pkg = PHYSICAL_PACKAGES.find((p) => p.id === e.target.value);
                 if (pkg) {
+                  let mappedType = component.type;
+                  if (pkg.id === 'mcu_mega') mappedType = 'ARDUINO_MEGA';
+                  else if (pkg.id === 'mcu_uno') mappedType = 'ARDUINO_UNO';
+                  else if (pkg.id === 'mcu_nano') mappedType = 'ARDUINO_NANO';
+                  else if (pkg.id === 'mcu_esp32') mappedType = 'ESP32_DEVKIT';
+                  else if (pkg.id === 'mcu_pico') mappedType = 'RASPBERRY_PI_PICO';
+
                   onUpdateComponent({
                     ...component,
+                    type: mappedType,
                     footprint: pkg.footprint,
                     model3d: pkg.model3d,
                   });
@@ -1650,7 +1702,21 @@ export function PropertiesInspector({
             </label>
             <select
               value={component.model3d || 'resistor_axial_horiz'}
-              onChange={(e) => onUpdateComponent({ ...component, model3d: e.target.value })}
+              onChange={(e) => {
+                const m3dVal = e.target.value;
+                let mappedType = component.type;
+                if (m3dVal === 'arduino_mega_2560') mappedType = 'ARDUINO_MEGA';
+                else if (m3dVal === 'arduino_uno_r3') mappedType = 'ARDUINO_UNO';
+                else if (m3dVal === 'arduino_nano_v3') mappedType = 'ARDUINO_NANO';
+                else if (m3dVal.startsWith('esp32')) mappedType = 'ESP32_DEVKIT';
+                else if (m3dVal === 'raspberry_pi_pico') mappedType = 'RASPBERRY_PI_PICO';
+
+                onUpdateComponent({
+                  ...component,
+                  type: mappedType,
+                  model3d: m3dVal,
+                });
+              }}
               className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500"
             >
               {MODEL_3D_OPTIONS.map((m3d) => (

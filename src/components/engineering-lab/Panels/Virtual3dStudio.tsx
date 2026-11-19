@@ -98,15 +98,15 @@ export function Virtual3dStudio({
 
     return components.map((comp) => {
       let mappedType = comp.type;
-      if (comp.type.includes('MEGA')) {
+      if (comp.type.includes('MEGA') || comp.model3d?.includes('mega')) {
         mappedType = 'ARDUINO_MEGA';
-      } else if (comp.type.includes('ARDUINO_NANO')) {
+      } else if (comp.type.includes('ARDUINO_NANO') || comp.model3d?.includes('nano')) {
         mappedType = 'ARDUINO_NANO';
-      } else if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO') {
+      } else if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO' || comp.model3d?.includes('uno')) {
         mappedType = 'ARDUINO_UNO';
-      } else if (comp.type.includes('ESP32')) {
+      } else if (comp.type.includes('ESP32') || comp.model3d?.includes('esp32')) {
         mappedType = 'ESP32_DEVKIT';
-      } else if (comp.type.includes('PICO')) {
+      } else if (comp.type.includes('PICO') || comp.model3d?.includes('pico')) {
         mappedType = 'RASPBERRY_PI_PICO';
       } else if (comp.type.includes('LED_RGB') || comp.type.includes('RGB')) {
         mappedType = 'LED_RGB';
@@ -206,9 +206,9 @@ export function Virtual3dStudio({
         };
       }
 
-      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, NE555):
+      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
       // Straddle breadboard center isolation trench directly at y = 5.0
-      if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'TIMER_555'].includes(mappedType)) {
+      if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
         const colX = -50 + (breadboardCol % 4) * 30;
         breadboardCol++;
         return {
@@ -244,13 +244,33 @@ export function Virtual3dStudio({
   }, [components]);
 
   const schematicTo3DWires = useCallback((): Wire3D[] => {
-    return wires.map((w) => ({
-      id: w.id,
-      fromPin: { compId: w.fromCompId, pinId: w.fromPinId },
-      toPin: { compId: w.toCompId, pinId: w.toPinId },
-      color: w.color || '#EF4444',
-      current: w.current,
-    }));
+    return wires.map((w) => {
+      let wireColor = w.color;
+      if (!wireColor || wireColor === '#EF4444') {
+        const f = (w.fromPinId || '').toLowerCase();
+        const t = (w.toPinId || '').toLowerCase();
+        if (f.includes('gnd') || t.includes('gnd') || f === '-' || t === '-') {
+          wireColor = '#1E293B'; // Standard Ground: Black
+        } else if (
+          f.includes('vcc') || t.includes('vcc') ||
+          f.includes('5v') || t.includes('5v') ||
+          f.includes('3v3') || t.includes('3v3') ||
+          f.includes('vin') || t.includes('vin') ||
+          f === '+' || t === '+'
+        ) {
+          wireColor = '#EF4444'; // Standard VCC/Power: Red
+        } else {
+          wireColor = '#3B82F6'; // Standard Signals: Blue
+        }
+      }
+      return {
+        id: w.id,
+        fromPin: { compId: w.fromCompId, pinId: w.fromPinId },
+        toPin: { compId: w.toCompId, pinId: w.toPinId },
+        color: wireColor,
+        current: w.current,
+      };
+    });
   }, [wires]);
 
   // Active 3D components and wires in the workbench
@@ -401,6 +421,7 @@ export function Virtual3dStudio({
     else if (c3d.type === 'ARDUINO_UNO') catalogType = 'ARDUINO_UNO';
     else if (c3d.type === 'ARDUINO_NANO') catalogType = 'ARDUINO_NANO';
     else if (c3d.type === 'ESP32_DEVKIT') catalogType = 'ESP32_DEVKIT';
+    else if (c3d.type === 'RASPBERRY_PI_PICO') catalogType = 'ARDUINO_UNO';
     else if (c3d.type === 'LED') catalogType = 'LED';
     else if (c3d.type === 'LED_RGB') catalogType = 'ACTUATOR_RGB_LED';
     else if (c3d.type === 'RESISTOR') catalogType = 'RESISTOR';

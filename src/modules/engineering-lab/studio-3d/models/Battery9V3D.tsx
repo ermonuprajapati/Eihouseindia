@@ -42,6 +42,57 @@ export function Battery9V3D({
     };
   }, []);
 
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Dark background with metallic gold upper band
+    ctx.fillStyle = '#0F172A';
+    ctx.fillRect(0, 0, 512, 1024);
+
+    // Golden brand band
+    ctx.fillStyle = '#D97706';
+    ctx.fillRect(0, 0, 512, 340);
+
+    // Gold highlight line
+    ctx.fillStyle = '#F59E0B';
+    ctx.fillRect(0, 340, 512, 16);
+
+    // Typography
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+
+    // 9V Bold
+    ctx.font = 'bold 120px sans-serif';
+    ctx.fillText('9V', 256, 180);
+
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText('HEAVY DUTY', 256, 260);
+
+    ctx.font = 'bold 44px sans-serif';
+    ctx.fillText('ALKALINE', 256, 500);
+
+    ctx.font = '28px monospace';
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillText('6LR61 / 1604A', 256, 580);
+    ctx.fillText('0% MERCURY & CADMIUM', 256, 640);
+
+    // Polarity labels
+    ctx.font = 'bold 72px sans-serif';
+    ctx.fillStyle = '#EF4444';
+    ctx.fillText('+', 120, 850);
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillText('-', 392, 850);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
   const P_POS: [number, number, number] = [-6.5, 27, 0];
   const P_NEG: [number, number, number] = [6.5, 27, 0];
 
@@ -60,9 +111,14 @@ export function Battery9V3D({
         <boxGeometry args={[25, 46, 17]} />
       </mesh>
 
-      {/* Golden Front Label Accent */}
-      <mesh position={[0, 12, 8.6]} material={materials.goldLabel}>
+      {/* Front Label Accent with 9V Alkaline Silkscreen */}
+      <mesh position={[0, 12, 8.6]}>
         <planeGeometry args={[22, 40]} />
+        {silkscreenTexture ? (
+          <meshBasicMaterial map={silkscreenTexture} />
+        ) : (
+          <meshStandardMaterial color="#D97706" roughness={0.3} />
+        )}
       </mesh>
 
       {/* Top Insulator Cap */}

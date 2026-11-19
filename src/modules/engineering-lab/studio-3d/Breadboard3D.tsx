@@ -43,6 +43,103 @@ export function Breadboard3D({
     mesh.instanceMatrix.needsUpdate = true;
   }, []);
 
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 2048;
+    canvas.height = 684; // 165mm : 55mm aspect ratio
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 2048, 684);
+
+    // Power Rails Red & Blue Lines
+    ctx.lineWidth = 4;
+
+    // Top Pos Red Line
+    ctx.strokeStyle = '#EF4444';
+    ctx.beginPath();
+    ctx.moveTo(60, 45);
+    ctx.lineTo(1988, 45);
+    ctx.stroke();
+
+    // Top Neg Blue Line
+    ctx.strokeStyle = '#3B82F6';
+    ctx.beginPath();
+    ctx.moveTo(60, 105);
+    ctx.lineTo(1988, 105);
+    ctx.stroke();
+
+    // Bottom Pos Red Line
+    ctx.strokeStyle = '#EF4444';
+    ctx.beginPath();
+    ctx.moveTo(60, 580);
+    ctx.lineTo(1988, 580);
+    ctx.stroke();
+
+    // Bottom Neg Blue Line
+    ctx.strokeStyle = '#3B82F6';
+    ctx.beginPath();
+    ctx.moveTo(60, 640);
+    ctx.lineTo(1988, 640);
+    ctx.stroke();
+
+    // Polarities (+ and -)
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillStyle = '#EF4444';
+    ctx.fillText('+', 30, 55);
+    ctx.fillText('+', 2005, 55);
+    ctx.fillText('+', 30, 590);
+    ctx.fillText('+', 2005, 590);
+
+    ctx.fillStyle = '#3B82F6';
+    ctx.fillText('−', 30, 115);
+    ctx.fillText('−', 2005, 115);
+    ctx.fillText('−', 30, 650);
+    ctx.fillText('−', 2005, 650);
+
+    // Center divider trench
+    ctx.fillStyle = '#CBD5E1';
+    ctx.fillRect(80, 335, 1888, 14);
+
+    // Column Numbers 1, 5, 10, 15... 60
+    ctx.font = 'bold 20px monospace';
+    ctx.fillStyle = '#64748B';
+    ctx.textAlign = 'center';
+
+    for (let c = 1; c <= 63; c++) {
+      if (c === 1 || c % 5 === 0) {
+        // x coord along 63 columns
+        const cx = 110 + ((c - 1) * (1828 / 62));
+        ctx.fillText(String(c), cx, 140);
+        ctx.fillText(String(c), cx, 550);
+      }
+    }
+
+    // Row Letters A B C D E (top) and F G H I J (bottom)
+    ctx.font = 'bold 24px monospace';
+    ctx.fillStyle = '#475569';
+    ctx.textAlign = 'center';
+
+    const topRows = ['A', 'B', 'C', 'D', 'E'];
+    topRows.forEach((r, idx) => {
+      const ry = 175 + idx * 30;
+      ctx.fillText(r, 65, ry);
+      ctx.fillText(r, 1985, ry);
+    });
+
+    const btmRows = ['F', 'G', 'H', 'I', 'J'];
+    btmRows.forEach((r, idx) => {
+      const ry = 380 + idx * 30;
+      ctx.fillText(r, 65, ry);
+      ctx.fillText(r, 1985, ry);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
   const materials = useMemo(() => {
     return {
       absBody: new THREE.MeshStandardMaterial({
@@ -114,6 +211,14 @@ export function Breadboard3D({
       >
         <boxGeometry args={[BB830_WIDTH, BB830_HEIGHT, BB830_DEPTH]} />
       </mesh>
+
+      {/* High-Resolution Breadboard Silkscreen Overlay (Rails, Polarity, Column Numbers & Row Letters) */}
+      {silkscreenTexture && (
+        <mesh position={[0, 0.51, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[BB830_WIDTH, BB830_DEPTH]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.96} />
+        </mesh>
+      )}
 
       {/* Center IC Isolation Trench */}
       <mesh position={[0, 0.4, 0]} material={materials.trench}>

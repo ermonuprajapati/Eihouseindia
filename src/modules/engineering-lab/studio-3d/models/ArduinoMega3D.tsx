@@ -8,6 +8,7 @@ export interface ArduinoMega3DProps {
   rotation?: [number, number, number];
   isSelected?: boolean;
   isUsbPlugged?: boolean;
+  isDcJackPlugged?: boolean;
   onToggleUsb?: () => void;
   isPowered?: boolean;
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
@@ -128,6 +129,7 @@ export function ArduinoMega3D({
   rotation = [0, 0, 0],
   isSelected = false,
   isUsbPlugged = true,
+  isDcJackPlugged = false,
   onToggleUsb,
   isPowered = true,
   onPinClick,
@@ -232,7 +234,7 @@ export function ArduinoMega3D({
     return texture;
   }, []);
 
-  const activePowered = isUsbPlugged || isPowered;
+  const activePowered = isUsbPlugged || isDcJackPlugged || isPowered;
 
   return (
     <group position={position} rotation={rotation}>
@@ -331,6 +333,22 @@ export function ArduinoMega3D({
         <cylinderGeometry args={[4.2, 4.2, 2, 24]} />
         <meshStandardMaterial color="#0A0A0A" />
       </mesh>
+      {/* DC Barrel Jack Cable Plug when active */}
+      {isDcJackPlugged && (
+        <group position={[-38, 5.5, 15]}>
+          <mesh position={[-10, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbPlugMetal}>
+            <cylinderGeometry args={[2.7, 2.7, 8, 16]} />
+          </mesh>
+          <mesh position={[-18, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[4.5, 4.5, 12, 16]} />
+            <meshStandardMaterial color="#111827" roughness={0.5} />
+          </mesh>
+          <mesh position={[-34, -4, 0]} rotation={[0, 0, Math.PI / 3]}>
+            <cylinderGeometry args={[2.2, 2.2, 24, 12]} />
+            <meshStandardMaterial color="#111827" roughness={0.4} />
+          </mesh>
+        </group>
+      )}
 
       {/* ATmega2560 TQFP-100 MCU Chip (Rotated 45 degrees like real Mega 2560) */}
       <mesh

@@ -231,3 +231,44 @@ export function findNearestHole830(
 
   return nearest;
 }
+
+/**
+ * Finds an unoccupied adjacent hole in the exact same 5-hole vertical terminal strip (tieGroup)
+ * Strict Rule: 1 hole = 1 pin! Never insert multiple pins/wires into the same hole.
+ */
+export function findFreeAdjacentHoleInTieGroup(
+  tieGroup: string,
+  occupiedHoleIds: Set<string>
+): BreadboardHole3D | null {
+  const holes = HOLES_BY_TIE_GROUP.get(tieGroup);
+  if (!holes || holes.length === 0) return null;
+  // Return the first hole that is not currently occupied
+  for (const h of holes) {
+    if (!occupiedHoleIds.has(h.id)) {
+      return h;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find nearest unoccupied hole on breadboard to avoid collisions
+ */
+export function findNearestFreeHole830(
+  wx: number,
+  wz: number,
+  occupiedHoleIds: Set<string>,
+  maxDistSq = 25.0
+): BreadboardHole3D | null {
+  const nearest = findNearestHole830(wx, wz, maxDistSq);
+  if (nearest && !occupiedHoleIds.has(nearest.id)) {
+    return nearest;
+  }
+  // If nearest is occupied, find free adjacent hole in same tieGroup
+  if (nearest) {
+    const freeInGroup = findFreeAdjacentHoleInTieGroup(nearest.tieGroup, occupiedHoleIds);
+    if (freeInGroup) return freeInGroup;
+  }
+  return null;
+}
+

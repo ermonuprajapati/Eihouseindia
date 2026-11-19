@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
@@ -24,11 +24,12 @@ import {
 import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Breadboard3D } from './Breadboard3D';
-import { BreadboardHole3D, HOLE_BY_ID } from './breadboard-topology';
+import { BreadboardHole3D, HOLE_BY_ID, findNearestHole830, findNearestFreeHole830 } from './breadboard-topology';
 import { ArduinoMega3D, MEGA_PINS } from './models/ArduinoMega3D';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
 import { ArduinoNano3D, NANO_PINS } from './models/ArduinoNano3D';
 import { Esp32DevKit3D, ESP32_PINS } from './models/Esp32DevKit3D';
+import { RaspberryPiPico3D, PICO_PINS } from './models/RaspberryPiPico3D';
 import { Led3D } from './models/Led3D';
 import { Resistor3D } from './models/Resistor3D';
 import { Battery9V3D } from './models/Battery9V3D';
@@ -90,6 +91,15 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     desc: 'Dual-core 240MHz Wi-Fi & Bluetooth microcontroller with 30-pin header',
     defaultPos: [0, 0, -65] as [number, number, number],
     params: { mcu: 'ESP32', clock: '240MHz', logicVoltage: 3.3 },
+  },
+  {
+    type: 'RASPBERRY_PI_PICO',
+    label: 'Raspberry Pi Pico (RP2040)',
+    category: 'boards',
+    value: 'RP2040',
+    desc: 'Dual ARM Cortex-M0+ 133MHz microcontroller with 40-pin breadboard-friendly layout',
+    defaultPos: [0, 5, -50] as [number, number, number],
+    params: { mcu: 'RP2040', clock: '133MHz', logicVoltage: 3.3 },
   },
   {
     type: 'BATTERY_9V',
@@ -294,6 +304,37 @@ export function Studio3DCanvas({
   const [activeWireColor, setActiveWireColor] = useState('#EF4444');
   const [hoveredHole, setHoveredHole] = useState<BreadboardHole3D | null>(null);
   const [hoveredPinInfo, setHoveredPinInfo] = useState<{ compId: string; pinName: string } | null>(null);
+  const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
+  const draggingCompRef = useRef<{ id: string; startPos: [number, number, number] } | null>(null);
+
+  // Compute occupied breadboard hole IDs for collision-free snapping (1 hole = 1 pin)
+  const occupiedHoleIds = useMemo(() => {
+    const set = new Set<string>();
+    wires3d.forEach((w) => {
+      if (w.fromPin.compId === 'breadboard') set.add(w.fromPin.pinId);
+      if (w.toPin.compId === 'breadboard') set.add(w.toPin.pinId);
+    });
+    components3d.forEach((c) => {
+      if (c.id !== draggingCompId && Math.abs(c.x3d) <= 85 && Math.abs(c.z3d) <= 30 && c.y3d >= 4.0) {
+        const nearest = findNearestHole830(c.x3d, c.z3d);
+        if (nearest) set.add(nearest.id);
+      }
+    });
+    return set;
+  }, [wires3d, components3d, draggingCompId]);
+
+  // Window pointerup listener guarantees OrbitControls are always re-enabled after drag
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (draggingCompRef.current) {
+        draggingCompRef.current = null;
+        setDraggingCompId(null);
+        if (controlsRef.current) controlsRef.current.enabled = true;
+      }
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
+  }, []);
 
   const toggleUsb = useCallback((compId: string) => {
     if (onToggleMcuUsb) {
@@ -322,7 +363,8 @@ export function Studio3DCanvas({
         c.type === 'ARDUINO_MEGA' ||
         c.type === 'ARDUINO_UNO' ||
         c.type === 'ARDUINO_NANO' ||
-        c.type === 'ESP32_DEVKIT'
+        c.type === 'ESP32_DEVKIT' ||
+        c.type === 'RASPBERRY_PI_PICO'
     );
   }, [components3d]);
 
@@ -461,6 +503,13 @@ export function Studio3DCanvas({
         ly = ep.localPos[1] + 4.3;
         lz = ep.localPos[2];
       }
+    } else if (comp.type === 'RASPBERRY_PI_PICO') {
+      const pp = PICO_PINS.find((p) => p.name === pinId || p.altNames?.includes(pinId));
+      if (pp) {
+        lx = pp.localPos[0];
+        ly = pp.localPos[1] + 4.3;
+        lz = pp.localPos[2];
+      }
     } else if (comp.type === 'LED') {
       if (pinId === 'anode' || pinId === '1') lx = -1.27;
       else lx = 1.27;
@@ -546,10 +595,16 @@ export function Studio3DCanvas({
     return new THREE.Vector3(comp.x3d + rx, comp.y3d + ly, comp.z3d + rz);
   }, [components3d]);
 
-  // Terminal Pin Click Handler (Starts or Completes Wire)
+  // Terminal Pin Click Handler (Starts or Completes Wire with smart color detection)
   const handlePinClick = (compId: string, pinId: string, worldPos: THREE.Vector3) => {
     if (!activeWireStart) {
-      // Start wire
+      // Start wire - detect power/ground pin
+      const p = pinId.toLowerCase();
+      if (p.includes('gnd') || p === '-' || p === 'cathode') {
+        setActiveWireColor('#1E293B'); // Black
+      } else if (p.includes('vcc') || p.includes('5v') || p.includes('3v3') || p.includes('vin') || p === '+' || p === 'anode' || p === 'raw') {
+        setActiveWireColor('#EF4444'); // Red
+      }
       setActiveWireStart({ compId, pinId, pos: worldPos });
     } else {
       // Prevent connecting to self pin
@@ -558,12 +613,28 @@ export function Studio3DCanvas({
         return;
       }
 
+      // Check pin polarity for auto-coloring
+      let wireColor = activeWireColor;
+      const sp = activeWireStart.pinId.toLowerCase();
+      const ep = pinId.toLowerCase();
+      if (sp.includes('gnd') || ep.includes('gnd') || sp === '-' || ep === '-') {
+        wireColor = '#1E293B';
+      } else if (
+        sp.includes('vcc') || ep.includes('vcc') ||
+        sp.includes('5v') || ep.includes('5v') ||
+        sp.includes('3v3') || ep.includes('3v3') ||
+        sp.includes('vin') || ep.includes('vin') ||
+        sp === '+' || ep === '+'
+      ) {
+        wireColor = '#EF4444';
+      }
+
       // Complete wire connection
       const newWire: Wire3D = {
         id: `wire3d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         fromPin: { compId: activeWireStart.compId, pinId: activeWireStart.pinId },
         toPin: { compId, pinId },
-        color: activeWireColor,
+        color: wireColor,
       };
 
       onAddWire3D(newWire);
@@ -618,16 +689,84 @@ export function Studio3DCanvas({
           sectionColor="#334155"
         />
 
-        {/* Orbit Camera Controls */}
+        {/* Orbit Camera Controls with Full Camera Freedom & Panning */}
         <OrbitControls
           ref={controlsRef}
           makeDefault
           enableDamping
           dampingFactor={0.05}
+          enablePan={true}
+          screenSpacePanning={true}
+          enableZoom={true}
+          enableRotate={true}
           maxPolarAngle={Math.PI / 2 - 0.05}
           minDistance={10}
           maxDistance={600}
         />
+
+        {/* Transparent Interactive Drag Raycasting Plane */}
+        <mesh
+          visible={false}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0, 0]}
+          onPointerMove={(e) => {
+            if (!draggingCompRef.current) return;
+            const comp = components3d.find((c) => c.id === draggingCompRef.current?.id);
+            if (!comp) return;
+
+            let targetX = e.point.x;
+            let targetZ = e.point.z;
+            let targetY = comp.y3d;
+
+            const isThroughHole = [
+              'RESISTOR',
+              'LED',
+              'LED_RGB',
+              'CAPACITOR',
+              'CAPACITOR_ELECTROLYTIC',
+              'TIMER_555',
+              'DIP_IC',
+              'DIODE',
+              'SENSOR_LDR',
+              'PUSHBUTTON',
+              'ARDUINO_NANO',
+              'ESP32_DEVKIT',
+              'RASPBERRY_PI_PICO',
+            ].includes(comp.type);
+
+            if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
+              const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
+              if (freeHole) {
+                targetX = freeHole.x;
+                targetZ = freeHole.z;
+                targetY = 5.0; // Breadboard surface height
+              }
+            } else {
+              targetX = Math.round(targetX / 2.54) * 2.54;
+              targetZ = Math.round(targetZ / 2.54) * 2.54;
+              if (!isThroughHole) {
+                targetY = 0; // Workbench surface height
+              }
+            }
+
+            onUpdateComponent3D({
+              ...comp,
+              x3d: Math.round(targetX * 100) / 100,
+              y3d: Math.round(targetY * 100) / 100,
+              z3d: Math.round(targetZ * 100) / 100,
+            });
+          }}
+          onPointerUp={() => {
+            if (draggingCompRef.current) {
+              draggingCompRef.current = null;
+              setDraggingCompId(null);
+              if (controlsRef.current) controlsRef.current.enabled = true;
+            }
+          }}
+        >
+          <planeGeometry args={[1200, 1200]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
 
         {/* 830-Point Solderless Breadboard */}
         {hasBreadboard && (
@@ -648,10 +787,21 @@ export function Studio3DCanvas({
           const rot: [number, number, number] = [0, ((comp.rotY || 0) * Math.PI) / 180, 0];
           const simState = simulationStates[comp.id];
 
+          const handleCompPointerDown = (e: ThreeEvent<PointerEvent>) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            onSelectComponent(comp.id);
+            onSelectWire(null);
+            if (controlsRef.current) controlsRef.current.enabled = false;
+            draggingCompRef.current = { id: comp.id, startPos: [comp.x3d, comp.y3d, comp.z3d] };
+            setDraggingCompId(comp.id);
+          };
+
           if (comp.type === 'ARDUINO_MEGA') {
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -663,8 +813,9 @@ export function Studio3DCanvas({
                   rotation={rot}
                   isSelected={isSelected}
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  isDcJackPlugged={comp.parameters?.dcJackPlugged === true}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false}
+                  isPowered={comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -679,6 +830,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -690,8 +842,9 @@ export function Studio3DCanvas({
                   rotation={rot}
                   isSelected={isSelected}
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  isDcJackPlugged={comp.parameters?.dcJackPlugged === true}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false}
+                  isPowered={comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -707,6 +860,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -733,6 +887,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -758,6 +913,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -782,6 +938,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -808,6 +965,7 @@ export function Studio3DCanvas({
                 key={comp.id}
                 position={pos}
                 rotation={rot}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -855,6 +1013,7 @@ export function Studio3DCanvas({
                 key={comp.id}
                 position={pos}
                 rotation={rot}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -902,6 +1061,7 @@ export function Studio3DCanvas({
                 key={comp.id}
                 position={pos}
                 rotation={rot}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -937,6 +1097,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -965,6 +1126,7 @@ export function Studio3DCanvas({
                 key={comp.id}
                 position={pos}
                 rotation={rot}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1008,6 +1170,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1035,6 +1198,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1058,10 +1222,39 @@ export function Studio3DCanvas({
             );
           }
 
+          if (comp.type === 'RASPBERRY_PI_PICO') {
+            return (
+              <group
+                key={comp.id}
+                onPointerDown={handleCompPointerDown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <RaspberryPiPico3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isUsbPlugged={comp.parameters?.usbPlugged !== false}
+                  onToggleUsb={() => toggleUsb(comp.id)}
+                  isPowered={comp.parameters?.usbPlugged !== false}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
           if (comp.type === 'SERVO_SG90') {
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1087,6 +1280,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1114,6 +1308,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1141,6 +1336,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1166,6 +1362,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1190,6 +1387,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1214,6 +1412,7 @@ export function Studio3DCanvas({
             return (
               <group
                 key={comp.id}
+                onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectComponent(comp.id);
@@ -1347,7 +1546,7 @@ export function Studio3DCanvas({
           </button>
         )}
 
-        {/* Prominent Wokwi-Style MCU USB Power Plug Quick Control */}
+        {/* Board Power Supply Quick Toggle */}
         {anyMcu && (
           <button
             onClick={() => toggleUsb(anyMcu.id)}
@@ -1356,10 +1555,10 @@ export function Studio3DCanvas({
                 ? 'bg-emerald-950/90 border border-emerald-400 text-emerald-300 hover:bg-emerald-900'
                 : 'bg-rose-950/90 border border-rose-500 text-rose-300 hover:bg-rose-900 animate-pulse'
             }`}
-            title={anyMcu.parameters?.usbPlugged !== false ? "Wokwi-Style USB Power: Click to Unplug USB Cable" : "Wokwi-Style USB Power: Click to Plug In USB Cable"}
+            title={anyMcu.parameters?.usbPlugged !== false ? "Board Power: Click to Disconnect USB Cable" : "Board Power: Click to Connect USB Cable"}
           >
             <Zap className={`w-3.5 h-3.5 ${anyMcu.parameters?.usbPlugged !== false ? 'text-emerald-400' : 'text-rose-400'}`} />
-            <span>{anyMcu.parameters?.usbPlugged !== false ? '🔌 USB: 5V Active' : '🔌 Plug USB Power (Board OFF)'}</span>
+            <span>{anyMcu.parameters?.usbPlugged !== false ? '⚡ USB: 5V Active' : '⚡ Connect USB Power'}</span>
           </button>
         )}
       </div>
