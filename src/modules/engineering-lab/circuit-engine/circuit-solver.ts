@@ -1,4 +1,4 @@
-import { CircuitComponent, CircuitWire, SimulationWaveformPoint } from '../types';
+import { CircuitComponent, CircuitWire, SimulationWaveformPoint, VirtualInstrumentState } from '../types';
 
 export interface SolverStepResult {
   nodeVoltages: Record<string, number>;
@@ -237,7 +237,8 @@ export class CircuitSolver {
     components: CircuitComponent[],
     wires: CircuitWire[],
     dt: number = 0.0001,
-    timeScale: number = 1.0
+    timeScale: number = 1.0,
+    instruments?: VirtualInstrumentState
   ): SolverStepResult {
     this.currentTime += dt * timeScale;
     this.buildNets(components, wires);
@@ -1121,6 +1122,71 @@ export class CircuitSolver {
         iVal = vA >= vB ? compCurrent : -compCurrent;
       }
       wireCurrents[wire.id] = iVal;
+    }
+
+    // 5. Synthesize Function Generator Signal and Inject into Circuit if active
+    if (instruments?.functionGenerator?.enabled) {
+      const fg = instruments.functionGenerator;
+      let instantGenV = fg.offsetV || 0;
+      const f = Math.max(0.1, fg.frequencyHz || 1000);
+      const a = fg.amplitudeV !== undefined ? fg.amplitudeV : 5;
+      const t = this.currentTime;
+      const phase = (t * f) % 1.0;
+
+      if (fg.waveform === 'square') {
+        const duty = Math.min(0.99, Math.max(0.01, fg.dutyCycle ?? 0.5));
+        instantGenV += phase < duty ? a : -a;
+      } else if (fg.waveform === 'triangle') {
+        instantGenV += a * (4 * Math.abs(phase - 0.5) - 1);
+      } else if (fg.waveform === 'sawtooth') {
+        instantGenV += a * (2 * phase - 1);
+      } else if (fg.waveform === 'pulse') {
+        instantGenV += phase < 0.1 ? a : 0;
+      } else if (fg.waveform === 'noise') {
+        instantGenV += (Math.random() * 2 - 1) * a;
+      } else {
+        // sine wave default
+        instantGenV += a * Math.sin(2 * Math.PI * f * t);
+      }
+
+      let genHist = this.waveformHistory.get('gen:out');
+      if (!genHist) {
+        genHist = [];
+        this.waveformHistory.set('gen:out', genHist);
+      }
+      genHist.push({ time: this.currentTime, value: instantGenV });
+      if (genHist.length > this.maxHistoryPoints) genHist.shift();
+
+      if (fg.outputNet) {
+        nodeVoltages[fg.outputNet] = instantGenV;
+      }
+    }
+
+    // 6. Record Waveform History for all Circuit Nets and Component Pins
+    for (const net of this.nets) {
+      const netKey = `net:${net}`;
+      let netHist = this.waveformHistory.get(netKey);
+      if (!netHist) {
+        netHist = [];
+        this.waveformHistory.set(netKey, netHist);
+      }
+      netHist.push({ time: this.currentTime, value: nodeVoltages[net] || 0 });
+      if (netHist.length > this.maxHistoryPoints) netHist.shift();
+    }
+
+    for (const comp of components) {
+      for (const pin of comp.pins) {
+        const net = this.netMap.get(`${comp.id}:${pin.id}`);
+        const pinV = net ? (nodeVoltages[net] || 0) : 0;
+        const pinKey = `${comp.id}:${pin.id}`;
+        let pinHist = this.waveformHistory.get(pinKey);
+        if (!pinHist) {
+          pinHist = [];
+          this.waveformHistory.set(pinKey, pinHist);
+        }
+        pinHist.push({ time: this.currentTime, value: pinV });
+        if (pinHist.length > this.maxHistoryPoints) pinHist.shift();
+      }
     }
 
     const waveformDataObj: Record<string, SimulationWaveformPoint[]> = {};

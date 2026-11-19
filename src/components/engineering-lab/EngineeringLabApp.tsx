@@ -22,7 +22,8 @@ import { ComponentBrowser } from './Panels/ComponentBrowser';
 import { PropertiesInspector } from './Panels/PropertiesInspector';
 import { LabStatusBar } from './StatusBar/LabStatusBar';
 import { toast } from 'sonner';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Crosshair } from 'lucide-react';
+import { QuickProbeOverlay } from './Panels/VirtualInstruments/QuickProbeOverlay';
 
 // DYNAMIC LAZY-LOADING OF HEAVY MODULES FOR SECTION 12 PERFORMANCE OPTIMIZATION
 const PcbView = dynamic(
@@ -115,6 +116,7 @@ export function EngineeringLabApp() {
   const [browserWidth, setBrowserWidth] = useState(288);
   const [inspectorWidth, setInspectorWidth] = useState(320);
   const [isExperimentsModalOpen, setIsExperimentsModalOpen] = useState(false);
+  const [isQuickProbeOpen, setIsQuickProbeOpen] = useState(false);
 
   // Load layout preferences from localStorage on mount & check for project load URL param
   useEffect(() => {
@@ -217,7 +219,7 @@ export function EngineeringLabApp() {
       if (isSimulating && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
         // Step Circuit MNA Solver
         const solver = solverRef.current;
-        const result: SolverStepResult = solver.step(project.components, project.wires, 0.001, 1.0);
+        const result: SolverStepResult = solver.step(project.components, project.wires, 0.001, 1.0, project.instruments);
 
         const now = Date.now();
         // Throttle UI commits to ~30 FPS to prevent memory churn and high CPU usage
@@ -259,7 +261,7 @@ export function EngineeringLabApp() {
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [isSimulating, project.components, project.wires, project.firmware]);
+  }, [isSimulating, project.components, project.wires, project.firmware, project.instruments]);
 
   // Sync PCB whenever components or wires change
   useEffect(() => {
@@ -784,6 +786,31 @@ export function EngineeringLabApp() {
                 onBatchDelete={handleBatchDelete}
                 onAutoAnnotate={handleAutoAnnotate}
               />
+
+              {/* Quick-Probe Trigger Button & Overlay */}
+              <button
+                type="button"
+                onClick={() => setIsQuickProbeOpen((o) => !o)}
+                className={`absolute bottom-4 left-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+                  isQuickProbeOpen
+                    ? 'bg-cyan-600 text-white border border-cyan-400'
+                    : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
+                }`}
+                title="Toggle Live Circuit Quick-Probe Tool"
+              >
+                <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{isQuickProbeOpen ? 'Close Quick-Probe' : 'Quick-Probe'}</span>
+              </button>
+
+              <QuickProbeOverlay
+                isOpen={isQuickProbeOpen}
+                onClose={() => setIsQuickProbeOpen(false)}
+                components={project.components}
+                wires={project.wires}
+                simStates={simStates}
+                wireCurrents={wireCurrents}
+                waveformData={waveformData}
+              />
             </main>
 
             <PropertiesInspector
@@ -820,6 +847,31 @@ export function EngineeringLabApp() {
         {/* 3D Virtual Electronics Studio (Direct 3D-First Electronics Design) */}
         {activeMode === 'virtual3d' && (
           <div className="flex-1 flex overflow-hidden relative w-full h-full">
+            {/* Quick-Probe Trigger Button & Overlay */}
+            <button
+              type="button"
+              onClick={() => setIsQuickProbeOpen((o) => !o)}
+              className={`absolute bottom-4 left-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+                isQuickProbeOpen
+                  ? 'bg-cyan-600 text-white border border-cyan-400'
+                  : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
+              }`}
+              title="Toggle Live Circuit Quick-Probe Tool"
+            >
+              <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{isQuickProbeOpen ? 'Close Quick-Probe' : 'Quick-Probe'}</span>
+            </button>
+
+            <QuickProbeOverlay
+              isOpen={isQuickProbeOpen}
+              onClose={() => setIsQuickProbeOpen(false)}
+              components={project.components}
+              wires={project.wires}
+              simStates={simStates}
+              wireCurrents={wireCurrents}
+              waveformData={waveformData}
+            />
+
             <Virtual3dStudio
               components={project.components}
               wires={project.wires}
@@ -884,6 +936,11 @@ export function EngineeringLabApp() {
             onUpdateInstruments={(instruments) => setProject((p) => ({ ...p, instruments }))}
             waveformData={waveformData}
             isSimulating={isSimulating}
+            components={project.components}
+            wires={project.wires}
+            simStates={simStates}
+            wireCurrents={wireCurrents}
+            onToggleSimulation={() => setIsSimulating((s) => !s)}
           />
         )}
 

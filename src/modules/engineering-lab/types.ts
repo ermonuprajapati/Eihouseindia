@@ -137,32 +137,88 @@ export interface SimulationWaveformPoint {
 
 export interface VirtualInstrumentState {
   oscilloscope: {
-    timebaseMs: number; // ms per div (e.g., 1ms, 5ms, 10ms)
-    ch1ScaleV: number;  // V per div (e.g., 1V, 2V, 5V)
+    timebaseMs: number; // ms per div (e.g., 0.001 to 500)
+    horizontalPosMs?: number;
+    ch1ScaleV: number;  // V per div
     ch2ScaleV: number;
+    ch3ScaleV?: number;
+    ch4ScaleV?: number;
+    ch1OffsetV?: number;
+    ch2OffsetV?: number;
+    ch3OffsetV?: number;
+    ch4OffsetV?: number;
     ch1Enabled: boolean;
     ch2Enabled: boolean;
+    ch3Enabled?: boolean;
+    ch4Enabled?: boolean;
+    ch1Coupling?: 'DC' | 'AC' | 'GND';
+    ch2Coupling?: 'DC' | 'AC' | 'GND';
+    ch3Coupling?: 'DC' | 'AC' | 'GND';
+    ch4Coupling?: 'DC' | 'AC' | 'GND';
+    ch1ProbeSource?: string; // compId, compId:pinId, 'net:GND', 'gen:out'
+    ch2ProbeSource?: string;
+    ch3ProbeSource?: string;
+    ch4ProbeSource?: string;
+    ch1Attenuation?: '1x' | '10x';
+    ch2Attenuation?: '1x' | '10x';
+    ch3Attenuation?: '1x' | '10x';
+    ch4Attenuation?: '1x' | '10x';
+    ch1Invert?: boolean;
+    ch2Invert?: boolean;
+    ch3Invert?: boolean;
+    ch4Invert?: boolean;
+    triggerSource?: 'CH1' | 'CH2' | 'CH3' | 'CH4' | 'GEN' | 'EXT';
+    triggerEdge?: 'rising' | 'falling';
+    triggerMode?: 'auto' | 'normal' | 'single';
     triggerLevel: number;
+    mathMode?: 'off' | 'CH1+CH2' | 'CH1-CH2' | 'CH1*CH2';
+    cursorsEnabled?: boolean;
+    cursorX1?: number; // 0..1 ratio of screen width
+    cursorX2?: number;
+    cursorY1?: number;
+    cursorY2?: number;
     running: boolean;
   };
   multimeter: {
-    mode: 'DC_V' | 'AC_V' | 'RESISTANCE' | 'CONTINUITY' | 'CURRENT_MA';
+    mode: 'DC_V' | 'AC_V' | 'RESISTANCE' | 'CONTINUITY' | 'CURRENT_MA' | 'DIODE' | 'CAPACITANCE' | 'FREQUENCY';
+    range?: 'auto' | 'manual';
     reading: number;
     unit: string;
     probesConnected: boolean;
+    probeRed?: string; // compId:pinId or netId
+    probeBlack?: string;
+    hold?: boolean;
+    minReading?: number;
+    maxReading?: number;
+    relZero?: number;
+    relEnabled?: boolean;
   };
   functionGenerator: {
-    waveform: 'sine' | 'square' | 'triangle' | 'sawtooth';
+    waveform: 'sine' | 'square' | 'triangle' | 'sawtooth' | 'pulse' | 'noise';
     frequencyHz: number;
     amplitudeV: number;
     offsetV: number;
     dutyCycle: number;
+    phaseDeg?: number;
+    outputImpedance?: '50' | 'High-Z';
     enabled: boolean;
+    outputNet?: string; // target net or pin
+    channel2?: {
+      waveform: 'sine' | 'square' | 'triangle' | 'sawtooth';
+      frequencyHz: number;
+      amplitudeV: number;
+      offsetV: number;
+      enabled: boolean;
+      outputNet?: string;
+    };
   };
   logicAnalyzer: {
-    channels: { id: string; label: string; samples: number[] }[];
+    channels: { id: string; label: string; pinSource?: string; samples: number[] }[];
     sampleRateHz: number;
     running: boolean;
+    busDecode?: 'none' | 'hex' | 'dec' | 'bin';
+    protocolDecoder?: 'none' | 'uart' | 'i2c' | 'spi';
+    baudRate?: number;
   };
 }
 
