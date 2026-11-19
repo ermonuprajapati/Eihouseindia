@@ -105,6 +105,7 @@ export function Virtual3dStudio({
         else if (matching.type.includes('ARDUINO') || matching.type === 'MCU_ARDUINO_UNO' || matching.model3d?.includes('uno')) mappedType = 'ARDUINO_UNO';
         else if (matching.type.includes('ESP32') || matching.model3d?.includes('esp32')) mappedType = 'ESP32_DEVKIT';
         else if (matching.type.includes('PICO') || matching.model3d?.includes('pico')) mappedType = 'RASPBERRY_PI_PICO';
+        else if (matching.type.includes('BATTERY') || matching.type === 'DC_VOLTAGE') mappedType = 'BATTERY_9V';
 
         const paramsChanged = JSON.stringify(c3d.parameters || {}) !== JSON.stringify(matching.parameters || {});
         if (c3d.type !== mappedType || c3d.value !== matching.value || c3d.label !== matching.label || paramsChanged) {
@@ -119,6 +120,32 @@ export function Virtual3dStudio({
         }
         return c3d;
       });
+
+      // Synchronize newly added components from schematic library into active 3D view
+      const existingIds = new Set(prev.map((c) => c.id));
+      const newlyAdded = components
+        .filter((c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd') && !existingIds.has(c.id))
+        .map((comp) => {
+          let mapped = comp.type;
+          if (comp.type.includes('BATTERY') || comp.type === 'DC_VOLTAGE') mapped = 'BATTERY_9V';
+          else if (comp.type.includes('ARDUINO')) mapped = 'ARDUINO_UNO';
+          else if (comp.type.includes('ESP32')) mapped = 'ESP32_DEVKIT';
+          return {
+            id: comp.id,
+            type: mapped,
+            label: comp.label,
+            value: comp.value,
+            parameters: comp.parameters || {},
+            x3d: comp.x3d ?? -20,
+            y3d: comp.y3d ?? 5.0,
+            z3d: comp.z3d ?? 8.42,
+            rotY: comp.rot3d ?? 0,
+          };
+        });
+
+      if (newlyAdded.length > 0) {
+        return [...next, ...newlyAdded];
+      }
       return changed ? next : prev;
     });
   }, [components, independentComponents]);
@@ -532,18 +559,14 @@ export function Virtual3dStudio({
     toast.success('3D Project saved to local storage & exported as JSON.');
   };
 
-  // Toggle MCU USB Power Plug
+  // Toggle MCU USB Power Plug without resetting coordinates or component position
   const handleToggleMcuUsb = useCallback((compId: string) => {
+    let nextState = false;
     setIndependentComponents((prev) => {
       const current = prev !== null ? prev : activeComponents3d;
       return current.map((c) => {
         if (c.id === compId) {
-          const nextState = !(c.parameters?.usbPlugged !== false);
-          toast.success(
-            nextState
-              ? `🔌 Connected USB Power to ${c.label} (5.0V Active)`
-              : `⚡ Unplugged USB Cable from ${c.label}`
-          );
+          nextState = !(c.parameters?.usbPlugged !== false);
           return {
             ...c,
             parameters: { ...c.parameters, usbPlugged: nextState },
@@ -554,10 +577,19 @@ export function Virtual3dStudio({
     });
 
     const comp = components.find((c) => c.id === compId);
+    const active = activeComponents3d.find((c) => c.id === compId);
     if (comp && onUpdateComponent) {
-      const nextState = !(comp.parameters?.usbPlugged !== false);
+      toast.success(
+        nextState
+          ? `🔌 Connected USB Power to ${comp.label} (5.0V Active)`
+          : `⚡ Unplugged USB Cable from ${comp.label}`
+      );
       onUpdateComponent({
         ...comp,
+        x3d: active?.x3d ?? comp.x3d,
+        y3d: active?.y3d ?? comp.y3d,
+        z3d: active?.z3d ?? comp.z3d,
+        rot3d: active?.rotY ?? comp.rot3d,
         parameters: { ...comp.parameters, usbPlugged: nextState },
       });
     }

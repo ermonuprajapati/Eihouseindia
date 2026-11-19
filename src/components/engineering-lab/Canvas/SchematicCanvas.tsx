@@ -879,7 +879,11 @@ export function SchematicCanvas({
       {/* MULTI-COMPONENT CAD ALIGNMENT FLOATING PALETTE                            */}
       {/* ========================================================================= */}
       {selectedCompIds.size >= 2 && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#0B1528]/95 border border-cyan-500/80 rounded-xl px-3 py-1.5 shadow-2xl z-40 backdrop-blur font-mono text-xs animate-in fade-in zoom-in-95 duration-150">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-16 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#0B1528]/95 border border-cyan-500/80 rounded-xl px-3 py-1.5 shadow-2xl z-40 backdrop-blur font-mono text-xs animate-in fade-in zoom-in-95 duration-150 select-none pointer-events-auto"
+        >
           <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider mr-1.5">
             {selectedCompIds.size} Selected
           </span>
@@ -887,22 +891,37 @@ export function SchematicCanvas({
           <div className="h-4 w-px bg-slate-700 mx-1" />
 
           <button
-            onClick={() => handleAlign('left')}
-            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors"
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAlign('left');
+            }}
+            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors cursor-pointer"
             title="Align Left Edges"
           >
             <AlignLeft className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleAlign('centerX')}
-            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors"
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAlign('centerX');
+            }}
+            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors cursor-pointer"
             title="Align Center Horizontally"
           >
             <AlignCenter className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleAlign('right')}
-            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors"
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAlign('right');
+            }}
+            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded transition-colors cursor-pointer"
             title="Align Right Edges"
           >
             <AlignRight className="w-4 h-4" />
@@ -912,27 +931,37 @@ export function SchematicCanvas({
 
           {/* Bulk Rotate */}
           <button
-            onClick={() => {
-              selectedCompIds.forEach((id) => onRotateComponent(id));
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              const ids = Array.from(selectedCompIds);
+              ids.forEach((id) => onRotateComponent(id));
+              toast.success(`Rotated ${ids.length} selected components 90°`);
             }}
-            className="p-1 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 rounded transition-colors"
-            title="Rotate All Selected 90°"
+            className="p-1 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 rounded transition-colors cursor-pointer"
+            title="Rotate All Selected 90° [R]"
           >
             <RotateCw className="w-4 h-4" />
           </button>
 
           {/* Bulk Delete */}
           <button
-            onClick={() => {
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              const ids = Array.from(selectedCompIds);
               if (onBatchDelete) {
-                onBatchDelete(Array.from(selectedCompIds), []);
+                onBatchDelete(ids, []);
               } else {
-                selectedCompIds.forEach((id) => onDeleteComponent(id));
+                ids.forEach((id) => onDeleteComponent(id));
               }
               setSelectedCompIds(new Set());
               onSelectComponent(null);
+              toast.info(`Deleted ${ids.length} components`);
             }}
-            className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded transition-colors"
+            className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-300 rounded transition-colors cursor-pointer"
             title="Delete Selected Components [Del]"
           >
             <Trash2 className="w-4 h-4" />

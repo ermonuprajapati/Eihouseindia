@@ -47,27 +47,11 @@ export class PcbGenerator {
         parameters: comp.parameters,
       });
 
-      comp.pins.forEach((pin, idx) => {
-        // Pin offset scaled to PCB footprint dimensions (~2.54mm pitch)
-        const pinOffsetMmX = (pin.x / 20) * 2.54;
-        const pinOffsetMmY = (pin.y / 20) * 2.54;
-        const padX = Math.round((normX + pinOffsetMmX) * 10) / 10;
-        const padY = Math.round((normY + pinOffsetMmY) * 10) / 10;
-
-        const padId = `pad_${comp.id}_${pin.id}`;
-        pads.push({
-          id: padId,
-          componentId: comp.id,
-          pinId: pin.id,
-          x: padX,
-          y: padY,
-          shape: idx === 0 ? 'rect' : 'round', // Pin 1 is square pad by standard
-          diameterMm: 1.8,
-          holeMm: 0.9,
-          layer: 'all',
-        });
-
-        padLookup.set(`${comp.id}:${pin.id}`, { x: padX, y: padY });
+      // Compute physical IPC-7351 footprint pads strictly aligned with package geometry
+      const footprintPads = PcbGenerator.calculateFootprintPads(comp, normX, normY, comp.rotation || 0);
+      footprintPads.forEach((pad) => {
+        pads.push(pad);
+        padLookup.set(`${comp.id}:${pad.pinId}`, { x: pad.x, y: pad.y });
       });
     });
 
@@ -99,6 +83,276 @@ export class PcbGenerator {
       components: placedComponents,
       drcErrors,
     };
+  }
+
+  /**
+   * Computes standard IPC-7351 physical footprint pads strictly matching real component packages
+   * (DIP-8, DIP-14/16, Axial Resistors, Radial Caps, LEDs, Transistors, Terminals)
+   */
+  public static calculateFootprintPads(
+    comp: CircuitComponent,
+    normX: number,
+    normY: number,
+    rotationDeg: number = 0
+  ): PcbPad[] {
+    const pads: PcbPad[] = [];
+    const upperType = comp.type.toUpperCase();
+    const upperFootprint = (comp.footprint || '').toUpperCase();
+    const rad = ((rotationDeg || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const transformCoord = (ox: number, oy: number) => {
+      const rx = ox * cos - oy * sin;
+      const ry = ox * sin + oy * cos;
+      return {
+        x: Math.round((normX + rx) * 10) / 10,
+        y: Math.round((normY + ry) * 10) / 10,
+      };
+    };
+
+    // 1. DIP-8 ICs (NE555 Timer, LM358 Op-Amp, DIP-8 IC packages)
+    if (
+      upperType.includes('555') ||
+      upperType.includes('TIMER') ||
+      (upperType.includes('IC') && !upperFootprint.includes('DIP-14') && !upperFootprint.includes('DIP-16')) ||
+      upperFootprint.includes('DIP-8') ||
+      (comp.pins.length <= 8 && (upperType.includes('OPAMP') || upperType.includes('AMPLIFIER')))
+    ) {
+      // Standard DIP-8: 7.62mm row spacing (Y: +/- 3.81mm), 2.54mm pitch (X: -3.81, -1.27, +1.27, +3.81)
+      const pinMap: Record<string, { ox: number; oy: number }> = {
+        '1': { ox: -3.81, oy: -3.81 },
+        '2': { ox: -1.27, oy: -3.81 },
+        '3': { ox: 1.27, oy: -3.81 },
+        '4': { ox: 3.81, oy: -3.81 },
+        '5': { ox: 3.81, oy: 3.81 },
+        '6': { ox: 1.27, oy: 3.81 },
+        '7': { ox: -1.27, oy: 3.81 },
+        '8': { ox: -3.81, oy: 3.81 },
+      };
+
+      const namedPinMap: Record<string, { ox: number; oy: number }> = {
+        out: { ox: -3.81, oy: -3.81 },
+        in_neg: { ox: -1.27, oy: -3.81 },
+        in_pos: { ox: 1.27, oy: -3.81 },
+        vee: { ox: 3.81, oy: -3.81 },
+        gnd: { ox: 3.81, oy: -3.81 },
+        vcc: { ox: -3.81, oy: 3.81 },
+      };
+
+      comp.pins.forEach((pin, idx) => {
+        const offset = pinMap[pin.id] || namedPinMap[pin.id.toLowerCase()] || (
+          idx < 4
+            ? { ox: -3.81 + idx * 2.54, oy: -3.81 }
+            : { ox: 3.81 - (idx - 4) * 2.54, oy: 3.81 }
+        );
+        const pt = transformCoord(offset.ox, offset.oy);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: pin.id === '1' || idx === 0 ? 'rect' : 'round',
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 2. DIP-14 or DIP-16
+    if (upperFootprint.includes('DIP-14') || upperFootprint.includes('DIP-16')) {
+      const pinCount = upperFootprint.includes('DIP-16') ? 16 : 14;
+      const pinsPerSide = pinCount / 2;
+      const startX = -((pinsPerSide - 1) * 2.54) / 2;
+
+      comp.pins.forEach((pin, idx) => {
+        let ox = 0;
+        let oy = -3.81;
+        if (idx < pinsPerSide) {
+          ox = startX + idx * 2.54;
+          oy = -3.81;
+        } else {
+          ox = -startX - (idx - pinsPerSide) * 2.54;
+          oy = 3.81;
+        }
+        const pt = transformCoord(ox, oy);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: idx === 0 ? 'rect' : 'round',
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 3. Resistors / Potentiometers / LDRs
+    if (upperType.includes('RESISTOR') || upperType.includes('POTENTIOMETER') || upperType.includes('LDR')) {
+      if (comp.pins.length === 3) {
+        const offsets = [
+          { ox: -2.54, oy: 0 },
+          { ox: 0, oy: 2.54 },
+          { ox: 2.54, oy: 0 },
+        ];
+        comp.pins.forEach((pin, idx) => {
+          const off = offsets[idx] || { ox: (idx - 1) * 2.54, oy: 0 };
+          const pt = transformCoord(off.ox, off.oy);
+          pads.push({
+            id: `pad_${comp.id}_${pin.id}`,
+            componentId: comp.id,
+            pinId: pin.id,
+            x: pt.x,
+            y: pt.y,
+            shape: idx === 0 ? 'rect' : 'round',
+            diameterMm: 1.8,
+            holeMm: 0.9,
+            layer: 'all',
+          });
+        });
+      } else {
+        comp.pins.forEach((pin, idx) => {
+          const ox = idx === 0 ? -3.81 : 3.81;
+          const pt = transformCoord(ox, 0);
+          pads.push({
+            id: `pad_${comp.id}_${pin.id}`,
+            componentId: comp.id,
+            pinId: pin.id,
+            x: pt.x,
+            y: pt.y,
+            shape: idx === 0 ? 'rect' : 'round',
+            diameterMm: 1.8,
+            holeMm: 0.9,
+            layer: 'all',
+          });
+        });
+      }
+      return pads;
+    }
+
+    // 4. LEDs / Diodes
+    if (upperType.includes('LED') || upperType.includes('DIODE')) {
+      comp.pins.forEach((pin, idx) => {
+        const ox = idx === 0 ? -1.27 : 1.27;
+        const pt = transformCoord(ox, 0);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: idx === 0 ? 'rect' : 'round',
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 5. Capacitors
+    if (upperType.includes('CAPACITOR')) {
+      comp.pins.forEach((pin, idx) => {
+        const ox = idx === 0 ? -1.27 : 1.27;
+        const pt = transformCoord(ox, 0);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: idx === 0 ? 'rect' : 'round',
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 6. Batteries / Power Terminals
+    if (
+      upperType.includes('BATTERY') ||
+      upperType.includes('VOLTAGE') ||
+      upperType.includes('POWER') ||
+      upperType.includes('TERMINAL')
+    ) {
+      comp.pins.forEach((pin, idx) => {
+        const ox = idx === 0 ? -2.54 : 2.54;
+        const pt = transformCoord(ox, 0);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: idx === 0 ? 'rect' : 'round',
+          diameterMm: 2.2,
+          holeMm: 1.2,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 7. Transistors
+    if (upperType.includes('TRANSISTOR') || upperType.includes('BJT') || upperType.includes('MOSFET')) {
+      comp.pins.forEach((pin, idx) => {
+        const ox = idx === 0 ? -2.54 : idx === 1 ? 0 : 2.54;
+        const pt = transformCoord(ox, 0);
+        pads.push({
+          id: `pad_${comp.id}_${pin.id}`,
+          componentId: comp.id,
+          pinId: pin.id,
+          x: pt.x,
+          y: pt.y,
+          shape: idx === 0 ? 'rect' : 'round',
+          diameterMm: 1.8,
+          holeMm: 0.9,
+          layer: 'all',
+        });
+      });
+      return pads;
+    }
+
+    // 8. Generic fallback
+    comp.pins.forEach((pin, idx) => {
+      let ox = 0;
+      let oy = 0;
+      if (comp.pins.length === 2) {
+        ox = idx === 0 ? -2.54 : 2.54;
+      } else {
+        const half = Math.ceil(comp.pins.length / 2);
+        if (idx < half) {
+          ox = -((half - 1) * 2.54) / 2 + idx * 2.54;
+          oy = -3.81;
+        } else {
+          ox = ((half - 1) * 2.54) / 2 - (idx - half) * 2.54;
+          oy = 3.81;
+        }
+      }
+      const pt = transformCoord(ox, oy);
+      pads.push({
+        id: `pad_${comp.id}_${pin.id}`,
+        componentId: comp.id,
+        pinId: pin.id,
+        x: pt.x,
+        y: pt.y,
+        shape: idx === 0 ? 'rect' : 'round',
+        diameterMm: 1.8,
+        holeMm: 0.9,
+        layer: 'all',
+      });
+    });
+
+    return pads;
   }
 
   /**

@@ -12,14 +12,14 @@ import {
   Compass,
   Search,
   Cpu,
-  Zap,
-  Layers,
   RotateCw,
   Unplug,
   MoveLeft,
   MoveRight,
   MoveUp,
   MoveDown,
+  MousePointer,
+  Cable,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
@@ -364,7 +364,7 @@ export interface Studio3DCanvasProps {
 
 export function Studio3DCanvas({
   hasBreadboard = true,
-  onToggleBreadboard,
+  onToggleBreadboard: _onToggleBreadboard,
   onToggleMcuUsb,
   components3d,
   wires3d,
@@ -385,6 +385,8 @@ export function Studio3DCanvas({
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [libSearch, setLibSearch] = useState('');
   const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
+  const [toolMode3D, setToolMode3D] = useState<'inspect' | 'wire'>('inspect');
+  const [editingWireEndpoint, setEditingWireEndpoint] = useState<{ wireId: string; end: 'from' | 'to' } | null>(null);
   const [activeWireStart, setActiveWireStart] = useState<{
     compId: string;
     pinId: string;
@@ -446,17 +448,6 @@ export function Studio3DCanvas({
     );
   }, [components3d, onToggleMcuUsb, onUpdateComponent3D]);
 
-  const anyMcu = useMemo(() => {
-    return components3d.find(
-      (c) =>
-        c.type === 'ARDUINO_MEGA' ||
-        c.type === 'ARDUINO_UNO' ||
-        c.type === 'ARDUINO_NANO' ||
-        c.type === 'ESP32_DEVKIT' ||
-        c.type === 'RASPBERRY_PI_PICO'
-    );
-  }, [components3d]);
-
   const filteredLibrary = useMemo(() => {
     return LIBRARY_3D_COMPONENTS.filter((item) => {
       const matchCat = libCategory === 'all' || item.category === libCategory;
@@ -514,7 +505,19 @@ export function Studio3DCanvas({
           onDeleteComponent3D(selectedCompId);
           onSelectComponent(null);
         }
+      } else if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        setToolMode3D('wire');
+        toast.info('Wire Tool Active [W]');
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setToolMode3D('inspect');
+        setActiveWireStart(null);
+        setEditingWireEndpoint(null);
       } else if (e.key === 'Escape') {
+        setActiveWireStart(null);
+        setEditingWireEndpoint(null);
+        setToolMode3D('inspect');
         setActiveWireStart(null);
         onSelectWire(null);
         onSelectComponent(null);
@@ -686,8 +689,33 @@ export function Studio3DCanvas({
     return new THREE.Vector3(comp.x3d + rx, comp.y3d + ly, comp.z3d + rz);
   }, [components3d]);
 
-  // Terminal Pin Click Handler (Starts or Completes Wire with smart color detection)
+  // Terminal Pin Click Handler (Respects tool mode & wire endpoint editing)
   const handlePinClick = (compId: string, pinId: string, worldPos: THREE.Vector3) => {
+    // If currently editing an existing wire endpoint:
+    if (editingWireEndpoint) {
+      const targetWire = wires3d.find((w) => w.id === editingWireEndpoint.wireId);
+      if (targetWire) {
+        const updated: Wire3D = {
+          ...targetWire,
+          [editingWireEndpoint.end === 'from' ? 'fromPin' : 'toPin']: { compId, pinId },
+        };
+        onUpdateWire3D(updated);
+        toast.success(`Connected wire endpoint to ${compId === 'breadboard' ? pinId : `${compId}:${pinId}`}`);
+        setEditingWireEndpoint(null);
+        return;
+      }
+    }
+
+    // In Inspect mode: Clicking a component pin or body selects the component, does not draw wires
+    if (toolMode3D !== 'wire' && !activeWireStart) {
+      if (compId !== 'breadboard') {
+        onSelectComponent(compId);
+        onSelectWire(null);
+      }
+      return;
+    }
+
+    // In Wire mode:
     if (!activeWireStart) {
       // Start wire - detect power/ground pin
       const p = pinId.toLowerCase();
@@ -730,6 +758,7 @@ export function Studio3DCanvas({
 
       onAddWire3D(newWire);
       setActiveWireStart(null);
+      toast.success(`Connected jumper wire from ${activeWireStart.pinId} to ${pinId}`);
     }
   };
 
@@ -780,22 +809,22 @@ export function Studio3DCanvas({
           sectionColor="#334155"
         />
 
-        {/* Orbit Camera Controls with Full Camera Freedom & Panning */}
+        {/* Orbit Camera Controls with Smooth Damped Camera Freedom & Stable Panning */}
         <OrbitControls
           ref={controlsRef}
           makeDefault
           enableDamping
-          dampingFactor={0.05}
+          dampingFactor={0.08}
           enablePan={true}
           screenSpacePanning={true}
           enableZoom={true}
           enableRotate={true}
-          maxPolarAngle={Math.PI / 2 - 0.05}
-          minDistance={10}
-          maxDistance={600}
+          maxPolarAngle={Math.PI / 2 - 0.02}
+          minDistance={15}
+          maxDistance={500}
         />
 
-        {/* Rock-solid Frame Drag Controller */}
+        {/* Stable Frame Drag Controller */}
         <DragFrameController
           draggingCompId={draggingCompId}
           components3d={components3d}
@@ -803,70 +832,6 @@ export function Studio3DCanvas({
           hasBreadboard={hasBreadboard}
           onUpdateComponent3D={onUpdateComponent3D}
         />
-
-        {/* Transparent Interactive Drag Raycasting Plane */}
-        <mesh
-          visible={true}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0, 0]}
-          onPointerMove={(e) => {
-            if (!draggingCompRef.current) return;
-            const comp = components3d.find((c) => c.id === draggingCompRef.current?.id);
-            if (!comp) return;
-
-            let targetX = e.point.x;
-            let targetZ = e.point.z;
-            let targetY = comp.y3d;
-
-            const isThroughHole = [
-              'RESISTOR',
-              'LED',
-              'LED_RGB',
-              'CAPACITOR',
-              'CAPACITOR_ELECTROLYTIC',
-              'TIMER_555',
-              'DIP_IC',
-              'DIODE',
-              'SENSOR_LDR',
-              'PUSHBUTTON',
-              'ARDUINO_NANO',
-              'ESP32_DEVKIT',
-              'RASPBERRY_PI_PICO',
-            ].includes(comp.type);
-
-            if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
-              const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
-              if (freeHole) {
-                targetX = freeHole.x;
-                targetZ = freeHole.z;
-                targetY = 5.0; // Breadboard surface height
-              }
-            } else {
-              targetX = Math.round(targetX / 2.54) * 2.54;
-              targetZ = Math.round(targetZ / 2.54) * 2.54;
-              if (!isThroughHole) {
-                targetY = 0; // Workbench surface height
-              }
-            }
-
-            onUpdateComponent3D({
-              ...comp,
-              x3d: Math.round(targetX * 100) / 100,
-              y3d: Math.round(targetY * 100) / 100,
-              z3d: Math.round(targetZ * 100) / 100,
-            });
-          }}
-          onPointerUp={() => {
-            if (draggingCompRef.current) {
-              draggingCompRef.current = null;
-              setDraggingCompId(null);
-              if (controlsRef.current) controlsRef.current.enabled = true;
-            }
-          }}
-        >
-          <planeGeometry args={[1200, 1200]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
 
         {/* 830-Point Solderless Breadboard */}
         {hasBreadboard && (
@@ -1009,7 +974,7 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'BATTERY_9V') {
+          if (comp.type === 'BATTERY_9V' || comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
             return (
               <group
                 key={comp.id}
@@ -1569,11 +1534,50 @@ export function Studio3DCanvas({
         })}
       </Canvas>
 
-      {/* Top Floating View Controls & Wire Colors */}
-      <div className="absolute top-3 left-4 flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 rounded-lg p-1.5 shadow-xl backdrop-blur z-20">
+      {/* Top Floating View Controls, Tool Mode & Wire Colors */}
+      <div className="absolute top-3 left-4 flex items-center gap-1.5 bg-slate-900/95 border border-slate-700/80 rounded-xl p-1 shadow-2xl backdrop-blur z-20 font-mono text-xs max-w-[calc(100vw-150px)] overflow-x-auto">
+        {/* Tool Mode: Inspect (V) vs Wire Tool (W) */}
+        <div className="flex items-center bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+          <button
+            onClick={() => {
+              setToolMode3D('inspect');
+              setActiveWireStart(null);
+              setEditingWireEndpoint(null);
+            }}
+            className={`px-2 py-1 rounded flex items-center gap-1 font-semibold text-xs transition-colors cursor-pointer ${
+              toolMode3D === 'inspect'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Inspect / Select Mode [V] — Click to select parts, move components or view connections without drawing wires"
+          >
+            <MousePointer className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Select (V)</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setToolMode3D('wire');
+              setEditingWireEndpoint(null);
+              toast.info('Wire Tool Active (W) — Click first pin/hole, then click second pin/hole');
+            }}
+            className={`px-2 py-1 rounded flex items-center gap-1 font-semibold text-xs transition-colors cursor-pointer ${
+              toolMode3D === 'wire'
+                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Jumper Wire Tool [W] — Click two terminals or breadboard holes to route wires"
+          >
+            <Cable className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Wire (W)</span>
+          </button>
+        </div>
+
+        <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
         <button
           onClick={() => setCameraView('iso')}
-          className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center gap-1 cursor-pointer"
+          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center gap-1 cursor-pointer"
           title="Isometric View"
         >
           <Compass className="w-3.5 h-3.5 text-cyan-400" />
@@ -1588,36 +1592,29 @@ export function Studio3DCanvas({
         </button>
         <button
           onClick={() => setCameraView('front')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono cursor-pointer"
+          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono cursor-pointer hidden sm:inline"
           title="Front View"
         >
           Front
         </button>
-        <button
-          onClick={() => setCameraView('side')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono cursor-pointer"
-          title="Side View"
-        >
-          Side
-        </button>
 
-        <div className="h-4 w-px bg-slate-700 mx-1" />
+        <div className="h-4 w-px bg-slate-700 mx-0.5" />
 
         {/* Wire Color Chooser */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400 uppercase font-mono">Wire:</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-slate-400 uppercase font-mono hidden sm:inline">Wire:</span>
           {[
             { hex: '#EF4444', label: 'Red' },
+            { hex: '#1E293B', label: 'Black' },
             { hex: '#3B82F6', label: 'Blue' },
             { hex: '#10B981', label: 'Green' },
             { hex: '#F59E0B', label: 'Yellow' },
-            { hex: '#1E293B', label: 'Black' },
             { hex: '#F8FAFC', label: 'White' },
           ].map((c) => (
             <button
               key={c.hex}
               onClick={() => setActiveWireColor(c.hex)}
-              className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border transition-all cursor-pointer ${
                 activeWireColor === c.hex
                   ? 'ring-2 ring-cyan-400 scale-110 border-white'
                   : 'border-slate-600 hover:scale-105'
@@ -1627,32 +1624,13 @@ export function Studio3DCanvas({
             />
           ))}
         </div>
-
-        <div className="h-4 w-px bg-slate-700 mx-1" />
-
-        {/* Breadboard Workbench Presence Toggle */}
-        {onToggleBreadboard && (
-          <button
-            onClick={onToggleBreadboard}
-            className={`px-2 py-0.5 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-colors ${
-              hasBreadboard
-                ? 'bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
-                : 'bg-slate-800 border border-slate-600 text-slate-400 hover:text-white'
-            }`}
-            title={hasBreadboard ? 'Click to Remove Breadboard' : 'Click to Add 830-Point Breadboard'}
-          >
-            <Layers className="w-3 h-3 text-cyan-400" />
-            <span>{hasBreadboard ? 'Breadboard' : '+ Breadboard'}</span>
-          </button>
-        )}
-
       </div>
 
       {/* Top Right Add Component Drawer Trigger */}
       <div className="absolute top-3 right-4 flex items-center gap-2 z-20">
         <button
           onClick={() => setIsAddDrawerOpen((o) => !o)}
-          className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg cursor-pointer transition-all"
+          className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-lg shadow-lg cursor-pointer transition-all"
         >
           <Plus className="w-4 h-4" />
           <span>3D Library</span>
@@ -1661,7 +1639,7 @@ export function Studio3DCanvas({
 
       {/* Expanded Pro 3D Component Library Grid Drawer */}
       {isAddDrawerOpen && (
-        <div className="absolute top-14 right-4 w-96 bg-slate-900/98 border border-slate-700/80 rounded-xl p-3.5 shadow-2xl z-30 font-mono text-xs space-y-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-14 right-4 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-slate-900/98 border border-slate-700/80 rounded-xl p-3.5 shadow-2xl z-30 font-mono text-xs space-y-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-200 font-bold uppercase text-[11px]">
             <span className="flex items-center gap-1.5 text-cyan-400">
               <Cpu className="w-4 h-4" />
@@ -1783,6 +1761,39 @@ export function Studio3DCanvas({
 
           <div className="h-4 w-px bg-slate-700" />
 
+          {/* Move / Reroute Endpoints to another hole or pin */}
+          <button
+            onClick={() => {
+              setEditingWireEndpoint({ wireId: selectedWire.id, end: 'from' });
+              toast.info(`Click any breadboard hole to move Start pin [${selectedWire.fromPin.pinId}]`);
+            }}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-colors ${
+              editingWireEndpoint?.wireId === selectedWire.id && editingWireEndpoint.end === 'from'
+                ? 'bg-amber-500 text-slate-950 animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+            }`}
+            title="Move Start Pin to another breadboard hole or pin"
+          >
+            Move Start
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingWireEndpoint({ wireId: selectedWire.id, end: 'to' });
+              toast.info(`Click any breadboard hole to move End pin [${selectedWire.toPin.pinId}]`);
+            }}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold cursor-pointer transition-colors ${
+              editingWireEndpoint?.wireId === selectedWire.id && editingWireEndpoint.end === 'to'
+                ? 'bg-amber-500 text-slate-950 animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+            }`}
+            title="Move End Pin to another breadboard hole or pin"
+          >
+            Move End
+          </button>
+
+          <div className="h-4 w-px bg-slate-700" />
+
           {/* Single Disconnect Wire Button */}
           <button
             onClick={() => {
@@ -1898,8 +1909,15 @@ export function Studio3DCanvas({
 
       {/* Wire in progress helper tooltip */}
       {activeWireStart && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-amber-500/90 text-slate-950 font-mono font-bold text-xs px-3 py-1.5 rounded-full shadow-lg z-30 flex items-center gap-2 animate-bounce">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-amber-500/90 text-slate-950 font-mono font-bold text-xs px-3.5 py-1.5 rounded-full shadow-lg z-30 flex items-center gap-2 animate-bounce">
           <span>Routing Wire from {activeWireStart.compId} [{activeWireStart.pinId}] ➔ Click destination pin/hole (Esc to cancel)</span>
+        </div>
+      )}
+
+      {/* Editing Wire Endpoint tooltip */}
+      {editingWireEndpoint && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-cyan-500 text-slate-950 font-mono font-bold text-xs px-3.5 py-1.5 rounded-full shadow-lg z-30 flex items-center gap-2 animate-pulse">
+          <span>Move {editingWireEndpoint.end === 'from' ? 'Start' : 'Far'} Endpoint ➔ Click any breadboard hole to connect (Esc to cancel)</span>
         </div>
       )}
 

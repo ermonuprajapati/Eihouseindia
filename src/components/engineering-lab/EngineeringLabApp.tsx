@@ -840,7 +840,7 @@ export function EngineeringLabApp() {
               <button
                 type="button"
                 onClick={() => setIsQuickProbeOpen((o) => !o)}
-                className={`absolute bottom-4 left-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+                className={`absolute bottom-4 left-56 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
                   isQuickProbeOpen
                     ? 'bg-cyan-600 text-white border border-cyan-400'
                     : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
@@ -900,7 +900,7 @@ export function EngineeringLabApp() {
             <button
               type="button"
               onClick={() => setIsQuickProbeOpen((o) => !o)}
-              className={`absolute bottom-4 left-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+              className={`absolute bottom-4 left-64 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
                 isQuickProbeOpen
                   ? 'bg-cyan-600 text-white border border-cyan-400'
                   : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
@@ -921,60 +921,34 @@ export function EngineeringLabApp() {
               waveformData={waveformData}
             />
 
-            <Virtual3dStudio
-              components={project.components}
-              wires={project.wires}
-              selectedCompId={selectedCompId}
-              selectedWireId={selectedWireId}
-              onSelectComponent={(id) => {
-                setSelectedCompId(id);
-                if (id) setSelectedWireId(null);
-              }}
-              onSelectWire={(id) => {
-                setSelectedWireId(id);
-                if (id) setSelectedCompId(null);
-              }}
-              onAddComponent={handleAddComponent}
-              onUpdateComponent={handleUpdateComponent}
-              onUpdateComponentPosition={handleUpdateComponentPosition}
-              onUpdateComponent3DPosition={handleUpdateComponent3DPosition}
-              onDeleteComponent={handleDeleteComponent}
-              onAddWire={handleAddWire}
-              onDeleteWire={handleDeleteWire}
-              onDisconnectWire={handleDisconnectWire}
-              isSimulating={isSimulating}
-              simulationStates={simStates}
-              wireCurrents={wireCurrents}
-              gpioStates={project.firmware.gpioStates}
-            />
-
-            <PropertiesInspector
-              component={selectedComponent}
-              selectedWire={selectedWire}
-              components={project.components}
-              wires={project.wires}
-              onUpdateComponent={handleUpdateComponent}
-              onUpdateWire={(updatedWire) => {
-                recordHistory();
-                setProject((prev) => ({
-                  ...prev,
-                  wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
-                }));
-              }}
-              onRotateComponent={handleRotateComponent}
-              onMirrorComponent={handleMirrorComponent}
-              onDeleteComponent={handleDeleteComponent}
-              onDeleteWire={handleDeleteWire}
-              onDisconnectWire={handleDisconnectWire}
-              onDisconnectWireEndpoint={handleDisconnectWireEndpoint}
-              onClose={() => setIsInspectorOpen(false)}
-              isOpen={isInspectorOpen}
-              onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
-              width={inspectorWidth}
-              onWidthChange={setInspectorWidth}
-              simState={selectedCompId ? simStates[selectedCompId] : undefined}
-              wireCurrent={selectedWireId ? wireCurrents[selectedWireId] : undefined}
-            />
+            <div className="flex-1 h-full w-full relative overflow-hidden">
+              <Virtual3dStudio
+                components={project.components}
+                wires={project.wires}
+                selectedCompId={selectedCompId}
+                selectedWireId={selectedWireId}
+                onSelectComponent={(id) => {
+                  setSelectedCompId(id);
+                  if (id) setSelectedWireId(null);
+                }}
+                onSelectWire={(id) => {
+                  setSelectedWireId(id);
+                  if (id) setSelectedCompId(null);
+                }}
+                onAddComponent={handleAddComponent}
+                onUpdateComponent={handleUpdateComponent}
+                onUpdateComponentPosition={handleUpdateComponentPosition}
+                onUpdateComponent3DPosition={handleUpdateComponent3DPosition}
+                onDeleteComponent={handleDeleteComponent}
+                onAddWire={handleAddWire}
+                onDeleteWire={handleDeleteWire}
+                onDisconnectWire={handleDisconnectWire}
+                isSimulating={isSimulating}
+                simulationStates={simStates}
+                wireCurrents={wireCurrents}
+                gpioStates={project.firmware.gpioStates}
+              />
+            </div>
           </div>
         )}
 

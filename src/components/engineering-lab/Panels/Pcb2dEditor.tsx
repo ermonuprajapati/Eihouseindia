@@ -617,7 +617,7 @@ export function Pcb2dEditor({
       ctx.fillText(`${distMm.toFixed(1)} mm`, mouseCoord.canvasX + 11, mouseCoord.canvasY - 6);
     }
 
-    // 7. Copper Pads (Annular Rings & Hole Centers)
+    // 7. Copper Pads (Annular Rings, Solder Mask Clearance & Plated Drill Centers)
     pcb.pads.forEach((pad) => {
       const px = offsetX + pad.x * scale;
       const py = offsetY + pad.y * scale;
@@ -625,21 +625,39 @@ export function Pcb2dEditor({
       const isHovered = pad.id === hoveredPadId;
       const isStart = routingStartPad?.id === pad.id;
       const isSelected = pad.id === selectedPadId;
+      const isRect = pad.shape === 'rect';
 
+      // Solder Mask Relief / Clearance Ring
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (isRect) {
+        ctx.strokeRect(px - radius - 1.5, py - radius - 1.5, (radius + 1.5) * 2, (radius + 1.5) * 2);
+      } else {
+        ctx.arc(px, py, radius + 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Selection / Hover Halo
       if (isHovered || isStart || isSelected) {
         ctx.strokeStyle = isStart ? '#10B981' : isSelected ? '#F59E0B' : '#38BDF8';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(px, py, radius + 3, 0, Math.PI * 2);
-        ctx.stroke();
+        if (isRect) {
+          ctx.strokeRect(px - radius - 3.5, py - radius - 3.5, (radius + 3.5) * 2, (radius + 3.5) * 2);
+        } else {
+          ctx.arc(px, py, radius + 3.5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
-      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#F59E0B' : '#F59E0B';
-      ctx.strokeStyle = '#D97706';
+      // ENIG Gold Plated Annular Pad
+      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#FBBF24' : '#F59E0B';
+      ctx.strokeStyle = '#B45309';
       ctx.lineWidth = 1;
 
       ctx.beginPath();
-      if (pad.shape === 'rect') {
+      if (isRect) {
         ctx.rect(px - radius, py - radius, radius * 2, radius * 2);
       } else {
         ctx.arc(px, py, radius, 0, Math.PI * 2);
@@ -647,10 +665,20 @@ export function Pcb2dEditor({
       ctx.fill();
       ctx.stroke();
 
+      // Plated Through Hole Barrel & Drill Center
       if (visibleLayers.drillHoles) {
-        ctx.fillStyle = '#050D1A';
+        const drillRadius = (pad.holeMm * scale) / 2;
+        // Inner plated barrel rim
+        ctx.strokeStyle = '#D97706';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(px, py, (pad.holeMm * scale) / 2, 0, Math.PI * 2);
+        ctx.arc(px, py, drillRadius + 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Dark hollow drill hole
+        ctx.fillStyle = '#020617';
+        ctx.beginPath();
+        ctx.arc(px, py, drillRadius, 0, Math.PI * 2);
         ctx.fill();
       }
     });
@@ -710,6 +738,22 @@ export function Pcb2dEditor({
               layout.boxBounds.width * scale,
               layout.boxBounds.height * scale
             );
+            if (layout.outlineType === 'dip') {
+              // Semicircular notch on the left side (-X)
+              ctx.beginPath();
+              ctx.arc(layout.boxBounds.x * scale, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
+              ctx.stroke();
+              // Pin 1 indicator dot
+              ctx.beginPath();
+              ctx.arc(
+                (layout.boxBounds.x + 1.8) * scale,
+                (layout.boxBounds.y + 1.8) * scale,
+                1.0 * scale,
+                0,
+                Math.PI * 2
+              );
+              ctx.fill();
+            }
           }
 
           // Designator text

@@ -105,14 +105,18 @@ export function Pcb3dViewer({
         ctx.fillText('+', -7 * scale, -1 * scale);
         ctx.fillText(comp.designator, -10, 7 * scale);
       } else if (comp.type.includes('IC') || comp.type.includes('TIMER') || comp.footprint?.includes('DIP')) {
-        // DIP package outline with Pin 1 notch and dot
-        ctx.strokeRect(-6 * scale, -9 * scale, 12 * scale, 18 * scale);
+        // DIP package outline matching physical package orientation and dimensions
+        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16');
+        const bLen = (isDip14Or16 ? 19.5 : 10.0) * scale;
+        const bWid = 6.8 * scale;
+        ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
+        // Semicircular notch on the left (-X) side where Pin 1 is
         ctx.beginPath();
-        ctx.arc(0, -9 * scale, 2.5 * scale, 0, Math.PI);
+        ctx.arc(-bLen / 2, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
         ctx.stroke();
-        // Pin 1 dot
+        // Pin 1 dot at top-left
         ctx.beginPath();
-        ctx.arc(-4 * scale, -6 * scale, 1.5 * scale, 0, Math.PI * 2);
+        ctx.arc(-bLen / 2 + 1.8 * scale, -bWid / 2 + 1.6 * scale, 1.0 * scale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillText(comp.designator, -10, 2);
       } else if (comp.type.includes('BATTERY') || comp.type.includes('VOLTAGE')) {
@@ -132,28 +136,32 @@ export function Pcb3dViewer({
 
   const materials = useMemo(() => {
     return {
-      fr4Core: new THREE.MeshStandardMaterial({
-        color: solderMaskColor,
-        roughness: 0.35,
-        metalness: 0.1,
+      fr4Core: new THREE.MeshPhysicalMaterial({
+        color: solderMaskColor === '#065F46' ? '#04442A' : solderMaskColor,
+        roughness: 0.22,
+        metalness: 0.08,
+        clearcoat: 0.35,
+        clearcoatRoughness: 0.25,
       }),
-      copperTop: new THREE.MeshStandardMaterial({
-        color: '#EF4444',
-        metalness: 0.8,
-        roughness: 0.3,
+      copperTop: new THREE.MeshPhysicalMaterial({
+        color: '#DC2626',
+        metalness: 0.88,
+        roughness: 0.22,
+        clearcoat: 0.3,
       }),
-      copperBottom: new THREE.MeshStandardMaterial({
-        color: '#3B82F6',
-        metalness: 0.8,
-        roughness: 0.3,
+      copperBottom: new THREE.MeshPhysicalMaterial({
+        color: '#2563EB',
+        metalness: 0.88,
+        roughness: 0.22,
+        clearcoat: 0.3,
       }),
       goldPad: new THREE.MeshStandardMaterial({
-        color: '#EAB308',
-        metalness: 0.9,
-        roughness: 0.2,
+        color: '#F59E0B',
+        metalness: 0.94,
+        roughness: 0.16,
       }),
       drillHole: new THREE.MeshBasicMaterial({
-        color: '#050D1A',
+        color: '#020617',
       }),
       icPlastic: new THREE.MeshStandardMaterial({
         color: '#18181B',
@@ -256,23 +264,36 @@ export function Pcb3dViewer({
           </mesh>
         )}
 
-        {/* Copper Pads */}
+        {/* Copper Pads & Plated Through Holes */}
         {pcb.pads.map((pad) => {
           const px = pad.x - halfW;
           const pz = pad.y - halfH;
           const r = pad.diameterMm / 2;
+          const isRect = pad.shape === 'rect';
 
           return (
             <group key={pad.id} position={[px, 0, pz]}>
-              {/* Top Pad Disc */}
+              {/* Top Pad (Square for Pin 1, Circular for others) */}
               <mesh position={[0, thickness / 2 + 0.02, 0]} material={materials.goldPad}>
-                <cylinderGeometry args={[r, r, 0.04, 16]} />
+                {isRect ? (
+                  <boxGeometry args={[pad.diameterMm, 0.04, pad.diameterMm]} />
+                ) : (
+                  <cylinderGeometry args={[r, r, 0.04, 16]} />
+                )}
               </mesh>
-              {/* Bottom Pad Disc */}
+              {/* Bottom Pad */}
               <mesh position={[0, -thickness / 2 - 0.02, 0]} material={materials.goldPad}>
-                <cylinderGeometry args={[r, r, 0.04, 16]} />
+                {isRect ? (
+                  <boxGeometry args={[pad.diameterMm, 0.04, pad.diameterMm]} />
+                ) : (
+                  <cylinderGeometry args={[r, r, 0.04, 16]} />
+                )}
               </mesh>
-              {/* Plated Through Hole */}
+              {/* Plated Through Hole Barrel */}
+              <mesh position={[0, 0, 0]} material={materials.goldPad}>
+                <cylinderGeometry args={[pad.holeMm / 2 + 0.06, pad.holeMm / 2 + 0.06, thickness + 0.04, 16]} />
+              </mesh>
+              {/* Hollow Drill Hole Center */}
               <mesh position={[0, 0, 0]} material={materials.drillHole}>
                 <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.1, 16]} />
               </mesh>

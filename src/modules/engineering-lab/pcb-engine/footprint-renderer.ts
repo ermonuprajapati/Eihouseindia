@@ -34,10 +34,10 @@ export class FootprintRenderer {
       return {
         designatorText: designator,
         valueText: value || 'NE555P',
-        designatorPos: { x: x - 5, y: y - 8.5 },
-        valuePos: { x: x - 5, y: y + 9.5 },
+        designatorPos: { x: x - 5, y: y - 5.5 },
+        valuePos: { x: x - 5, y: y + 6.8 },
         outlineType: 'dip',
-        boxBounds: { x: x - 4.5, y: y - 7.5, width: 9, height: 15 },
+        boxBounds: { x: x - 5.5, y: y - 4.25, width: 11, height: 8.5 },
       };
     }
 
