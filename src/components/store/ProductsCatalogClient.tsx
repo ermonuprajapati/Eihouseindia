@@ -546,11 +546,11 @@ export function ProductsCatalogClient() {
 
                   {/* Direct Inquiry / Order + WhatsApp Buttons */}
                   {item.inStock ? (
-                    <div className="grid grid-cols-5 gap-1.5">
+                    <div className="flex items-center gap-1.5 pt-1">
                       <Button
                         size="sm"
                         onClick={() => setOrderModalProduct(item)}
-                        className="col-span-3 h-8 bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-[11px] px-2 shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+                        className="flex-1 min-w-0 h-8 bg-[#172D4D] hover:bg-[#0B1528] text-white font-semibold text-[11px] px-2 shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">Order / Inquiry</span>
@@ -560,21 +560,21 @@ export function ProductsCatalogClient() {
                         asChild
                         size="sm"
                         variant="outline"
-                        className="col-span-2 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2 flex items-center justify-center gap-1"
+                        className="shrink-0 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2.5 flex items-center justify-center gap-1"
                       >
-                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp">
                           <MessageCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span className="truncate">WhatsApp</span>
+                          <span className="hidden xs:inline truncate">WhatsApp</span>
                         </a>
                       </Button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-5 gap-1.5">
+                    <div className="flex items-center gap-1.5 pt-1">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setOrderModalProduct(item)}
-                        className="col-span-3 h-8 text-[11px] border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 px-2 flex items-center justify-center gap-1 cursor-pointer"
+                        className="flex-1 min-w-0 h-8 text-[11px] border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 px-2 flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">Pre-Order Inquiry</span>
@@ -584,11 +584,11 @@ export function ProductsCatalogClient() {
                         asChild
                         size="sm"
                         variant="outline"
-                        className="col-span-2 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2 flex items-center justify-center gap-1"
+                        className="shrink-0 h-8 border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-[11px] px-2.5 flex items-center justify-center gap-1"
                       >
-                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                        <a href={whatsappLink} target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp">
                           <MessageCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span className="truncate">WhatsApp</span>
+                          <span className="hidden xs:inline truncate">WhatsApp</span>
                         </a>
                       </Button>
                     </div>

@@ -46,7 +46,7 @@ class EngineeringLabErrorBoundary extends Component<ErrorBoundaryProps, ErrorBou
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#070D18] text-slate-200 font-mono px-4 select-none">
+        <div className="flex h-screen h-[100dvh] w-full max-w-full flex-col items-center justify-center bg-[#070D18] text-slate-200 font-mono px-4 select-none">
           <div className="max-w-md w-full rounded-2xl border border-rose-500/40 bg-slate-900/90 p-8 text-center shadow-2xl backdrop-blur space-y-6">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-950/60 border border-rose-500/50 text-rose-400 text-2xl font-bold">
               ⚡
@@ -103,7 +103,7 @@ const EngineeringLabApp = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#070D18] text-slate-300 font-mono">
+      <div className="flex h-screen h-[100dvh] w-full max-w-full flex-col items-center justify-center bg-[#070D18] text-slate-300 font-mono">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
         <div className="mt-4 text-sm font-semibold tracking-wider text-cyan-400">
           INITIALIZING UNIVERSAL ENGINEERING LAB...

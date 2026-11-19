@@ -188,7 +188,7 @@ export function DatasheetAdminModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0 border-slate-200">
+      <DialogContent className="max-w-2xl max-h-[90dvh] overflow-y-auto touch-scroll p-0 gap-0 border-slate-200">
         {/* Sticky Action Bar */}
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-3.5 backdrop-blur-md">
           <div className="flex items-center gap-2">

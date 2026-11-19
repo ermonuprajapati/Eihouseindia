@@ -15,9 +15,9 @@ export function FranchiseLabAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      {/* Soft Ambient Laboratory Lighting (Right-Dominant) */}
-      <div className="absolute top-0 right-1/4 w-[520px] h-[360px] rounded-full bg-blue-600/10 blur-[90px]" />
-      <div className="absolute -bottom-10 right-10 w-[460px] h-[300px] rounded-full bg-amber-500/10 blur-[85px]" />
+      {/* Soft Ambient Laboratory Lighting (Hardware Accelerated & Desktop-only for Max Mobile Speed) */}
+      <div className="hidden sm:block absolute top-0 right-1/4 w-[520px] h-[360px] rounded-full bg-blue-600/10 blur-[80px] transform-gpu pointer-events-none" />
+      <div className="hidden sm:block absolute -bottom-10 right-10 w-[460px] h-[300px] rounded-full bg-amber-500/10 blur-[75px] transform-gpu pointer-events-none" />
 
       <svg
         className="absolute inset-0 h-full w-full opacity-60"

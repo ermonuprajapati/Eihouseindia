@@ -241,13 +241,13 @@ export function SiteHeader() {
         {/* Zone 2: Primary Ecosystem Navigation (Desktop, Single-Row, Spacious) */}
         <nav
           aria-label="Primary navigation"
-          className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm font-medium text-slate-600"
+          className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 text-xs xl:text-sm font-medium text-slate-600"
         >
           {/* 1. Flagship Destination: Virtual Lab (Earned Visual Distinction, Never Duplicated) */}
           <Link
             href="/engineering-lab"
             prefetch={false}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all mr-1 ${
+            className={`inline-flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-1 xl:py-1.5 rounded-full text-xs font-semibold transition-all mr-1 ${
               pathname.startsWith('/engineering-lab')
                 ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
                 : 'bg-blue-50/90 hover:bg-blue-100 text-blue-700 border border-blue-200/80'
@@ -265,7 +265,7 @@ export function SiteHeader() {
           <Link
             href="/products"
             prefetch={false}
-            className={`px-3 py-2 rounded-md transition-colors whitespace-nowrap ${
+            className={`px-2 xl:px-3 py-1.5 xl:py-2 rounded-md transition-colors whitespace-nowrap ${
               pathname.startsWith('/products')
                 ? 'text-[#0B1528] font-semibold bg-slate-100/60'
                 : 'text-slate-600 hover:text-[#0B1528] hover:bg-slate-50'
@@ -278,7 +278,7 @@ export function SiteHeader() {
           <Link
             href="/learn"
             prefetch={false}
-            className={`px-3 py-2 rounded-md transition-colors whitespace-nowrap ${
+            className={`px-2 xl:px-3 py-1.5 xl:py-2 rounded-md transition-colors whitespace-nowrap ${
               pathname.startsWith('/learn')
                 ? 'text-[#0B1528] font-semibold bg-slate-100/60'
                 : 'text-slate-600 hover:text-[#0B1528] hover:bg-slate-50'
@@ -291,7 +291,7 @@ export function SiteHeader() {
           <Link
             href="/projects"
             prefetch={false}
-            className={`px-3 py-2 rounded-md transition-colors whitespace-nowrap ${
+            className={`px-2 xl:px-3 py-1.5 xl:py-2 rounded-md transition-colors whitespace-nowrap ${
               pathname.startsWith('/projects')
                 ? 'text-[#0B1528] font-semibold bg-slate-100/60'
                 : 'text-slate-600 hover:text-[#0B1528] hover:bg-slate-50'
@@ -311,7 +311,7 @@ export function SiteHeader() {
               onClick={() => setActiveMenu((prev) => (prev === 'tools' ? null : 'tools'))}
               aria-expanded={activeMenu === 'tools'}
               aria-haspopup="true"
-              className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors whitespace-nowrap outline-none cursor-pointer ${
+              className={`flex items-center gap-1 px-2 xl:px-3 py-1.5 xl:py-2 rounded-md transition-colors whitespace-nowrap outline-none cursor-pointer ${
                 activeMenu === 'tools' ||
                 ['/tools', '/datasheets', '/library', '/services'].some((r) => pathname.startsWith(r))
                   ? 'text-[#0B1528] font-semibold bg-slate-100/60'
@@ -329,7 +329,7 @@ export function SiteHeader() {
             {/* Mega Menu Dropdown Panel */}
             {activeMenu === 'tools' && (
               <div
-                className="absolute top-full left-0 mt-1.5 w-[390px] rounded-2xl border border-slate-200/90 bg-white/98 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150 z-50"
+                className="absolute top-full left-0 mt-1.5 w-[380px] rounded-2xl border border-slate-200/90 bg-white/98 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150 z-50"
                 onMouseEnter={() => handleMouseEnter('tools')}
                 onMouseLeave={handleMouseLeave}
               >
@@ -377,7 +377,7 @@ export function SiteHeader() {
               onClick={() => setActiveMenu((prev) => (prev === 'ecosystem' ? null : 'ecosystem'))}
               aria-expanded={activeMenu === 'ecosystem'}
               aria-haspopup="true"
-              className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors whitespace-nowrap outline-none cursor-pointer ${
+              className={`flex items-center gap-1 px-2 xl:px-3 py-1.5 xl:py-2 rounded-md transition-colors whitespace-nowrap outline-none cursor-pointer ${
                 activeMenu === 'ecosystem' ||
                 ['/articles', '/blog', '/community', '/partnerships', '/about'].some((r) =>
                   pathname.startsWith(r)
@@ -394,10 +394,10 @@ export function SiteHeader() {
               />
             </button>
 
-            {/* Mega Menu Dropdown Panel */}
+            {/* Mega Menu Dropdown Panel (Anchored to right to avoid overflow) */}
             {activeMenu === 'ecosystem' && (
               <div
-                className="absolute top-full left-0 mt-1.5 w-[390px] rounded-2xl border border-slate-200/90 bg-white/98 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150 z-50"
+                className="absolute top-full right-0 mt-1.5 w-[380px] rounded-2xl border border-slate-200/90 bg-white/98 p-2.5 shadow-2xl backdrop-blur-xl animate-in fade-in-50 zoom-in-95 duration-150 z-50"
                 onMouseEnter={() => handleMouseEnter('ecosystem')}
                 onMouseLeave={handleMouseLeave}
               >
@@ -436,17 +436,17 @@ export function SiteHeader() {
         </nav>
 
         {/* Zone 3: Actions & Account Trigger (Desktop & Mobile) */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 xl:gap-2.5 shrink-0">
           {/* Universal Search Button with Command Hint */}
           <Link
             href="/search"
             prefetch={false}
-            className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs text-slate-500 hover:text-slate-800 transition-colors"
+            className="flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs text-slate-500 hover:text-slate-800 transition-colors"
             title="Search Platform (⌘K / Ctrl+K)"
           >
             <Search className="h-3.5 w-3.5 text-slate-400" />
-            <span className="hidden md:inline">Search...</span>
-            <kbd className="hidden md:inline-flex items-center font-mono text-[9px] bg-white border border-slate-200 px-1 rounded text-slate-400">
+            <span className="hidden xl:inline">Search...</span>
+            <kbd className="hidden xl:inline-flex items-center font-mono text-[9px] bg-white border border-slate-200 px-1 rounded text-slate-400">
               ⌘K
             </kbd>
           </Link>
@@ -466,13 +466,13 @@ export function SiteHeader() {
 
           {/* User Account / Auth Trigger */}
           {loading ? (
-            <div className="h-8 w-20 rounded-md bg-slate-100 animate-pulse" />
+            <div className="h-8 w-16 sm:w-20 rounded-md bg-slate-100 animate-pulse" />
           ) : firebaseUser ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 h-8 text-xs border-slate-200 font-medium">
-                  <User className="h-3.5 w-3.5 text-slate-600" />
-                  <span className="max-w-[100px] truncate">
+                <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 h-8 text-xs border-slate-200 font-medium px-2 sm:px-3">
+                  <User className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                  <span className="max-w-[80px] sm:max-w-[100px] truncate">
                     {profile?.displayName || firebaseUser.displayName || 'Account'}
                   </span>
                 </Button>
@@ -519,10 +519,10 @@ export function SiteHeader() {
             </DropdownMenu>
           ) : (
             <div className="hidden sm:flex items-center gap-1.5">
-              <Button asChild variant="ghost" size="sm" className="h-8 text-xs text-slate-600 hover:text-slate-900">
+              <Button asChild variant="ghost" size="sm" className="h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900">
                 <Link href="/auth/login">Sign In</Link>
               </Button>
-              <Button asChild size="sm" className="h-8 text-xs bg-[#172D4D] hover:bg-[#0B1528] text-white font-medium">
+              <Button asChild size="sm" className="h-8 px-3 text-xs bg-[#172D4D] hover:bg-[#0B1528] text-white font-medium">
                 <Link href="/auth/register">Join</Link>
               </Button>
             </div>
@@ -532,7 +532,7 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
-            className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="lg:hidden inline-flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -542,8 +542,8 @@ export function SiteHeader() {
 
       {/* Mobile Navigation Drawer (Executive, Responsive, Full-Featured) */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-x-0 top-16 bottom-0 z-50 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white h-full max-h-full overflow-y-auto px-5 py-5 space-y-5 border-t border-slate-200 shadow-2xl">
+        <div className="lg:hidden fixed inset-x-0 top-16 h-[calc(100dvh-4rem)] z-50 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white h-full max-h-full overflow-y-auto touch-scroll overscroll-contain px-5 py-5 pb-20 space-y-5 border-t border-slate-200 shadow-2xl">
             {/* Flagship Product Card: Virtual Lab */}
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5">
               <Link
@@ -616,7 +616,7 @@ export function SiteHeader() {
                 />
               </button>
 
-              <div className={`space-y-1.5 ${mobileToolsOpen ? 'block' : 'hidden sm:block'}`}>
+              <div className={`pt-1 space-y-1.5 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 ${mobileToolsOpen ? 'block' : 'hidden'}`}>
                 {TOOLS_REFERENCE_ITEMS.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -624,14 +624,14 @@ export function SiteHeader() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-slate-50 transition-colors"
+                      className="flex items-center gap-3 py-2 px-2.5 rounded-lg hover:bg-slate-50 transition-colors"
                     >
                       <div className={`p-1.5 rounded-md ${item.iconBg} ${item.iconColor} shrink-0`}>
                         <Icon className="h-3.5 w-3.5" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold text-slate-800">{item.title}</div>
-                        <div className="text-[11px] text-slate-500">{item.description}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{item.description}</div>
                       </div>
                     </Link>
                   );
@@ -644,7 +644,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={() => setMobileEcosystemOpen((prev) => !prev)}
-                className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 py-1"
+                className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 py-1 cursor-pointer"
               >
                 <span>Ecosystem &amp; Company</span>
                 <ChevronDown
@@ -654,7 +654,7 @@ export function SiteHeader() {
                 />
               </button>
 
-              <div className={`space-y-1.5 ${mobileEcosystemOpen ? 'block' : 'hidden sm:block'}`}>
+              <div className={`pt-1 space-y-1.5 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 ${mobileEcosystemOpen ? 'block' : 'hidden'}`}>
                 {ECOSYSTEM_ITEMS.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -662,14 +662,14 @@ export function SiteHeader() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-slate-50 transition-colors"
+                      className="flex items-center gap-3 py-2 px-2.5 rounded-lg hover:bg-slate-50 transition-colors"
                     >
                       <div className={`p-1.5 rounded-md ${item.iconBg} ${item.iconColor} shrink-0`}>
                         <Icon className="h-3.5 w-3.5" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold text-slate-800">{item.title}</div>
-                        <div className="text-[11px] text-slate-500">{item.description}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{item.description}</div>
                       </div>
                     </Link>
                   );

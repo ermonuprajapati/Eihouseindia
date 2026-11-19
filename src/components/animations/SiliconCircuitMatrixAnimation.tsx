@@ -15,10 +15,10 @@ export function SiliconCircuitMatrixAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0 [contain:strict]"
     >
-      {/* Soft Ambient Peripheral Glows */}
-      <div className="absolute -top-24 right-1/4 w-[540px] h-[360px] rounded-full bg-blue-600/10 blur-[100px]" />
-      <div className="absolute top-10 right-10 w-[480px] h-[320px] rounded-full bg-amber-500/10 blur-[95px]" />
-      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-sky-500/8 blur-[90px]" />
+      {/* Soft Ambient Peripheral Glows (Hardware Accelerated & Desktop-only for Max Mobile Speed) */}
+      <div className="hidden sm:block absolute -top-24 right-1/4 w-[540px] h-[360px] rounded-full bg-blue-600/10 blur-[90px] transform-gpu pointer-events-none" />
+      <div className="hidden sm:block absolute top-10 right-10 w-[480px] h-[320px] rounded-full bg-amber-500/10 blur-[85px] transform-gpu pointer-events-none" />
+      <div className="hidden sm:block absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-sky-500/8 blur-[80px] transform-gpu pointer-events-none" />
 
       <svg
         className="absolute inset-0 h-full w-full opacity-60"

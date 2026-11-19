@@ -643,7 +643,7 @@ export function EngineeringLabApp() {
   const selectedWire = project.wires.find((w) => w.id === selectedWireId) || null;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#070D18]">
+    <div className="flex flex-col h-screen h-[100dvh] w-full max-w-full overflow-hidden bg-[#070D18]">
       {/* Top Application Header */}
       <LabHeader
         projectTitle={project.title}

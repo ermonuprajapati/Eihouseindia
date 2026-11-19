@@ -81,7 +81,7 @@ export function ProductDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0 gap-0 rounded-2xl border-slate-200">
+      <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto p-0 gap-0 rounded-2xl border-slate-200 touch-scroll">
         <DialogHeader className="sr-only">
           <DialogTitle>{product.name}</DialogTitle>
           <DialogDescription>

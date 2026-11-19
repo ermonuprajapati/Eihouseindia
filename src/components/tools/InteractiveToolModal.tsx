@@ -759,7 +759,7 @@ export function InteractiveToolModal({ tool, onClose }: InteractiveToolModalProp
 
   return (
     <Dialog open={Boolean(tool)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[94vh] overflow-y-auto p-0 gap-0 border-slate-200">
+      <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto p-0 gap-0 border-slate-200 touch-scroll">
         {/* Sticky Modal Header */}
         <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur-md px-6 py-4">
           <div>

@@ -15,9 +15,9 @@ export function ServicesPcbRoutingAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      {/* Soft Ambient Services Glows (Right-Dominant) */}
-      <div className="absolute top-0 right-1/4 w-[500px] h-[340px] rounded-full bg-blue-600/10 blur-[90px]" />
-      <div className="absolute -bottom-10 right-10 w-[440px] h-[300px] rounded-full bg-teal-500/10 blur-[85px]" />
+      {/* Soft Ambient Services Glows (Hardware Accelerated & Desktop-only for Max Mobile Speed) */}
+      <div className="hidden sm:block absolute top-0 right-1/4 w-[500px] h-[340px] rounded-full bg-blue-600/10 blur-[80px] transform-gpu pointer-events-none" />
+      <div className="hidden sm:block absolute -bottom-10 right-10 w-[440px] h-[300px] rounded-full bg-teal-500/10 blur-[75px] transform-gpu pointer-events-none" />
 
       <svg
         className="absolute inset-0 h-full w-full opacity-60"

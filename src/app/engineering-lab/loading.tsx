@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function EngineeringLabLoading() {
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#070D18] text-slate-300 font-mono select-none">
+    <div className="flex h-screen h-[100dvh] w-full max-w-full flex-col items-center justify-center bg-[#070D18] text-slate-300 font-mono select-none">
       <div className="relative flex items-center justify-center h-16 w-16 mb-4">
         <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping" />
         <div className="h-12 w-12 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />

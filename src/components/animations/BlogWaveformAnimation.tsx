@@ -13,8 +13,8 @@ export function BlogWaveformAnimation() {
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 overflow-hidden select-none z-0"
     >
-      <div className="absolute top-0 right-1/4 w-[480px] h-[320px] rounded-full bg-indigo-600/10 blur-[85px]" />
-      <div className="absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-blue-600/10 blur-[80px]" />
+      <div className="hidden sm:block absolute top-0 right-1/4 w-[480px] h-[320px] rounded-full bg-indigo-600/10 blur-[80px] transform-gpu pointer-events-none" />
+      <div className="hidden sm:block absolute -bottom-10 left-10 w-[420px] h-[280px] rounded-full bg-blue-600/10 blur-[75px] transform-gpu pointer-events-none" />
 
       <svg
         className="absolute inset-0 h-full w-full opacity-55"

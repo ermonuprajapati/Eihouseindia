@@ -261,7 +261,7 @@ export function ToolAdminModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto touch-scroll p-0 gap-0">
         <form onSubmit={handleSubmit}>
           {/* Sticky Top Action Bar (Reference: Blog Editor Experience) */}
           <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-4">

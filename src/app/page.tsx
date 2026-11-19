@@ -1,3 +1,4 @@
+import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -36,6 +37,21 @@ import { SiliconCircuitMatrixAnimation } from '@/components/animations/SiliconCi
 
 export const revalidate = 60;
 
+const TECH_TICKER_ITEMS = [
+  { icon: '⚡', iconColor: 'text-amber-400', name: 'STM32 ARM Cortex' },
+  { icon: '🚀', iconColor: 'text-emerald-400', name: 'ESP32-S3 Dual-Core' },
+  { icon: '📐', iconColor: 'text-blue-400', name: 'KiCad 8 EDA Suite' },
+  { icon: '⚙️', iconColor: 'text-orange-400', name: 'Autodesk Fusion 360' },
+  { icon: '🔬', iconColor: 'text-cyan-400', name: 'Wokwi Web Simulator' },
+  { icon: '🧊', iconColor: 'text-red-400', name: 'FreeCAD Parametric' },
+  { icon: '💻', iconColor: 'text-indigo-400', name: 'Visual Studio Code' },
+  { icon: '🌐', iconColor: 'text-amber-400', name: 'Cisco Packet Tracer' },
+  { icon: '📦', iconColor: 'text-sky-400', name: 'Docker & DevOps' },
+  { icon: '🖨️', iconColor: 'text-purple-400', name: 'Bambu Studio 3D' },
+  { icon: '🐍', iconColor: 'text-emerald-400', name: 'Python Automation' },
+  { icon: '📈', iconColor: 'text-rose-400', name: 'Ansys Simulation' },
+];
+
 export default async function HomePage() {
   const [latestPosts, allTools] = await Promise.all([
     getPublishedPosts({ limitCount: 6 }),
@@ -69,35 +85,37 @@ export default async function HomePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="font-display text-4xl sm:text-6xl lg:text-[4rem] font-extrabold tracking-tight text-[#0B1528] leading-[1.08] text-balance">
+                  <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl xl:text-[4rem] font-extrabold tracking-tight text-[#0B1528] leading-[1.1] text-balance">
                     Where Ideas Become Things.
                   </h1>
-                  <p className="text-xl sm:text-2xl font-semibold text-[#172D4D]">
+                  <p className="text-lg sm:text-2xl font-semibold text-[#172D4D]">
                     Engineering Knowledge. Practical Innovation. Real-World Solutions.
                   </p>
                 </div>
 
-                <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
+                <p className="text-sm sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
                   EI House brings together engineering education, practical projects, innovative products,
                   technical services, and a collaborative technology community under one unified ecosystem.
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white">
+                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-2">
+                  <Button asChild size="lg" className="bg-[#172D4D] hover:bg-[#0B1528] text-white w-full sm:w-auto">
                     <Link href="/learn" prefetch={false}>
                       <span>Explore Courses</span>
                       <ArrowRight className="h-4 w-4 ml-1.5" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg">
+                  <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
                     <Link href="/projects" prefetch={false}>Discover Projects</Link>
                   </Button>
-                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
-                    <Link href="/tools" prefetch={false}>Engineering Tools →</Link>
-                  </Button>
-                  <Button asChild variant="ghost" size="lg" className="text-slate-700 hover:text-[#0B1528]">
-                    <Link href="/products" prefetch={false}>Store →</Link>
-                  </Button>
+                  <div className="flex items-center gap-2 w-full sm:w-auto pt-1 sm:pt-0">
+                    <Button asChild variant="ghost" size="sm" className="text-slate-700 hover:text-[#0B1528] flex-1 sm:flex-initial">
+                      <Link href="/tools" prefetch={false}>Tools →</Link>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" className="text-slate-700 hover:text-[#0B1528] flex-1 sm:flex-initial">
+                      <Link href="/products" prefetch={false}>Store →</Link>
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Quick Search Band */}
@@ -196,39 +214,15 @@ export default async function HomePage() {
         {/* Animated Engineering Technologies Ticker */}
         <section className="bg-[#0B1528] border-y border-white/10 text-white py-3 overflow-hidden select-none">
           <div className="flex animate-marquee-slow whitespace-nowrap gap-8 text-xs font-mono font-medium tracking-wide text-slate-300">
-            <span className="flex items-center gap-2"><span className="text-amber-400">⚡</span> STM32 ARM Cortex</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-emerald-400">🚀</span> ESP32-S3 Dual-Core</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-blue-400">📐</span> KiCad 8 EDA Suite</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-orange-400">⚙️</span> Autodesk Fusion 360</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-cyan-400">🔬</span> Wokwi Web Simulator</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-red-400">🧊</span> FreeCAD Parametric</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-indigo-400">💻</span> Visual Studio Code</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-amber-400">🌐</span> Cisco Packet Tracer</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-sky-400">📦</span> Docker &amp; DevOps</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-purple-400">🖨️</span> Bambu Studio 3D</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-emerald-400">🐍</span> Python Automation</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-rose-400">📈</span> Ansys Simulation</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-amber-400">⚡</span> STM32 ARM Cortex</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-emerald-400">🚀</span> ESP32-S3 Dual-Core</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-blue-400">📐</span> KiCad 8 EDA Suite</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-orange-400">⚙️</span> Autodesk Fusion 360</span>
-            <span className="text-slate-600">/</span>
-            <span className="flex items-center gap-2"><span className="text-cyan-400">🔬</span> Wokwi Web Simulator</span>
+            {[...TECH_TICKER_ITEMS, ...TECH_TICKER_ITEMS].map((item, idx) => (
+              <React.Fragment key={idx}>
+                <span className="flex items-center gap-2">
+                  <span className={item.iconColor}>{item.icon}</span>
+                  <span>{item.name}</span>
+                </span>
+                <span className="text-slate-600">/</span>
+              </React.Fragment>
+            ))}
           </div>
         </section>
 
@@ -558,14 +552,14 @@ export default async function HomePage() {
             </div>
 
             {/* Quick Filter Menu Pill Strip matching user suggestion */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 shrink-0">
                 <span className="p-1 rounded bg-slate-200 text-slate-700">
                   <Sparkles className="h-3.5 w-3.5" />
                 </span>
                 <span>Browse by Discipline:</span>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium">
+              <div className="flex items-center gap-2 text-xs font-medium overflow-x-auto no-scrollbar w-full sm:w-auto py-1">
                 <Link
                   href="/tools?category=Electronics"
                   className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-[#0B1528] transition-colors"
