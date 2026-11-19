@@ -175,6 +175,58 @@ export class CircuitSolver {
       }
     }
 
+    // Synthesize physical breadboard seating for through-hole components placed directly on breadboard
+    for (const comp of components) {
+      if (
+        comp.x3d !== undefined &&
+        comp.y3d !== undefined &&
+        comp.z3d !== undefined &&
+        comp.y3d >= 3.5 &&
+        Math.abs(comp.x3d) <= 85 &&
+        Math.abs(comp.z3d) <= 30 &&
+        !comp.type.startsWith('ARDUINO_') &&
+        comp.type !== 'MCU_ARDUINO_UNO' &&
+        comp.type !== 'BATTERY' &&
+        comp.type !== 'BATTERY_9V'
+      ) {
+        const startX = -78.74;
+        const pitchX = 2.54;
+        const rot = comp.rot3d || 0;
+        const isRotated = (rot % 180 !== 0);
+
+        if (comp.pins.length === 2) {
+          const pinAKey = `${comp.id}:${comp.pins[0].id}`;
+          const pinBKey = `${comp.id}:${comp.pins[1].id}`;
+
+          let colA = Math.round((comp.x3d - (isRotated ? 0 : 2.54) - startX) / pitchX) + 1;
+          let colB = Math.round((comp.x3d + (isRotated ? 0 : 2.54) - startX) / pitchX) + 1;
+          colA = Math.max(1, Math.min(63, colA));
+          colB = Math.max(1, Math.min(63, colB));
+          if (colA === colB && !isRotated) {
+            colB = Math.min(63, colA + 1);
+          }
+
+          const isTopA = isRotated ? true : comp.z3d <= 0;
+          const isTopB = isRotated ? false : comp.z3d <= 0;
+
+          const tieA = `bb_tie_col_${colA}_${isTopA ? 'top' : 'bottom'}`;
+          const tieB = `bb_tie_col_${colB}_${isTopB ? 'top' : 'bottom'}`;
+
+          if (breadboardTies.has(tieA)) {
+            union(pinAKey, breadboardTies.get(tieA)!);
+          } else {
+            breadboardTies.set(tieA, pinAKey);
+          }
+
+          if (breadboardTies.has(tieB)) {
+            union(pinBKey, breadboardTies.get(tieB)!);
+          } else {
+            breadboardTies.set(tieB, pinBKey);
+          }
+        }
+      }
+    }
+
     // Assign canonical net IDs
     for (const comp of components) {
       for (const pin of comp.pins) {
@@ -310,13 +362,19 @@ export class CircuitSolver {
         comp.type.startsWith('ARDUINO_') ||
         comp.type.startsWith('ESP32') ||
         comp.type.startsWith('STM32') ||
-        comp.type.startsWith('RASPBERRY_PI_PICO')
+        comp.type.startsWith('RASPBERRY_PI_PICO') ||
+        comp.type === 'MCU_ARDUINO_UNO' ||
+        comp.type.includes('MCU')
       ) {
-        // Wokwi-Style MCU Power Supply (defaults to active USB plug unless explicitly disabled)
-        const isUsbPowered = comp.parameters?.usbPlugged !== false;
-        if (isUsbPowered) {
+        // Board Power Supply (supports USB 5.0V and DC Barrel Jack 9.0V/12.0V)
+        const isDcPowered = comp.parameters?.dcJackPlugged === true;
+        const isUsbPowered = !isDcPowered && comp.parameters?.usbPlugged !== false;
+        const isPowered = isUsbPowered || isDcPowered;
+
+        if (isPowered) {
           const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
           const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
+          const vinPin = this.netMap.get(`${comp.id}:VIN`);
 
           // Support all GND pin designators: GND, GND_1, GND_2, GND_3
           const gndPins = [
@@ -343,10 +401,15 @@ export class CircuitSolver {
             nodeVoltages[pwr3V3Pin] = 3.3;
             fixedNodes.add(pwr3V3Pin);
           }
+          if (isDcPowered && vinPin && !fixedNodes.has(vinPin)) {
+            nodeVoltages[vinPin] = Number(comp.parameters?.dcVoltage ?? 9.0);
+            fixedNodes.add(vinPin);
+          }
         } else {
-          // Unpowered MCU: USB unplugged and no external power -> 5V and 3.3V power rails output 0.0V
+          // Unpowered MCU: USB unplugged and no external power -> 5V, 3.3V, and VIN output 0.0V
           const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
           const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
+          const vinPin = this.netMap.get(`${comp.id}:VIN`);
           if (pwr5VPin && !fixedNodes.has(pwr5VPin)) {
             nodeVoltages[pwr5VPin] = 0.0;
             fixedNodes.add(pwr5VPin);
@@ -354,6 +417,10 @@ export class CircuitSolver {
           if (pwr3V3Pin && !fixedNodes.has(pwr3V3Pin)) {
             nodeVoltages[pwr3V3Pin] = 0.0;
             fixedNodes.add(pwr3V3Pin);
+          }
+          if (vinPin && !fixedNodes.has(vinPin)) {
+            nodeVoltages[vinPin] = 0.0;
+            fixedNodes.add(vinPin);
           }
         }
       }

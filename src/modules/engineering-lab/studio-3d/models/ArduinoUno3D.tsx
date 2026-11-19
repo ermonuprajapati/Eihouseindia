@@ -375,21 +375,28 @@ export function ArduinoUno3D({
         <boxGeometry args={[46, 8, 3]} />
       </mesh>
 
-      {/* Clickable 3D Pin Anchors with interactive hit-spheres */}
+      {/* Clickable 3D Pin Anchors with Authentic Female Receptacle Sockets */}
       {ARDUINO_PINS.map((pin) => {
         const isHovered = hoveredPin === pin.name;
         return (
           <group key={pin.name} position={pin.localPos}>
-            {/* Header socket receptacle hole */}
-            <mesh position={[0, 3.8, 0]}>
-              <boxGeometry args={[1.2, 0.4, 1.2]} />
-              <meshBasicMaterial color="#000000" />
+            {/* Dark recessed female header receptacle socket */}
+            <mesh position={[0, 4.0, 0]}>
+              <boxGeometry args={[1.3, 0.4, 1.3]} />
+              <meshBasicMaterial color={isHovered ? '#0284C7' : '#0B0F19'} />
             </mesh>
 
-            {/* Clickable Pin Target Sphere */}
+            {/* Glowing cyan hover border on header rim */}
+            {isHovered && (
+              <mesh position={[0, 4.22, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.7, 1.25, 4]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
+            )}
+
+            {/* Invisible Responsive Click & Hover Target */}
             <mesh
-              position={[0, 4.2, 0]}
-              material={isHovered ? materials.pinHover : materials.goldPin}
+              position={[0, 4.0, 0]}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();
@@ -402,7 +409,8 @@ export function ArduinoUno3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[isHovered ? 1.6 : 1.0, 12, 12]} />
+              <boxGeometry args={[2.4, 6.0, 2.4]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
 
             {/* Live Hover Tooltip Badge above pin */}

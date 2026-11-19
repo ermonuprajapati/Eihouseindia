@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Canvas, ThreeEvent } from '@react-three/fiber';
+import { Canvas, ThreeEvent, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
@@ -252,6 +252,95 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     params: { closed: false },
   },
 ];
+
+interface DragFrameControllerProps {
+  draggingCompId: string | null;
+  components3d: Component3D[];
+  occupiedHoleIds: Set<string>;
+  hasBreadboard: boolean;
+  onUpdateComponent3D: (comp: Component3D) => void;
+}
+
+function DragFrameController({
+  draggingCompId,
+  components3d,
+  occupiedHoleIds,
+  hasBreadboard,
+  onUpdateComponent3D,
+}: DragFrameControllerProps) {
+  const { camera, raycaster, pointer } = useThree();
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const hitPoint = useMemo(() => new THREE.Vector3(), []);
+  const lastTargetRef = useRef<{ x: number; y: number; z: number } | null>(null);
+
+  useFrame(() => {
+    if (!draggingCompId) {
+      lastTargetRef.current = null;
+      return;
+    }
+    const comp = components3d.find((c) => c.id === draggingCompId);
+    if (!comp) return;
+
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(plane, hitPoint)) {
+      let targetX = hitPoint.x;
+      let targetZ = hitPoint.z;
+      let targetY = comp.y3d;
+
+      const isThroughHole = [
+        'RESISTOR',
+        'LED',
+        'LED_RGB',
+        'CAPACITOR',
+        'CAPACITOR_ELECTROLYTIC',
+        'TIMER_555',
+        'DIP_IC',
+        'DIODE',
+        'SENSOR_LDR',
+        'PUSHBUTTON',
+        'ARDUINO_NANO',
+        'ESP32_DEVKIT',
+        'RASPBERRY_PI_PICO',
+      ].includes(comp.type);
+
+      if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
+        const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
+        if (freeHole) {
+          targetX = freeHole.x;
+          targetZ = freeHole.z;
+          targetY = 5.0; // Breadboard surface elevation
+        }
+      } else {
+        targetX = Math.round(targetX / 2.54) * 2.54;
+        targetZ = Math.round(targetZ / 2.54) * 2.54;
+        if (!isThroughHole) {
+          targetY = 0; // Table surface elevation
+        }
+      }
+
+      targetX = Math.round(targetX * 100) / 100;
+      targetY = Math.round(targetY * 100) / 100;
+      targetZ = Math.round(targetZ * 100) / 100;
+
+      if (
+        !lastTargetRef.current ||
+        lastTargetRef.current.x !== targetX ||
+        lastTargetRef.current.y !== targetY ||
+        lastTargetRef.current.z !== targetZ
+      ) {
+        lastTargetRef.current = { x: targetX, y: targetY, z: targetZ };
+        onUpdateComponent3D({
+          ...comp,
+          x3d: targetX,
+          y3d: targetY,
+          z3d: targetZ,
+        });
+      }
+    }
+  });
+
+  return null;
+}
 
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
@@ -659,8 +748,8 @@ export function Studio3DCanvas({
         camera={{ position: [0, 130, 150], fov: 45, near: 0.1, far: 2000 }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
         onContextMenu={(e) => {
+          e.preventDefault();
           if (activeWireStart) {
-            e.preventDefault();
             setActiveWireStart(null);
           }
         }}
@@ -704,9 +793,18 @@ export function Studio3DCanvas({
           maxDistance={600}
         />
 
+        {/* Rock-solid Frame Drag Controller */}
+        <DragFrameController
+          draggingCompId={draggingCompId}
+          components3d={components3d}
+          occupiedHoleIds={occupiedHoleIds}
+          hasBreadboard={hasBreadboard}
+          onUpdateComponent3D={onUpdateComponent3D}
+        />
+
         {/* Transparent Interactive Drag Raycasting Plane */}
         <mesh
-          visible={false}
+          visible={true}
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, 0, 0]}
           onPointerMove={(e) => {

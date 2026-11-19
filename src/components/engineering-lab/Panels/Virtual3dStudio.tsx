@@ -89,6 +89,40 @@ export function Virtual3dStudio({
     }
   }, []);
 
+  // Forensically synchronize changes made to components externally (e.g. Inspector MCU Physical Representation, Power switch, values)
+  useEffect(() => {
+    if (independentComponents === null) return;
+    setIndependentComponents((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const next = prev.map((c3d) => {
+        const matching = components.find((c) => c.id === c3d.id);
+        if (!matching) return c3d;
+
+        let mappedType = matching.type;
+        if (matching.type.includes('MEGA') || matching.model3d?.includes('mega')) mappedType = 'ARDUINO_MEGA';
+        else if (matching.type.includes('ARDUINO_NANO') || matching.model3d?.includes('nano')) mappedType = 'ARDUINO_NANO';
+        else if (matching.type.includes('ARDUINO') || matching.type === 'MCU_ARDUINO_UNO' || matching.model3d?.includes('uno')) mappedType = 'ARDUINO_UNO';
+        else if (matching.type.includes('ESP32') || matching.model3d?.includes('esp32')) mappedType = 'ESP32_DEVKIT';
+        else if (matching.type.includes('PICO') || matching.model3d?.includes('pico')) mappedType = 'RASPBERRY_PI_PICO';
+
+        const paramsChanged = JSON.stringify(c3d.parameters || {}) !== JSON.stringify(matching.parameters || {});
+        if (c3d.type !== mappedType || c3d.value !== matching.value || c3d.label !== matching.label || paramsChanged) {
+          changed = true;
+          return {
+            ...c3d,
+            type: mappedType,
+            value: matching.value,
+            label: matching.label,
+            parameters: { ...matching.parameters },
+          };
+        }
+        return c3d;
+      });
+      return changed ? next : prev;
+    });
+  }, [components, independentComponents]);
+
   // Convert 2D schematic components to 3D representation without placing any parts floating in air
   const schematicTo3DComponents = useCallback((): Component3D[] => {
     let breadboardCol = 0;

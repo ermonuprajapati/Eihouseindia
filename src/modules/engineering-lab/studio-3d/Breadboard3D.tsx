@@ -183,7 +183,6 @@ export function Breadboard3D({
         receiveShadow
         castShadow
         onPointerMove={(e) => {
-          e.stopPropagation();
           const localPoint = e.point.clone();
           localPoint.x -= position[0];
           localPoint.z -= position[2];
