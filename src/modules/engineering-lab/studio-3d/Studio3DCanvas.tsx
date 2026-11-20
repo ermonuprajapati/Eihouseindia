@@ -640,58 +640,66 @@ export function Studio3DCanvas({
       const p = (pinId || '').toLowerCase();
       if (p === 'anode' || p === 'a' || p === '1' || p === '+') lx = -1.27;
       else lx = 1.27;
-      ly = -5;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
     } else if (comp.type === 'LED_RGB') {
       if (pinId === 'R' || pinId === '1') lx = -3.81;
       else if (pinId === 'C' || pinId === 'GND' || pinId === '2') lx = -1.27;
       else if (pinId === 'G' || pinId === '3') lx = 1.27;
       else lx = 3.81;
-      ly = -3.8;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54;
     } else if (comp.type === 'BUZZER_ACTIVE') {
       if (pinId === '+' || pinId === '1') lx = -2.54;
       else lx = 2.54;
-      ly = -3.8;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54;
     } else if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
       if (pinId === '1' || pinId === 'anode') lx = -5.08;
       else lx = 5.08;
-      ly = -1.0;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54;
     } else if (comp.type === 'SENSOR_LDR') {
       if (pinId === '1') lx = -2.54;
       else lx = 2.54;
-      ly = -1.0;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54;
     } else if (comp.type === 'SLIDE_SWITCH') {
       if (pinId === '1') lx = -2.54;
       else if (pinId === '2') lx = 0;
       else lx = 2.54;
-      ly = -1.0;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54;
     } else if (comp.type === 'RESISTOR') {
       if (pinId === '1') lx = -5.08;
       else lx = 5.08;
-      ly = -5;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
     } else if (comp.type === 'POTENTIOMETER') {
       if (pinId === '1') { lx = -2.54; lz = 0; }
       else if (pinId === '2' || pinId === 'wiper') { lx = 0; lz = 2.54; }
       else { lx = 2.54; lz = 0; }
-      ly = -4;
+      ly = 0;
     } else if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
       if (pinId === '1' || pinId === '+') lx = -1.27;
       else lx = 1.27;
-      ly = -5;
+      ly = 0;
+      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
     } else if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
       const pNum = parseInt(pinId) || 1;
       if (pNum >= 1 && pNum <= 4) {
         lx = -3.81 + (pNum - 1) * 2.54;
-        lz = -3.34;
+        lz = -5.88; // Adjacent hole in Row D for pins 1..4
       } else {
         lx = 3.81 - (pNum - 5) * 2.54;
-        lz = 3.34;
+        lz = 5.88; // Adjacent hole in Row G for pins 5..8
       }
-      ly = -3;
+      ly = 0;
     } else if (comp.type === 'BATTERY_9V' || comp.type === 'BATTERY') {
       const p = (pinId || '').toLowerCase();
       if (p === '+' || p === 'p' || p === 'pos' || p === '1') lx = -6.5;
       else lx = 6.5;
-      ly = 27;
+      ly = 48;
     } else if (comp.type === 'PUSHBUTTON') {
       if (pinId === '1A' || pinId === '1') { lx = -2.54; lz = -2.54; }
       else if (pinId === '1B' || pinId === '2') { lx = 2.54; lz = -2.54; }
@@ -818,6 +826,12 @@ export function Studio3DCanvas({
             setActiveWireStart(null);
           }
         }}
+        onPointerMissed={() => {
+          onSelectComponent(null);
+          onSelectWire(null);
+          setActiveWireStart(null);
+          setEditingWireEndpoint(null);
+        }}
       >
         <color attach="background" args={['#070E1A']} />
 
@@ -835,7 +849,17 @@ export function Studio3DCanvas({
         {/* Grounded ESD Antistatic Workbench Mat */}
         <group position={[0, -0.1, 0]}>
           {/* Main ESD Mat Body */}
-          <mesh receiveShadow position={[0, 0, 0]}>
+          <mesh
+            receiveShadow
+            position={[0, 0, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectComponent(null);
+              onSelectWire(null);
+              setActiveWireStart(null);
+              setEditingWireEndpoint(null);
+            }}
+          >
             <boxGeometry args={[440, 0.2, 280]} />
             <meshStandardMaterial
               color="#0f172a"

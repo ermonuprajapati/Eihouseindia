@@ -44,8 +44,8 @@ export function Resistor3D({
     };
   }, [isBurned]);
 
-  const P_PIN1: [number, number, number] = [-5.08, -5, 0];
-  const P_PIN2: [number, number, number] = [5.08, -5, 0];
+  const P_PIN1: [number, number, number] = [-5.08, 0, 0];
+  const P_PIN2: [number, number, number] = [5.08, 0, 0];
 
   return (
     <group position={position} rotation={rotation}>

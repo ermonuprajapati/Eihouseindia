@@ -4,8 +4,9 @@ import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Studio3DCanvas } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
+import { findNearestRailHoleForColumn } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
-import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw } from 'lucide-react';
+import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders } from 'lucide-react';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -43,6 +44,8 @@ interface Virtual3dStudioProps {
   >;
   wireCurrents?: Record<string, number>;
   gpioStates?: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
+  isInspectorOpen?: boolean;
+  onToggleInspector?: () => void;
 }
 
 interface Studio3DHistoryState {
@@ -65,6 +68,8 @@ export function Virtual3dStudio({
   onDeleteWire = () => {},
   isSimulating,
   simulationStates,
+  isInspectorOpen,
+  onToggleInspector,
 }: Virtual3dStudioProps) {
   // Independent 3D Studio document state (Decoupled from 2D Schematic)
   const [independentComponents, setIndependentComponents] = useState<Component3D[] | null>(null);
@@ -154,7 +159,7 @@ export function Virtual3dStudio({
             value: comp.value,
             parameters: comp.parameters || {},
             x3d: comp.x3d ?? -20,
-            y3d: comp.y3d ?? 5.0,
+            y3d: comp.y3d ?? 8.5,
             z3d: comp.z3d ?? 8.42,
             rotY: comp.rot3d ?? 0,
           };
@@ -290,7 +295,7 @@ export function Virtual3dStudio({
       }
 
       // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
-      // Straddle breadboard center isolation trench directly at y = 5.0
+      // Straddle breadboard center isolation trench directly seated flush at y = 8.5
       // Col 25 center aligns pins exactly with breadboard columns 24..27
       if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
         const colX = -19.05 + (breadboardCol % 3) * 35.56;
@@ -302,14 +307,14 @@ export function Virtual3dStudio({
           value: comp.value,
           parameters: comp.parameters || {},
           x3d: colX,
-          y3d: 5.0, // Placed firmly on breadboard
+          y3d: 8.5, // Resting flush on breadboard
           z3d: 0,   // Straddling center isolation trench (pins in rows E and F)
           rotY: 0,
         };
       }
 
       // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs):
-      // Snap directly into breadboard 5-hole terminal rows at y = 5.0
+      // Snap directly into breadboard 5-hole terminal rows seated at y = 8.5
       const colX = -55 + (breadboardCol * 15.24) % 110;
       const isTopStrip = breadboardCol % 2 === 0;
       breadboardCol++;
@@ -320,7 +325,7 @@ export function Virtual3dStudio({
         value: comp.value,
         parameters: comp.parameters || {},
         x3d: colX,
-        y3d: 5.0, // Firmly plugged into breadboard holes
+        y3d: 8.5, // Firmly plugged into breadboard holes
         z3d: isTopStrip ? -8.42 : 8.42, // Seated in terminal rows
         rotY: 0,
       };
@@ -381,10 +386,12 @@ export function Virtual3dStudio({
         return;
       }
 
-      // If one end connects to battery positive, route it as tapping from the Red (+) breadboard rail
+      // If one end connects to battery positive, route it as a short vertical drop from nearest Red (+) rail hole
       if (fromIsBat && (fPin === 'p' || fPin === '+')) {
-        const railHole = `bb_rail_top_pos_${posRailHoleIdx}`;
-        posRailHoleIdx += 2;
+        const toComp = components.find((c) => c.id === w.toCompId);
+        const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
+        const isTop = (toComp?.z3d ?? -8) <= 0;
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -395,8 +402,10 @@ export function Virtual3dStudio({
         return;
       }
       if (toIsBat && (tPin === 'p' || tPin === '+')) {
-        const railHole = `bb_rail_top_pos_${posRailHoleIdx}`;
-        posRailHoleIdx += 2;
+        const fromComp = components.find((c) => c.id === w.fromCompId);
+        const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
+        const isTop = (fromComp?.z3d ?? -8) <= 0;
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -407,10 +416,12 @@ export function Virtual3dStudio({
         return;
       }
 
-      // If one end connects to a schematic GND symbol, tap from the Blue (-) breadboard ground rail
+      // If one end connects to a schematic GND symbol, drop directly from nearest Blue (-) ground rail hole
       if (fromIsGnd) {
-        const railHole = `bb_rail_top_neg_${negRailHoleIdx}`;
-        negRailHoleIdx += 2;
+        const toComp = components.find((c) => c.id === w.toCompId);
+        const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
+        const isTop = (toComp?.z3d ?? -8) <= 0;
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -421,8 +432,10 @@ export function Virtual3dStudio({
         return;
       }
       if (toIsGnd) {
-        const railHole = `bb_rail_top_neg_${negRailHoleIdx}`;
-        negRailHoleIdx += 2;
+        const fromComp = components.find((c) => c.id === w.fromCompId);
+        const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
+        const isTop = (fromComp?.z3d ?? -8) <= 0;
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -752,7 +765,7 @@ export function Virtual3dStudio({
   return (
     <div className="relative w-full h-full flex flex-col bg-[#070D18] select-none overflow-hidden">
       {/* Top 3D Studio Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 z-10 shrink-0 overflow-hidden">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 sm:px-4 z-10 shrink-0 overflow-x-auto overflow-y-hidden min-w-0 max-w-full scrollbar-none gap-2">
         <div className="flex items-center gap-2 shrink-0">
           <Box className="w-4 h-4 text-cyan-400" />
           <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider hidden sm:inline">
@@ -835,6 +848,22 @@ export function Virtual3dStudio({
             <span className="hidden sm:inline">Save 3D</span>
             <span className="sm:hidden">Save</span>
           </button>
+
+          {onToggleInspector && (
+            <button
+              type="button"
+              onClick={onToggleInspector}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors cursor-pointer shrink-0 border ${
+                isInspectorOpen
+                  ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 font-bold'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700'
+              }`}
+              title="Toggle Right Property Inspector"
+            >
+              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Inspector</span>
+            </button>
+          )}
         </div>
       </div>
 

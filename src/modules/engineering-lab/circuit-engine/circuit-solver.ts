@@ -26,7 +26,7 @@ export interface SolverStepResult {
   faults?: Array<{
     compId: string;
     compLabel: string;
-    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY';
+    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY' | 'SHORT_CIRCUIT' | 'MISSING_GND' | 'OPEN_CIRCUIT' | 'DISCONNECTED';
     message: string;
     timestamp: number;
   }>;
@@ -109,7 +109,7 @@ export class CircuitSolver {
   private recordedFaults: Array<{
     compId: string;
     compLabel: string;
-    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY';
+    type: 'OVERCURRENT' | 'OVERVOLTAGE' | 'OVERPOWER' | 'REVERSE_POLARITY' | 'SHORT_CIRCUIT' | 'MISSING_GND' | 'OPEN_CIRCUIT' | 'DISCONNECTED';
     message: string;
     timestamp: number;
   }> = [];
@@ -272,6 +272,43 @@ export class CircuitSolver {
           } else {
             breadboardTies.set(tieB, pinBKey);
           }
+        } else if (comp.pins.length === 8 || comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
+          // DIP-8 straddles center isolation notch: Pins 1..4 on Row E (top), Pins 5..8 on Row F (bottom)
+          const centerCol = Math.round((comp.x3d - startX) / pitchX) + 1;
+          for (let pIdx = 1; pIdx <= 8; pIdx++) {
+            const pinObj = comp.pins.find((p) => p.id === String(pIdx) || p.name === String(pIdx)) || comp.pins[pIdx - 1];
+            if (!pinObj) continue;
+            const pinKey = `${comp.id}:${pinObj.id}`;
+            let col = centerCol;
+            let isTop = true;
+            if (pIdx >= 1 && pIdx <= 4) {
+              col = centerCol - 2 + (pIdx - 1);
+              isTop = true;
+            } else {
+              col = centerCol + 1 - (pIdx - 5);
+              isTop = false;
+            }
+            col = Math.max(1, Math.min(63, col));
+            const tie = `bb_tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
+            if (breadboardTies.has(tie)) {
+              union(pinKey, breadboardTies.get(tie)!);
+            } else {
+              breadboardTies.set(tie, pinKey);
+            }
+          }
+        } else if (comp.pins.length === 3 || comp.type === 'POTENTIOMETER') {
+          const centerCol = Math.round((comp.x3d - startX) / pitchX) + 1;
+          const isTop = (comp.z3d || 0) <= 0;
+          for (let pIdx = 0; pIdx < comp.pins.length; pIdx++) {
+            const pinKey = `${comp.id}:${comp.pins[pIdx].id}`;
+            const col = Math.max(1, Math.min(63, centerCol - 1 + pIdx));
+            const tie = `bb_tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
+            if (breadboardTies.has(tie)) {
+              union(pinKey, breadboardTies.get(tie)!);
+            } else {
+              breadboardTies.set(tie, pinKey);
+            }
+          }
         }
       }
     }
@@ -370,7 +407,18 @@ export class CircuitSolver {
         const vVal = Number(comp.parameters?.voltage ?? parseFloat(comp.value) ?? 9.0);
 
         if (pNet && nNet) {
-          if (nNet === this.gndNetId) {
+          if (pNet === nNet) {
+            const shortFault = `FAULT: Direct short circuit detected across ${comp.label || 'Power Source'}! Terminals are connected together.`;
+            if (!this.recordedFaults.some((f) => f.compId === comp.id && f.type === 'SHORT_CIRCUIT')) {
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Power Source',
+                type: 'SHORT_CIRCUIT',
+                message: shortFault,
+                timestamp: Date.now(),
+              });
+            }
+          } else if (nNet === this.gndNetId) {
             nodeVoltages[pNet] = vVal;
             fixedNodes.add(pNet);
           } else if (pNet === this.gndNetId) {

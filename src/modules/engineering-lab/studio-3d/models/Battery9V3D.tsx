@@ -93,26 +93,26 @@ export function Battery9V3D({
     return texture;
   }, []);
 
-  const P_POS: [number, number, number] = [-6.5, 27, 0];
-  const P_NEG: [number, number, number] = [6.5, 27, 0];
+  const P_POS: [number, number, number] = [-6.5, 48, 0];
+  const P_NEG: [number, number, number] = [6.5, 48, 0];
 
   return (
     <group position={position} rotation={rotation}>
       {/* Selection Box */}
       {isSelected && (
-        <mesh position={[0, 12, 0]}>
-          <boxGeometry args={[28, 52, 20]} />
+        <mesh position={[0, 23, 0]}>
+          <boxGeometry args={[28, 48, 20]} />
           <meshBasicMaterial color="#38BDF8" wireframe />
         </mesh>
       )}
 
-      {/* Main 9V Rectangular Block Casing */}
-      <mesh position={[0, 12, 0]} material={materials.body} castShadow>
+      {/* Main 9V Rectangular Block Casing - Resting strictly on floor (y = 0) */}
+      <mesh position={[0, 23, 0]} material={materials.body} castShadow>
         <boxGeometry args={[25, 46, 17]} />
       </mesh>
 
       {/* Front Label Accent with 9V Alkaline Silkscreen */}
-      <mesh position={[0, 12, 8.6]}>
+      <mesh position={[0, 23, 8.6]}>
         <planeGeometry args={[22, 40]} />
         {silkscreenTexture ? (
           <meshBasicMaterial map={silkscreenTexture} />
@@ -122,17 +122,17 @@ export function Battery9V3D({
       </mesh>
 
       {/* Top Insulator Cap */}
-      <mesh position={[0, 25.2, 0]} material={materials.body}>
+      <mesh position={[0, 46.3, 0]} material={materials.body}>
         <boxGeometry args={[24, 0.6, 16]} />
       </mesh>
 
       {/* Positive Terminal (+) Octagonal Snap Socket */}
-      <mesh position={[-6.5, 26, 0]} material={materials.snapMetal}>
+      <mesh position={[-6.5, 47.1, 0]} material={materials.snapMetal}>
         <cylinderGeometry args={[2.5, 2.5, 2, 8]} />
       </mesh>
 
       {/* Negative Terminal (-) Circular Stud */}
-      <mesh position={[6.5, 26, 0]} material={materials.snapMetal}>
+      <mesh position={[6.5, 47.1, 0]} material={materials.snapMetal}>
         <cylinderGeometry args={[2.0, 2.0, 2.4, 16]} />
       </mesh>
 

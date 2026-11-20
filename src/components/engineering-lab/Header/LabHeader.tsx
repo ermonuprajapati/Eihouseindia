@@ -111,7 +111,7 @@ export function LabHeader({
             type="text"
             value={projectTitle}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="bg-slate-900/80 hover:bg-slate-900 text-xs font-medium text-slate-200 px-1.5 sm:px-2 py-1 rounded border border-slate-700/80 focus:border-emerald-500 focus:outline-none transition-all w-20 sm:w-28 md:w-32 lg:w-36 xl:w-48 truncate"
+            className="bg-slate-900/80 hover:bg-slate-900 text-xs font-medium text-slate-200 px-1.5 sm:px-2 py-1 rounded border border-slate-700/80 focus:border-emerald-500 focus:outline-none transition-all w-20 sm:w-28 md:w-32 lg:w-36 xl:w-40 truncate"
             title="Click to rename project"
           />
           {hasUnsavedChanges ? (
@@ -146,7 +146,7 @@ export function LabHeader({
       <nav className="hidden md:flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-800 text-xs flex-shrink-0">
         <button
           onClick={() => onModeChange('schematic')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'schematic'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -159,7 +159,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('virtual3d')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'virtual3d'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -172,7 +172,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('instruments')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'instruments'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -185,7 +185,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('pcb2d')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'pcb2d'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -198,7 +198,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('pcb3d')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'pcb3d'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -211,7 +211,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('firmware')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'firmware'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -224,7 +224,7 @@ export function LabHeader({
 
         <button
           onClick={() => onModeChange('calculators')}
-          className={`px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
+          className={`px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all flex-shrink-0 ${
             activeMode === 'calculators'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -232,26 +232,26 @@ export function LabHeader({
           title="R&D Engineering Calculators"
         >
           <Calculator className="w-3.5 h-3.5" />
-          <span className="hidden xl:inline">Calculators</span>
+          <span className="hidden 2xl:inline">Calculators</span>
         </button>
 
         <button
           onClick={onOpenExperiments}
-          className="px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1 font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 transition-all border-l border-slate-800 ml-0.5 flex-shrink-0"
+          className="px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1 font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 transition-all border-l border-slate-800 ml-0.5 flex-shrink-0"
           title="Guided Electronics Experiments"
         >
           <BookOpen className="w-3.5 h-3.5" />
-          <span className="hidden xl:inline">Experiments</span>
+          <span className="hidden 2xl:inline">Experiments</span>
         </button>
 
         {onOpenCommunityProjects && (
           <button
             onClick={onOpenCommunityProjects}
-            className="px-2 xl:px-2.5 py-1.5 rounded-md flex items-center gap-1 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all border-l border-slate-800 relative group flex-shrink-0"
+            className="px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all border-l border-slate-800 relative group flex-shrink-0"
             title="Explore Wokwi-grade community projects & open in 1 click"
           >
             <Globe className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform" />
-            <span className="hidden xl:inline">Community Hub</span>
+            <span className="hidden 2xl:inline">Community Hub</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping absolute top-1 right-1" />
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute top-1 right-1" />
           </button>
@@ -261,7 +261,7 @@ export function LabHeader({
       {/* Primary Actions: Simulation Controls & File Operations (Always visible, flex-shrink-0) */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
         {/* Undo / Redo & Workspace Layout Controls */}
-        <div className="hidden xl:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
+        <div className="hidden 2xl:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
           <button
             onClick={onUndo}
             disabled={!canUndo}

@@ -259,89 +259,89 @@ export function CalculatorsPanel() {
   };
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
+    <div className="flex-1 flex flex-col lg:flex-row bg-[#070D18] text-slate-200 select-none overflow-hidden h-full min-w-0 max-w-full">
       {/* Left Navigation Menu */}
-      <div className="w-full lg:w-72 bg-slate-900/90 border-r border-slate-800 p-4 flex flex-col">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-800 mb-4">
+      <div className="w-full lg:w-72 bg-slate-900/90 border-b lg:border-b-0 lg:border-r border-slate-800 p-3 lg:p-4 flex flex-col shrink-0 min-w-0">
+        <div className="flex items-center gap-2 pb-2.5 lg:pb-3 border-b border-slate-800 mb-2.5 lg:mb-4">
           <Calculator className="w-4 h-4 text-emerald-400" />
           <h2 className="text-xs font-bold text-white uppercase font-mono tracking-wider">
             R&D Engineering Calculators
           </h2>
         </div>
 
-        <nav className="space-y-1 text-xs font-medium">
+        <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 lg:space-y-1 pb-1.5 lg:pb-0 scrollbar-none text-xs font-medium">
           <button
             onClick={() => setActiveTab('555')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === '555' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Cpu className="w-4 h-4 text-amber-400" />
+            <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
             <span>NE555 Astable / Monostable</span>
           </button>
 
           <button
             onClick={() => setActiveTab('ohm')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'ohm' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Zap className="w-4 h-4 text-yellow-400" />
+            <Zap className="w-4 h-4 text-yellow-400 shrink-0" />
             <span>Ohm&apos;s Law & Power</span>
           </button>
 
           <button
             onClick={() => setActiveTab('divider')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'divider' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Sliders className="w-4 h-4 text-blue-400" />
+            <Sliders className="w-4 h-4 text-blue-400 shrink-0" />
             <span>Voltage Divider</span>
           </button>
 
           <button
             onClick={() => setActiveTab('led')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'led' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Activity className="w-4 h-4 text-rose-400" />
+            <Activity className="w-4 h-4 text-rose-400 shrink-0" />
             <span>LED Current Limiter</span>
           </button>
 
           <button
             onClick={() => setActiveTab('rc')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'rc' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Waves className="w-4 h-4 text-cyan-400" />
+            <Waves className="w-4 h-4 text-cyan-400 shrink-0" />
             <span>RC Cutoff & Time Constant</span>
           </button>
 
           <button
             onClick={() => setActiveTab('lc')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'lc' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Activity className="w-4 h-4 text-purple-400" />
+            <Activity className="w-4 h-4 text-purple-400 shrink-0" />
             <span>LC Resonant Frequency</span>
           </button>
 
           <button
             onClick={() => setActiveTab('pcb')}
-            className={`w-full px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left ${
+            className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
               activeTab === 'pcb' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <Layers className="w-4 h-4 text-emerald-400" />
+            <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>PCB Trace Width (IPC-2152)</span>
           </button>
         </nav>
 
-        <div className="mt-auto p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono">
+        <div className="hidden lg:block mt-auto p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono">
           <div className="text-emerald-400 font-bold mb-1">EI House R&D Lab</div>
           Validated closed-form engineering formulations based on IEC/IEEE and IPC standards.
         </div>

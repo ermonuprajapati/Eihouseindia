@@ -48,59 +48,63 @@ export function InstrumentPanel({
   return (
     <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* Benchtop Chassis Sub-Navigation Bar */}
-      <div className="h-11 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-4 shrink-0 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-1.5 text-xs font-mono">
+      <div className="h-11 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 shrink-0 shadow-lg backdrop-blur overflow-x-auto min-w-0 max-w-full">
+        <div className="flex items-center gap-1.5 text-xs font-mono min-w-0 shrink-0">
           <button
             onClick={() => setActiveTab('scope')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-2 font-bold cursor-pointer transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 font-bold cursor-pointer transition-all shrink-0 ${
               activeTab === 'scope'
                 ? 'bg-amber-500/20 text-yellow-300 border border-yellow-500/60 shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Activity className="w-3.5 h-3.5 text-yellow-400" />
-            <span>4-CH Storage Oscilloscope (DSO)</span>
+            <span className="hidden xl:inline">4-CH Storage Oscilloscope (DSO)</span>
+            <span className="xl:hidden">Oscilloscope</span>
           </button>
 
           <button
             onClick={() => setActiveTab('multimeter')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-2 font-bold cursor-pointer transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 font-bold cursor-pointer transition-all shrink-0 ${
               activeTab === 'multimeter'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Gauge className="w-3.5 h-3.5 text-emerald-400" />
-            <span>6.5-Digit True-RMS Multimeter</span>
+            <span className="hidden xl:inline">6.5-Digit True-RMS Multimeter</span>
+            <span className="xl:hidden">Multimeter</span>
           </button>
 
           <button
             onClick={() => setActiveTab('funcgen')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-2 font-bold cursor-pointer transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 font-bold cursor-pointer transition-all shrink-0 ${
               activeTab === 'funcgen'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/60 shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Radio className="w-3.5 h-3.5 text-purple-400" />
-            <span>Dual DDS Function Gen (AWG)</span>
+            <span className="hidden xl:inline">Dual DDS Function Gen (AWG)</span>
+            <span className="xl:hidden">Function Gen</span>
           </button>
 
           <button
             onClick={() => setActiveTab('logic')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-2 font-bold cursor-pointer transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 font-bold cursor-pointer transition-all shrink-0 ${
               activeTab === 'logic'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Binary className="w-3.5 h-3.5 text-cyan-400" />
-            <span>16-CH Logic Analyzer</span>
+            <span className="hidden xl:inline">16-CH Logic Analyzer</span>
+            <span className="xl:hidden">Logic Analyzer</span>
           </button>
         </div>
 
         {/* Global Simulation & Virtual Rack Live Indicator */}
-        <div className="flex items-center gap-3 text-xs font-mono">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono shrink-0 pl-2">
           {onToggleSimulation && (
             <button
               onClick={onToggleSimulation}

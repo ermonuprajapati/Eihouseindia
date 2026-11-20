@@ -87,8 +87,8 @@ export function Led3D({
   }, [hex, isIlluminated, effectiveBrightness, isBurned]);
 
   // Lead spacing: 2.54mm between Anode (x = -1.27) and Cathode (x = 1.27)
-  const P_ANODE: [number, number, number] = [-1.27, -5, 0];
-  const P_CATHODE: [number, number, number] = [1.27, -5, 0];
+  const P_ANODE: [number, number, number] = [-1.27, 0, 0];
+  const P_CATHODE: [number, number, number] = [1.27, 0, 0];
 
   return (
     <group position={position} rotation={rotation}>

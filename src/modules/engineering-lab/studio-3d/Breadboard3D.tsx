@@ -34,7 +34,7 @@ export function Breadboard3D({
     const dummy = new THREE.Object3D();
 
     ALL_830_HOLES.forEach((h, i) => {
-      dummy.position.set(h.x, 0.45, h.z);
+      dummy.position.set(h.x, BB830_HEIGHT - 0.05, h.z);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
@@ -176,9 +176,9 @@ export function Breadboard3D({
 
   return (
     <group position={position}>
-      {/* Main ABS Plastic Breadboard Substrate */}
+      {/* Main ABS Plastic Breadboard Substrate - Resting strictly on Floor (y = 0) */}
       <mesh
-        position={[0, -BB830_HEIGHT / 2 + 0.5, 0]}
+        position={[0, BB830_HEIGHT / 2, 0]}
         material={materials.absBody}
         receiveShadow
         castShadow
@@ -213,32 +213,32 @@ export function Breadboard3D({
 
       {/* High-Resolution Breadboard Silkscreen Overlay (Rails, Polarity, Column Numbers & Row Letters) */}
       {silkscreenTexture && (
-        <mesh position={[0, 0.51, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, BB830_HEIGHT + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[BB830_WIDTH, BB830_DEPTH]} />
           <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.96} />
         </mesh>
       )}
 
       {/* Center IC Isolation Trench */}
-      <mesh position={[0, 0.4, 0]} material={materials.trench}>
+      <mesh position={[0, BB830_HEIGHT - 0.2, 0]} material={materials.trench}>
         <boxGeometry args={[BB830_WIDTH - 8, 0.4, 3.8]} />
       </mesh>
 
       {/* Red & Blue Power Rail Silk Lines */}
       {/* Top Positive (+) Red Line */}
-      <mesh position={[0, 0.52, -23.5]} material={materials.redRail}>
+      <mesh position={[0, BB830_HEIGHT + 0.02, -23.5]} material={materials.redRail}>
         <boxGeometry args={[BB830_WIDTH - 12, 0.05, 0.4]} />
       </mesh>
       {/* Top Negative (-) Blue Line */}
-      <mesh position={[0, 0.52, -17.0]} material={materials.blueRail}>
+      <mesh position={[0, BB830_HEIGHT + 0.02, -17.0]} material={materials.blueRail}>
         <boxGeometry args={[BB830_WIDTH - 12, 0.05, 0.4]} />
       </mesh>
       {/* Bottom Positive (+) Red Line */}
-      <mesh position={[0, 0.52, 17.0]} material={materials.redRail}>
+      <mesh position={[0, BB830_HEIGHT + 0.02, 17.0]} material={materials.redRail}>
         <boxGeometry args={[BB830_WIDTH - 12, 0.05, 0.4]} />
       </mesh>
       {/* Bottom Negative (-) Blue Line */}
-      <mesh position={[0, 0.52, 23.5]} material={materials.blueRail}>
+      <mesh position={[0, BB830_HEIGHT + 0.02, 23.5]} material={materials.blueRail}>
         <boxGeometry args={[BB830_WIDTH - 12, 0.05, 0.4]} />
       </mesh>
 
@@ -256,12 +256,12 @@ export function Breadboard3D({
         <group>
           {/* Subtle connected strip highlight for all tieGroup holes */}
           {(HOLES_BY_TIE_GROUP.get(hoveredHole.tieGroup) || []).map((th) => (
-            <mesh key={th.id} position={[th.x, 0.56, th.z]} rotation={[-Math.PI / 2, 0, 0]} material={materials.tieGroupAura}>
+            <mesh key={th.id} position={[th.x, BB830_HEIGHT + 0.03, th.z]} rotation={[-Math.PI / 2, 0, 0]} material={materials.tieGroupAura}>
               <circleGeometry args={[0.9, 12]} />
             </mesh>
           ))}
           {/* Active Hover Snap Indicator Ring */}
-          <group position={[hoveredHole.x, 0.6, hoveredHole.z]}>
+          <group position={[hoveredHole.x, BB830_HEIGHT + 0.04, hoveredHole.z]}>
             <mesh rotation={[-Math.PI / 2, 0, 0]} material={materials.snapRing}>
               <ringGeometry args={[0.9, 1.4, 16]} />
             </mesh>

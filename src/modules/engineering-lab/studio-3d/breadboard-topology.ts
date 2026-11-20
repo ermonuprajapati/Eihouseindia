@@ -15,7 +15,7 @@ export interface BreadboardHole3D {
   id: string;
   name: string;
   x: number;
-  y: number; // surface elevation (y = 0.5)
+  y: number; // surface elevation (y = BB830_HEIGHT = 8.5mm when resting on y = 0 floor)
   z: number;
   section: 'terminal_top' | 'terminal_bottom' | 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg';
   tieGroup: string;
@@ -68,7 +68,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
         id: `bb_col_${col}_${row}`,
         name: `Col ${col}, Row ${row}`,
         x,
-        y: 0.5,
+        y: BB830_HEIGHT,
         z,
         section: 'terminal_top',
         tieGroup: `bb_tie_col_${col}_top`,
@@ -84,7 +84,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
         id: `bb_col_${col}_${row}`,
         name: `Col ${col}, Row ${row}`,
         x,
-        y: 0.5,
+        y: BB830_HEIGHT,
         z,
         section: 'terminal_bottom',
         tieGroup: `bb_tie_col_${col}_bottom`,
@@ -106,7 +106,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
       id: `bb_rail_top_pos_${i + 1}`,
       name: `Top Rail [+] Hole ${i + 1}`,
       x,
-      y: 0.5,
+      y: BB830_HEIGHT,
       z: RAIL_Z_MAP.top_pos,
       section: 'rail_top_pos',
       tieGroup: 'bb_tie_rail_top_pos',
@@ -116,7 +116,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
       id: `bb_rail_top_neg_${i + 1}`,
       name: `Top Rail [-] Hole ${i + 1}`,
       x,
-      y: 0.5,
+      y: BB830_HEIGHT,
       z: RAIL_Z_MAP.top_neg,
       section: 'rail_top_neg',
       tieGroup: 'bb_tie_rail_top_neg',
@@ -127,7 +127,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
       id: `bb_rail_bottom_pos_${i + 1}`,
       name: `Bottom Rail [+] Hole ${i + 1}`,
       x,
-      y: 0.5,
+      y: BB830_HEIGHT,
       z: RAIL_Z_MAP.bottom_pos,
       section: 'rail_bottom_pos',
       tieGroup: 'bb_tie_rail_bottom_pos',
@@ -137,7 +137,7 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
       id: `bb_rail_bottom_neg_${i + 1}`,
       name: `Bottom Rail [-] Hole ${i + 1}`,
       x,
-      y: 0.5,
+      y: BB830_HEIGHT,
       z: RAIL_Z_MAP.bottom_neg,
       section: 'rail_bottom_neg',
       tieGroup: 'bb_tie_rail_bottom_neg',
@@ -148,6 +148,30 @@ export function generate830BreadboardHoles(): BreadboardHole3D[] {
 }
 
 export const ALL_830_HOLES = generate830BreadboardHoles();
+
+/**
+ * Finds the nearest local power/ground rail hole directly in or closest to a specific breadboard column.
+ * This guarantees short, vertical, tidy power drops rather than long diagonal wires back to the battery.
+ */
+export function findNearestRailHoleForColumn(
+  col: number,
+  railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg'
+): string {
+  const targetX = START_X + (Math.max(1, Math.min(63, col)) - 1) * PITCH_X;
+  const candidateHoles = ALL_830_HOLES.filter((h) => h.section === railType);
+  let bestHole = candidateHoles[0]?.id || `bb_${railType}_1`;
+  let minDx = Infinity;
+
+  for (const h of candidateHoles) {
+    const dx = Math.abs(h.x - targetX);
+    if (dx < minDx) {
+      minDx = dx;
+      bestHole = h.id;
+    }
+  }
+
+  return bestHole;
+}
 
 // Fast O(1) Map for lookup
 export const HOLE_BY_ID = new Map<string, BreadboardHole3D>(

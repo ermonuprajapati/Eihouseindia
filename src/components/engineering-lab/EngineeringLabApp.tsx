@@ -1047,7 +1047,7 @@ export function EngineeringLabApp() {
 
         {/* 3D Virtual Electronics Studio (Direct 3D-First Electronics Design) */}
         {activeMode === 'virtual3d' && (
-          <div className="flex-1 flex overflow-hidden relative w-full h-full">
+          <div className="flex-1 flex overflow-hidden relative w-full h-full min-w-0">
             {/* Quick-Probe Trigger Button & Overlay */}
             <button
               type="button"
@@ -1073,7 +1073,7 @@ export function EngineeringLabApp() {
               waveformData={waveformData}
             />
 
-            <div className="flex-1 h-full w-full relative overflow-hidden">
+            <div className="flex-1 h-full w-full relative overflow-hidden min-w-0">
               {/* Circuit Overload / Component Burnout Alert Banner (3D Studio) */}
               {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) && (
                 <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
@@ -1106,7 +1106,10 @@ export function EngineeringLabApp() {
                 selectedWireId={selectedWireId}
                 onSelectComponent={(id) => {
                   setSelectedCompId(id);
-                  if (id) setSelectedWireId(null);
+                  if (id) {
+                    setSelectedWireId(null);
+                    setIsInspectorOpen(true);
+                  }
                 }}
                 onSelectWire={(id) => {
                   setSelectedWireId(id);
@@ -1124,8 +1127,45 @@ export function EngineeringLabApp() {
                 simulationStates={simStates}
                 wireCurrents={wireCurrents}
                 gpioStates={project.firmware.gpioStates}
+                isInspectorOpen={isInspectorOpen}
+                onToggleInspector={() => setIsInspectorOpen((o) => !o)}
               />
             </div>
+
+            {isInspectorOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                onClick={() => setIsInspectorOpen(false)}
+              />
+            )}
+            <PropertiesInspector
+              component={selectedComponent}
+              selectedWire={selectedWire}
+              components={project.components}
+              wires={project.wires}
+              onUpdateComponent={handleUpdateComponent}
+              onUpdateWire={(updatedWire) => {
+                recordHistory();
+                setProject((prev) => ({
+                  ...prev,
+                  wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
+                }));
+              }}
+              onRotateComponent={handleRotateComponent}
+              onMirrorComponent={handleMirrorComponent}
+              onDeleteComponent={handleDeleteComponent}
+              onDeleteWire={handleDeleteWire}
+              onDisconnectWire={handleDisconnectWire}
+              onDisconnectWireEndpoint={handleDisconnectWireEndpoint}
+              onDuplicateComponent={handleDuplicateComponent}
+              onClose={() => setIsInspectorOpen(false)}
+              isOpen={isInspectorOpen}
+              onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
+              width={inspectorWidth}
+              onWidthChange={setInspectorWidth}
+              simState={selectedCompId ? simStates[selectedCompId] : undefined}
+              wireCurrent={selectedWireId ? wireCurrents[selectedWireId] : undefined}
+            />
           </div>
         )}
 
