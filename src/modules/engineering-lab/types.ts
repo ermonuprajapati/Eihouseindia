@@ -187,7 +187,11 @@ export interface VirtualInstrumentState {
     triggerEdge?: 'rising' | 'falling';
     triggerMode?: 'auto' | 'normal' | 'single';
     triggerLevel: number;
-    mathMode?: 'off' | 'CH1+CH2' | 'CH1-CH2' | 'CH1*CH2';
+    mathMode?: 'off' | 'CH1+CH2' | 'CH1-CH2' | 'CH1*CH2' | string;
+    mathSourceA?: 'CH1' | 'CH2' | 'CH3' | 'CH4';
+    mathOp?: '+' | '-' | '×' | '÷' | '*' | '/';
+    mathSourceB?: 'CH1' | 'CH2' | 'CH3' | 'CH4';
+    mathEnabled?: boolean;
     cursorsEnabled?: boolean;
     cursorX1?: number; // 0..1 ratio of screen width
     cursorX2?: number;
@@ -220,10 +224,11 @@ export interface VirtualInstrumentState {
     enabled: boolean;
     outputNet?: string; // target net or pin
     channel2?: {
-      waveform: 'sine' | 'square' | 'triangle' | 'sawtooth';
+      waveform: 'sine' | 'square' | 'triangle' | 'sawtooth' | 'pulse' | 'noise';
       frequencyHz: number;
       amplitudeV: number;
       offsetV: number;
+      dutyCycle?: number;
       enabled: boolean;
       outputNet?: string;
     };

@@ -99,21 +99,6 @@ export function Virtual3dStudio({
     });
   }, []);
 
-  // Restore saved 3D project from localStorage if available
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('ei_house_virtual3d_project');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.components3d) && Array.isArray(parsed.wires3d)) {
-          setIndependentComponents(parsed.components3d);
-          setIndependentWires(parsed.wires3d);
-        }
-      }
-    } catch {
-      // Ignore JSON parse errors
-    }
-  }, []);
 
   // Forensically synchronize changes made to components externally (e.g. Inspector MCU Physical Representation, Power switch, values)
   useEffect(() => {

@@ -10,30 +10,40 @@ export interface LabProjectIndexEntry {
 
 /**
  * Resolves a namespace-isolated localStorage key for the given user.
- * Prevents multiple users on the same machine from overwriting each other's projects.
+ * Ensures strict multi-user isolation so different user accounts on the
+ * same machine NEVER leak or overwrite each other's circuits.
  */
-export function getUserStorageKey(userId: string | null | undefined, baseKey: string): string {
-  const safeUid = userId && typeof userId === 'string' && userId.trim() ? userId.trim() : 'guest';
-  return `ei_lab_${safeUid}_${baseKey}`;
+export function getUserProjectStorageKey(userId: string | null | undefined): string {
+  if (userId && typeof userId === 'string' && userId.trim() && userId.trim() !== 'guest') {
+    return `eihouse_saved_project_${userId.trim()}`;
+  }
+  return 'eihouse_saved_project_guest';
+}
+
+export function getUserProjectsIndexKey(userId: string | null | undefined): string {
+  if (userId && typeof userId === 'string' && userId.trim() && userId.trim() !== 'guest') {
+    return `eihouse_projects_index_${userId.trim()}`;
+  }
+  return 'eihouse_projects_index_guest';
 }
 
 /**
- * Persists the user's active workspace project snapshot with multi-user isolation.
+ * Persists the user's circuit state ONLY when explicitly saved by the user (Save button / Ctrl+S).
+ * Namespaced strictly by the authenticated userId.
  */
-export function saveUserActiveProject(userId: string | null | undefined, project: EngineeringProject): void {
+export function saveUserExplicitProject(userId: string | null | undefined, project: EngineeringProject): void {
   if (typeof window === 'undefined') return;
   try {
     const jsonStr = JSON.stringify(project);
-    const userActiveKey = getUserStorageKey(userId, 'active_project');
-    const userProjKey = getUserStorageKey(userId, `project_${project.id}`);
+    const storageKey = getUserProjectStorageKey(userId);
+    localStorage.setItem(storageKey, jsonStr);
 
-    localStorage.setItem(userActiveKey, jsonStr);
-    localStorage.setItem(userProjKey, jsonStr);
+    // Also persist under direct project ID for explicit share links
+    if (project.id) {
+      localStorage.setItem(`ei_lab_${project.id}`, jsonStr);
+    }
 
-    // Also persist under direct project ID for shared links
-    localStorage.setItem(`ei_lab_${project.id}`, jsonStr);
-
-    // Update the user's isolated project index
+    // Maintain per-user project catalog index
     const indexList = getUserProjectsIndex(userId);
     const existingIdx = indexList.findIndex((item) => item.id === project.id);
     const entry: LabProjectIndexEntry = {
@@ -50,66 +60,43 @@ export function saveUserActiveProject(userId: string | null | undefined, project
       indexList.unshift(entry);
     }
     saveUserProjectsIndex(userId, indexList);
-
-    // Legacy sync for guest/unauthenticated users
-    if (!userId || userId === 'guest') {
-      localStorage.setItem('ei_lab_active_project', jsonStr);
-      localStorage.setItem('ei_lab_projects_index', JSON.stringify(indexList));
-    }
   } catch (err) {
-    console.warn('[Storage] Failed to save project locally:', err);
+    console.warn('[Storage] Failed to explicitly save project locally:', err);
   }
 }
 
 /**
- * Restores the active project for the specified user with backward compatibility.
+ * Loads the last explicitly saved project for the authenticated user.
+ * If the user has not explicitly saved a project, returns null so the caller
+ * can render the pristine default 1-second NE555 presentation circuit.
+ * Guest users NEVER see a logged-in user's saved circuit.
  */
-export function loadUserActiveProject(userId: string | null | undefined): EngineeringProject | null {
+export function loadUserExplicitProject(userId: string | null | undefined): EngineeringProject | null {
   if (typeof window === 'undefined') return null;
   try {
-    const userActiveKey = getUserStorageKey(userId, 'active_project');
-    let raw = localStorage.getItem(userActiveKey);
-
-    // Fallback to legacy unnamespaced key if user is guest or first time migrating
-    if (!raw) {
-      raw = localStorage.getItem('ei_lab_active_project');
-    }
-
+    const storageKey = getUserProjectStorageKey(userId);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
+
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.components) && Array.isArray(parsed.wires)) {
       return parsed;
     }
   } catch (err) {
-    console.warn('[Storage] Failed to parse active project:', err);
+    console.warn('[Storage] Failed to parse saved project:', err);
   }
   return null;
 }
 
 /**
- * Restores a specific project by ID for the specified user or global direct link.
+ * Clears the explicitly saved project for the specified user (e.g., on New Project / Reset).
  */
-export function loadUserProjectById(userId: string | null | undefined, projectId: string): EngineeringProject | null {
-  if (typeof window === 'undefined') return null;
+export function clearUserExplicitProject(userId: string | null | undefined): void {
+  if (typeof window === 'undefined') return;
   try {
-    // 1. Try user-isolated project key
-    const userProjKey = getUserStorageKey(userId, `project_${projectId}`);
-    let raw = localStorage.getItem(userProjKey);
-
-    // 2. Try global/legacy project key
-    if (!raw) {
-      raw = localStorage.getItem(`ei_lab_${projectId}`);
-    }
-
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.components) && Array.isArray(parsed.wires)) {
-      return parsed;
-    }
-  } catch (err) {
-    console.warn('[Storage] Failed to parse project by ID:', err);
-  }
-  return null;
+    const storageKey = getUserProjectStorageKey(userId);
+    localStorage.removeItem(storageKey);
+  } catch {}
 }
 
 /**
@@ -118,16 +105,10 @@ export function loadUserProjectById(userId: string | null | undefined, projectId
 export function getUserProjectsIndex(userId: string | null | undefined): LabProjectIndexEntry[] {
   if (typeof window === 'undefined') return [];
   try {
-    const userIndexKey = getUserStorageKey(userId, 'projects_index');
-    let indexRaw = localStorage.getItem(userIndexKey);
-
-    // Fallback to legacy global index if guest or first load
-    if (!indexRaw && (!userId || userId === 'guest')) {
-      indexRaw = localStorage.getItem('ei_lab_projects_index');
-    }
-
-    if (indexRaw) {
-      const parsed = JSON.parse(indexRaw);
+    const key = getUserProjectsIndexKey(userId);
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
@@ -140,42 +121,25 @@ export function getUserProjectsIndex(userId: string | null | undefined): LabProj
 export function saveUserProjectsIndex(userId: string | null | undefined, list: LabProjectIndexEntry[]): void {
   if (typeof window === 'undefined') return;
   try {
-    const userIndexKey = getUserStorageKey(userId, 'projects_index');
-    const jsonStr = JSON.stringify(list);
-    localStorage.setItem(userIndexKey, jsonStr);
-
-    if (!userId || userId === 'guest') {
-      localStorage.setItem('ei_lab_projects_index', jsonStr);
-    }
+    const key = getUserProjectsIndexKey(userId);
+    localStorage.setItem(key, JSON.stringify(list));
   } catch {}
 }
 
 /**
- * Deletes a project for the specified user.
+ * Deletes a project from the specified user's index and storage.
  */
 export function deleteUserProject(userId: string | null | undefined, projectId: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const userProjKey = getUserStorageKey(userId, `project_${projectId}`);
-    localStorage.removeItem(userProjKey);
     localStorage.removeItem(`ei_lab_${projectId}`);
-
     const indexList = getUserProjectsIndex(userId);
     const updated = indexList.filter((p) => p.id !== projectId);
     saveUserProjectsIndex(userId, updated);
   } catch {}
 }
 
-/**
- * Clears the active project snapshot for the specified user (e.g. for Reset / New Blank Project).
- */
-export function clearUserActiveProject(userId: string | null | undefined): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const userActiveKey = getUserStorageKey(userId, 'active_project');
-    localStorage.removeItem(userActiveKey);
-    if (!userId || userId === 'guest') {
-      localStorage.removeItem('ei_lab_active_project');
-    }
-  } catch {}
-}
+// Aliases for compatibility
+export const saveUserActiveProject = saveUserExplicitProject;
+export const loadUserActiveProject = loadUserExplicitProject;
+export const clearUserActiveProject = clearUserExplicitProject;

@@ -129,7 +129,9 @@ export function Oscilloscope4CH({
   const handleAutoSet = useCallback(() => {
     const ch1Pts = getChannelPoints('CH1');
     const ch2Pts = getChannelPoints('CH2');
-    const activePts = ch1Pts.length > 5 ? ch1Pts : ch2Pts.length > 5 ? ch2Pts : Object.values(waveformData)[0];
+    const ch3Pts = getChannelPoints('CH3');
+    const ch4Pts = getChannelPoints('CH4');
+    const activePts = ch1Pts.length > 5 ? ch1Pts : ch2Pts.length > 5 ? ch2Pts : ch3Pts.length > 5 ? ch3Pts : ch4Pts.length > 5 ? ch4Pts : Object.values(waveformData)[0];
 
     if (!activePts || activePts.length < 5) {
       toast.info('Auto-Set: Start simulation to acquire waveform signal for auto-scaling.');
@@ -160,7 +162,7 @@ export function Oscilloscope4CH({
       const avgHalfPeriod = (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
       const periodSec = avgHalfPeriod * 2;
       const idealTbSec = (periodSec * 3) / 10; // 3 periods in 10 divisions
-      const tbSteps = [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+      const tbSteps = [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 250, 500, 1000, 2000];
       const idealTbMs = idealTbSec * 1000;
       bestTimebaseMs = tbSteps.reduce((prev, curr) => (Math.abs(curr - idealTbMs) < Math.abs(prev - idealTbMs) ? curr : prev));
     }
@@ -430,34 +432,42 @@ export function Oscilloscope4CH({
         ctx.shadowBlur = 0; // reset
       });
 
-      // 4. Math Channel Rendering (CH1+CH2 / CH1-CH2 / CH1*CH2)
-      if (scopeState.mathMode && scopeState.mathMode !== 'off') {
-        const ch1 = channels[0].pts;
-        const ch2 = channels[1].pts;
-        if (ch1 && ch2 && ch1.length > 2 && ch2.length > 2) {
-          const len = Math.min(ch1.length, ch2.length);
-          ctx.strokeStyle = '#F97316'; // Orange Math Trace
-          ctx.lineWidth = 2.0;
+      // 4. Math Channel Rendering (All 4 Channels: Source A [+ - × ÷] Source B)
+      const isMathActive = scopeState.mathEnabled ?? (scopeState.mathMode && scopeState.mathMode !== 'off');
+      if (isMathActive) {
+        const sourceA = scopeState.mathSourceA || (scopeState.mathMode?.startsWith('CH2') ? 'CH2' : 'CH1');
+        const sourceB = scopeState.mathSourceB || 'CH2';
+        const op = scopeState.mathOp || (scopeState.mathMode?.includes('-') ? '-' : scopeState.mathMode?.includes('*') ? '×' : '+');
+
+        const chIdxMap: Record<string, number> = { CH1: 0, CH2: 1, CH3: 2, CH4: 3 };
+        const ptsA = channels[chIdxMap[sourceA] ?? 0]?.pts;
+        const ptsB = channels[chIdxMap[sourceB] ?? 1]?.pts;
+
+        if (ptsA && ptsB && ptsA.length > 2 && ptsB.length > 2) {
+          const len = Math.min(ptsA.length, ptsB.length);
+          ctx.strokeStyle = '#F97316'; // High-contrast orange Math Trace
+          ctx.lineWidth = 2.4;
           ctx.shadowColor = '#F97316';
-          ctx.shadowBlur = 5;
+          ctx.shadowBlur = 6;
           ctx.beginPath();
 
-          const tLatest = Math.max(ch1[ch1.length - 1].time, ch2[ch2.length - 1].time);
+          const tLatest = Math.max(ptsA[ptsA.length - 1].time, ptsB[ptsB.length - 1].time);
           const tStart = tLatest - totalSpanSec;
           let hasDrawnFirst = false;
 
           for (let i = 0; i < len; i++) {
-            const pt1 = ch1[i];
-            const pt2 = ch2[i];
+            const pt1 = ptsA[i];
+            const pt2 = ptsB[i];
             const t = pt1.time;
-            if (t < tStart && i + 1 < len && ch1[i + 1].time < tStart) {
+            if (t < tStart && i + 1 < len && ptsA[i + 1].time < tStart) {
               continue;
             }
 
             let mVal = 0;
-            if (scopeState.mathMode === 'CH1+CH2') mVal = pt1.value + pt2.value;
-            else if (scopeState.mathMode === 'CH1-CH2') mVal = pt1.value - pt2.value;
-            else if (scopeState.mathMode === 'CH1*CH2') mVal = (pt1.value * pt2.value) / 5;
+            if (op === '+') mVal = pt1.value + pt2.value;
+            else if (op === '-') mVal = pt1.value - pt2.value;
+            else if (op === '×' || op === '*') mVal = (pt1.value * pt2.value) / 5;
+            else if (op === '÷' || op === '/') mVal = Math.abs(pt2.value) > 0.05 ? (pt1.value / pt2.value) : 0;
 
             const y = midY - (mVal / (scopeState.ch1ScaleV || 1.0)) * divH;
             const x = ((t - tStart) / totalSpanSec) * width;
@@ -524,7 +534,23 @@ export function Oscilloscope4CH({
           <div className="flex items-center gap-2">
             {/* Built-in Function Generator Dock Button */}
             <button
-              onClick={() => setIsGenOutDrawerOpen(!isGenOutDrawerOpen)}
+              onClick={() => {
+                const nextOpen = !isGenOutDrawerOpen;
+                setIsGenOutDrawerOpen(nextOpen);
+                if (nextOpen && scopeState.ch1ProbeSource !== 'gen:out') {
+                  onUpdateInstruments({
+                    ...instruments,
+                    functionGenerator: { ...instruments.functionGenerator, enabled: true },
+                    oscilloscope: {
+                      ...scopeState,
+                      ch1Enabled: true,
+                      ch1ProbeSource: 'gen:out',
+                      timebaseMs: 1, // 1 ms/Div shows 1 kHz waveform cleanly
+                    },
+                  });
+                  toast.success('⚡ Connected AWG Gen Out directly to CH1 on DSO for instant testing');
+                }
+              }}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-bold cursor-pointer transition-all ${
                 isGenOutDrawerOpen || instruments.functionGenerator.enabled
                   ? 'bg-purple-950/90 border border-purple-500 text-purple-300 shadow-md ring-1 ring-purple-500/50'
@@ -712,7 +738,28 @@ export function Oscilloscope4CH({
             ref={canvasRef}
             width={900}
             height={460}
-            className="w-full h-full block"
+            className="w-full h-full block cursor-ew-resize"
+            onWheel={(e) => {
+              e.preventDefault();
+              const steps = [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 250, 500, 1000, 2000];
+              const cur = scopeState.timebaseMs || 50;
+              const idx = steps.findIndex((s) => s >= cur);
+              if (e.deltaY < 0) {
+                // Zoom in (smaller time/div)
+                const nextIdx = idx > 0 ? idx - 1 : 0;
+                onUpdateInstruments({
+                  ...instruments,
+                  oscilloscope: { ...scopeState, timebaseMs: steps[nextIdx] },
+                });
+              } else {
+                // Zoom out (larger time/div)
+                const nextIdx = idx >= 0 && idx < steps.length - 1 ? (steps[idx] === cur ? idx + 1 : idx) : steps.length - 1;
+                onUpdateInstruments({
+                  ...instruments,
+                  oscilloscope: { ...scopeState, timebaseMs: steps[nextIdx] },
+                });
+              }
+            }}
           />
 
           {/* Graticule Overlay Labels */}
@@ -850,22 +897,58 @@ export function Oscilloscope4CH({
                 <span>HORIZONTAL TIMEBASE</span>
                 <span className="text-cyan-400 font-bold">{formatTimebase(scopeState.timebaseMs || 50)}</span>
               </div>
-              <select
-                value={scopeState.timebaseMs || 50}
-                onChange={(e) =>
-                  onUpdateInstruments({
-                    ...instruments,
-                    oscilloscope: { ...scopeState, timebaseMs: Number(e.target.value) },
-                  })
-                }
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
-              >
-                {[0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].map((t) => (
-                  <option key={t} value={t}>
-                    {formatTimebase(t)}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const steps = [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 250, 500, 1000, 2000];
+                    const cur = scopeState.timebaseMs || 50;
+                    const idx = steps.findIndex((s) => s >= cur);
+                    const prevIdx = idx > 0 ? idx - 1 : 0;
+                    onUpdateInstruments({
+                      ...instruments,
+                      oscilloscope: { ...scopeState, timebaseMs: steps[prevIdx] },
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold cursor-pointer text-xs"
+                  title="Zoom In (Decrease Time/Div)"
+                >
+                  -
+                </button>
+                <select
+                  value={scopeState.timebaseMs || 50}
+                  onChange={(e) =>
+                    onUpdateInstruments({
+                      ...instruments,
+                      oscilloscope: { ...scopeState, timebaseMs: Number(e.target.value) },
+                    })
+                  }
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
+                >
+                  {[0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 250, 500, 1000, 2000].map((t) => (
+                    <option key={t} value={t}>
+                      {formatTimebase(t)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const steps = [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 250, 500, 1000, 2000];
+                    const cur = scopeState.timebaseMs || 50;
+                    const idx = steps.findIndex((s) => s >= cur);
+                    const nextIdx = idx >= 0 && idx < steps.length - 1 ? (steps[idx] === cur ? idx + 1 : idx) : steps.length - 1;
+                    onUpdateInstruments({
+                      ...instruments,
+                      oscilloscope: { ...scopeState, timebaseMs: steps[nextIdx] },
+                    });
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold cursor-pointer text-xs"
+                  title="Zoom Out (Increase Time/Div)"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             {/* CH1 Channel Box */}
@@ -1218,38 +1301,121 @@ export function Oscilloscope4CH({
           </div>
         )}
 
-        {/* Tab 3: Math Operations */}
+        {/* Tab 3: Math Operations (All 4 Channels) */}
         {activeTabPanel === 'math' && (
           <div className="space-y-3 p-1">
             <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-3">
-              <h5 className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">Waveform Math Channel</h5>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'off', label: 'Math OFF' },
-                  { id: 'CH1+CH2', label: 'CH1 + CH2' },
-                  { id: 'CH1-CH2', label: 'CH1 - CH2' },
-                  { id: 'CH1*CH2', label: 'CH1 × CH2' },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() =>
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">4-Channel Waveform Math</h5>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentActive = scopeState.mathEnabled ?? (scopeState.mathMode && scopeState.mathMode !== 'off');
+                    const nextActive = !currentActive;
+                    onUpdateInstruments({
+                      ...instruments,
+                      oscilloscope: {
+                        ...scopeState,
+                        mathEnabled: nextActive,
+                        mathMode: nextActive ? `${scopeState.mathSourceA || 'CH1'}${scopeState.mathOp || '+'}${scopeState.mathSourceB || 'CH2'}` : 'off',
+                      },
+                    });
+                  }}
+                  className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    (scopeState.mathEnabled ?? (scopeState.mathMode && scopeState.mathMode !== 'off'))
+                      ? 'bg-orange-600 text-white border border-orange-400 shadow-[0_0_10px_rgba(249,115,22,0.4)]'
+                      : 'bg-slate-900 text-slate-400 border border-slate-700 hover:text-white'
+                  }`}
+                >
+                  {(scopeState.mathEnabled ?? (scopeState.mathMode && scopeState.mathMode !== 'off')) ? 'MATH ON' : 'MATH OFF'}
+                </button>
+              </div>
+
+              {/* Math Sources and Operator Selectors */}
+              <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Source A</label>
+                  <select
+                    value={scopeState.mathSourceA || (scopeState.mathMode?.startsWith('CH2') ? 'CH2' : 'CH1')}
+                    onChange={(e) => {
+                      const newA = e.target.value as 'CH1' | 'CH2' | 'CH3' | 'CH4';
                       onUpdateInstruments({
                         ...instruments,
-                        oscilloscope: { ...scopeState, mathMode: m.id as 'off' | 'CH1+CH2' | 'CH1-CH2' | 'CH1*CH2' },
-                      })
-                    }
-                    className={`p-2 rounded font-bold border transition-colors ${
-                      (scopeState.mathMode || 'off') === m.id
-                        ? 'bg-orange-600 border-orange-400 text-white'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
+                        oscilloscope: {
+                          ...scopeState,
+                          mathSourceA: newA,
+                          mathMode: `${newA}${scopeState.mathOp || '+'}${scopeState.mathSourceB || 'CH2'}`,
+                        },
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-yellow-300 font-bold"
                   >
-                    {m.label}
-                  </button>
-                ))}
+                    <option value="CH1">CH1 (Yellow)</option>
+                    <option value="CH2">CH2 (Cyan)</option>
+                    <option value="CH3">CH3 (Pink)</option>
+                    <option value="CH4">CH4 (Green)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Operation</label>
+                  <select
+                    value={scopeState.mathOp || (scopeState.mathMode?.includes('-') ? '-' : scopeState.mathMode?.includes('*') ? '×' : '+')}
+                    onChange={(e) => {
+                      const newOp = e.target.value as '+' | '-' | '×' | '÷';
+                      onUpdateInstruments({
+                        ...instruments,
+                        oscilloscope: {
+                          ...scopeState,
+                          mathOp: newOp,
+                          mathMode: `${scopeState.mathSourceA || 'CH1'}${newOp}${scopeState.mathSourceB || 'CH2'}`,
+                        },
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-orange-400 font-bold text-center text-sm"
+                  >
+                    <option value="+">+ (Add)</option>
+                    <option value="-">- (Subtract)</option>
+                    <option value="×">× (Multiply)</option>
+                    <option value="÷">÷ (Divide)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Source B</label>
+                  <select
+                    value={scopeState.mathSourceB || 'CH2'}
+                    onChange={(e) => {
+                      const newB = e.target.value as 'CH1' | 'CH2' | 'CH3' | 'CH4';
+                      onUpdateInstruments({
+                        ...instruments,
+                        oscilloscope: {
+                          ...scopeState,
+                          mathSourceB: newB,
+                          mathMode: `${scopeState.mathSourceA || 'CH1'}${scopeState.mathOp || '+'}${newB}`,
+                        },
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-cyan-300 font-bold"
+                  >
+                    <option value="CH1">CH1 (Yellow)</option>
+                    <option value="CH2">CH2 (Cyan)</option>
+                    <option value="CH3">CH3 (Pink)</option>
+                    <option value="CH4">CH4 (Green)</option>
+                  </select>
+                </div>
               </div>
+
+              {/* Active Math Formula Preview */}
+              <div className="p-2 rounded bg-[#090e18] border border-orange-950 flex items-center justify-between text-xs">
+                <span className="text-slate-400">Live Formula:</span>
+                <span className="font-bold text-orange-400 font-mono">
+                  M = {scopeState.mathSourceA || 'CH1'} {scopeState.mathOp || '+'} {scopeState.mathSourceB || 'CH2'}
+                </span>
+              </div>
+
               <p className="text-[10px] text-slate-500 leading-relaxed">
-                Calculates real-time vector addition, differential voltage, or instantaneous power product rendered in high-contrast orange.
+                Calculates real-time vector addition, differential voltage, product, or division across any two channels, rendered in high-contrast orange (#F97316).
               </p>
             </div>
           </div>

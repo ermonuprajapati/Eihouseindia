@@ -2052,6 +2052,43 @@ export class CircuitSolver {
       }
     }
 
+    // 5b. Synthesize Function Generator Channel 2 Signal and Inject into Circuit if active
+    if (instruments?.functionGenerator?.channel2?.enabled) {
+      const fg2 = instruments.functionGenerator.channel2;
+      let instantGenV2 = fg2.offsetV || 0;
+      const f2 = Math.max(0.1, fg2.frequencyHz || 1000);
+      const a2 = fg2.amplitudeV !== undefined ? fg2.amplitudeV : 5;
+      const t = this.currentTime;
+      const phase2 = (t * f2) % 1.0;
+
+      if (fg2.waveform === 'square') {
+        const duty2 = Math.min(0.99, Math.max(0.01, fg2.dutyCycle ?? 0.5));
+        instantGenV2 += phase2 < duty2 ? a2 : -a2;
+      } else if (fg2.waveform === 'triangle') {
+        instantGenV2 += a2 * (4 * Math.abs(phase2 - 0.5) - 1);
+      } else if (fg2.waveform === 'sawtooth') {
+        instantGenV2 += a2 * (2 * phase2 - 1);
+      } else if (fg2.waveform === 'pulse') {
+        instantGenV2 += phase2 < 0.1 ? a2 : 0;
+      } else if (fg2.waveform === 'noise') {
+        instantGenV2 += (Math.random() * 2 - 1) * a2;
+      } else {
+        instantGenV2 += a2 * Math.sin(2 * Math.PI * f2 * t);
+      }
+
+      let genHist2 = this.waveformHistory.get('gen:out2');
+      if (!genHist2) {
+        genHist2 = [];
+        this.waveformHistory.set('gen:out2', genHist2);
+      }
+      genHist2.push({ time: this.currentTime, value: instantGenV2 });
+      if (genHist2.length > this.maxHistoryPoints) genHist2.shift();
+
+      if (fg2.outputNet) {
+        nodeVoltages[fg2.outputNet] = instantGenV2;
+      }
+    }
+
     // 6. Record Waveform History for all Circuit Nets and Component Pins
     for (const net of this.nets) {
       const netKey = `net:${net}`;

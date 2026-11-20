@@ -212,8 +212,13 @@ export function DigitalLogicAnalyzer16({
         ctx.beginPath();
 
         if (pts && pts.length > 1) {
-          const xStep = (width / (pts.length - 1)) * zoomLevel;
-          pts.forEach((p, idx) => {
+          // Dynamically compress/expand timing waveforms on the horizontal axis based on zoomLevel
+          const visibleCount = Math.max(8, Math.round(pts.length / zoomLevel));
+          const startIndex = Math.max(0, pts.length - visibleCount);
+          const visibleSlice = pts.slice(startIndex);
+          const xStep = width / Math.max(1, visibleSlice.length - 1);
+
+          visibleSlice.forEach((p, idx) => {
             const x = idx * xStep;
             const isHigh = p.value >= logicThreshold;
             const y = isHigh ? highY : lowY;
@@ -221,7 +226,7 @@ export function DigitalLogicAnalyzer16({
             if (idx === 0) {
               ctx.moveTo(x, y);
             } else {
-              const prevHigh = pts[idx - 1].value >= logicThreshold;
+              const prevHigh = visibleSlice[idx - 1].value >= logicThreshold;
               const prevY = prevHigh ? highY : lowY;
               if (prevY !== y) {
                 ctx.lineTo(x, prevY);
@@ -332,26 +337,32 @@ export function DigitalLogicAnalyzer16({
             </select>
           </div>
 
-          {/* Zoom Buttons */}
-          <div className="flex items-center gap-1">
+          {/* Zoom Buttons with 100% Reset */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
-              onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.25))}
-              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-              title="Zoom Out"
+              onClick={() => setZoomLevel((z) => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))}
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+              title="Zoom Out (Compress Timing)"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[10px] text-slate-400 font-bold px-1">{Math.round(zoomLevel * 100)}%</span>
             <button
-              onClick={() => setZoomLevel((z) => Math.min(3.0, z + 0.25))}
-              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-              title="Zoom In"
+              onClick={() => setZoomLevel(1.0)}
+              className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-slate-800"
+              title="Reset Zoom to 100%"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={() => setZoomLevel((z) => Math.min(4.0, parseFloat((z + 0.25).toFixed(2))))}
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+              title="Zoom In (Expand Timing)"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Run / Stop Toggle */}
+          {/* Run / Stop (HOLD) Toggle */}
           <button
             onClick={() => {
               const nextRunning = !la.running;
@@ -370,7 +381,7 @@ export function DigitalLogicAnalyzer16({
             }`}
           >
             {la.running ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
-            <span>{la.running ? 'HOLD' : 'ACQUIRE'}</span>
+            <span>{la.running ? 'HOLD' : 'RESUME'}</span>
           </button>
         </div>
       </div>
@@ -431,7 +442,20 @@ export function DigitalLogicAnalyzer16({
 
         {/* Right Timing Canvas Area */}
         <div className="flex-1 relative overflow-hidden bg-[#050B14]">
-          <canvas ref={canvasRef} width={800} height={channelCount * 44} className="w-full h-full block" />
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={channelCount * 44}
+            className="w-full h-full block cursor-ew-resize"
+            onWheel={(e) => {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoomLevel((z) => Math.min(4.0, parseFloat((z + 0.25).toFixed(2))));
+              } else {
+                setZoomLevel((z) => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))));
+              }
+            }}
+          />
         </div>
       </div>
 

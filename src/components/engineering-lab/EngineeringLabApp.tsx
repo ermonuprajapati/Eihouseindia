@@ -36,6 +36,12 @@ import {
   generateSpiceNetlist,
   downloadSpiceNetlist,
 } from '@/modules/engineering-lab/circuit-engine/spice-netlist-generator';
+import { useOptionalAuth } from '@/modules/auth/auth-context';
+import {
+  saveUserExplicitProject,
+  loadUserExplicitProject,
+  clearUserExplicitProject,
+} from '@/modules/engineering-lab/utils/storage-persistence';
 
 // DYNAMIC LAZY-LOADING OF HEAVY MODULES FOR SECTION 12 PERFORMANCE OPTIMIZATION
 const PcbView = dynamic(
@@ -146,6 +152,10 @@ const MODE_TO_PARAM: Record<WorkspaceMode, string> = {
 };
 
 export function EngineeringLabApp() {
+  const auth = useOptionalAuth();
+  const currentUserId = auth?.firebaseUser?.uid || auth?.profile?.uid || null;
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
   // Project State
   const [project, setProject] = useState<EngineeringProject>(TEMPLATE_555_ASTABLE);
   const [activeMode, setActiveMode] = useState<WorkspaceMode>('schematic');
@@ -156,6 +166,31 @@ export function EngineeringLabApp() {
   useEffect(() => {
     projectRef.current = project;
   }, [project]);
+
+  // Per-User Account Switch Detection & Memory Cleanup (Strict Multi-User Isolation)
+  useEffect(() => {
+    if (prevUserIdRef.current === undefined) {
+      prevUserIdRef.current = currentUserId;
+      return;
+    }
+    if (prevUserIdRef.current !== currentUserId) {
+      prevUserIdRef.current = currentUserId;
+      // Discard in-memory unsaved edits and reload this user's explicitly saved project
+      const savedUserProject = loadUserExplicitProject(currentUserId);
+      if (savedUserProject) {
+        setProject(savedUserProject);
+        toast.info(`Switched to user workspace: "${savedUserProject.title}"`);
+      } else {
+        setProject(TEMPLATE_555_ASTABLE);
+        toast.info('Switched account: loaded fresh default NE555 circuit');
+      }
+      setHasUnsavedChanges(false);
+      setSelectedCompId(null);
+      setSelectedWireId(null);
+      solverRef.current.reset();
+      mcuRef.current.resetGpio();
+    }
+  }, [currentUserId]);
 
   // Synchronize Tab with URL query parameter and localStorage
   const handleModeChange = useCallback((newMode: WorkspaceMode) => {
@@ -275,22 +310,21 @@ export function EngineeringLabApp() {
           return;
         }
 
-        // Automatic Hydration: Zero Data Loss on Refresh
-        // If neither shareParam nor loadId, hydrate from the last saved active workspace
-        const savedActive = localStorage.getItem('ei_lab_active_project');
+        // Explicit-Save Hydration with Strict Multi-User Isolation
+        // If neither shareParam nor loadId, hydrate from the last explicitly saved project for this user
+        const savedActive = loadUserExplicitProject(currentUserId);
         if (savedActive) {
-          try {
-            const parsed = JSON.parse(savedActive);
-            if (parsed && Array.isArray(parsed.components) && Array.isArray(parsed.wires)) {
-              setProject(parsed);
-              setHasUnsavedChanges(false);
-              toast.success(`Restored workspace: "${parsed.title}"`, { duration: 2500 });
-            }
-          } catch {}
+          setProject(savedActive);
+          setHasUnsavedChanges(false);
+          toast.success(`Restored saved workspace: "${savedActive.title}"`, { duration: 2500 });
+        } else {
+          // If never saved or guest, ensure pristine starter presentation circuit
+          setProject(TEMPLATE_555_ASTABLE);
+          setHasUnsavedChanges(false);
         }
       }
     } catch {}
-  }, []);
+  }, [currentUserId]);
 
   // Save layout preferences on change
   useEffect(() => {
@@ -497,12 +531,10 @@ export function EngineeringLabApp() {
     setSelectedWireId(null);
     solverRef.current.reset();
     mcuRef.current.resetGpio();
-    try {
-      localStorage.removeItem('ei_lab_active_project');
-    } catch {}
+    clearUserExplicitProject(currentUserId);
     setHasUnsavedChanges(false);
     toast.success('Started fresh with a new blank project');
-  }, [recordHistory]);
+  }, [recordHistory, currentUserId]);
 
   // Load Sample NE555 Astable Template
   const handleLoadTemplate = useCallback(() => {
@@ -856,39 +888,13 @@ export function EngineeringLabApp() {
   const handleSaveProject = useCallback(() => {
     try {
       const curProject = projectRef.current;
-      const jsonStr = JSON.stringify(curProject);
-
-      // Persist to active workspace key and project-specific key
-      localStorage.setItem('ei_lab_active_project', jsonStr);
-      localStorage.setItem(`ei_lab_${curProject.id}`, jsonStr);
-
-      // Maintain user projects index for Dashboard
-      const indexRaw = localStorage.getItem('ei_lab_projects_index');
-      let indexList: Array<{ id: string; title: string; updatedAt: string; componentCount: number; wireCount: number }> = [];
-      try {
-        if (indexRaw) indexList = JSON.parse(indexRaw);
-      } catch {}
-      const existingIdx = indexList.findIndex((item) => item.id === curProject.id);
-      const entry = {
-        id: curProject.id,
-        title: curProject.title,
-        updatedAt: new Date().toISOString(),
-        componentCount: curProject.components.length,
-        wireCount: curProject.wires.length,
-      };
-      if (existingIdx >= 0) {
-        indexList[existingIdx] = entry;
-      } else {
-        indexList.unshift(entry);
-      }
-      localStorage.setItem('ei_lab_projects_index', JSON.stringify(indexList));
-
+      saveUserExplicitProject(currentUserId, curProject);
       setHasUnsavedChanges(false);
       toast.success(`Project "${curProject.title}" saved! Changes will persist on refresh.`);
     } catch {
       toast.error('Failed to save project locally.');
     }
-  }, []);
+  }, [currentUserId]);
 
   const handleLoadProjectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -906,9 +912,7 @@ export function EngineeringLabApp() {
           solverRef.current.reset();
           mcuRef.current.resetGpio();
           setHasUnsavedChanges(false);
-          try {
-            localStorage.setItem('ei_lab_active_project', JSON.stringify(loaded));
-          } catch {}
+          saveUserExplicitProject(currentUserId, loaded);
           toast.success(`Imported project "${loaded.title || file.name}"`);
         } else {
           toast.error('Invalid file format. Please select a valid .eihouse.json or .json project.');
