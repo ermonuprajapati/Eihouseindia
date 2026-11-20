@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Cpu,
@@ -16,7 +16,6 @@ import {
   Code2,
   Activity,
   Box,
-  FileCode,
   FilePlus,
   RefreshCw,
   ArrowLeft,
@@ -26,8 +25,25 @@ import {
   LayoutGrid,
   Globe,
   Share2,
+  Image as ImageIcon,
+  FileText,
+  Upload,
+  Sparkles,
+  FileJson,
 } from 'lucide-react';
 import { WorkspaceMode } from '@/modules/engineering-lab/types';
+
+export type ExportFormat =
+  | 'eihouse'
+  | 'json'
+  | 'gerber'
+  | 'bom'
+  | 'firmware'
+  | 'cpp'
+  | 'png'
+  | 'svg'
+  | 'netlist'
+  | 'netlist-json';
 
 interface LabHeaderProps {
   projectTitle: string;
@@ -38,9 +54,11 @@ interface LabHeaderProps {
   onToggleSimulation: () => void;
   onResetSimulation: () => void;
   onNewProject: () => void;
+  onNewBlankProject?: () => void;
+  onLoadTemplate?: () => void;
   onSaveProject: () => void;
   onLoadProject: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onExportProject: (format: 'json' | 'gerber' | 'bom' | 'firmware') => void;
+  onExportProject: (format: ExportFormat) => void;
   onOpenExperiments: () => void;
   onOpenCommunityProjects?: () => void;
   onOpenShareModal?: () => void;
@@ -65,6 +83,8 @@ export function LabHeader({
   onToggleSimulation,
   onResetSimulation,
   onNewProject,
+  onNewBlankProject,
+  onLoadTemplate,
   onSaveProject,
   onLoadProject,
   onExportProject,
@@ -83,6 +103,43 @@ export function LabHeader({
   onResetLayout,
 }: LabHeaderProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const newMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Close menus on outside click or Escape key
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setShowNewMenu(false);
+      }
+    };
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowExportMenu(false);
+        setShowNewMenu(false);
+      }
+    };
+
+    if (showExportMenu || showNewMenu) {
+      document.addEventListener('mousedown', handleGlobalClick);
+      document.addEventListener('keydown', handleGlobalKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleGlobalClick);
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [showExportMenu, showNewMenu]);
+
+  const isSchematic = activeMode === 'schematic';
+  const is3D = activeMode === 'virtual3d';
+  const isPcb2D = activeMode === 'pcb2d';
+  const isPcb3D = activeMode === 'pcb3d';
+  const isFirmware = activeMode === 'firmware';
 
   return (
     <header className="h-14 bg-[#0B1528] text-white border-b border-slate-800 flex items-center justify-between px-2 sm:px-3 select-none z-30 w-full max-w-full overflow-hidden flex-shrink-0">
@@ -105,7 +162,7 @@ export function LabHeader({
           </div>
         </Link>
 
-        {/* Project Title Input */}
+        {/* Project Title Input & Save State Badge */}
         <div className="flex items-center gap-1.5 min-w-0">
           <input
             type="text"
@@ -115,12 +172,21 @@ export function LabHeader({
             title="Click to rename project"
           />
           {hasUnsavedChanges ? (
-            <span className="text-[9px] sm:text-[10px] text-amber-400 hidden sm:flex items-center gap-1 font-mono flex-shrink-0">
+            <span
+              className="text-[9px] sm:text-[10px] text-amber-400 hidden sm:flex items-center gap-1 font-mono flex-shrink-0 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20"
+              title="Workspace has unsaved changes. Press Ctrl+S to save."
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
               Unsaved
             </span>
           ) : (
-            <span className="text-[9px] sm:text-[10px] text-slate-400 hidden sm:inline font-mono flex-shrink-0">Saved</span>
+            <span
+              className="text-[9px] sm:text-[10px] text-emerald-400 hidden sm:flex items-center gap-1 font-mono flex-shrink-0 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20"
+              title="Workspace saved in browser local storage."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Saved
+            </span>
           )}
         </div>
       </div>
@@ -164,9 +230,9 @@ export function LabHeader({
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
-          title="Direct 3D-First Virtual Electronics Studio (Breadboard, Wiring & Boards)"
+          title="3D Virtual Electronics Studio & Breadboard Simulator"
         >
-          <Box className="w-3.5 h-3.5 text-amber-400" />
+          <Layers className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">3D Studio</span>
         </button>
 
@@ -177,7 +243,7 @@ export function LabHeader({
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
-          title="Virtual Instruments (Scope, DMM, AWG, Logic Analyzer)"
+          title="Benchtop Virtual Instruments"
         >
           <Activity className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">Instruments</span>
@@ -190,7 +256,7 @@ export function LabHeader({
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
           }`}
-          title="PCB 2D Layout & Autorouter"
+          title="PCB 2D Layout Editor & Autorouter"
         >
           <Layers className="w-3.5 h-3.5" />
           <span className="hidden xl:inline">PCB 2D</span>
@@ -260,12 +326,16 @@ export function LabHeader({
 
       {/* Primary Actions: Simulation Controls & File Operations (Always visible, flex-shrink-0) */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-        {/* Undo / Redo & Workspace Layout Controls */}
-        <div className="hidden 2xl:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
+        {/* Undo / Redo & Workspace Layout Controls (Visible on laptops & desktops) */}
+        <div className="hidden lg:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded transition-colors"
+            className={`p-1.5 rounded transition-colors ${
+              canUndo
+                ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+            }`}
             title="Undo (Ctrl+Z)"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -273,8 +343,12 @@ export function LabHeader({
           <button
             onClick={onRedo}
             disabled={!canRedo}
-            className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none rounded transition-colors"
-            title="Redo (Ctrl+Y)"
+            className={`p-1.5 rounded transition-colors ${
+              canRedo
+                ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+            }`}
+            title="Redo (Ctrl+Y or Ctrl+Shift+Z)"
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
@@ -336,12 +410,12 @@ export function LabHeader({
               {isSimulating ? (
                 <>
                   <Square className="w-3.5 h-3.5 fill-current" />
-                  Stop Sim
+                  <span>Stop Sim</span>
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  Run Sim
+                  <span>Run Sim</span>
                 </>
               )}
             </button>
@@ -357,89 +431,343 @@ export function LabHeader({
           </>
         )}
 
-        {/* New Project */}
-        <button
-          onClick={onNewProject}
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-700/80 transition-colors"
-          title="Create New Project"
-        >
-          <FilePlus className="w-3.5 h-3.5" />
-        </button>
+        {/* New Project / Reset Canvas Dropdown */}
+        <div className="relative" ref={newMenuRef}>
+          <button
+            onClick={() => setShowNewMenu(!showNewMenu)}
+            className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors flex items-center gap-0.5"
+            title="Create New Project / Reset Canvas"
+          >
+            <FilePlus className="w-3.5 h-3.5" />
+            <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+          </button>
 
-        {/* Save */}
+          {showNewMenu && (
+            <div className="absolute right-0 mt-1 w-52 bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl p-1 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+              <button
+                onClick={() => {
+                  if (onNewBlankProject) onNewBlankProject();
+                  else onNewProject();
+                  setShowNewMenu(false);
+                }}
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <FilePlus className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs">New Blank Project</div>
+                  <div className="text-[10px] text-slate-400">Start fresh with empty canvas</div>
+                </div>
+              </button>
+
+              {onLoadTemplate && (
+                <button
+                  onClick={() => {
+                    onLoadTemplate();
+                    setShowNewMenu(false);
+                  }}
+                  className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center gap-2 transition-colors border-t border-slate-800/70"
+                >
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <div className="font-semibold text-xs">NE555 Astable Demo</div>
+                    <div className="text-[10px] text-slate-400">Load sample 555 pulsing circuit</div>
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Save Workspace to localStorage (Ctrl+S) */}
         <button
           onClick={onSaveProject}
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors"
-          title="Save Project (Ctrl+S)"
+          className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors flex items-center gap-1.5 text-xs"
+          title="Save Project to Local Storage (Ctrl+S)"
         >
-          <Save className="w-4 h-4" />
+          <Save className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden md:inline font-medium">Save</span>
         </button>
 
-        {/* Open File / Load Project */}
-        <label
-          className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors cursor-pointer"
-          title="Open Project JSON"
-        >
-          <FolderOpen className="w-4 h-4" />
-          <input type="file" accept=".json" onChange={onLoadProject} className="hidden" />
-        </label>
+        {/* Hidden File Input for .eihouse.json and .json */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".eihouse.json,.json"
+          onChange={onLoadProject}
+          className="hidden"
+        />
 
-        {/* Export Dropdown */}
-        <div className="relative">
+        {/* Open File / Load Project Button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors"
+          title="Import Project (.eihouse.json / .json)"
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Universal Export Dropdown */}
+        <div className="relative" ref={exportMenuRef}>
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
-            className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
-            title="Export Options"
+            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded border border-slate-700/80 text-xs flex items-center gap-1 transition-colors font-medium"
+            title="Universal Export Options"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden sm:inline">Export</span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
           {showExportMenu && (
-            <div
-              className="absolute right-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl py-1 z-50 text-xs"
-              onMouseLeave={() => setShowExportMenu(false)}
-            >
+            <div className="absolute right-0 mt-1 w-64 bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
+              {/* 1. Complete Project File & Re-import */}
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                EI House Project
+              </div>
+
+              <button
+                onClick={() => {
+                  onExportProject('eihouse');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between group transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+                  <span className="font-medium">EI House Project</span>
+                </span>
+                <span className="text-[10px] font-mono text-cyan-400/90 font-bold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/50">
+                  .eihouse.json
+                </span>
+              </button>
+
               <button
                 onClick={() => {
                   onExportProject('json');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-3 py-2 text-left text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+                className="w-full px-2.5 py-1.5 text-left text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between group transition-colors"
               >
-                <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                Project File (.json)
+                <span className="flex items-center gap-2">
+                  <FileJson className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Standard Project File</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                  .json
+                </span>
               </button>
+
               <button
                 onClick={() => {
-                  onExportProject('gerber');
+                  fileInputRef.current?.click();
                   setShowExportMenu(false);
                 }}
-                className="w-full px-3 py-2 text-left text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+                className="w-full px-2.5 py-1.5 text-left text-emerald-400 hover:bg-emerald-950/60 hover:text-emerald-300 rounded-lg flex items-center justify-between group transition-colors border border-emerald-500/20 my-0.5"
               >
-                <Layers className="w-3.5 h-3.5 text-blue-400" />
-                RS-274X Gerber Top (.gtl)
+                <span className="flex items-center gap-2">
+                  <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="font-medium">Import Project...</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  Load
+                </span>
               </button>
+
+              <div className="my-1 border-t border-slate-800/80" />
+
+              {/* 2. Context-Aware Tab Export Options */}
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center justify-between">
+                <span>Current View Exports</span>
+                <span className="text-[9px] text-slate-500 font-normal">Context-Aware</span>
+              </div>
+
+              {isSchematic && (
+                <>
+                  <button
+                    onClick={() => {
+                      onExportProject('png');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Schematic Snapshot</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('svg');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Vector Drawing</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
+                  </button>
+                </>
+              )}
+
+              {is3D && (
+                <button
+                  onClick={() => {
+                    onExportProject('png');
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                    <span>3D Studio Photorealistic Shot</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                </button>
+              )}
+
+              {isPcb2D && (
+                <>
+                  <button
+                    onClick={() => {
+                      onExportProject('gerber');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Gerber & Drill Package</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('svg');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-purple-400" />
+                      <span>PCB 2D Vector Blueprint</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
+                  </button>
+                </>
+              )}
+
+              {isPcb3D && (
+                <>
+                  <button
+                    onClick={() => {
+                      onExportProject('png');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                      <span>PCB 3D High-Res Snapshot</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('gerber');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Gerber Fabrication Package</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                  </button>
+                </>
+              )}
+
+              {isFirmware && (
+                <>
+                  <button
+                    onClick={() => {
+                      onExportProject('firmware');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Code2 className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Arduino Sketch</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.ino</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('cpp');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>C++ Source File</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.cpp</span>
+                  </button>
+                </>
+              )}
+
+              <div className="my-1 border-t border-slate-800/80" />
+
+              {/* 3. Engineering Deliverables & Netlists */}
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Deliverables & Netlists
+              </div>
+
               <button
                 onClick={() => {
                   onExportProject('bom');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-3 py-2 text-left text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
               >
-                <Cpu className="w-3.5 h-3.5 text-amber-400" />
-                Bill of Materials (.csv)
+                <span className="flex items-center gap-2">
+                  <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Bill of Materials</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.csv</span>
               </button>
+
               <button
                 onClick={() => {
-                  onExportProject('firmware');
+                  onExportProject('netlist');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-3 py-2 text-left text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
               >
-                <Code2 className="w-3.5 h-3.5 text-purple-400" />
-                Arduino Firmware (.ino)
+                <span className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>SPICE Netlist</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40">.cir</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onExportProject('netlist-json');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>JSON Netlist</span>
+                </span>
+                <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/40">.json</span>
               </button>
             </div>
           )}

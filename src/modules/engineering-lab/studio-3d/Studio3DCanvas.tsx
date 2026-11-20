@@ -844,7 +844,9 @@ export function Studio3DCanvas({
     >
       {/* 3D WebGL Canvas */}
       <Canvas
+        id="virtual-3d-webgl-canvas"
         shadows
+        gl={{ preserveDrawingBuffer: true }}
         camera={{ position: [0, 130, 150], fov: 45, near: 0.1, far: 2000 }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
         onContextMenu={(e) => {

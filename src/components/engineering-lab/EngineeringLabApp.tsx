@@ -17,7 +17,7 @@ import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 
-import { LabHeader } from './Header/LabHeader';
+import { LabHeader, ExportFormat } from './Header/LabHeader';
 import { SchematicCanvas } from './Canvas/SchematicCanvas';
 import { ComponentBrowser } from './Panels/ComponentBrowser';
 import { PropertiesInspector } from './Panels/PropertiesInspector';
@@ -25,6 +25,17 @@ import { LabStatusBar } from './StatusBar/LabStatusBar';
 import { toast } from 'sonner';
 import { RefreshCw, Crosshair } from 'lucide-react';
 import { QuickProbeOverlay } from './Panels/VirtualInstruments/QuickProbeOverlay';
+import {
+  downloadBlob,
+  createEihouseProjectPayload,
+  parseEihouseProject,
+  exportCanvasToPng,
+  exportSvgElementToPng,
+} from '@/modules/engineering-lab/utils/export-helpers';
+import {
+  generateSpiceNetlist,
+  downloadSpiceNetlist,
+} from '@/modules/engineering-lab/circuit-engine/spice-netlist-generator';
 
 // DYNAMIC LAZY-LOADING OF HEAVY MODULES FOR SECTION 12 PERFORMANCE OPTIMIZATION
 const PcbView = dynamic(
@@ -107,13 +118,60 @@ const ShareProjectModal = dynamic(
   { ssr: false }
 );
 
+const TAB_PARAM_MAP: Record<string, WorkspaceMode> = {
+  'schematic': 'schematic',
+  '3d-studio': 'virtual3d',
+  'virtual3d': 'virtual3d',
+  'instruments': 'instruments',
+  'pcb-2d': 'pcb2d',
+  'pcb2d': 'pcb2d',
+  'pcb-3d': 'pcb3d',
+  'pcb3d': 'pcb3d',
+  'mcu': 'firmware',
+  'firmware': 'firmware',
+  'calculators': 'calculators',
+  'experiments': 'schematic',
+};
+
+const MODE_TO_PARAM: Record<WorkspaceMode, string> = {
+  'schematic': 'schematic',
+  'virtual3d': '3d-studio',
+  'instruments': 'instruments',
+  'pcb2d': 'pcb-2d',
+  'pcb3d': 'pcb-3d',
+  'firmware': 'mcu',
+  'calculators': 'calculators',
+  'experiments': 'experiments',
+  'simulation': 'schematic',
+};
+
 export function EngineeringLabApp() {
   // Project State
   const [project, setProject] = useState<EngineeringProject>(TEMPLATE_555_ASTABLE);
   const [activeMode, setActiveMode] = useState<WorkspaceMode>('schematic');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Undo / Redo Stacks
+  // Synchronized Project Ref to prevent stale closures in history/save
+  const projectRef = useRef<EngineeringProject>(project);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  // Synchronize Tab with URL query parameter and localStorage
+  const handleModeChange = useCallback((newMode: WorkspaceMode) => {
+    setActiveMode(newMode);
+    if (typeof window !== 'undefined') {
+      const slug = MODE_TO_PARAM[newMode] || newMode;
+      try {
+        localStorage.setItem('ei_lab_active_tab', slug);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', slug);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  }, []);
+
+  // Undo / Redo Stacks (Capped at 50 steps)
   const [undoStack, setUndoStack] = useState<EngineeringProject[]>([]);
   const [redoStack, setRedoStack] = useState<EngineeringProject[]>([]);
 
@@ -131,7 +189,7 @@ export function EngineeringLabApp() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isQuickProbeOpen, setIsQuickProbeOpen] = useState(false);
 
-  // Load layout preferences from localStorage on mount & check for project load URL param
+  // Load layout preferences, sync active tab, and restore saved project from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem('ei_lab_workspace_layout_prefs');
@@ -151,6 +209,24 @@ export function EngineeringLabApp() {
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
+        const queryTab = params.get('tab');
+        const savedTab = localStorage.getItem('ei_lab_active_tab');
+        const targetTab = queryTab || savedTab;
+
+        // Restore exact tab from URL query or localStorage (zero forced redirect to Schematic)
+        if (targetTab && TAB_PARAM_MAP[targetTab]) {
+          const mode = TAB_PARAM_MAP[targetTab];
+          setActiveMode(mode);
+          if (targetTab === 'experiments') {
+            setIsExperimentsModalOpen(true);
+          }
+          const currentSlug = MODE_TO_PARAM[mode] || mode;
+          if (!queryTab) {
+            params.set('tab', currentSlug);
+            window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+          }
+        }
+
         const shareParam = params.get('share') || params.get('data');
         const loadId = params.get('load') || params.get('project');
 
@@ -196,6 +272,21 @@ export function EngineeringLabApp() {
               }
             })
             .catch(() => {});
+          return;
+        }
+
+        // Automatic Hydration: Zero Data Loss on Refresh
+        // If neither shareParam nor loadId, hydrate from the last saved active workspace
+        const savedActive = localStorage.getItem('ei_lab_active_project');
+        if (savedActive) {
+          try {
+            const parsed = JSON.parse(savedActive);
+            if (parsed && Array.isArray(parsed.components) && Array.isArray(parsed.wires)) {
+              setProject(parsed);
+              setHasUnsavedChanges(false);
+              toast.success(`Restored workspace: "${parsed.title}"`, { duration: 2500 });
+            }
+          } catch {}
         }
       }
     } catch {}
@@ -333,30 +424,95 @@ export function EngineeringLabApp() {
     });
   }, []);
 
-  // Save current project state to Undo stack before changes
+  // Save current project state to Undo stack before changes (capped at 50 steps)
   const recordHistory = useCallback(() => {
-    setUndoStack((prev) => [...prev.slice(-20), JSON.parse(JSON.stringify(project))]);
+    setUndoStack((prev) => [...prev.slice(-49), JSON.parse(JSON.stringify(projectRef.current))]);
     setRedoStack([]);
     setHasUnsavedChanges(true);
-  }, [project]);
+  }, []);
 
-  // Undo action
-  const handleUndo = () => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack((prev) => prev.slice(0, prev.length - 1));
-    setRedoStack((prev) => [...prev, JSON.parse(JSON.stringify(project))]);
-    setProject(previous);
-  };
+  // Reliable Undo action
+  const handleUndo = useCallback(() => {
+    setUndoStack((prevUndo) => {
+      if (prevUndo.length === 0) return prevUndo;
+      const previous = prevUndo[prevUndo.length - 1];
+      const newUndo = prevUndo.slice(0, prevUndo.length - 1);
+      setRedoStack((prevRedo) => [...prevRedo.slice(-49), JSON.parse(JSON.stringify(projectRef.current))]);
+      setProject(previous);
+      setHasUnsavedChanges(true);
+      setSelectedCompId(null);
+      setSelectedWireId(null);
+      toast.info('Reverted previous change (Undo)');
+      return newUndo;
+    });
+  }, []);
 
-  // Redo action
-  const handleRedo = () => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, prev.length - 1));
-    setUndoStack((prev) => [...prev, JSON.parse(JSON.stringify(project))]);
-    setProject(next);
-  };
+  // Reliable Redo action
+  const handleRedo = useCallback(() => {
+    setRedoStack((prevRedo) => {
+      if (prevRedo.length === 0) return prevRedo;
+      const next = prevRedo[prevRedo.length - 1];
+      const newRedo = prevRedo.slice(0, prevRedo.length - 1);
+      setUndoStack((prevUndo) => [...prevUndo.slice(-49), JSON.parse(JSON.stringify(projectRef.current))]);
+      setProject(next);
+      setHasUnsavedChanges(true);
+      setSelectedCompId(null);
+      setSelectedWireId(null);
+      toast.info('Re-applied change (Redo)');
+      return newRedo;
+    });
+  }, []);
+
+  // Reset to Blank Project
+  const handleNewBlankProject = useCallback(() => {
+    recordHistory();
+    const blankProject: EngineeringProject = {
+      ...TEMPLATE_555_ASTABLE,
+      id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title: 'New Blank Circuit',
+      description: 'Empty schematic workspace ready for custom component placement.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      components: [],
+      wires: [],
+      pcb: {
+        ...TEMPLATE_555_ASTABLE.pcb,
+        pads: [],
+        tracks: [],
+        drcErrors: [],
+      },
+      firmware: {
+        ...TEMPLATE_555_ASTABLE.firmware,
+        code: '// EI House Virtual Lab Blank Sketch\nvoid setup() {\n  // Initialize pins here\n}\n\nvoid loop() {\n  // Main loop\n}\n',
+        serialLog: [],
+        isRunning: false,
+        gpioStates: {},
+      },
+      instruments: TEMPLATE_555_ASTABLE.instruments,
+    };
+    setProject(blankProject);
+    setSelectedCompId(null);
+    setSelectedWireId(null);
+    solverRef.current.reset();
+    mcuRef.current.resetGpio();
+    try {
+      localStorage.removeItem('ei_lab_active_project');
+    } catch {}
+    setHasUnsavedChanges(false);
+    toast.success('Started fresh with a new blank project');
+  }, [recordHistory]);
+
+  // Load Sample NE555 Astable Template
+  const handleLoadTemplate = useCallback(() => {
+    recordHistory();
+    setProject(TEMPLATE_555_ASTABLE);
+    setSelectedCompId(null);
+    setSelectedWireId(null);
+    solverRef.current.reset();
+    mcuRef.current.resetGpio();
+    setHasUnsavedChanges(true);
+    toast.success('Loaded NE555 Astable Demo Template');
+  }, [recordHistory]);
 
   // ----------------------------------------------------------------
   // SECTION 12: DECOUPLED & THROTTLED SIMULATION LOOP
@@ -392,16 +548,34 @@ export function EngineeringLabApp() {
           }
         }
 
-        // Step Circuit MNA Solver WITH active MCU gpioStates!
+        // Step Circuit MNA Solver WITH active MCU gpioStates in real-time (8 x 2ms = 16ms per 60fps frame)
         const solver = solverRef.current;
-        const result: SolverStepResult = solver.step(
+        let result: SolverStepResult = solver.step(
           project.components,
           project.wires,
-          0.001,
+          0.002,
           1.0,
           project.instruments,
           currentGpioStates || mcuRef.current.getGpioState()
         );
+        for (let sub = 1; sub < 8; sub++) {
+          const subRes = solver.step(
+            project.components,
+            project.wires,
+            0.002,
+            1.0,
+            project.instruments,
+            currentGpioStates || mcuRef.current.getGpioState()
+          );
+          result = {
+            ...result,
+            faults: subRes.faults && subRes.faults.length > 0 ? [...(result.faults || []), ...subRes.faults] : result.faults,
+            componentStates: subRes.componentStates,
+            nodeVoltages: subRes.nodeVoltages,
+            wireCurrents: subRes.wireCurrents,
+            waveformData: subRes.waveformData,
+          };
+        }
 
         const now = Date.now();
         // Fire toast alerts for new component electrical burnout / damage faults
@@ -676,9 +850,14 @@ export function EngineeringLabApp() {
   // ----------------------------------------------------------------
   // Project & File Operations
   // ----------------------------------------------------------------
-  const handleSaveProject = () => {
+  const handleSaveProject = useCallback(() => {
     try {
-      localStorage.setItem(`ei_lab_${project.id}`, JSON.stringify(project));
+      const curProject = projectRef.current;
+      const jsonStr = JSON.stringify(curProject);
+
+      // Persist to active workspace key and project-specific key
+      localStorage.setItem('ei_lab_active_project', jsonStr);
+      localStorage.setItem(`ei_lab_${curProject.id}`, jsonStr);
 
       // Maintain user projects index for Dashboard
       const indexRaw = localStorage.getItem('ei_lab_projects_index');
@@ -686,13 +865,13 @@ export function EngineeringLabApp() {
       try {
         if (indexRaw) indexList = JSON.parse(indexRaw);
       } catch {}
-      const existingIdx = indexList.findIndex((item) => item.id === project.id);
+      const existingIdx = indexList.findIndex((item) => item.id === curProject.id);
       const entry = {
-        id: project.id,
-        title: project.title,
+        id: curProject.id,
+        title: curProject.title,
         updatedAt: new Date().toISOString(),
-        componentCount: project.components.length,
-        wireCount: project.wires.length,
+        componentCount: curProject.components.length,
+        wireCount: curProject.wires.length,
       };
       if (existingIdx >= 0) {
         indexList[existingIdx] = entry;
@@ -702,11 +881,11 @@ export function EngineeringLabApp() {
       localStorage.setItem('ei_lab_projects_index', JSON.stringify(indexList));
 
       setHasUnsavedChanges(false);
-      toast.success('Project saved successfully to local storage.');
+      toast.success(`Project "${curProject.title}" saved! Changes will persist on refresh.`);
     } catch {
       toast.error('Failed to save project locally.');
     }
-  };
+  }, []);
 
   const handleLoadProjectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -714,57 +893,151 @@ export function EngineeringLabApp() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const loaded: EngineeringProject = JSON.parse(event.target?.result as string);
-        if (loaded.components && loaded.wires) {
+        const rawText = event.target?.result as string;
+        const loaded = parseEihouseProject(rawText);
+        if (loaded && Array.isArray(loaded.components) && Array.isArray(loaded.wires)) {
+          recordHistory();
           setProject(loaded);
           setSelectedCompId(null);
+          setSelectedWireId(null);
           solverRef.current.reset();
+          mcuRef.current.resetGpio();
           setHasUnsavedChanges(false);
-          toast.success(`Loaded "${loaded.title}"`);
+          try {
+            localStorage.setItem('ei_lab_active_project', JSON.stringify(loaded));
+          } catch {}
+          toast.success(`Imported project "${loaded.title || file.name}"`);
+        } else {
+          toast.error('Invalid file format. Please select a valid .eihouse.json or .json project.');
         }
       } catch {
-        toast.error('Invalid EI House Engineering Lab project file.');
+        toast.error('Failed to parse EI House project file.');
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
-  const handleExportProject = (format: 'json' | 'gerber' | 'bom' | 'firmware') => {
-    if (format === 'json') {
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(project, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `${project.title.toLowerCase().replace(/\s+/g, '_')}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      toast.success('Project JSON exported');
-    } else if (format === 'gerber') {
-      GerberExporter.exportGerberZip(project.pcb, project.components, project.title);
-      toast.success('RS-274X Gerber & Excellon Drill ZIP package generated');
+  const handleExportProject = async (format: ExportFormat) => {
+    const curProject = projectRef.current;
+    const slug = curProject.title.toLowerCase().replace(/[^a-z0-9_-]/g, '_') || 'circuit';
+
+    if (format === 'eihouse') {
+      const payload = createEihouseProjectPayload(curProject);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      downloadBlob(blob, `${slug}.eihouse.json`);
+      toast.success('Exported EI House project file (.eihouse.json)');
+    } else if (format === 'json') {
+      const blob = new Blob([JSON.stringify(curProject, null, 2)], { type: 'application/json' });
+      downloadBlob(blob, `${slug}.json`);
+      toast.success('Exported standard project JSON');
     } else if (format === 'bom') {
-      const bom = PcbGenerator.generateBom(project.components);
-      let csv = 'Designator,Component Type,Value,Footprint,Quantity\n';
+      const bom = PcbGenerator.generateBom(curProject.components);
+      let csv = 'Designator,Component Type,Value,Package/Footprint,Quantity\n';
       bom.forEach((b) => {
         csv += `"${b.designators.join(' ')}","${b.componentType}","${b.value}","${b.footprint}",${b.quantity}\n`;
       });
-      const dataStr = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-      const a = document.createElement('a');
-      a.href = dataStr;
-      a.download = `${project.title.toLowerCase().replace(/\s+/g, '_')}_BOM.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      toast.success('Bill of Materials exported');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      downloadBlob(blob, `${slug}_BOM.csv`);
+      toast.success('Bill of Materials exported (.csv)');
+    } else if (format === 'gerber') {
+      GerberExporter.exportGerberZip(curProject.pcb, curProject.components, curProject.title);
+      toast.success('RS-274X Gerber & Excellon Drill ZIP package generated');
     } else if (format === 'firmware') {
-      const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(project.firmware.code);
-      const a = document.createElement('a');
-      a.href = dataStr;
-      a.download = `${project.title.toLowerCase().replace(/\s+/g, '_')}.ino`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      toast.success('Arduino firmware exported');
+      const blob = new Blob([curProject.firmware.code || ''], { type: 'text/plain;charset=utf-8' });
+      downloadBlob(blob, `${slug}.ino`);
+      toast.success('Arduino firmware exported (.ino)');
+    } else if (format === 'cpp') {
+      const blob = new Blob([curProject.firmware.code || ''], { type: 'text/plain;charset=utf-8' });
+      downloadBlob(blob, `${slug}.cpp`);
+      toast.success('C++ source file exported (.cpp)');
+    } else if (format === 'netlist') {
+      const netlist = generateSpiceNetlist(curProject.title, curProject.components, curProject.wires);
+      downloadSpiceNetlist(curProject.title, netlist);
+      toast.success('SPICE Netlist exported (.cir)');
+    } else if (format === 'netlist-json') {
+      const jsonNetlist = {
+        title: curProject.title,
+        exportedAt: new Date().toISOString(),
+        components: curProject.components.map((c) => ({
+          id: c.id,
+          label: c.label,
+          designator: c.designator,
+          type: c.type,
+          value: c.value,
+          pins: c.pins.map((p) => p.id),
+        })),
+        wires: curProject.wires.map((w) => ({
+          id: w.id,
+          from: `${w.fromCompId}:${w.fromPinId}`,
+          to: `${w.toCompId}:${w.toPinId}`,
+          net: w.netName || 'NET',
+        })),
+      };
+      const blob = new Blob([JSON.stringify(jsonNetlist, null, 2)], { type: 'application/json' });
+      downloadBlob(blob, `${slug}_netlist.json`);
+      toast.success('JSON Netlist exported');
+    } else if (format === 'svg') {
+      if (activeMode === 'pcb2d') {
+        const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
+        const blob = new Blob([pcbSvg], { type: 'image/svg+xml;charset=utf-8' });
+        downloadBlob(blob, `${slug}_pcb.svg`);
+        toast.success('PCB 2D vector blueprint exported (.svg)');
+      } else {
+        const svgEl = document.getElementById('main-schematic-svg') as SVGElement | null;
+        if (svgEl) {
+          const serializer = new XMLSerializer();
+          let svgStr = serializer.serializeToString(svgEl);
+          if (!svgStr.includes('xmlns="http://www.w3.org/2000/svg"')) {
+            svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+          }
+          const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+          downloadBlob(blob, `${slug}_schematic.svg`);
+          toast.success('Schematic vector drawing exported (.svg)');
+        } else {
+          toast.error('Schematic SVG could not be found.');
+        }
+      }
+    } else if (format === 'png') {
+      if (activeMode === 'virtual3d') {
+        const canvas = (document.getElementById('virtual-3d-webgl-canvas') ||
+          document.querySelector('.virtual-3d-canvas canvas') ||
+          document.querySelector('canvas')) as HTMLCanvasElement | null;
+        if (canvas) {
+          exportCanvasToPng(canvas, `${slug}_3d_studio.png`);
+          toast.success('3D Virtual Studio snapshot exported (.png)');
+        } else {
+          toast.error('3D canvas not ready for snapshot.');
+        }
+      } else if (activeMode === 'pcb3d') {
+        const canvas = (document.getElementById('pcb-3d-webgl-canvas') ||
+          document.querySelector('canvas')) as HTMLCanvasElement | null;
+        if (canvas) {
+          exportCanvasToPng(canvas, `${slug}_pcb3d.png`);
+          toast.success('PCB 3D inspection snapshot exported (.png)');
+        } else {
+          toast.error('PCB 3D canvas not ready for snapshot.');
+        }
+      } else if (activeMode === 'pcb2d') {
+        const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = pcbSvg;
+        const svgEl = tempDiv.querySelector('svg');
+        if (svgEl) {
+          const ok = await exportSvgElementToPng(svgEl, `${slug}_pcb2d.png`, 3);
+          if (ok) toast.success('PCB 2D layout exported (.png)');
+          else toast.error('Failed to export PCB 2D PNG.');
+        }
+      } else {
+        const svgEl = document.getElementById('main-schematic-svg') as SVGElement | null;
+        if (svgEl) {
+          const ok = await exportSvgElementToPng(svgEl, `${slug}_schematic.png`, 2);
+          if (ok) toast.success('Schematic snapshot exported (.png)');
+          else toast.error('Failed to export schematic PNG.');
+        } else {
+          toast.error('Schematic drawing not found.');
+        }
+      }
     }
   };
 
@@ -807,8 +1080,32 @@ export function EngineeringLabApp() {
   // ----------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Save: Ctrl+S / Cmd+S universally (even when inside inputs)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSaveProject();
+        return;
+      }
+
       // Don't trigger canvas shortcuts while typing in inputs
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+      // Undo: Ctrl+Z / Cmd+Z (without Shift)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Redo: Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
+      ) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
 
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
@@ -823,22 +1120,21 @@ export function EngineeringLabApp() {
         if (selectedCompId) handleMirrorComponent(selectedCompId);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedCompId) handleDeleteComponent(selectedCompId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSaveProject();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        handleUndo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-        e.preventDefault();
-        handleRedo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCompId, undoStack, redoStack]);
+  }, [
+    selectedCompId,
+    handleSaveProject,
+    handleUndo,
+    handleRedo,
+    handleToggleSimulation,
+    handleRotateComponent,
+    handleMirrorComponent,
+    handleDeleteComponent,
+  ]);
 
   const selectedComponent = project.components.find((c) => c.id === selectedCompId) || null;
   const selectedWire = project.wires.find((w) => w.id === selectedWireId) || null;
@@ -849,11 +1145,12 @@ export function EngineeringLabApp() {
       <LabHeader
         projectTitle={project.title}
         onTitleChange={(title) => {
+          recordHistory();
           setProject((p) => ({ ...p, title }));
           setHasUnsavedChanges(true);
         }}
         activeMode={activeMode}
-        onModeChange={setActiveMode}
+        onModeChange={handleModeChange}
         isSimulating={isSimulating}
         onToggleSimulation={handleToggleSimulation}
         onResetSimulation={() => {
@@ -861,12 +1158,9 @@ export function EngineeringLabApp() {
           mcuRef.current.resetGpio();
           setSimTime(0);
         }}
-        onNewProject={() => {
-          recordHistory();
-          setProject(TEMPLATE_555_ASTABLE);
-          setSelectedCompId(null);
-          toast.success('Created new project');
-        }}
+        onNewProject={handleNewBlankProject}
+        onNewBlankProject={handleNewBlankProject}
+        onLoadTemplate={handleLoadTemplate}
         onSaveProject={handleSaveProject}
         onLoadProject={handleLoadProjectFile}
         onExportProject={handleExportProject}
@@ -1129,6 +1423,7 @@ export function EngineeringLabApp() {
                 gpioStates={project.firmware.gpioStates}
                 isInspectorOpen={isInspectorOpen}
                 onToggleInspector={() => setIsInspectorOpen((o) => !o)}
+                onSaveWorkspace={handleSaveProject}
               />
             </div>
 

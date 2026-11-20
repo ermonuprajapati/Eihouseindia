@@ -368,7 +368,9 @@ export function Pcb3dViewer({
     <div className="relative w-full h-full bg-[#070D18] select-none overflow-hidden">
       {/* Three.js Canvas */}
       <Canvas
+        id="pcb-3d-webgl-canvas"
         shadows
+        gl={{ preserveDrawingBuffer: true }}
         camera={{ position: [0, 80, 100], fov: 40, near: 0.1, far: 2000 }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
       >

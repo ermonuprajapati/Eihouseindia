@@ -1218,7 +1218,7 @@ export function SchematicCanvas({
         }}
       >
         {/* SVG Layer for Drawing Sheet Frame, Connecting Wires, Junctions & Net Labels */}
-        <svg className="main-schematic-svg absolute inset-0 w-[4000px] h-[4000px] pointer-events-auto overflow-visible">
+        <svg id="main-schematic-svg" className="main-schematic-svg absolute inset-0 w-[4000px] h-[4000px] pointer-events-auto overflow-visible">
           {/* IEEE Schematic Drawing Sheet Frame & Title Block */}
           <SchematicSheetFrame projectTitle={projectTitle} showFrame={showSheetFrame} />
 

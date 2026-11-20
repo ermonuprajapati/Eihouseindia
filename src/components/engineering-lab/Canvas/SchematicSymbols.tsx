@@ -90,7 +90,8 @@ export function SchematicSymbol({
           </g>
         );
 
-      case 'CAPACITOR': {
+      case 'CAPACITOR':
+      case 'CAPACITOR_ELECTROLYTIC': {
         const isPolarized = (component.parameters?.polarized as boolean) ?? (value.includes('µ') || value.includes('u'));
         return (
           <g>

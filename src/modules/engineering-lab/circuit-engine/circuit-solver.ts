@@ -570,9 +570,9 @@ export class CircuitSolver {
 
     // Initialize dynamic capacitor node voltages from previous time step
     for (const comp of components) {
-      if (comp.type === 'CAPACITOR') {
-        const pin1 = this.netMap.get(`${comp.id}:1`);
-        const pin2 = this.netMap.get(`${comp.id}:2`);
+      if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
+        const pin1 = this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:+`) || this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:pos`);
+        const pin2 = this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:-`) || this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:neg`);
         const prevVc = this.capacitorVoltages.get(comp.id) ?? 0;
         if (pin1 && pin2 && pin1 !== pin2 && !fixedNodes.has(pin1)) {
           nodeVoltages[pin1] = (nodeVoltages[pin2] || 0) + prevVc;
@@ -968,9 +968,9 @@ export class CircuitSolver {
             sumGV[pinN] += g * (nodeVoltages[pinP] || 0);
             sumG[pinN] += g;
           }
-        } else if (comp.type === 'CAPACITOR') {
-          const pin1 = this.netMap.get(`${comp.id}:1`);
-          const pin2 = this.netMap.get(`${comp.id}:2`);
+        } else if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
+          const pin1 = this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:+`) || this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:pos`);
+          const pin2 = this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:-`) || this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:neg`);
           if (pin1 && pin2 && pin1 !== pin2) {
             if (this.burnedComponents.has(comp.id)) {
               // Burned out open circuit: minimal leakage
@@ -1168,14 +1168,15 @@ export class CircuitSolver {
           }
 
           if (iter > 5) {
-            if (vTrig <= lowerThresh * 1.10) {
+            if (vTrig <= lowerThresh) {
               state.flipFlop = true;
-            } else if (vThresh >= upperThresh * 0.90) {
+            } else if (vThresh >= upperThresh) {
               state.flipFlop = false;
             }
           }
 
-          state.outV = state.flipFlop ? (vcc - 0.2) : (gnd + 0.1);
+          // Real bipolar NE555 output stage drops ~1.4V from Vcc when high (~7.6V at 9V Vcc)
+          state.outV = state.flipFlop ? (vcc - 1.4) : (gnd + 0.1);
 
           if (outPin && !fixedNodes.has(outPin)) {
             nodeVoltages[outPin] = state.outV;
@@ -1199,9 +1200,9 @@ export class CircuitSolver {
 
     // Update dynamic capacitor state from solved node voltages for next time step
     for (const comp of components) {
-      if (comp.type === 'CAPACITOR') {
-        const pin1 = this.netMap.get(`${comp.id}:1`);
-        const pin2 = this.netMap.get(`${comp.id}:2`);
+      if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
+        const pin1 = this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:+`) || this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:pos`);
+        const pin2 = this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:-`) || this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:neg`);
         if (pin1 && pin2 && pin1 !== pin2) {
           const v1 = nodeVoltages[pin1] || 0;
           const v2 = nodeVoltages[pin2] || 0;
@@ -1301,7 +1302,7 @@ export class CircuitSolver {
               faultState = 'WARNING';
             }
           }
-        } else if (comp.type === 'CAPACITOR') {
+        } else if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
           if (this.burnedComponents.has(comp.id)) {
             current = 0;
             on = false;

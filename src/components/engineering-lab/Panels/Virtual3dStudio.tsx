@@ -46,6 +46,7 @@ interface Virtual3dStudioProps {
   gpioStates?: Record<number | string, { mode: 'INPUT' | 'OUTPUT'; value: 0 | 1; analogVal: number }>;
   isInspectorOpen?: boolean;
   onToggleInspector?: () => void;
+  onSaveWorkspace?: () => void;
 }
 
 interface Studio3DHistoryState {
@@ -70,6 +71,7 @@ export function Virtual3dStudio({
   simulationStates,
   isInspectorOpen,
   onToggleInspector,
+  onSaveWorkspace,
 }: Virtual3dStudioProps) {
   // Independent 3D Studio document state (Decoupled from 2D Schematic)
   const [independentComponents, setIndependentComponents] = useState<Component3D[] | null>(null);
@@ -211,7 +213,9 @@ export function Virtual3dStudio({
       } else if (comp.type.includes('TIMER') || comp.type.includes('555')) {
         mappedType = 'TIMER_555';
       } else if (comp.type.includes('CAPACITOR')) {
-        mappedType = comp.type.includes('ELECTROLYTIC') ? 'CAPACITOR_ELECTROLYTIC' : 'CAPACITOR';
+        mappedType = comp.type.includes('ELECTROLYTIC') || comp.model3d?.includes('can') || comp.model3d?.includes('radial') || Boolean(comp.parameters?.polarized)
+          ? 'CAPACITOR_ELECTROLYTIC'
+          : 'CAPACITOR';
       } else if (comp.type.includes('ULTRASONIC') || comp.type.includes('SR04')) {
         mappedType = 'HC_SR04';
       } else if (comp.type.includes('SERVO')) {
@@ -577,6 +581,11 @@ export function Virtual3dStudio({
 
   // Top Bar Action: Save 3D Project / Export JSON
   const handleSave3DProject = () => {
+    if (onSaveWorkspace) {
+      onSaveWorkspace();
+      return;
+    }
+
     const projectPayload = {
       version: '1.0',
       timestamp: new Date().toISOString(),
