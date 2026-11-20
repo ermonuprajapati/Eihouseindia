@@ -455,6 +455,23 @@ export function EngineeringLabApp() {
             };
           }),
         }));
+      } else {
+        // Complete turn-OFF reset on Stop simulation: zero voltage, current, brightness, and ON states
+        setSimStates((prevStates) => {
+          const resetStates = { ...prevStates };
+          Object.keys(resetStates).forEach((k) => {
+            if (resetStates[k]) {
+              resetStates[k] = {
+                ...resetStates[k],
+                voltage: 0,
+                current: 0,
+                on: false,
+                brightness: 0,
+              };
+            }
+          });
+          return resetStates;
+        });
       }
       return next;
     });
@@ -840,11 +857,11 @@ export function EngineeringLabApp() {
   // ----------------------------------------------------------------
   // Wire Actions
   // ----------------------------------------------------------------
-  const handleAddWire = (wire: Omit<CircuitWire, 'id'>) => {
+  const handleAddWire = (wire: Omit<CircuitWire, 'id'> & { id?: string }) => {
     recordHistory();
     const newWire: CircuitWire = {
       ...wire,
-      id: `w_${Math.random().toString(36).substring(2, 9)}`,
+      id: wire.id || `w_${Math.random().toString(36).substring(2, 9)}`,
     };
     setProject((prev) => ({
       ...prev,

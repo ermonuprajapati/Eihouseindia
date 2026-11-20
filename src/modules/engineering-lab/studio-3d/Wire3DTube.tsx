@@ -91,6 +91,17 @@ export function Wire3DTube({
   const wireMeshRef = useRef<THREE.Mesh>(null);
   const hasCurrent = Boolean(isSimulating && current !== undefined && Math.abs(current) > 0.0001);
 
+  // Immediate material color update when wire color or selection state changes
+  useEffect(() => {
+    if (wireMeshRef.current) {
+      const mat = wireMeshRef.current.material as THREE.MeshStandardMaterial;
+      if (mat) {
+        mat.color.set(isSelected ? '#F59E0B' : color);
+        mat.needsUpdate = true;
+      }
+    }
+  }, [color, isSelected]);
+
   // Dynamic live current flow visual shimmer along jumper wire
   useFrame((state) => {
     if (!wireMeshRef.current) return;

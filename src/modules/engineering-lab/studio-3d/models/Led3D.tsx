@@ -18,17 +18,56 @@ export interface Led3DProps {
   onHoverPin?: (pinName: string | null) => void;
 }
 
+export function getLedColorPalette(colorInput?: string): {
+  hex: string;
+  offColor: string;
+  onColor: string;
+  onEmissive: string;
+} {
+  const col = (colorInput || 'Red').trim();
+  const lower = col.toLowerCase();
+
+  // 1. All 7 presets supported with authentic physical jewel-tone OFF optics and vivid emission ON
+  if (lower === 'white' || lower.includes('white') || lower === '#ffffff' || lower === '#f8fafc') {
+    return { hex: '#ffffff', offColor: '#d8e2ea', onColor: '#ffffff', onEmissive: '#ffffff' };
+  }
+  if (lower === 'cyan' || lower.includes('cyan') || lower === '#00e5ff' || lower === '#06b6d4') {
+    return { hex: '#00e5ff', offColor: '#0a5c66', onColor: '#00e5ff', onEmissive: '#00e5ff' };
+  }
+  if (lower === 'purple' || lower.includes('purple') || lower.includes('violet') || lower === '#b026ff' || lower === '#a855f7') {
+    return { hex: '#b026ff', offColor: '#3e1166', onColor: '#b026ff', onEmissive: '#b026ff' };
+  }
+  if (lower === 'green' || lower.includes('green') || lower === '#10b981') {
+    return { hex: '#10B981', offColor: '#064e3b', onColor: '#10B981', onEmissive: '#34d399' };
+  }
+  if (lower === 'blue' || lower.includes('blue') || lower === '#3b82f6') {
+    return { hex: '#3B82F6', offColor: '#0c4a6e', onColor: '#3B82F6', onEmissive: '#60a5fa' };
+  }
+  if (lower === 'amber' || lower === 'yellow' || lower.includes('amber') || lower.includes('yellow') || lower === '#f59e0b') {
+    return { hex: '#F59E0B', offColor: '#78350f', onColor: '#F59E0B', onEmissive: '#fbbf24' };
+  }
+  if (lower === 'red' || lower.includes('red') || lower === '#ef4444' || lower === '#ff1a1a') {
+    return { hex: '#ff1a1a', offColor: '#6b0f0f', onColor: '#ff1a1a', onEmissive: '#ff1a1a' };
+  }
+
+  // 2. Custom Hex String (#RRGGBB) or CSS color
+  try {
+    const c = new THREE.Color(col);
+    const hex = '#' + c.getHexString();
+    const off = c.clone().multiplyScalar(0.25);
+    return {
+      hex,
+      offColor: '#' + off.getHexString(),
+      onColor: hex,
+      onEmissive: hex,
+    };
+  } catch {
+    return { hex: '#ff1a1a', offColor: '#6b0f0f', onColor: '#ff1a1a', onEmissive: '#ff1a1a' };
+  }
+}
+
 export function parseHexColor(colStr?: string): string {
-  if (!colStr) return '#EF4444';
-  if (colStr.startsWith('#')) return colStr;
-  const lower = colStr.toLowerCase();
-  if (lower.includes('blue')) return '#3B82F6';
-  if (lower.includes('green')) return '#10B981';
-  if (lower.includes('yellow') || lower.includes('amber')) return '#F59E0B';
-  if (lower.includes('white')) return '#F8FAFC';
-  if (lower.includes('purple') || lower.includes('violet')) return '#A855F7';
-  if (lower.includes('cyan')) return '#06B6D4';
-  return '#EF4444'; // Red default
+  return getLedColorPalette(colStr).hex;
 }
 
 export function Led3D({
@@ -43,25 +82,10 @@ export function Led3D({
   hoveredPin,
   onHoverPin,
 }: Led3DProps) {
-  const hex = parseHexColor(color);
-  const effectiveBrightness = isBurned ? 0 : brightness !== undefined ? brightness : isPowered ? 1.0 : 0;
+  const { offColor, onColor, onEmissive } = useMemo(() => getLedColorPalette(color), [color]);
+  // Strict OFF state: when burned OR !isPowered, effectiveBrightness is strictly 0
+  const effectiveBrightness = isBurned || !isPowered ? 0 : (brightness !== undefined ? brightness : 1.0);
   const isIlluminated = effectiveBrightness > 0;
-
-  // Authentic physical LED optics: deep jewel tone when OFF, vivid brilliant emission when ON
-  const { offColor, onColor, onEmissive } = useMemo(() => {
-    const lower = hex.toLowerCase();
-    if (lower.includes('10b981') || lower.includes('green')) {
-      return { offColor: '#064e3b', onColor: '#10B981', onEmissive: '#34d399' };
-    }
-    if (lower.includes('3b82f6') || lower.includes('blue')) {
-      return { offColor: '#0c4a6e', onColor: '#3B82F6', onEmissive: '#60a5fa' };
-    }
-    if (lower.includes('f59e0b') || lower.includes('yellow') || lower.includes('amber')) {
-      return { offColor: '#78350f', onColor: '#F59E0B', onEmissive: '#fbbf24' };
-    }
-    // Deep ruby red physical standard
-    return { offColor: '#6b0f0f', onColor: '#ff1a1a', onEmissive: '#ff1a1a' };
-  }, [hex]);
 
   // Stable Three.js materials - Avoid recreating shader programs on every animation frame
   const materials = useMemo(() => {
@@ -147,10 +171,12 @@ export function Led3D({
     if (lightRef.current) {
       if (isBurned || !isIlluminated) {
         lightRef.current.intensity = 0;
+        lightRef.current.visible = false;
       } else {
         const pulse = 0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 10);
         lightRef.current.color.set(onEmissive);
         lightRef.current.intensity = Math.min(4.5, Math.max(1.0, effectiveBrightness * 4.2)) * pulse;
+        lightRef.current.visible = true;
       }
     }
   });
@@ -158,11 +184,18 @@ export function Led3D({
   // Smooth real-time update of optical parameters without WebGL shader compilation lag
   useEffect(() => {
     if (materials.lens instanceof THREE.MeshPhysicalMaterial) {
-      materials.lens.emissive.set(isIlluminated ? hex : '#000000');
-      materials.lens.emissiveIntensity = isIlluminated ? Math.max(0.4, effectiveBrightness * 3.2) : 0;
-      materials.lens.opacity = Math.min(0.95, 0.65 + effectiveBrightness * 0.3);
+      materials.lens.color.set(isIlluminated ? onColor : offColor);
+      materials.lens.emissive.set(isIlluminated ? onEmissive : '#000000');
+      materials.lens.emissiveIntensity = isIlluminated ? Math.max(0.6, effectiveBrightness * 3.5) : 0;
+      materials.lens.opacity = isIlluminated ? Math.min(0.95, 0.7 + effectiveBrightness * 0.25) : 0.75;
+      materials.lens.needsUpdate = true;
     }
-  }, [materials, isIlluminated, effectiveBrightness, hex]);
+    if (lightRef.current) {
+      lightRef.current.color.set(onEmissive);
+      lightRef.current.intensity = isIlluminated ? Math.min(4.5, Math.max(1.0, effectiveBrightness * 4.2)) : 0;
+      lightRef.current.visible = isIlluminated;
+    }
+  }, [materials, isIlluminated, effectiveBrightness, onColor, offColor, onEmissive]);
 
   // Lead spacing: Exactly 5.08mm (2 x 2.54mm breadboard pitch) centered at x = 0
   // Anode at x = -2.54 (Column N-1), Cathode at x = +2.54 (Column N+1)
@@ -239,11 +272,12 @@ export function Led3D({
       {/* Point Light when Illuminated with proportional intensity */}
       <pointLight
         ref={lightRef}
-        color={hex}
+        color={onEmissive}
         intensity={isIlluminated ? Math.max(0.6, effectiveBrightness * 4.0) : 0}
         distance={25 + 25 * effectiveBrightness}
         decay={2}
         position={[0, 7, 0]}
+        visible={isIlluminated}
       />
 
       {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm) */}

@@ -172,17 +172,46 @@ export class CircuitSolver {
     };
 
     // Initialize all pins
+    const compMap = new Map<string, CircuitComponent>();
     for (const comp of components) {
+      compMap.set(comp.id, comp);
       for (const pin of comp.pins) {
         const pinKey = `${comp.id}:${pin.id}`;
         parent.set(pinKey, pinKey);
       }
     }
 
+    const resolvePinKey = (compId: string, pinId: string): string => {
+      const comp = compMap.get(compId);
+      if (!comp) return `${compId}:${pinId}`;
+      const pIdLower = (pinId || '').toLowerCase();
+      // Match pin by id, name, or canonical alias
+      for (const p of comp.pins) {
+        const pId = (p.id || '').toLowerCase();
+        const pName = (p.name || '').toLowerCase();
+        if (pId === pIdLower || pName === pIdLower) {
+          return `${compId}:${p.id}`;
+        }
+        if (pIdLower === 'anode' && (pId === 'a' || pId === '1' || pName.includes('+') || pName.includes('anode'))) {
+          return `${compId}:${p.id}`;
+        }
+        if (pIdLower === 'cathode' && (pId === 'k' || pId === '2' || pName.includes('-') || pName.includes('cathode'))) {
+          return `${compId}:${p.id}`;
+        }
+        if ((pIdLower === '+' || pIdLower === 'pos') && (pId === 'p' || pId === 'pos' || pId === '+' || pId === '1' || pName.includes('+'))) {
+          return `${compId}:${p.id}`;
+        }
+        if ((pIdLower === '-' || pIdLower === 'neg') && (pId === 'n' || pId === 'neg' || pId === '-' || pId === '2' || pName.includes('-'))) {
+          return `${compId}:${p.id}`;
+        }
+      }
+      return `${compId}:${pinId}`;
+    };
+
     // Connect sets through wires
     for (const wire of wires) {
-      const pinA = `${wire.fromCompId}:${wire.fromPinId}`;
-      const pinB = `${wire.toCompId}:${wire.toPinId}`;
+      const pinA = resolvePinKey(wire.fromCompId, wire.fromPinId);
+      const pinB = resolvePinKey(wire.toCompId, wire.toPinId);
       union(pinA, pinB);
     }
 
@@ -356,7 +385,7 @@ export class CircuitSolver {
             foundGnd = true;
             break;
           }
-        } else if (c.type === 'DC_VOLTAGE' || c.type === 'BATTERY') {
+        } else if (c.type === 'DC_VOLTAGE' || c.type.includes('BATTERY')) {
           const nPin =
             this.netMap.get(`${c.id}:-`) ||
             this.netMap.get(`${c.id}:n`) ||
@@ -401,7 +430,7 @@ export class CircuitSolver {
 
     // 1. Process Independent Fixed DC & AC Voltage Sources & MCU Output Pins
     for (const comp of components) {
-      if (comp.type === 'DC_VOLTAGE' || comp.type === 'BATTERY') {
+      if (comp.type === 'DC_VOLTAGE' || comp.type.includes('BATTERY')) {
         const pNet =
           this.netMap.get(`${comp.id}:+`) ||
           this.netMap.get(`${comp.id}:p`) ||
@@ -1910,7 +1939,7 @@ export class CircuitSolver {
               on = false;
             }
           }
-        } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
+        } else if (comp.type.includes('BATTERY') || comp.type === 'DC_VOLTAGE') {
           current = Math.abs(vDiff) / 1000;
         }
 
@@ -1952,12 +1981,12 @@ export class CircuitSolver {
       const vB = netB ? (nodeVoltages[netB] || 0) : 0;
 
       let iVal = vA - vB;
-      if (fromComp.type === 'BATTERY' || fromComp.type === 'DC_VOLTAGE') {
-        const isPosPin = wire.fromPinId === 'p' || wire.fromPinId === '1';
+      if (fromComp.type.includes('BATTERY') || fromComp.type === 'DC_VOLTAGE') {
+        const isPosPin = wire.fromPinId === 'p' || wire.fromPinId === '1' || wire.fromPinId === '+' || wire.fromPinId.toLowerCase().includes('pos');
         const vBat = Number(fromComp.parameters?.voltage ?? 9.0);
         iVal = isPosPin ? (vBat >= 0 ? 1 : -1) : (vBat >= 0 ? -1 : 1);
-      } else if (toComp.type === 'BATTERY' || toComp.type === 'DC_VOLTAGE') {
-        const isPosPin = wire.toPinId === 'p' || wire.toPinId === '1';
+      } else if (toComp.type.includes('BATTERY') || toComp.type === 'DC_VOLTAGE') {
+        const isPosPin = wire.toPinId === 'p' || wire.toPinId === '1' || wire.toPinId === '+' || wire.toPinId.toLowerCase().includes('pos');
         const vBat = Number(toComp.parameters?.voltage ?? 9.0);
         iVal = isPosPin ? (vBat >= 0 ? -1 : 1) : (vBat >= 0 ? 1 : -1);
       } else {

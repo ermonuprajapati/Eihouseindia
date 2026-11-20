@@ -846,13 +846,6 @@ export function Studio3DCanvas({
 
     // In Wire mode:
     if (!activeWireStart) {
-      // Start wire - detect power/ground pin
-      const p = pinId.toLowerCase();
-      if (p.includes('gnd') || p === '-' || p === 'cathode') {
-        setActiveWireColor('#1E293B'); // Black
-      } else if (p.includes('vcc') || p.includes('5v') || p.includes('3v3') || p.includes('vin') || p === '+' || p === 'anode' || p === 'raw') {
-        setActiveWireColor('#EF4444'); // Red
-      }
       setActiveWireStart({ compId, pinId, pos: worldPos });
     } else {
       // Prevent connecting to self pin
@@ -861,21 +854,8 @@ export function Studio3DCanvas({
         return;
       }
 
-      // Check pin polarity for auto-coloring
-      let wireColor = activeWireColor;
-      const sp = activeWireStart.pinId.toLowerCase();
-      const ep = pinId.toLowerCase();
-      if (sp.includes('gnd') || ep.includes('gnd') || sp === '-' || ep === '-') {
-        wireColor = '#1E293B';
-      } else if (
-        sp.includes('vcc') || ep.includes('vcc') ||
-        sp.includes('5v') || ep.includes('5v') ||
-        sp.includes('3v3') || ep.includes('3v3') ||
-        sp.includes('vin') || ep.includes('vin') ||
-        sp === '+' || ep === '+'
-      ) {
-        wireColor = '#EF4444';
-      }
+      // Use user-selected wire color
+      const wireColor = activeWireColor;
 
       // Prevent wire stacking in the same breadboard/rail hole:
       let finalToPin = pinId;
@@ -1117,7 +1097,7 @@ export function Studio3DCanvas({
           if (comp.type === 'LED') {
             const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             const isPowered = Boolean(isSimulating && (simState?.on || (simState?.current && Math.abs(simState.current) > 0.001)));
-            const brightness = simState?.brightness;
+            const brightness = isSimulating && isPowered ? (simState?.brightness ?? 1.0) : 0;
             return (
               <group
                 key={comp.id}
@@ -1919,21 +1899,33 @@ export function Studio3DCanvas({
             { hex: '#1E293B', label: 'Black' },
             { hex: '#3B82F6', label: 'Blue' },
             { hex: '#10B981', label: 'Green' },
-            { hex: '#F59E0B', label: 'Yellow' },
+            { hex: '#F97316', label: 'Orange' },
             { hex: '#F8FAFC', label: 'White' },
-          ].map((c) => (
-            <button
-              key={c.hex}
-              onClick={() => setActiveWireColor(c.hex)}
-              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border transition-all cursor-pointer ${
-                activeWireColor === c.hex
-                  ? 'ring-2 ring-cyan-400 scale-110 border-white'
-                  : 'border-slate-600 hover:scale-105'
-              }`}
-              style={{ backgroundColor: c.hex }}
-              title={`Wire Color: ${c.label}`}
-            />
-          ))}
+          ].map((c) => {
+            const isDotActive = selectedWire ? (selectedWire.color === c.hex || (c.hex === '#F97316' && selectedWire.color === '#F59E0B')) : (activeWireColor === c.hex || (c.hex === '#F97316' && activeWireColor === '#F59E0B'));
+            return (
+              <button
+                key={c.hex}
+                type="button"
+                onClick={() => {
+                  setActiveWireColor(c.hex);
+                  if (selectedWireId && onUpdateWire3D) {
+                    const selWire = wires3d.find((w) => w.id === selectedWireId);
+                    if (selWire) {
+                      onUpdateWire3D({ ...selWire, color: c.hex });
+                    }
+                  }
+                }}
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border transition-all cursor-pointer ${
+                  isDotActive
+                    ? 'ring-2 ring-cyan-400 scale-110 border-white'
+                    : 'border-slate-600 hover:scale-105'
+                }`}
+                style={{ backgroundColor: c.hex }}
+                title={`Wire Color: ${c.label}`}
+              />
+            );
+          })}
         </div>
       </div>
 

@@ -26,7 +26,7 @@ interface Virtual3dStudioProps {
   onUpdateComponentPosition?: (id: string, x: number, y: number) => void;
   onUpdateComponent3DPosition?: (id: string, x3d: number, y3d: number, z3d: number) => void;
   onDeleteComponent?: (id: string) => void;
-  onAddWire: (wire: Omit<CircuitWire, 'id'>) => void;
+  onAddWire: (wire: Omit<CircuitWire, 'id'> & { id?: string }) => void;
   onDeleteWire?: (wireId: string) => void;
   onDisconnectWire?: (wireId: string) => void;
   isSimulating: boolean;
@@ -949,6 +949,7 @@ export function Virtual3dStudio({
     });
 
     onAddWire({
+      id: w3d.id,
       fromCompId: w3d.fromPin.compId,
       fromPinId: w3d.fromPin.pinId,
       toCompId: w3d.toPin.compId,
@@ -978,6 +979,7 @@ export function Virtual3dStudio({
 
     onDeleteWire(w3d.id);
     onAddWire({
+      id: w3d.id,
       fromCompId: w3d.fromPin.compId,
       fromPinId: w3d.fromPin.pinId,
       toCompId: w3d.toPin.compId,

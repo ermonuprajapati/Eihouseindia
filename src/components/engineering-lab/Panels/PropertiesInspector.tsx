@@ -174,6 +174,45 @@ function getCategoryForComponent(type: string): PhysicalPackagePreset['category'
   return 'general';
 }
 
+const LED_COLOR_PRESETS: Array<{ name: string; hex: string; vf: number; wavelength: string }> = [
+  { name: 'Red', hex: '#EF4444', vf: 2.0, wavelength: '630nm' },
+  { name: 'Green', hex: '#10B981', vf: 2.2, wavelength: '525nm' },
+  { name: 'Blue', hex: '#3B82F6', vf: 3.1, wavelength: '470nm' },
+  { name: 'Amber', hex: '#F59E0B', vf: 2.1, wavelength: '590nm' },
+  { name: 'White', hex: '#FFFFFF', vf: 3.1, wavelength: 'Warm' },
+  { name: 'Cyan', hex: '#00E5FF', vf: 3.0, wavelength: '505nm' },
+  { name: 'Purple', hex: '#B026FF', vf: 3.2, wavelength: '405nm' },
+];
+
+function resolveLedColor(val?: string | number | boolean): { name: string; hex: string; vf: number } {
+  const str = String(val || 'Red').trim().toLowerCase();
+  if (str === 'white' || str.includes('white') || str === '#ffffff' || str === '#f8fafc') {
+    return { name: 'White', hex: '#FFFFFF', vf: 3.1 };
+  }
+  if (str === 'cyan' || str.includes('cyan') || str === '#00e5ff' || str === '#06b6d4') {
+    return { name: 'Cyan', hex: '#00E5FF', vf: 3.0 };
+  }
+  if (str === 'purple' || str.includes('purple') || str.includes('violet') || str === '#b026ff' || str === '#a855f7') {
+    return { name: 'Purple', hex: '#B026FF', vf: 3.2 };
+  }
+  if (str === 'green' || str.includes('green') || str === '#10b981') {
+    return { name: 'Green', hex: '#10B981', vf: 2.2 };
+  }
+  if (str === 'blue' || str.includes('blue') || str === '#3b82f6') {
+    return { name: 'Blue', hex: '#3B82F6', vf: 3.1 };
+  }
+  if (str === 'amber' || str === 'yellow' || str.includes('amber') || str.includes('yellow') || str === '#f59e0b') {
+    return { name: 'Amber', hex: '#F59E0B', vf: 2.1 };
+  }
+  if (str === 'red' || str.includes('red') || str === '#ef4444' || str === '#ff1a1a') {
+    return { name: 'Red', hex: '#EF4444', vf: 2.0 };
+  }
+  if (str.startsWith('#')) {
+    return { name: 'Custom', hex: String(val).toUpperCase(), vf: 2.5 };
+  }
+  return { name: 'Red', hex: '#EF4444', vf: 2.0 };
+}
+
 export function PropertiesInspector({
   component,
   selectedWire,
@@ -478,15 +517,9 @@ export function PropertiesInspector({
   const updateParameter = (key: string, val: number | string | boolean, formattedValue?: string) => {
     const updatedParams = { ...component.parameters, [key]: val };
     if (key === 'color' && component.type === 'LED') {
-      const colorStr = String(val).toLowerCase();
-      let vf = 1.9;
-      if (colorStr.includes('blue') || colorStr.includes('white')) vf = 3.1;
-      else if (colorStr.includes('cyan')) vf = 3.0;
-      else if (colorStr.includes('purple') || colorStr.includes('violet')) vf = 3.2;
-      else if (colorStr.includes('green')) vf = 2.3;
-      else if (colorStr.includes('amber') || colorStr.includes('yellow') || colorStr.includes('orange')) vf = 2.1;
-      updatedParams.forwardVoltage = vf;
-      updatedParams.forwardVoltageV = vf;
+      const resolved = resolveLedColor(val);
+      updatedParams.forwardVoltage = resolved.vf;
+      updatedParams.forwardVoltageV = resolved.vf;
     }
     const nextComp: CircuitComponent = {
       ...component,
@@ -879,85 +912,75 @@ export function PropertiesInspector({
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold">Preset Color</label>
                     <select
-                      value={String(parameters.color ?? 'Red')}
-                      onChange={(e) => updateParameter('color', e.target.value, `${e.target.value} LED`)}
+                      value={resolveLedColor(parameters.color).name}
+                      onChange={(e) => {
+                        const target = LED_COLOR_PRESETS.find((p) => p.name === e.target.value) || LED_COLOR_PRESETS[0];
+                        updateParameter('color', target.name, `${target.name} LED`);
+                      }}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-300 font-mono text-xs"
                     >
-                      <option value="Red">Red (630nm)</option>
-                      <option value="Green">Green (525nm)</option>
-                      <option value="Blue">Blue (470nm)</option>
-                      <option value="Amber">Amber (590nm)</option>
-                      <option value="White">White (Warm)</option>
-                      <option value="Cyan">Cyan (505nm)</option>
-                      <option value="Purple">Purple (405nm)</option>
+                      {LED_COLOR_PRESETS.map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name} ({p.wavelength})
+                        </option>
+                      ))}
+                      {resolveLedColor(parameters.color).name === 'Custom' && (
+                        <option value="Custom">Custom Hex</option>
+                      )}
                     </select>
                   </div>
                 )}
               </div>
 
-              {type === 'LED' && (
-                <div className="space-y-2 pt-2 border-t border-slate-800">
-                  <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
-                    <span>RGB & Custom HEX Color</span>
-                    <span className="text-cyan-400 font-mono text-[11px] font-bold">
-                      {String(parameters.color ?? 'Red').startsWith('#') ? parameters.color : `${parameters.color} LED`}
-                    </span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={
-                        String(parameters.color ?? '#EF4444').startsWith('#')
-                          ? String(parameters.color)
-                          : String(parameters.color ?? '').toLowerCase().includes('green')
-                          ? '#10B981'
-                          : String(parameters.color ?? '').toLowerCase().includes('blue')
-                          ? '#3B82F6'
-                          : String(parameters.color ?? '').toLowerCase().includes('amber')
-                          ? '#F59E0B'
-                          : String(parameters.color ?? '').toLowerCase().includes('white')
-                          ? '#F8FAFC'
-                          : String(parameters.color ?? '').toLowerCase().includes('cyan')
-                          ? '#06B6D4'
-                          : String(parameters.color ?? '').toLowerCase().includes('purple')
-                          ? '#A855F7'
-                          : '#EF4444'
-                      }
-                      onChange={(e) => updateParameter('color', e.target.value, `Custom ${e.target.value}`)}
-                      className="w-9 h-8 bg-slate-950 border border-slate-700 rounded cursor-pointer p-0.5 shrink-0"
-                      title="Pick Custom RGB Color"
-                    />
-                    <input
-                      type="text"
-                      placeholder="#RRGGBB"
-                      value={String(parameters.color ?? 'Red')}
-                      onChange={(e) => updateParameter('color', e.target.value, `LED ${e.target.value}`)}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 uppercase"
-                    />
-                  </div>
-                  {/* Preset Quick Chips */}
-                  <div className="flex items-center gap-1.5 pt-1">
-                    {[
-                      { name: 'Red', hex: '#EF4444' },
-                      { name: 'Green', hex: '#10B981' },
-                      { name: 'Blue', hex: '#3B82F6' },
-                      { name: 'Amber', hex: '#F59E0B' },
-                      { name: 'White', hex: '#F8FAFC' },
-                      { name: 'Cyan', hex: '#06B6D4' },
-                      { name: 'Purple', hex: '#A855F7' },
-                    ].map((chip) => (
-                      <button
-                        key={chip.name}
-                        type="button"
-                        onClick={() => updateParameter('color', chip.hex, `${chip.name} LED`)}
-                        className="w-5 h-5 rounded-full border border-slate-600 hover:scale-125 transition-transform"
-                        style={{ backgroundColor: chip.hex }}
-                        title={`Select ${chip.name} (${chip.hex})`}
+              {type === 'LED' && (() => {
+                const currentLed = resolveLedColor(parameters.color);
+                return (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
+                      <span>RGB & Custom HEX Color</span>
+                      <span className="text-cyan-400 font-mono text-[11px] font-bold">
+                        {currentLed.name !== 'Custom' ? `${currentLed.name} LED` : `Custom ${currentLed.hex}`}
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={currentLed.hex.length === 7 ? currentLed.hex : '#EF4444'}
+                        onChange={(e) => updateParameter('color', e.target.value, `Custom ${e.target.value}`)}
+                        className="w-9 h-8 bg-slate-950 border border-slate-700 rounded cursor-pointer p-0.5 shrink-0"
+                        title="Pick Custom RGB Color"
                       />
-                    ))}
+                      <input
+                        type="text"
+                        placeholder="#RRGGBB"
+                        value={String(parameters.color ?? currentLed.name)}
+                        onChange={(e) => updateParameter('color', e.target.value, `LED ${e.target.value}`)}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-cyan-500 uppercase"
+                      />
+                    </div>
+                    {/* Preset Quick Chips */}
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {LED_COLOR_PRESETS.map((chip) => {
+                        const isChipActive = currentLed.name === chip.name;
+                        return (
+                          <button
+                            key={chip.name}
+                            type="button"
+                            onClick={() => updateParameter('color', chip.name, `${chip.name} LED`)}
+                            className={`w-5 h-5 rounded-full border transition-all cursor-pointer ${
+                              isChipActive
+                                ? 'ring-2 ring-cyan-400 scale-125 border-white shadow-lg'
+                                : 'border-slate-600 hover:scale-125'
+                            }`}
+                            style={{ backgroundColor: chip.hex }}
+                            title={`Select ${chip.name} (${chip.hex}, ${chip.vf}V)`}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

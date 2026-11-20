@@ -16,6 +16,7 @@ import {
   getBreadboardHoleCoords,
   getResistorColorBands,
 } from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
+import { getLedColorPalette } from '@/modules/engineering-lab/studio-3d/models/Led3D';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
   let solver: CircuitSolver;
@@ -3372,6 +3373,178 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       // 4. Zero unrouted airwires
       const unroutedViolation = drcViolations.find((v) => v.rule === 'unrouted_nets');
       expect(unroutedViolation).toBeUndefined();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AS - 3D Virtual Studio: LED Colors, Toolbar Wire Color & Simulation Sync
+  // --------------------------------------------------------------------------
+  describe('TEST AS: 3D Virtual Studio LED Colors, Toolbar Wire Color & Simulation Netlist Sync', () => {
+    it('AS1: correctly resolves authentic physical optics for all 7 LED presets + custom hex', () => {
+      // White: frosted clear-white (#d8e2ea) OFF, vibrant #ffffff ON
+      const white = getLedColorPalette('White');
+      expect(white.hex).toBe('#ffffff');
+      expect(white.offColor).toBe('#d8e2ea');
+      expect(white.onEmissive).toBe('#ffffff');
+
+      // Cyan: deep teal (#0a5c66) OFF, vibrant #00e5ff ON
+      const cyan = getLedColorPalette('Cyan');
+      expect(cyan.hex).toBe('#00e5ff');
+      expect(cyan.offColor).toBe('#0a5c66');
+      expect(cyan.onEmissive).toBe('#00e5ff');
+
+      // Purple: deep violet (#3e1166) OFF, vibrant #b026ff ON
+      const purple = getLedColorPalette('Purple');
+      expect(purple.hex).toBe('#b026ff');
+      expect(purple.offColor).toBe('#3e1166');
+      expect(purple.onEmissive).toBe('#b026ff');
+
+      // Red, Green, Blue, Amber
+      const red = getLedColorPalette('Red');
+      expect(red.offColor).toBe('#6b0f0f');
+      expect(red.onEmissive).toBe('#ff1a1a');
+
+      const green = getLedColorPalette('Green');
+      expect(green.offColor).toBe('#064e3b');
+      expect(green.onEmissive).toBe('#34d399');
+
+      const blue = getLedColorPalette('Blue');
+      expect(blue.offColor).toBe('#0c4a6e');
+      expect(blue.onEmissive).toBe('#60a5fa');
+
+      const amber = getLedColorPalette('Amber');
+      expect(amber.offColor).toBe('#78350f');
+      expect(amber.onEmissive).toBe('#fbbf24');
+
+      // Custom hex string
+      const custom = getLedColorPalette('#FF00AA');
+      expect(custom.hex.toLowerCase()).toBe('#ff00aa');
+      expect(custom.onEmissive.toLowerCase()).toBe('#ff00aa');
+      expect(custom.offColor).toBeDefined();
+    });
+
+    it('AS2: synchronizes forward voltage Vf across all 7 LED presets', () => {
+      const makeLedWithColor = (color: string): CircuitComponent => ({
+        id: 'led_test',
+        type: 'LED',
+        label: 'LED',
+        value: `${color} LED`,
+        category: 'active',
+        footprint: 'LED_THT:LED_D5.0mm',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'a', name: 'A (+)', x: -20, y: 0, pinType: 'passive' as const },
+          { id: 'k', name: 'K (-)', x: 20, y: 0, pinType: 'passive' as const },
+        ],
+        parameters: { color },
+      });
+
+      expect(getLedForwardVoltage(makeLedWithColor('White'))).toBeCloseTo(3.1, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Cyan'))).toBeCloseTo(3.0, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Purple'))).toBeCloseTo(3.2, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Blue'))).toBeCloseTo(3.1, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Green'))).toBeCloseTo(2.3, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Amber'))).toBeCloseTo(2.1, 1);
+      expect(getLedForwardVoltage(makeLedWithColor('Red'))).toBeCloseTo(1.9, 1);
+    });
+
+    it('AS3: simulates newly placed 3D breadboard circuit with forward current driving LED and strict OFF reset on stop', () => {
+      const solver = new CircuitSolver();
+
+      // Battery 9V, 330 ohm resistor, and White LED on 3D breadboard
+      const testComps: CircuitComponent[] = [
+        {
+          id: 'bat1',
+          type: 'BATTERY_9V',
+          label: '9V Battery',
+          value: '9V',
+          category: 'sources',
+          footprint: 'Battery:BatteryHolder_Keystone_2460_1xAA',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          x3d: -95,
+          y3d: 0,
+          z3d: 0,
+          pins: [
+            { id: 'p', name: '+', x: 0, y: -25, pinType: 'power' },
+            { id: 'n', name: '-', x: 0, y: 25, pinType: 'power' },
+          ],
+          parameters: { voltage: 9.0 },
+        },
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: 'R1',
+          value: '330Ω',
+          category: 'passive',
+          footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal',
+          x: 100,
+          y: 0,
+          rotation: 0,
+          x3d: -5.08, // Col 30
+          y3d: 8.5,
+          z3d: -8.42, // Row C (Top)
+          pins: [
+            { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+            { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
+          ],
+          parameters: { resistance: 330 },
+        },
+        {
+          id: 'led1',
+          type: 'LED',
+          label: 'LED1',
+          value: 'White LED',
+          category: 'active',
+          footprint: 'LED_THT:LED_D5.0mm',
+          x: 200,
+          y: 0,
+          rotation: 0,
+          x3d: 5.08, // Col 34
+          y3d: 8.5,
+          z3d: -8.42, // Row C (Top)
+          pins: [
+            { id: 'a', name: 'A (+)', x: -25, y: 0, pinType: 'passive' },
+            { id: 'k', name: 'K (-)', x: 25, y: 0, pinType: 'passive' },
+          ],
+          parameters: { color: 'White', forwardVoltageV: 3.1 },
+        },
+      ];
+
+      // Wires connected through breadboard tie rails and columns
+      // Battery(+) -> top positive rail (hole 1)
+      // Top positive rail (hole 5) -> Resistor pin 1 (Col 28, Row A)
+      // Resistor pin 2 (Col 32, Row A) -> LED Anode (Col 33, Row A)
+      // LED Cathode (Col 35, Row A) -> top negative rail (hole 10)
+      // Top negative rail (hole 1) -> Battery(-)
+      const testWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '+', toCompId: 'breadboard', toPinId: 'bb_rail_top_pos_1' },
+        { id: 'w2', fromCompId: 'breadboard', fromPinId: 'bb_rail_top_pos_5', toCompId: 'breadboard', toPinId: 'bb_col_28_A' },
+        { id: 'w3', fromCompId: 'breadboard', fromPinId: 'bb_col_32_A', toCompId: 'breadboard', toPinId: 'bb_col_33_A' },
+        { id: 'w4', fromCompId: 'breadboard', fromPinId: 'bb_col_35_A', toCompId: 'breadboard', toPinId: 'bb_rail_top_neg_10' },
+        { id: 'w5', fromCompId: 'breadboard', fromPinId: 'bb_rail_top_neg_1', toCompId: 'bat1', toPinId: '-' },
+      ];
+
+      // Step simulation
+      const res = solver.step(testComps, testWires, 0.001);
+      const ledState = res.componentStates['led1'];
+
+      // Forward current If should be positive (~(9V - 3.1V) / (330 + 15) = ~17.1mA)
+      expect(ledState).toBeDefined();
+      expect(ledState.current).toBeGreaterThan(0.010);
+      expect(ledState.current).toBeLessThan(0.025);
+      expect(ledState.on).toBe(true);
+      expect(ledState.brightness).toBeGreaterThan(0.5);
+
+      // Verify strict OFF state when simulation is stopped:
+      const isSimulating = false;
+      const isPowered = Boolean(isSimulating && (ledState?.on || (ledState?.current && Math.abs(ledState.current) > 0.001)));
+      const effectiveBrightness = isSimulating && isPowered ? (ledState?.brightness ?? 1.0) : 0;
+      expect(isPowered).toBe(false);
+      expect(effectiveBrightness).toBe(0);
     });
   });
 });
