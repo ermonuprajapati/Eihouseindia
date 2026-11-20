@@ -143,20 +143,22 @@ export function LabHeader({
 
   return (
     <>
-      <header className="h-14 bg-[#0B1528] text-white border-b border-slate-800 flex items-center justify-between px-2 sm:px-3 select-none z-50 w-full max-w-full overflow-hidden relative flex-shrink-0">
-      {/* Brand & Project Info */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0 min-w-0">
+      <header className="w-full max-w-[100vw] flex items-center justify-between gap-1.5 px-2 h-11 box-border bg-[#0B1528] text-white border-b border-slate-800 select-none z-50 shrink-0 relative">
+      {/* Zone A: Left Brand & Project (Compact shrink-0, max ~185px on < 1480px) */}
+      <div className="shrink-0 flex items-center gap-1.5 sm:gap-2 min-w-0">
         <Link
           href="/"
-          className="flex items-center gap-1.5 group text-slate-300 hover:text-white transition-colors pr-1.5 sm:pr-2 border-r border-slate-700/60"
+          className="flex items-center gap-1.5 group text-slate-300 hover:text-white transition-colors pr-1.5 sm:pr-2 border-r border-slate-700/60 shrink-0"
           title="Back to EI House Home"
         >
-          <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 group-hover:-translate-x-0.5 transition-transform" />
-          <div className="flex items-center gap-1">
-            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center font-bold text-[11px] sm:text-xs text-emerald-400">
+          <div className="w-6 h-6 flex items-center justify-center rounded text-emerald-400 group-hover:bg-slate-800 transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:-translate-x-0.5 transition-transform shrink-0" />
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center font-bold text-[11px] text-emerald-400 shrink-0" title="EI House Virtual Engineering Lab">
               EI
             </div>
-            <div className="hidden xl:block leading-none">
+            <div className="hidden 2xl:block leading-none">
               <span className="font-semibold text-xs tracking-tight text-white block">EI HOUSE</span>
               <span className="text-[9px] text-emerald-400 tracking-wider uppercase font-mono">ENG LAB</span>
             </div>
@@ -164,158 +166,163 @@ export function LabHeader({
         </Link>
 
         {/* Project Title Input & Save State Badge */}
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
           <input
             type="text"
             value={projectTitle}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="bg-slate-900/80 hover:bg-slate-900 text-xs font-medium text-slate-200 px-1.5 sm:px-2 py-1 rounded border border-slate-700/80 focus:border-emerald-500 focus:outline-none transition-all w-20 sm:w-24 md:w-28 max-w-[115px] xl:max-w-[140px] 2xl:max-w-[180px] truncate"
+            className="bg-slate-900/80 hover:bg-slate-900 text-[11px] font-medium text-slate-200 px-1.5 py-0.5 rounded border border-slate-700/80 focus:border-emerald-500 focus:outline-none transition-all w-14 sm:w-20 md:w-24 max-w-[65px] sm:max-w-[140px] xl:max-w-[125px] 2xl:max-w-[175px] truncate"
             title="Click to rename project"
           />
           {hasUnsavedChanges ? (
             <span
-              className="text-[10px] xl:text-[11px] text-amber-400 hidden sm:flex items-center gap-1 font-mono flex-shrink-0 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20"
+              className="flex items-center gap-1 font-mono flex-shrink-0 cursor-default"
               title="Workspace has unsaved changes. Press Ctrl+S to save."
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Unsaved
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <span className="hidden 2xl:inline text-[10px] text-amber-400 px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20">Unsaved</span>
             </span>
           ) : (
             <span
-              className="text-[10px] xl:text-[11px] text-emerald-400 hidden sm:flex items-center gap-1 font-mono flex-shrink-0 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20"
+              className="flex items-center gap-1 font-mono flex-shrink-0 cursor-default"
               title="Workspace saved in browser local storage."
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Saved
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+              <span className="hidden 2xl:inline text-[10px] text-emerald-400 px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20">Saved</span>
             </span>
           )}
         </div>
       </div>
 
-      {/* Desktop & Laptop Mode Switcher (Visible on lg: >= 1024px screens) */}
-      <nav className="hidden lg:flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-800 text-xs flex-shrink-0 gap-0.5 xl:gap-1">
-        <button
-          onClick={() => onModeChange('schematic')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'schematic'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="Schematic Circuit Designer"
-        >
-          <Cpu className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">Schematic</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('virtual3d')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'virtual3d'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="3D Virtual Electronics Studio & Breadboard Simulator"
-        >
-          <Layers className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">3D Studio</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('instruments')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'instruments'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="Benchtop Virtual Instruments"
-        >
-          <Activity className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">Instruments</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('pcb2d')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'pcb2d'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="PCB 2D Layout Editor & Autorouter"
-        >
-          <Layers className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">PCB 2D</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('pcb3d')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'pcb3d'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="PCB 3D Photorealistic Inspection"
-        >
-          <Box className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">PCB 3D</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('firmware')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'firmware'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="Embedded Microcontroller Firmware IDE"
-        >
-          <Code2 className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">MCU</span>
-        </button>
-
-        <button
-          onClick={() => onModeChange('calculators')}
-          className={`px-2 py-1 rounded-md flex items-center gap-1 font-medium transition-all flex-shrink-0 ${
-            activeMode === 'calculators'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="R&D Engineering Calculators"
-        >
-          <Calculator className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden 2xl:inline">Calculators</span>
-        </button>
-
-        <button
-          onClick={onOpenExperiments}
-          className="px-2 py-1 rounded-md flex items-center gap-1 font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 transition-all border-l border-slate-800 ml-0.5 flex-shrink-0"
-          title="Guided Electronics Experiments"
-        >
-          <BookOpen className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden 2xl:inline">Experiments</span>
-        </button>
-
-        {onOpenCommunityProjects && (
+      {/* Zone B: Center Navigation Tabs (flex-1 min-w-0 overflow-x-auto no-scrollbar flex items-center justify-center gap-0.5) */}
+      <nav
+        aria-label="Workspace tabs desktop"
+        className="hidden lg:flex flex-1 min-w-0 overflow-x-auto no-scrollbar items-center justify-center gap-0.5 py-0.5 select-none"
+      >
+        <div className="flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-800 gap-0.5 shrink-0">
           <button
-            onClick={onOpenCommunityProjects}
-            className="px-2 py-1 rounded-md flex items-center gap-1 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all border-l border-slate-800 relative group flex-shrink-0"
-            title="Explore EI House community projects & open in 1 click"
+            onClick={() => onModeChange('schematic')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'schematic'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Schematic Circuit Designer"
           >
-            <Globe className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform shrink-0" />
-            <span className="hidden 2xl:inline">Community Hub</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping absolute top-1 right-1" />
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute top-1 right-1" />
+            <Cpu className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+            <span>Schematic</span>
           </button>
-        )}
+
+          <button
+            onClick={() => onModeChange('virtual3d')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'virtual3d'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="3D Virtual Electronics Studio & Breadboard Simulator"
+          >
+            <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            <span>3D Studio</span>
+          </button>
+
+          <button
+            onClick={() => onModeChange('instruments')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'instruments'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Benchtop Virtual Instruments"
+          >
+            <Activity className="w-3.5 h-3.5 shrink-0 text-yellow-400" />
+            <span>Instruments</span>
+          </button>
+
+          <button
+            onClick={() => onModeChange('pcb2d')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'pcb2d'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="PCB 2D Layout Editor & Autorouter"
+          >
+            <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            <span>PCB 2D</span>
+          </button>
+
+          <button
+            onClick={() => onModeChange('pcb3d')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'pcb3d'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="PCB 3D Photorealistic Inspection"
+          >
+            <Box className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+            <span>PCB 3D</span>
+          </button>
+
+          <button
+            onClick={() => onModeChange('firmware')}
+            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+              activeMode === 'firmware'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Embedded Microcontroller Firmware IDE"
+          >
+            <Code2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+            <span>MCU</span>
+          </button>
+
+          {/* Icon Tabs: Calculators, Experiments, Community */}
+          <div className="w-[1px] h-3.5 bg-slate-700 mx-0.5 shrink-0" />
+
+          <button
+            onClick={() => onModeChange('calculators')}
+            className={`w-7 h-7 rounded-md flex items-center justify-center transition-all shrink-0 ${
+              activeMode === 'calculators'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-orange-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+            title="R&D Engineering Calculators"
+          >
+            <Calculator className="w-3.5 h-3.5 shrink-0" />
+          </button>
+
+          <button
+            onClick={onOpenExperiments}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 transition-all shrink-0"
+            title="Guided Electronics Experiments"
+          >
+            <BookOpen className="w-3.5 h-3.5 shrink-0" />
+          </button>
+
+          {onOpenCommunityProjects && (
+            <button
+              onClick={onOpenCommunityProjects}
+              className="w-7 h-7 rounded-md flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all relative shrink-0 group"
+              title="Explore EI House community projects & open in 1 click"
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping absolute top-1 right-1" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute top-1 right-1" />
+            </button>
+          )}
+        </div>
       </nav>
 
-      {/* Primary Actions: Simulation Controls & File Operations (Always visible, flex-shrink-0) */}
-      <div className="flex items-center gap-1 xl:gap-1.5 flex-shrink-0">
-        {/* Undo / Redo & Workspace Layout Controls (Visible on laptops & desktops) */}
-        <div className="hidden lg:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5">
+      {/* Zone C: Right Action Cluster (shrink-0 flex items-center gap-1 - ALWAYS 100% ON-SCREEN) */}
+      <div className="shrink-0 flex items-center gap-1">
+        {/* Undo / Redo & Workspace Layout Controls (Visible on laptops & desktops >= xl) */}
+        <div className="hidden xl:flex items-center bg-slate-900 rounded p-0.5 border border-slate-800 gap-0.5 shrink-0">
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+            className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
               canUndo
                 ? 'text-slate-300 hover:text-white hover:bg-slate-800'
                 : 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
@@ -327,7 +334,7 @@ export function LabHeader({
           <button
             onClick={onRedo}
             disabled={!canRedo}
-            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+            className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
               canRedo
                 ? 'text-slate-300 hover:text-white hover:bg-slate-800'
                 : 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
@@ -337,13 +344,13 @@ export function LabHeader({
             <RotateCw className="w-3.5 h-3.5" />
           </button>
 
-          <div className="w-[1px] h-4 bg-slate-700 mx-0.5" />
+          <div className="w-[1px] h-3.5 bg-slate-700 mx-0.5" />
 
           {/* Panel Visibility Toggles */}
           {onToggleBrowser && (
             <button
               onClick={onToggleBrowser}
-              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
                 isBrowserOpen
                   ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/50'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -357,7 +364,7 @@ export function LabHeader({
           {onToggleInspector && (
             <button
               onClick={onToggleInspector}
-              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
                 isInspectorOpen
                   ? 'bg-sky-950/80 text-sky-400 border border-sky-700/50'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -371,10 +378,41 @@ export function LabHeader({
           {onResetLayout && (
             <button
               onClick={onResetLayout}
-              className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition-colors"
+              className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition-colors"
               title="Reset Workspace Layout (Restore Default Panels)"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Mobile & Tablet Slide-Over Drawer Toggles (< lg: < 1024px, hidden on small mobile) */}
+        <div className="hidden sm:flex lg:hidden items-center gap-0.5 shrink-0">
+          {onToggleBrowser && (
+            <button
+              onClick={onToggleBrowser}
+              className={`w-6 h-6 flex items-center justify-center rounded transition-colors border border-slate-700/80 ${
+                isBrowserOpen
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700/50'
+                  : 'bg-slate-900 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Component Library Drawer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onToggleInspector && (
+            <button
+              onClick={onToggleInspector}
+              className={`w-6 h-6 flex items-center justify-center rounded transition-colors border border-slate-700/80 ${
+                isInspectorOpen
+                  ? 'bg-sky-950/80 text-sky-400 border-sky-700/50'
+                  : 'bg-slate-900 text-slate-400 hover:text-white'
+              }`}
+              title="Toggle Properties Inspector Drawer"
+            >
+              <Sliders className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -384,7 +422,7 @@ export function LabHeader({
           <>
             <button
               onClick={onToggleSimulation}
-              className={`px-2 py-1 2xl:px-3 2xl:py-1.5 rounded-md flex items-center gap-1 font-semibold text-xs shadow-md transition-all shrink-0 ${
+              className={`px-1.5 sm:px-2 py-1 rounded-md flex items-center gap-1 font-semibold text-[11px] shadow-md transition-all shrink-0 whitespace-nowrap ${
                 isSimulating
                   ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
                   : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
@@ -409,7 +447,7 @@ export function LabHeader({
             {/* Reset Sim */}
             <button
               onClick={onResetSimulation}
-              className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
+              className="w-6 h-6 hidden sm:flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
               title="Reset Simulation Clock & Nodes"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -418,17 +456,17 @@ export function LabHeader({
         )}
 
         {/* New Project / Reset Canvas Dropdown */}
-        <div className="relative" ref={newMenuRef}>
+        <div className="relative hidden sm:block shrink-0" ref={newMenuRef}>
           <button
             onClick={() => setShowNewMenu(!showNewMenu)}
-            className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
+            className="w-6 h-6 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
             title="Create New Project / Reset Canvas"
           >
             <FilePlus className="w-3.5 h-3.5" />
           </button>
 
           {showNewMenu && (
-            <div className="fixed top-14 right-24 sm:right-32 mt-1 w-52 bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl p-1 z-[100] text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+            <div className="fixed top-12 right-24 sm:right-32 mt-1 w-52 bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl p-1 z-[100] text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
               <button
                 onClick={() => {
                   if (onNewBlankProject) onNewBlankProject();
@@ -466,11 +504,11 @@ export function LabHeader({
         {/* Save Workspace to localStorage (Ctrl+S) */}
         <button
           onClick={onSaveProject}
-          className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors flex items-center gap-1 text-xs shrink-0"
+          className="w-6 h-6 sm:w-auto px-0 sm:px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors flex items-center justify-center gap-1 text-[11px] shrink-0 whitespace-nowrap"
           title="Save Project to Local Storage (Ctrl+S)"
         >
           <Save className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="hidden md:inline font-medium">Save</span>
+          <span className="hidden xl:inline font-medium">Save</span>
         </button>
 
         {/* Hidden File Input for .eihouse.json and .json */}
@@ -485,26 +523,26 @@ export function LabHeader({
         {/* Open File / Load Project Button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-7 h-7 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
+          className="w-6 h-6 hidden sm:flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700/80 transition-colors shrink-0"
           title="Import Project (.eihouse.json / .json)"
         >
           <FolderOpen className="w-3.5 h-3.5" />
         </button>
 
         {/* Universal Export Dropdown */}
-        <div className="relative" ref={exportMenuRef}>
+        <div className="relative shrink-0" ref={exportMenuRef}>
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
-            className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded border border-slate-700/80 text-xs flex items-center gap-1 transition-colors font-medium shrink-0"
+            className="w-6 h-6 sm:w-auto px-0 sm:px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded border border-slate-700/80 text-[11px] flex items-center justify-center gap-1 transition-colors font-medium shrink-0 whitespace-nowrap"
             title="Universal Export Options"
           >
             <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span className="hidden sm:inline">Export</span>
-            <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            <ChevronDown className="hidden sm:inline w-3 h-3 text-slate-400 shrink-0" />
           </button>
 
           {showExportMenu && (
-            <div className="fixed top-14 right-2 sm:right-4 mt-1 w-80 max-w-[calc(100vw-1rem)] bg-[#0B1528] border border-slate-700/90 rounded-xl shadow-2xl p-2 z-[100] text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto ring-1 ring-white/10 space-y-0.5">
+            <div className="fixed top-12 right-2 sm:right-4 mt-1 w-80 max-w-[calc(100vw-1rem)] bg-[#0B1528] border border-slate-700/90 rounded-xl shadow-2xl p-2 z-[100] text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto ring-1 ring-white/10 space-y-0.5">
               {/* 1. Complete Project File & Re-import */}
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 EI House Project
@@ -762,128 +800,129 @@ export function LabHeader({
         {onOpenShareModal && (
           <button
             onClick={onOpenShareModal}
-            className="px-2 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-medium text-xs flex items-center gap-1 shadow-md shadow-emerald-950/40 border border-emerald-500/30 transition-all shrink-0 hover:scale-102"
+            className="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow-md shadow-emerald-950/40 border border-emerald-500/30 transition-all shrink-0 hover:scale-102 whitespace-nowrap"
             title="Share Project Link, Embed Snippet or Publish to Community Web"
           >
             <Share2 className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Share</span>
+            <span className="inline">Share</span>
           </button>
         )}
       </div>
     </header>
 
-    {/* Mobile & Tablet Mode Switcher (< lg: < 1024px) */}
+    {/* Row 2: Mobile & Tablet Mode Switcher (< lg: < 1024px) */}
     <nav
-      aria-label="Workspace tabs"
-      className="flex lg:hidden items-center bg-[#070D18] border-b border-slate-800 px-2 py-1.5 overflow-x-auto no-scrollbar touch-scroll gap-1.5 text-xs shrink-0 select-none shadow-inner w-full"
+      aria-label="Workspace tabs mobile"
+      className="flex lg:hidden items-center bg-[#070D18] border-b border-slate-800 px-2 h-9 overflow-x-auto no-scrollbar touch-scroll gap-1 text-xs shrink-0 select-none shadow-inner w-full box-border"
+      style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <button
         onClick={() => onModeChange('schematic')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'schematic'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="Schematic Circuit Designer"
       >
-        <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+        <Cpu className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
         <span>Schematic</span>
       </button>
 
       <button
         onClick={() => onModeChange('virtual3d')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'virtual3d'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="3D Virtual Electronics Studio & Breadboard Simulator"
       >
-        <Layers className="w-3.5 h-3.5 text-emerald-400" />
+        <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <span>3D Studio</span>
       </button>
 
       <button
         onClick={() => onModeChange('instruments')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'instruments'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="Benchtop Virtual Instruments"
       >
-        <Activity className="w-3.5 h-3.5 text-yellow-400" />
+        <Activity className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
         <span>Instruments</span>
       </button>
 
       <button
         onClick={() => onModeChange('pcb2d')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'pcb2d'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="PCB 2D Layout Editor & Autorouter"
       >
-        <Layers className="w-3.5 h-3.5 text-emerald-400" />
+        <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <span>PCB 2D</span>
       </button>
 
       <button
         onClick={() => onModeChange('pcb3d')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'pcb3d'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="PCB 3D Photorealistic Inspection"
       >
-        <Box className="w-3.5 h-3.5 text-sky-400" />
+        <Box className="w-3.5 h-3.5 text-sky-400 shrink-0" />
         <span>PCB 3D</span>
       </button>
 
       <button
         onClick={() => onModeChange('firmware')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'firmware'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="Embedded Microcontroller Firmware IDE"
       >
-        <Code2 className="w-3.5 h-3.5 text-purple-400" />
+        <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
         <span>MCU</span>
       </button>
 
       <button
         onClick={() => onModeChange('calculators')}
-        className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-all shrink-0 whitespace-nowrap ${
+        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
           activeMode === 'calculators'
             ? 'bg-emerald-600 text-white shadow-sm font-semibold'
             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
         }`}
         title="R&D Engineering Calculators"
       >
-        <Calculator className="w-3.5 h-3.5 text-orange-400" />
+        <Calculator className="w-3.5 h-3.5 text-orange-400 shrink-0" />
         <span>Calculators</span>
       </button>
 
       <button
         onClick={onOpenExperiments}
-        className="px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 bg-slate-900/60 border border-slate-800/80 transition-all shrink-0 whitespace-nowrap"
+        className="px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 bg-slate-900/60 border border-slate-800/80 transition-all shrink-0 whitespace-nowrap"
         title="Guided Electronics Experiments"
       >
-        <BookOpen className="w-3.5 h-3.5" />
+        <BookOpen className="w-3.5 h-3.5 shrink-0" />
         <span>Experiments</span>
       </button>
 
       {onOpenCommunityProjects && (
         <button
           onClick={onOpenCommunityProjects}
-          className="px-2.5 py-1.5 rounded-md flex items-center gap-1.5 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 bg-slate-900/60 border border-slate-800/80 transition-all relative shrink-0 whitespace-nowrap"
+          className="px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 bg-slate-900/60 border border-slate-800/80 transition-all relative shrink-0 whitespace-nowrap"
           title="Explore EI House community projects & open in 1 click"
         >
-          <Globe className="w-3.5 h-3.5 text-emerald-400" />
+          <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span>Community Hub</span>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5" />
         </button>
