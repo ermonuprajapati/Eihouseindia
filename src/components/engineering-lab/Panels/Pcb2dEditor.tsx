@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   PcbLayout,
   PcbTrack,
@@ -110,7 +110,14 @@ export function Pcb2dEditor({
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Canvas mouse coordinates
-  const [mouseCoord, setMouseCoord] = useState<{ mmX: number; mmY: number; canvasX: number; canvasY: number } | null>(null);
+  const [mouseCoord, setMouseCoord] = useState<{
+    mmX: number;
+    mmY: number;
+    canvasX: number;
+    canvasY: number;
+    clientX?: number;
+    clientY?: number;
+  } | null>(null);
 
   // Zoom & Pan
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
@@ -923,7 +930,7 @@ export function Pcb2dEditor({
     const mmX = (canvasX - offsetX) / scale;
     const mmY = (canvasY - offsetY) / scale;
 
-    return { canvasX, canvasY, mmX, mmY };
+    return { canvasX, canvasY, mmX, mmY, clientX: e.clientX, clientY: e.clientY };
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1186,6 +1193,25 @@ export function Pcb2dEditor({
   const selectedTrack = pcb.tracks.find((t) => t.id === selectedTrackId);
   const selectedPad = pcb.pads.find((p) => p.id === selectedPadId);
   const selectedComp = pcb.components?.find((c) => c.componentId === selectedCompId);
+
+  const hoveredPad = hoveredPadId ? pcb.pads.find((p) => p.id === hoveredPadId) : null;
+  const hoveredComp = hoveredPad ? pcb.components?.find((c) => c.componentId === hoveredPad.componentId) : null;
+  const hoveredPadNet = useMemo(() => {
+    if (!hoveredPad) return null;
+    const connectedTrack = pcb.tracks.find(
+      (t) =>
+        Math.hypot(t.from.x - hoveredPad.x, t.from.y - hoveredPad.y) < 0.5 ||
+        Math.hypot(t.to.x - hoveredPad.x, t.to.y - hoveredPad.y) < 0.5
+    );
+    if (connectedTrack?.netId) return connectedTrack.netId;
+    const connectedWire = wires.find(
+      (w) =>
+        (w.fromCompId === hoveredPad.componentId && w.fromPinId === hoveredPad.pinId) ||
+        (w.toCompId === hoveredPad.componentId && w.toPinId === hoveredPad.pinId)
+    );
+    if (connectedWire) return connectedWire.id;
+    return 'Unrouted / Floating';
+  }, [hoveredPad, pcb.tracks, wires]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
@@ -1770,6 +1796,56 @@ export function Pcb2dEditor({
             }}
             className="touch-none max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
           />
+
+          {/* Interactive Hover HUD Tooltip for Pads / Vias */}
+          {hoveredPad && mouseCoord?.clientX && mouseCoord?.clientY && (
+            <div
+              className="pointer-events-none fixed z-50 bg-[#0B1528]/95 backdrop-blur-md border border-cyan-500/70 rounded-xl p-3 shadow-2xl font-mono text-xs min-w-[220px] animate-in fade-in duration-100"
+              style={{
+                left: Math.min(window.innerWidth - 240, mouseCoord.clientX + 16),
+                top: Math.min(window.innerHeight - 190, mouseCoord.clientY + 16),
+              }}
+            >
+              <div className="flex items-center justify-between pb-1 mb-1.5 border-b border-slate-700/80">
+                <span className="font-bold text-cyan-400">
+                  {hoveredPad.componentId === 'VIA' ? 'Through-Hole Via' : `${hoveredComp?.designator || hoveredPad.componentId}`}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950/70 border border-amber-600/70 text-amber-300 font-bold">
+                  {hoveredPad.layer === 'all'
+                    ? 'Through-Hole'
+                    : hoveredPad.layer === 'top'
+                    ? 'F.Cu (Top)'
+                    : 'B.Cu (Bot)'}
+                </span>
+              </div>
+              <div className="space-y-1 text-[11px] text-slate-300">
+                {hoveredPad.componentId !== 'VIA' && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Pin / Name:</span>
+                    <span className="text-white font-semibold">
+                      Pin {hoveredPad.pinId}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-400">
+                  <span>Net:</span>
+                  <span className="text-emerald-400 font-bold">{hoveredPadNet}</span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Coordinates:</span>
+                  <span className="text-slate-200">
+                    X: {hoveredPad.x.toFixed(2)} mm, Y: {hoveredPad.y.toFixed(2)} mm
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Pad / Drill:</span>
+                  <span className="text-cyan-300">
+                    Ø {hoveredPad.diameterMm} mm / Ø {hoveredPad.holeMm} mm
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ---------------------------------------------------- */}

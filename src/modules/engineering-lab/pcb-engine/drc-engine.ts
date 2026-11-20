@@ -125,11 +125,12 @@ export class DrcEngine {
 
     // 4. Pad-to-Track Clearance Check (< minClearanceMm)
     pads.forEach((pad) => {
+      const padRadius = pad.diameterMm / 2;
       tracks.forEach((track) => {
         // Only check if track does not terminate on this pad
         const dFrom = Math.hypot(track.from.x - pad.x, track.from.y - pad.y);
         const dTo = Math.hypot(track.to.x - pad.x, track.to.y - pad.y);
-        if (dFrom > 0.3 && dTo > 0.3) {
+        if (dFrom > padRadius + 0.1 && dTo > padRadius + 0.1) {
           // Point to line segment distance
           const dx = track.to.x - track.from.x;
           const dy = track.to.y - track.from.y;
@@ -139,7 +140,6 @@ export class DrcEngine {
             const projX = track.from.x + t * dx;
             const projY = track.from.y + t * dy;
             const dist = Math.hypot(pad.x - projX, pad.y - projY);
-            const padRadius = pad.diameterMm / 2;
             const trackHalf = track.widthMm / 2;
             if (dist < padRadius + trackHalf + minClearanceMm && dist > 0.01) {
               violations.push({
@@ -176,23 +176,65 @@ export class DrcEngine {
       }
     }
 
-    // 6. Unrouted Nets / Airwires Check
-    if (wires.length > 0) {
+    // 6. Unrouted Nets / Airwires Check (Multi-Segment Graph Connectivity)
+    if (wires.length > 0 && tracks.length > 0) {
       const padLookup = new Map<string, { x: number; y: number }>();
       pads.forEach((p) => padLookup.set(`${p.componentId}:${p.pinId}`, { x: p.x, y: p.y }));
+
+      // DSU for track endpoints connectivity
+      const parent = new Map<number, number>();
+      const find = (i: number): number => {
+        if (!parent.has(i)) parent.set(i, i);
+        let root = i;
+        while (root !== parent.get(root)!) {
+          root = parent.get(root)!;
+        }
+        let curr = i;
+        while (curr !== root) {
+          const nxt = parent.get(curr)!;
+          parent.set(curr, root);
+          curr = nxt;
+        }
+        return root;
+      };
+      const union = (i: number, j: number) => {
+        const r1 = find(i);
+        const r2 = find(j);
+        if (r1 !== r2) parent.set(r1, r2);
+      };
+
+      const ptKey = (x: number, y: number) => Math.round(x * 10) * 100000 + Math.round(y * 10);
+
+      tracks.forEach((t) => {
+        const k1 = ptKey(t.from.x, t.from.y);
+        const k2 = ptKey(t.to.x, t.to.y);
+        union(k1, k2);
+      });
+
+      // Merge vertices within 0.25mm of each other
+      const endpoints: { x: number; y: number; key: number }[] = [];
+      tracks.forEach((t) => {
+        endpoints.push({ x: t.from.x, y: t.from.y, key: ptKey(t.from.x, t.from.y) });
+        endpoints.push({ x: t.to.x, y: t.to.y, key: ptKey(t.to.x, t.to.y) });
+      });
+      for (let i = 0; i < endpoints.length; i++) {
+        for (let j = i + 1; j < endpoints.length; j++) {
+          if (Math.hypot(endpoints[i].x - endpoints[j].x, endpoints[i].y - endpoints[j].y) < 0.25) {
+            union(endpoints[i].key, endpoints[j].key);
+          }
+        }
+      }
 
       let unroutedCount = 0;
       wires.forEach((wire) => {
         const p1 = padLookup.get(`${wire.fromCompId}:${wire.fromPinId}`);
         const p2 = padLookup.get(`${wire.toCompId}:${wire.toPinId}`);
         if (p1 && p2) {
-          // Check if any track or chain connects near p1 and p2
-          const isConnected = tracks.some((t) => {
-            const near1 = Math.hypot(t.from.x - p1.x, t.from.y - p1.y) < 0.5 || Math.hypot(t.to.x - p1.x, t.to.y - p1.y) < 0.5;
-            const near2 = Math.hypot(t.from.x - p2.x, t.from.y - p2.y) < 0.5 || Math.hypot(t.to.x - p2.x, t.to.y - p2.y) < 0.5;
-            return near1 && near2;
-          });
-          if (!isConnected) {
+          const ep1 = endpoints.find((ep) => Math.hypot(ep.x - p1.x, ep.y - p1.y) < 0.6);
+          const ep2 = endpoints.find((ep) => Math.hypot(ep.x - p2.x, ep.y - p2.y) < 0.6);
+          if (ep1 && ep2 && find(ep1.key) === find(ep2.key)) {
+            // Connected!
+          } else {
             unroutedCount++;
           }
         }

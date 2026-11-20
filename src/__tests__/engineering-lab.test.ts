@@ -3317,4 +3317,61 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(resetRes.componentStates['led1']?.burned).toBeFalsy();
     }, 15000);
   });
+
+  // --------------------------------------------------------------------------
+  // TEST AR: 2-LAYER OCTILINEAR AUTO-ROUTER & 3D PCB VERIFICATION
+  // --------------------------------------------------------------------------
+  describe('TEST AR: 2-Layer Octilinear Auto-Router & Photorealistic PCB 3D Verification', () => {
+    it('routes the default NE555 astable circuit with strict 45°/90° angles, 0 same-layer track crossings, 0 unrouted airwires, and 0 DRC clearance errors', () => {
+      const tmpl = TEMPLATE_555_ASTABLE;
+      const pcb = PcbGenerator.generatePcbFromSchematic(tmpl.components, tmpl.wires, 90, 70);
+
+      expect(pcb.tracks.length).toBeGreaterThan(0);
+      expect(pcb.pads.length).toBeGreaterThan(0);
+
+      // 1. Strict 45° / 90° angles on all track segments
+      pcb.tracks.forEach((track) => {
+        const dx = track.to.x - track.from.x;
+        const dy = track.to.y - track.from.y;
+        if (Math.hypot(dx, dy) > 0.01) {
+          const angleDeg = Math.round(Math.abs((Math.atan2(dy, dx) * 180) / Math.PI));
+          const mod45 = angleDeg % 45;
+          // Must be within 1 degree of a multiple of 45° (0°, 45°, 90°, 135°, 180°)
+          expect(mod45 === 0 || mod45 === 45 || Math.abs(mod45 - 45) <= 1 || mod45 <= 1).toBe(true);
+        }
+      });
+
+      // 2. Zero same-layer crossings between different nets
+      const tracks = pcb.tracks;
+      for (let i = 0; i < tracks.length; i++) {
+        for (let j = i + 1; j < tracks.length; j++) {
+          const t1 = tracks[i];
+          const t2 = tracks[j];
+          if (t1.layer === t2.layer && t1.netId && t2.netId && t1.netId !== t2.netId) {
+            // Check segment intersection
+            const x1 = t1.from.x, y1 = t1.from.y, x2 = t1.to.x, y2 = t1.to.y;
+            const x3 = t2.from.x, y3 = t2.from.y, x4 = t2.to.x, y4 = t2.to.y;
+
+            const denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+            if (Math.abs(denom) > 1e-6) {
+              const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom;
+              const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom;
+              // True interior intersection
+              const isCrossing = ua > 0.05 && ua < 0.95 && ub > 0.05 && ub < 0.95;
+              expect(isCrossing).toBe(false);
+            }
+          }
+        }
+      }
+
+      // 3. Zero DRC Clearance Errors
+      const drcViolations = DrcEngine.runChecks(pcb, { wires: tmpl.wires });
+      const clearanceErrors = drcViolations.filter((v) => v.severity === 'error');
+      expect(clearanceErrors.length).toBe(0);
+
+      // 4. Zero unrouted airwires
+      const unroutedViolation = drcViolations.find((v) => v.rule === 'unrouted_nets');
+      expect(unroutedViolation).toBeUndefined();
+    });
+  });
 });

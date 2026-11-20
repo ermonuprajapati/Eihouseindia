@@ -307,6 +307,7 @@ export interface PcbPad {
   diameterMm: number;
   holeMm: number;
   layer: 'all' | 'top' | 'bottom';
+  netId?: string;
 }
 
 export interface PcbComponentPlacement {
