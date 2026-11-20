@@ -320,6 +320,7 @@ export function EngineeringLabApp() {
   const [simStates, setSimStates] = useState<SolverStepResult['componentStates']>({});
   const [wireCurrents, setWireCurrents] = useState<Record<string, number>>({});
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
+  const [activeFaults, setActiveFaults] = useState<SolverStepResult['faults']>([]);
 
   // Firmware & MCU State
   const [isFlashing, setIsFlashing] = useState(false);
@@ -338,6 +339,7 @@ export function EngineeringLabApp() {
   const handleResetFaults = useCallback(() => {
     solverRef.current.resetBurntComponents();
     notifiedFaultsRef.current.clear();
+    setActiveFaults([]);
     setSimStates((prevStates) => {
       const resetStates = { ...prevStates };
       Object.keys(resetStates).forEach((k) => {
@@ -580,6 +582,7 @@ export function EngineeringLabApp() {
         const now = Date.now();
         // Fire toast alerts for new component electrical burnout / damage faults
         if (result.faults && result.faults.length > 0) {
+          setActiveFaults(result.faults);
           result.faults.forEach((fault) => {
             const faultKey = `${fault.compId}:${fault.type}`;
             if (!notifiedFaultsRef.current.has(faultKey)) {
@@ -1368,8 +1371,8 @@ export function EngineeringLabApp() {
             />
 
             <div className="flex-1 h-full w-full relative overflow-hidden min-w-0">
-              {/* Circuit Overload / Component Burnout Alert Banner (3D Studio) */}
-              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) && (
+              {/* Circuit Overload / Electrical Fault Alert Banner (3D Studio) */}
+              {(Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) || (activeFaults && activeFaults.length > 0)) && (
                 <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
                   <span className="font-bold text-rose-400 flex items-center gap-1.5 shrink-0">
                     <span>💥</span>
@@ -1377,10 +1380,13 @@ export function EngineeringLabApp() {
                   </span>
                   <span
                     className="text-rose-100 flex-1 truncate"
-                    title={Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault}
+                    title={
+                      Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault ||
+                      (activeFaults && activeFaults.length > 0 ? activeFaults[0].message : undefined)
+                    }
                   >
                     {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault ||
-                      'Component burned out due to electrical overload!'}
+                      (activeFaults && activeFaults.length > 0 ? activeFaults[0].message : 'Component burned out due to electrical overload!')}
                   </span>
                   <button
                     type="button"

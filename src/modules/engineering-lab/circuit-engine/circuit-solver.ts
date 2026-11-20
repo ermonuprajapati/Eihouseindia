@@ -103,7 +103,7 @@ export class CircuitSolver {
   private timer555State: Map<string, { flipFlop: boolean; outV: number }> = new Map();
   private waveformHistory: Map<string, SimulationWaveformPoint[]> = new Map();
   private currentTime: number = 0;
-  private maxHistoryPoints: number = 300;
+  private maxHistoryPoints: number = 2500;
   private burnedComponents: Set<string> = new Set();
   private burnFaultReasons: Map<string, string> = new Map();
   private recordedFaults: Array<{
@@ -1279,7 +1279,7 @@ export class CircuitSolver {
             const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
             current = vDiff / r;
             const p = Math.abs(vDiff * current);
-            const pMax = Number(comp.parameters?.powerRating ?? comp.parameters?.ratedPower ?? 0.25);
+            const pMax = Number(comp.parameters?.powerRating ?? comp.parameters?.powerRatingW ?? comp.parameters?.ratedPower ?? 0.25);
             thermalStress = p / pMax;
             if (p > pMax) {
               this.burnedComponents.add(comp.id);
@@ -1314,7 +1314,7 @@ export class CircuitSolver {
             fault = this.burnFaultReasons.get(comp.id);
           } else {
             const absVc = Math.abs(vDiff);
-            const vRated = Number(comp.parameters?.voltageRating ?? comp.parameters?.ratedVoltage ?? 16.0);
+            const vRated = Number(comp.parameters?.voltageRating ?? comp.parameters?.voltageRatingV ?? comp.parameters?.ratedVoltage ?? 16.0);
             thermalStress = absVc / vRated;
             const isPolarized = comp.parameters?.polarized === true ||
               comp.subCategory === 'electrolytic' ||

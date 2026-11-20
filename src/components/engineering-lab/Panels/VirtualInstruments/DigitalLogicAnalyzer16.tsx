@@ -34,6 +34,16 @@ export function DigitalLogicAnalyzer16({
 }: DigitalLogicAnalyzer16Props) {
   const la = instruments.logicAnalyzer;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frozenWaveformsRef = useRef<Record<string, SimulationWaveformPoint[]> | null>(null);
+
+  // If in HOLD mode, use the frozen snapshot to prevent live simulation updates from overwriting display
+  if (!la.running && !frozenWaveformsRef.current && Object.keys(waveformData).length > 0) {
+    frozenWaveformsRef.current = JSON.parse(JSON.stringify(waveformData));
+  } else if (la.running && frozenWaveformsRef.current) {
+    frozenWaveformsRef.current = null;
+  }
+
+  const activeWaveformData = !la.running && frozenWaveformsRef.current ? frozenWaveformsRef.current : waveformData;
 
   const [channelCount, setChannelCount] = useState<8 | 16>(8);
   const [logicThreshold, setLogicThreshold] = useState<number>(2.0); // 2.0V TTL, 1.65V CMOS 3.3V, 0.9V 1.8V
@@ -106,13 +116,13 @@ export function DigitalLogicAnalyzer16({
 
   // Per-channel live metrics (Frequency, Pulse Width, Duty)
   const channelMetrics = useMemo(() => {
-    const keys = Object.keys(waveformData);
+    const keys = Object.keys(activeWaveformData);
     const metrics: Record<number, { freq: string; pulseWidth: string; duty: string; state: number }> = {};
 
     for (let ch = 0; ch < channelCount; ch++) {
       const explicitPin = channelPinMap[ch];
-      const waveKey = explicitPin && waveformData[explicitPin] ? explicitPin : keys[ch % keys.length];
-      const pts = waveKey ? waveformData[waveKey] : undefined;
+      const waveKey = explicitPin && activeWaveformData[explicitPin] ? explicitPin : keys[ch % keys.length];
+      const pts = waveKey ? activeWaveformData[waveKey] : undefined;
 
       if (!pts || pts.length < 5) {
         metrics[ch] = { freq: '--', pulseWidth: '--', duty: '--', state: 0 };
@@ -148,7 +158,7 @@ export function DigitalLogicAnalyzer16({
     }
 
     return metrics;
-  }, [channelCount, channelPinMap, waveformData, logicThreshold]);
+  }, [channelCount, channelPinMap, activeWaveformData, logicThreshold]);
 
   // Synchronous Canvas Rendering Loop
   useEffect(() => {
@@ -169,7 +179,7 @@ export function DigitalLogicAnalyzer16({
 
       const numChannels = channelCount;
       const rowHeight = height / numChannels;
-      const keys = Object.keys(waveformData);
+      const keys = Object.keys(activeWaveformData);
 
       for (let ch = 0; ch < numChannels; ch++) {
         const topY = ch * rowHeight;
@@ -189,8 +199,8 @@ export function DigitalLogicAnalyzer16({
 
         // Trace
         const explicitPin = channelPinMap[ch];
-        const waveKey = explicitPin && waveformData[explicitPin] ? explicitPin : keys[ch % keys.length];
-        const pts = waveKey ? waveformData[waveKey] : undefined;
+        const waveKey = explicitPin && activeWaveformData[explicitPin] ? explicitPin : keys[ch % keys.length];
+        const pts = waveKey ? activeWaveformData[waveKey] : undefined;
 
         const traceColor = [
           '#10B981', '#38BDF8', '#EAB308', '#EC4899', '#A855F7', '#F97316', '#06B6D4', '#F43F5E',
@@ -236,7 +246,7 @@ export function DigitalLogicAnalyzer16({
 
     render();
     return () => cancelAnimationFrame(animId);
-  }, [channelCount, channelPinMap, waveformData, zoomLevel, logicThreshold, la.running, isSimulating]);
+  }, [channelCount, channelPinMap, activeWaveformData, zoomLevel, logicThreshold, la.running, isSimulating]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#050B14] p-3 text-slate-200 select-none overflow-hidden font-mono text-xs">
@@ -343,14 +353,20 @@ export function DigitalLogicAnalyzer16({
 
           {/* Run / Stop Toggle */}
           <button
-            onClick={() =>
+            onClick={() => {
+              const nextRunning = !la.running;
+              if (!nextRunning) {
+                frozenWaveformsRef.current = JSON.parse(JSON.stringify(waveformData));
+              } else {
+                frozenWaveformsRef.current = null;
+              }
               onUpdateInstruments({
                 ...instruments,
-                logicAnalyzer: { ...la, running: !la.running },
-              })
-            }
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs cursor-pointer shadow-md ${
-              la.running ? 'bg-rose-950 border border-rose-600 text-rose-300' : 'bg-emerald-950 border border-emerald-500 text-emerald-300'
+                logicAnalyzer: { ...la, running: nextRunning },
+              });
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs cursor-pointer shadow-md transition-all ${
+              la.running ? 'bg-rose-950/90 border border-rose-600 text-rose-300 hover:bg-rose-900' : 'bg-emerald-950/90 border border-emerald-500 text-emerald-300 hover:bg-emerald-900'
             }`}
           >
             {la.running ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}

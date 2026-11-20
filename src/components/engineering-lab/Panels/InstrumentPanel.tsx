@@ -12,8 +12,6 @@ import {
   Gauge,
   Radio,
   Binary,
-  Play,
-  Pause,
 } from 'lucide-react';
 import { Oscilloscope4CH } from './VirtualInstruments/Oscilloscope4CH';
 import { DigitalMultimeter65 } from './VirtualInstruments/DigitalMultimeter65';
@@ -41,7 +39,6 @@ export function InstrumentPanel({
   wires = [],
   simStates = {},
   wireCurrents = {},
-  onToggleSimulation,
 }: InstrumentPanelProps) {
   const [activeTab, setActiveTab] = useState<'scope' | 'multimeter' | 'funcgen' | 'logic'>('scope');
 
@@ -105,22 +102,24 @@ export function InstrumentPanel({
 
         {/* Global Simulation & Virtual Rack Live Indicator */}
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono shrink-0 pl-2">
-          {onToggleSimulation && (
-            <button
-              onClick={onToggleSimulation}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold cursor-pointer transition-all shadow-md ${
-                isSimulating
-                  ? 'bg-emerald-950 border border-emerald-500 text-emerald-300 hover:bg-emerald-900'
-                  : 'bg-rose-950 border border-rose-500 text-rose-300 hover:bg-rose-900 animate-pulse'
+          {/* Clean Read-Only Engine Status Badge (Navbar controls Sim Run/Stop) */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors ${
+              isSimulating
+                ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isSimulating ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-500'
               }`}
-            >
-              {isSimulating ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{isSimulating ? 'SIM ACTIVE (30 FPS)' : 'SIM PAUSED'}</span>
-            </button>
-          )}
+            />
+            <span>{isSimulating ? 'ENGINE RUNNING (60 FPS)' : 'ENGINE PAUSED'}</span>
+          </div>
 
-          <div className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="text-[11px] font-mono text-cyan-400 flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span>MNA Solver Bench Online</span>
           </div>
         </div>

@@ -50,6 +50,7 @@ import { Diode3D } from './models/Diode3D';
 import { Ldr3D } from './models/Ldr3D';
 import { SlideSwitch3D } from './models/SlideSwitch3D';
 import { DipPackage3D } from './models/DipPackage3D';
+import { BurnSmokeFX } from './models/BurnSmokeFX';
 import { Wire3DTube } from './Wire3DTube';
 
 interface Library3DItem {
@@ -468,22 +469,6 @@ export function Studio3DCanvas({
   const draggingCompRef = useRef<{ id: string; startPos: [number, number, number] } | null>(null);
   const pointerDownPosRef = useRef<{ clientX: number; clientY: number; compId: string } | null>(null);
 
-  // Compute occupied breadboard hole IDs for collision-free snapping (1 hole = 1 pin)
-  const occupiedHoleIds = useMemo(() => {
-    const set = new Set<string>();
-    wires3d.forEach((w) => {
-      if (w.fromPin.compId === 'breadboard') set.add(w.fromPin.pinId);
-      if (w.toPin.compId === 'breadboard') set.add(w.toPin.pinId);
-    });
-    components3d.forEach((c) => {
-      if (c.id !== draggingCompId && Math.abs(c.x3d) <= 85 && Math.abs(c.z3d) <= 30 && c.y3d >= 4.0) {
-        const nearest = findNearestHole830(c.x3d, c.z3d);
-        if (nearest) set.add(nearest.id);
-      }
-    });
-    return set;
-  }, [wires3d, components3d, draggingCompId]);
-
   // Window pointer listeners enforce 6px drag threshold and re-enable OrbitControls after drag
   useEffect(() => {
     const handleGlobalPointerMove = (e: PointerEvent) => {
@@ -789,6 +774,50 @@ export function Studio3DCanvas({
     return new THREE.Vector3(comp.x3d + rx, comp.y3d + ly, comp.z3d + rz);
   }, [components3d]);
 
+  // Strictly maintain Map<holeId, occupiedBy> for all 830 breadboard holes (1 hole = 1 pin, zero stacking)
+  const occupiedHoleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    wires3d.forEach((w) => {
+      if (w.fromPin.compId === 'breadboard') map.set(w.fromPin.pinId, `wire:${w.id}:from`);
+      if (w.toPin.compId === 'breadboard') map.set(w.toPin.pinId, `wire:${w.id}:to`);
+    });
+    components3d.forEach((c) => {
+      if (c.id !== draggingCompId && Math.abs(c.x3d) <= 85 && Math.abs(c.z3d) <= 30 && c.y3d >= 4.0) {
+        if (c.type === 'TIMER_555' || c.type === 'DIP_IC') {
+          for (let p = 1; p <= 8; p++) {
+            const pw = getPinWorld3D(c.id, String(p));
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          }
+        } else if (c.type === 'RESISTOR') {
+          ['1', '2'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (c.type === 'LED') {
+          ['anode', 'cathode'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (c.type === 'CAPACITOR' || c.type === 'CAPACITOR_ELECTROLYTIC') {
+          ['1', '2', '+', '-'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else {
+          const nearest = findNearestHole830(c.x3d, c.z3d);
+          if (nearest) map.set(nearest.id, c.id);
+        }
+      }
+    });
+    return map;
+  }, [wires3d, components3d, draggingCompId, getPinWorld3D]);
+
+  const occupiedHoleIds = useMemo(() => new Set(occupiedHoleMap.keys()), [occupiedHoleMap]);
+
   // Terminal Pin Click Handler (Respects tool mode & wire endpoint editing)
   const handlePinClick = (compId: string, pinId: string, worldPos: THREE.Vector3) => {
     // If currently editing an existing wire endpoint:
@@ -1024,6 +1053,7 @@ export function Studio3DCanvas({
           };
 
           if (comp.type === 'ARDUINO_MEGA') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1034,6 +1064,7 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 6, 0]} heightOffset={2} />}
                 <ArduinoMega3D
                   position={pos}
                   rotation={rot}
@@ -1041,7 +1072,7 @@ export function Studio3DCanvas({
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
                   isDcJackPlugged={comp.parameters?.dcJackPlugged === true}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true}
+                  isPowered={!isBurned && (comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true)}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -1053,6 +1084,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'ARDUINO_UNO') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1063,6 +1095,7 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 6, 0]} heightOffset={2} />}
                 <ArduinoUno3D
                   position={pos}
                   rotation={rot}
@@ -1070,7 +1103,7 @@ export function Studio3DCanvas({
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
                   isDcJackPlugged={comp.parameters?.dcJackPlugged === true}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true}
+                  isPowered={!isBurned && (comp.parameters?.usbPlugged !== false || comp.parameters?.dcJackPlugged === true)}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -1240,6 +1273,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'CAPACITOR_ELECTROLYTIC') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1252,29 +1286,32 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
-                {/* Blue Aluminum Electrolytic Can Body */}
+                {/* 3D Burnout Overheat FX & Smoke Particles */}
+                {isBurned && <BurnSmokeFX position={[0, 9.3, 0]} heightOffset={1} />}
+
+                {/* Blue Aluminum Electrolytic Can Body (Charred dark if burned) */}
                 <mesh position={[0, 5.0, 0]}>
                   <cylinderGeometry args={[3.2, 3.2, 8.5, 24]} />
-                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#1E3A8A'} roughness={0.3} />
+                  <meshStandardMaterial color={isBurned ? '#18181B' : (isSelected ? '#38BDF8' : '#1E3A8A')} roughness={isBurned ? 0.95 : 0.3} />
                 </mesh>
 
                 {/* Silver Metal Safety Vent Top */}
                 <mesh position={[0, 9.3, 0]}>
                   <cylinderGeometry args={[3.1, 3.1, 0.2, 24]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <meshStandardMaterial color={isBurned ? '#52525B' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
                 {/* Negative Polarity Stripe on the - lead side (+X: x = 3.18) */}
                 <group position={[3.15, 5.0, 0]}>
                   <mesh>
                     <boxGeometry args={[0.2, 8.5, 1.6]} />
-                    <meshStandardMaterial color="#F1F5F9" roughness={0.4} />
+                    <meshStandardMaterial color={isBurned ? '#3F3F46' : '#F1F5F9'} roughness={0.4} />
                   </mesh>
                   {/* Minus "-" Polarity Symbols */}
                   {[-2.5, 0, 2.5].map((yOff, mi) => (
                     <mesh key={mi} position={[0.12, yOff, 0]}>
                       <boxGeometry args={[0.05, 0.35, 1.0]} />
-                      <meshBasicMaterial color="#0F172A" />
+                      <meshBasicMaterial color={isBurned ? '#18181B' : '#0F172A'} />
                     </mesh>
                   ))}
                 </group>
@@ -1283,33 +1320,33 @@ export function Studio3DCanvas({
                 <group position={[-3.15, 5.0, 0]}>
                   <mesh position={[-0.12, 0, 0]}>
                     <boxGeometry args={[0.05, 0.3, 0.9]} />
-                    <meshBasicMaterial color="#10B981" />
+                    <meshBasicMaterial color={isBurned ? '#52525B' : '#10B981'} />
                   </mesh>
                   <mesh position={[-0.12, 0, 0]}>
                     <boxGeometry args={[0.05, 0.9, 0.3]} />
-                    <meshBasicMaterial color="#10B981" />
+                    <meshBasicMaterial color={isBurned ? '#52525B' : '#10B981'} />
                   </mesh>
                 </group>
 
-                {/* Authentic Radial Bent Wire Leads Firmly Seated Into Breadboard Holes (Spacing: 5.08mm) */}
-                {/* 1. Positive Anode Lead (+) at x = -2.54, extending down to y = -5.0mm */}
+                {/* Realistic Radial Bent Metallic Wire Leads Seated Into Breadboard Holes (radius 0.38mm) */}
+                {/* 1. Positive Anode Lead (+) at x = -2.54, extending down to y = -5.5mm */}
                 <mesh position={[-1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 <mesh position={[-2.54, -2.0, 0]}>
-                  <cylinderGeometry args={[0.3, 0.3, 6.0, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 6.4, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
-                {/* 2. Negative Cathode Lead (-) at x = 2.54, extending down to y = -4.2mm */}
+                {/* 2. Negative Cathode Lead (-) at x = 2.54, extending down to y = -4.5mm */}
                 <mesh position={[1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 <mesh position={[2.54, -1.6, 0]}>
-                  <cylinderGeometry args={[0.3, 0.3, 5.2, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 5.6, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
                 {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
@@ -1331,8 +1368,8 @@ export function Studio3DCanvas({
                       }}
                       onPointerOut={() => setHoveredPinInfo(null)}
                     >
-                      <cylinderGeometry args={[isHovered ? 0.6 : 0.35, 0.35, 1.2, 12]} />
-                      <meshBasicMaterial color={isHovered ? (i === 0 ? '#10B981' : '#38BDF8') : '#CBD5E1'} />
+                      <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+                      <meshBasicMaterial color={isHovered ? (i === 0 ? '#10B981' : '#38BDF8') : (isBurned ? '#71717A' : '#CBD5E1')} />
                     </mesh>
                   );
                 })}
@@ -1341,6 +1378,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'CAPACITOR') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1353,31 +1391,34 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
-                {/* Tan Ceramic Disc Body */}
+                {/* 3D Burnout Overheat FX & Smoke Particles */}
+                {isBurned && <BurnSmokeFX position={[0, 4.5, 0]} heightOffset={1} />}
+
+                {/* Tan Ceramic Disc Body (Charred dark if burned) */}
                 <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]}>
                   <cylinderGeometry args={[3.0, 3.0, 1.2, 24]} />
-                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#D97706'} roughness={0.6} />
+                  <meshStandardMaterial color={isBurned ? '#18181B' : (isSelected ? '#38BDF8' : '#D97706')} roughness={isBurned ? 0.95 : 0.6} />
                 </mesh>
 
-                {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Breadboard Holes (Spacing: 5.08mm) */}
+                {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Breadboard Holes (radius 0.38mm) */}
                 {/* Pin 1 at x = -2.54 */}
                 <mesh position={[-1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.3, 0.3, 1.74, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 1.74, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 <mesh position={[-2.54, -1.5, 0]}>
-                  <cylinderGeometry args={[0.3, 0.3, 7.0, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
                 {/* Pin 2 at x = 2.54 */}
                 <mesh position={[1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.3, 0.3, 1.74, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 1.74, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 <mesh position={[2.54, -1.5, 0]}>
-                  <cylinderGeometry args={[0.3, 0.3, 7.0, 8]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                  <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
                 {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
@@ -1399,8 +1440,8 @@ export function Studio3DCanvas({
                       }}
                       onPointerOut={() => setHoveredPinInfo(null)}
                     >
-                      <cylinderGeometry args={[isHovered ? 0.6 : 0.35, 0.35, 1.2, 12]} />
-                      <meshBasicMaterial color={isHovered ? '#38BDF8' : '#CBD5E1'} />
+                      <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+                      <meshBasicMaterial color={isHovered ? '#38BDF8' : (isBurned ? '#71717A' : '#CBD5E1')} />
                     </mesh>
                   );
                 })}
@@ -1483,6 +1524,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'ARDUINO_NANO') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1493,13 +1535,14 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 6, 0]} heightOffset={2} />}
                 <ArduinoNano3D
                   position={pos}
                   rotation={rot}
                   isSelected={isSelected}
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false}
+                  isPowered={!isBurned && comp.parameters?.usbPlugged !== false}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -1511,6 +1554,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'ESP32_DEVKIT') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1521,13 +1565,14 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 6, 0]} heightOffset={2} />}
                 <Esp32DevKit3D
                   position={pos}
                   rotation={rot}
                   isSelected={isSelected}
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false}
+                  isPowered={!isBurned && comp.parameters?.usbPlugged !== false}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -1539,6 +1584,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'RASPBERRY_PI_PICO') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1549,13 +1595,14 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 6, 0]} heightOffset={2} />}
                 <RaspberryPiPico3D
                   position={pos}
                   rotation={rot}
                   isSelected={isSelected}
                   isUsbPlugged={comp.parameters?.usbPlugged !== false}
                   onToggleUsb={() => toggleUsb(comp.id)}
-                  isPowered={comp.parameters?.usbPlugged !== false}
+                  isPowered={!isBurned && comp.parameters?.usbPlugged !== false}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -1648,7 +1695,8 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'BUZZER_ACTIVE') {
-            const isSounding = Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
+            const isSounding = !isBurned && Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
             return (
               <group
                 key={comp.id}
@@ -1659,6 +1707,7 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 4, 0]} heightOffset={1} />}
                 <Buzzer3D
                   position={pos}
                   rotation={rot}
@@ -1675,6 +1724,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1685,6 +1735,7 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 4, 0]} heightOffset={1} />}
                 <Diode3D
                   position={pos}
                   rotation={rot}
@@ -1700,6 +1751,7 @@ export function Studio3DCanvas({
           }
 
           if (comp.type === 'SENSOR_LDR') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             return (
               <group
                 key={comp.id}
@@ -1710,6 +1762,7 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                {isBurned && <BurnSmokeFX position={[0, 4, 0]} heightOffset={1} />}
                 <Ldr3D
                   position={pos}
                   rotation={rot}

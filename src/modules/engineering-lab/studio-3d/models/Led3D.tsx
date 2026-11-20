@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { BurnSmokeFX } from './BurnSmokeFX';
 
 export interface Led3DProps {
@@ -100,6 +101,42 @@ export function Led3D({
     };
   }, [hex, isBurned]);
 
+  const lensMeshRef = useRef<THREE.Mesh>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+
+  // Real-time render loop direct subscription: maps solver output every tick
+  useFrame((state) => {
+    if (lensMeshRef.current && lensMeshRef.current.material instanceof THREE.MeshPhysicalMaterial) {
+      const mat = lensMeshRef.current.material;
+      if (isBurned) {
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+        mat.color.set('#18181B');
+        mat.opacity = 0.95;
+      } else if (isIlluminated) {
+        const pulse = 0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 10);
+        mat.color.set(hex);
+        mat.emissive.set(hex);
+        mat.emissiveIntensity = Math.max(0.6, effectiveBrightness * 3.6) * pulse;
+        mat.opacity = Math.min(0.95, 0.7 + effectiveBrightness * 0.25);
+      } else {
+        mat.color.set(hex);
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+        mat.opacity = 0.7;
+      }
+    }
+    if (lightRef.current) {
+      if (isBurned || !isIlluminated) {
+        lightRef.current.intensity = 0;
+      } else {
+        const pulse = 0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 10);
+        lightRef.current.color.set(hex);
+        lightRef.current.intensity = Math.max(1.0, effectiveBrightness * 4.2) * pulse;
+      }
+    }
+  });
+
   // Smooth real-time update of optical parameters without WebGL shader compilation lag
   useEffect(() => {
     if (materials.lens instanceof THREE.MeshPhysicalMaterial) {
@@ -128,7 +165,7 @@ export function Led3D({
       )}
 
       {/* 5mm LED Cylindrical Body */}
-      <mesh position={[0, 5, 0]} material={materials.lens} castShadow>
+      <mesh ref={lensMeshRef} position={[0, 5, 0]} material={materials.lens} castShadow>
         <cylinderGeometry args={[2.5, 2.5, 5, 24]} />
       </mesh>
 
@@ -176,31 +213,30 @@ export function Led3D({
       </mesh>
 
       {/* Point Light when Illuminated with proportional intensity */}
-      {isIlluminated && (
-        <pointLight
-          color={hex}
-          intensity={Math.max(0.6, effectiveBrightness * 4.0)}
-          distance={25 + 25 * effectiveBrightness}
-          decay={2}
-          position={[0, 7, 0]}
-        />
-      )}
+      <pointLight
+        ref={lightRef}
+        color={hex}
+        intensity={isIlluminated ? Math.max(0.6, effectiveBrightness * 4.0) : 0}
+        distance={25 + 25 * effectiveBrightness}
+        decay={2}
+        position={[0, 7, 0]}
+      />
 
-      {/* Authentic Bent Metallic Leads Firmly Seated Into Breadboard Holes */}
-      {/* 1. Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -5.0mm */}
+      {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm) */}
+      {/* 1. Longer Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -5.5mm */}
       <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+        <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[-2.54, -1.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 7.0, 12]} />
+      <mesh position={[-2.54, -1.6, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
       </mesh>
 
-      {/* 2. Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -4.2mm */}
+      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -4.5mm */}
       <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+        <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[2.54, -1.1, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 6.2, 12]} />
+      <mesh position={[2.54, -1.2, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 6.4, 12]} />
       </mesh>
 
       {/* Anode Terminal Pin Anchor (x = -2.54, y = 0 Breadboard Surface) */}
@@ -219,7 +255,7 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <cylinderGeometry args={[hoveredPin === 'anode' ? 0.6 : 0.35, 0.35, 1.2, 12]} />
+        <cylinderGeometry args={[hoveredPin === 'anode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
       </mesh>
 
       {/* Cathode Terminal Pin Anchor (x = 2.54, y = 0 Breadboard Surface) */}
@@ -238,7 +274,7 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.6 : 0.35, 0.35, 1.2, 12]} />
+        <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
       </mesh>
     </group>
   );

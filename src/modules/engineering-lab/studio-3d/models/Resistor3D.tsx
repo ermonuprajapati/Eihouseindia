@@ -56,14 +56,14 @@ export function Resistor3D({
 
       {/* Selection Box */}
       {isSelected && (
-        <mesh position={[0, 4, 0]}>
+        <mesh position={[0, 4.5, 0]}>
           <boxGeometry args={[13, 6, 6]} />
           <meshBasicMaterial color="#38BDF8" wireframe />
         </mesh>
       )}
 
-      {/* Main Ceramic Cylindrical Body (Horizontal along X) */}
-      <mesh position={[0, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.body} castShadow>
+      {/* Main Ceramic Cylindrical Body (Horizontal along X, raised cleanly at y = 4.5mm) */}
+      <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.body} castShadow>
         <cylinderGeometry args={[1.5, 1.5, 7, 24]} />
       </mesh>
 
@@ -72,30 +72,30 @@ export function Resistor3D({
         // Spaced along body: [-2.0, -0.8, 0.4, 1.8]
         const ringX = -2.0 + idx * 1.3;
         return (
-          <mesh key={idx} position={[ringX, 4, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <mesh key={idx} position={[ringX, 4.5, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[1.53, 1.53, 0.6, 24]} />
             <meshBasicMaterial color={isBurned ? '#27272A' : bandHex} />
           </mesh>
         );
       })}
 
-      {/* Axial Silver Leads - 0.6mm wire diameter (0.3mm radius) bent cleanly at 90 deg */}
+      {/* Realistic Thin Silver/Tinned-Copper Cylindrical Wire Leads (radius 0.38mm) */}
       {/* Left horizontal stem */}
-      <mesh position={[-4.04, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 2.08, 12]} />
+      <mesh position={[-4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
-      {/* Left bent leg extending down into breadboard hole */}
+      {/* Left bent leg entering straight into exact center of breadboard hole */}
       <mesh position={[-5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 9, 12]} />
+        <cylinderGeometry args={[0.38, 0.38, 10, 12]} />
       </mesh>
 
       {/* Right horizontal stem */}
-      <mesh position={[4.04, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 2.08, 12]} />
+      <mesh position={[4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
-      {/* Right bent leg extending down into breadboard hole */}
+      {/* Right bent leg entering straight into exact center of breadboard hole */}
       <mesh position={[5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 9, 12]} />
+        <cylinderGeometry args={[0.38, 0.38, 10, 12]} />
       </mesh>
 
       {/* Pin 1 Clean Clickable Terminal Anchor (No chunky discs) */}

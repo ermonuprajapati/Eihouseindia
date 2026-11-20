@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 
 export interface Wire3DTubeProps {
   id: string;
@@ -87,15 +88,34 @@ export function Wire3DTube({
     };
   }, [geometry, haloGeometry]);
 
-  const hasCurrent = isSimulating && current !== undefined && Math.abs(current) > 0.0001;
+  const wireMeshRef = useRef<THREE.Mesh>(null);
+  const hasCurrent = Boolean(isSimulating && current !== undefined && Math.abs(current) > 0.0001);
+
+  // Dynamic live current flow visual shimmer along jumper wire
+  useFrame((state) => {
+    if (!wireMeshRef.current) return;
+    const mat = wireMeshRef.current.material as THREE.MeshStandardMaterial;
+    if (!mat) return;
+
+    if (isSimulating && current !== undefined && Math.abs(current) > 0.0001) {
+      const curAmp = Math.min(1.0, Math.abs(current) * 40);
+      const pulse = 0.25 + 0.35 * Math.sin(state.clock.elapsedTime * 12);
+      mat.emissive.set(isSelected ? '#F59E0B' : color);
+      mat.emissiveIntensity = (0.2 + pulse * 0.45) * curAmp;
+    } else {
+      mat.emissive.set(isSelected ? '#F59E0B' : '#000000');
+      mat.emissiveIntensity = isSelected ? 0.3 : 0;
+    }
+  });
+
   const materials = useMemo(() => {
     return {
       insulation: new THREE.MeshStandardMaterial({
         color: isSelected ? '#F59E0B' : color,
         roughness: 0.38,
         metalness: 0.12,
-        emissive: hasCurrent ? color : '#000000',
-        emissiveIntensity: hasCurrent ? 0.35 : 0,
+        emissive: hasCurrent ? (isSelected ? '#F59E0B' : color) : '#000000',
+        emissiveIntensity: hasCurrent ? 0.35 : (isSelected ? 0.3 : 0),
       }),
       halo: new THREE.MeshBasicMaterial({
         color: '#F59E0B',
@@ -138,6 +158,7 @@ export function Wire3DTube({
 
       {/* Main Jumper Wire Flexible PVC Insulation Tube */}
       <mesh
+        ref={wireMeshRef}
         geometry={geometry}
         material={materials.insulation}
         castShadow

@@ -1665,32 +1665,55 @@ export function PropertiesInspector({
         </div>
 
         {/* SECTION 3: REAL-TIME ELECTRICAL TELEMETRY */}
-        {simState && (
-          <div className="rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-3 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-cyan-400 font-mono text-[11px] font-bold">
-              <Zap className="w-3.5 h-3.5 fill-current" />
-              <span>Real-Time In-Circuit Telemetry</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-              <div className="bg-slate-950/90 p-2 rounded border border-slate-800">
-                <div className="text-slate-500 text-[9px] font-semibold">VOLTAGE DROP</div>
-                <div className="text-cyan-300 font-bold text-sm mt-0.5">
-                  {simState.voltage >= 0 ? simState.voltage.toFixed(3) : simState.voltage.toFixed(3)} V
+        {simState && (() => {
+          const isBurned = Boolean(simState.status === 'BURNED' || simState.burned || simState.isBurnedOut);
+          return (
+            <div className={`rounded-lg border p-3 space-y-2.5 ${
+              isBurned
+                ? 'border-rose-700 bg-rose-950/40 text-rose-200'
+                : 'border-cyan-900/60 bg-cyan-950/20'
+            }`}>
+              <div className="flex items-center justify-between font-mono text-[11px] font-bold">
+                <div className={`flex items-center gap-1.5 ${isBurned ? 'text-rose-400' : 'text-cyan-400'}`}>
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>{isBurned ? 'CIRCUIT FAULT / DAMAGE TELEMETRY' : 'Real-Time In-Circuit Telemetry'}</span>
+                </div>
+                {isBurned && (
+                  <span className="px-2 py-0.5 rounded bg-rose-900/90 border border-rose-500 text-rose-200 text-[10px] font-bold animate-pulse">
+                    BURNED OUT
+                  </span>
+                )}
+              </div>
+
+              {isBurned && simState.fault && (
+                <div className="p-2 rounded bg-rose-950 border border-rose-800 text-rose-200 text-[11px] font-mono leading-relaxed">
+                  {simState.fault}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                <div className="bg-slate-950/90 p-2 rounded border border-slate-800">
+                  <div className="text-slate-500 text-[9px] font-semibold">VOLTAGE DROP</div>
+                  <div className={`font-bold text-sm mt-0.5 ${isBurned ? 'text-rose-300' : 'text-cyan-300'}`}>
+                    {isBurned ? '0.000 V' : `${simState.voltage.toFixed(3)} V`}
+                  </div>
+                </div>
+                <div className="bg-slate-950/90 p-2 rounded border border-slate-800">
+                  <div className="text-slate-500 text-[9px] font-semibold">BRANCH CURRENT</div>
+                  <div className={`font-bold text-sm mt-0.5 ${isBurned ? 'text-rose-400' : 'text-amber-400'}`}>
+                    {isBurned ? '0.00 mA' : `${(simState.current * 1000).toFixed(2)} mA`}
+                  </div>
                 </div>
               </div>
-              <div className="bg-slate-950/90 p-2 rounded border border-slate-800">
-                <div className="text-slate-500 text-[9px] font-semibold">BRANCH CURRENT</div>
-                <div className="text-amber-400 font-bold text-sm mt-0.5">
-                  {(simState.current * 1000).toFixed(2)} mA
-                </div>
+              <div className="bg-slate-950/90 p-2 rounded border border-slate-800 text-[11px] font-mono flex items-center justify-between">
+                <span className="text-slate-500 text-[9px] font-semibold">POWER DISSIPATION</span>
+                <span className={`font-bold ${isBurned ? 'text-rose-300 line-through' : 'text-purple-300'}`}>
+                  {isBurned ? '0.00 mW' : `${powerMw.toFixed(2)} mW`}
+                </span>
               </div>
             </div>
-            <div className="bg-slate-950/90 p-2 rounded border border-slate-800 text-[11px] font-mono flex items-center justify-between">
-              <span className="text-slate-500 text-[9px] font-semibold">POWER DISSIPATION</span>
-              <span className="text-purple-300 font-bold">{powerMw.toFixed(2)} mW</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* SECTION 4: PCB FOOTPRINT & 3D CAD MODEL MAPPING */}
         <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 space-y-3">

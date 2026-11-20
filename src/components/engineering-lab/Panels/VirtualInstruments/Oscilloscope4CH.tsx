@@ -27,6 +27,23 @@ export interface Oscilloscope4CHProps {
   wires?: CircuitWire[];
 }
 
+export function formatTimebase(tbMs: number): string {
+  if (tbMs < 1) {
+    return `${Math.round(tbMs * 1000)} µs / Div`;
+  }
+  if (tbMs >= 1000) {
+    return `${tbMs / 1000} s / Div`;
+  }
+  return `${tbMs} ms / Div`;
+}
+
+export function formatCursorTime(ms: number): string {
+  if (Math.abs(ms) < 0.0001) return '0.0 µs';
+  if (Math.abs(ms) < 1) return `${(ms * 1000).toFixed(1)} µs`;
+  if (Math.abs(ms) >= 1000) return `${(ms / 1000).toFixed(2)} s`;
+  return `${ms.toFixed(2)} ms`;
+}
+
 export function Oscilloscope4CH({
   instruments,
   onUpdateInstruments,
@@ -36,6 +53,19 @@ export function Oscilloscope4CH({
 }: Oscilloscope4CHProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scopeState = instruments.oscilloscope;
+  const frozenWaveformRef = useRef<Record<string, SimulationWaveformPoint[]> | null>(null);
+
+  // When paused/stopped in DSO, freeze the snapshot so live simulation doesn't overwrite it
+  if (scopeState.running === false && !frozenWaveformRef.current && Object.keys(waveformData).length > 0) {
+    frozenWaveformRef.current = JSON.parse(JSON.stringify(waveformData));
+  } else if (scopeState.running !== false && frozenWaveformRef.current) {
+    frozenWaveformRef.current = null;
+  }
+
+  const activeWaveformData =
+    scopeState.running === false && frozenWaveformRef.current
+      ? frozenWaveformRef.current
+      : waveformData;
 
   const [measureChannel, setMeasureChannel] = useState<'CH1' | 'CH2' | 'CH3' | 'CH4'>('CH1');
   const [activeTabPanel, setActiveTabPanel] = useState<'channels' | 'trigger' | 'math' | 'cursors'>('channels');
@@ -61,14 +91,14 @@ export function Oscilloscope4CH({
     });
 
     // Keys present in current waveform buffer
-    Object.keys(waveformData).forEach((k) => {
+    Object.keys(activeWaveformData).forEach((k) => {
       if (!list.some((item) => item.id === k)) {
         list.push({ id: k, label: `Signal: ${k}`, group: 'Signals' });
       }
     });
 
     return list;
-  }, [components, waveformData]);
+  }, [components, activeWaveformData]);
 
   // Resolve waveform series for a given channel based on probe selection
   const getChannelPoints = useCallback(
@@ -79,20 +109,20 @@ export function Oscilloscope4CH({
       else if (ch === 'CH3') probeKey = scopeState.ch3ProbeSource || '';
       else if (ch === 'CH4') probeKey = scopeState.ch4ProbeSource || '';
 
-      if (probeKey && waveformData[probeKey]) {
-        return waveformData[probeKey];
+      if (probeKey && activeWaveformData[probeKey]) {
+        return activeWaveformData[probeKey];
       }
 
       // Default fallback by index
-      const keys = Object.keys(waveformData);
+      const keys = Object.keys(activeWaveformData);
       const chIdx = ch === 'CH1' ? 0 : ch === 'CH2' ? 1 : ch === 'CH3' ? 2 : 3;
-      if (keys[chIdx] && waveformData[keys[chIdx]]) {
-        return waveformData[keys[chIdx]];
+      if (keys[chIdx] && activeWaveformData[keys[chIdx]]) {
+        return activeWaveformData[keys[chIdx]];
       }
 
       return [];
     },
-    [scopeState, waveformData]
+    [scopeState, activeWaveformData]
   );
 
   // Auto-Set Button (Scans active signals and auto-adjusts V/Div and Timebase)
@@ -130,7 +160,7 @@ export function Oscilloscope4CH({
       const avgHalfPeriod = (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
       const periodSec = avgHalfPeriod * 2;
       const idealTbSec = (periodSec * 3) / 10; // 3 periods in 10 divisions
-      const tbSteps = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+      const tbSteps = [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
       const idealTbMs = idealTbSec * 1000;
       bestTimebaseMs = tbSteps.reduce((prev, curr) => (Math.abs(curr - idealTbMs) < Math.abs(prev - idealTbMs) ? curr : prev));
     }
@@ -149,7 +179,7 @@ export function Oscilloscope4CH({
       },
     });
 
-    toast.success(`⚡ Auto-Set: Locked V/Div at ${bestVScale}V, Timebase at ${bestTimebaseMs}ms/Div`);
+    toast.success(`⚡ Auto-Set: Locked V/Div at ${bestVScale}V, Timebase at ${formatTimebase(bestTimebaseMs)}`);
   }, [getChannelPoints, waveformData, instruments, onUpdateInstruments, scopeState]);
 
   // Compute Live Measurements for Selected Channel
@@ -354,6 +384,9 @@ export function Oscilloscope4CH({
         },
       ];
 
+      const timebaseMs = scopeState.timebaseMs || 50;
+      const totalSpanSec = (numDivX * timebaseMs) / 1000; // 10 horizontal divisions
+
       channels.forEach((ch) => {
         if (!ch.enabled || !ch.pts || ch.pts.length < 2) return;
 
@@ -363,10 +396,18 @@ export function Oscilloscope4CH({
         ctx.shadowBlur = 6;
         ctx.beginPath();
 
-        const xStep = width / (ch.pts.length - 1);
         const meanV = ch.pts.reduce((s, p) => s + p.value, 0) / ch.pts.length;
+        const tLatest = ch.pts[ch.pts.length - 1].time;
+        const tStart = tLatest - totalSpanSec;
 
-        ch.pts.forEach((pt, i) => {
+        let hasDrawnFirst = false;
+
+        for (let i = 0; i < ch.pts.length; i++) {
+          const pt = ch.pts[i];
+          if (pt.time < tStart && i + 1 < ch.pts.length && ch.pts[i + 1].time < tStart) {
+            continue;
+          }
+
           let val = pt.value;
           if (ch.coupling === 'GND') val = 0;
           else if (ch.coupling === 'AC') val = val - meanV;
@@ -375,11 +416,15 @@ export function Oscilloscope4CH({
           if (ch.invert) val = -val;
 
           const y = midY - ((val + ch.offsetV) / ch.scaleV) * divH;
-          const x = i * xStep;
+          const x = ((pt.time - tStart) / totalSpanSec) * width;
 
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
+          if (!hasDrawnFirst) {
+            ctx.moveTo(x, y);
+            hasDrawnFirst = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
 
         ctx.stroke();
         ctx.shadowBlur = 0; // reset
@@ -392,22 +437,40 @@ export function Oscilloscope4CH({
         if (ch1 && ch2 && ch1.length > 2 && ch2.length > 2) {
           const len = Math.min(ch1.length, ch2.length);
           ctx.strokeStyle = '#F97316'; // Orange Math Trace
-          ctx.lineWidth = 1.8;
+          ctx.lineWidth = 2.0;
+          ctx.shadowColor = '#F97316';
+          ctx.shadowBlur = 5;
           ctx.beginPath();
-          const xStep = width / (len - 1);
+
+          const tLatest = Math.max(ch1[ch1.length - 1].time, ch2[ch2.length - 1].time);
+          const tStart = tLatest - totalSpanSec;
+          let hasDrawnFirst = false;
 
           for (let i = 0; i < len; i++) {
+            const pt1 = ch1[i];
+            const pt2 = ch2[i];
+            const t = pt1.time;
+            if (t < tStart && i + 1 < len && ch1[i + 1].time < tStart) {
+              continue;
+            }
+
             let mVal = 0;
-            if (scopeState.mathMode === 'CH1+CH2') mVal = ch1[i].value + ch2[i].value;
-            else if (scopeState.mathMode === 'CH1-CH2') mVal = ch1[i].value - ch2[i].value;
-            else if (scopeState.mathMode === 'CH1*CH2') mVal = (ch1[i].value * ch2[i].value) / 5;
+            if (scopeState.mathMode === 'CH1+CH2') mVal = pt1.value + pt2.value;
+            else if (scopeState.mathMode === 'CH1-CH2') mVal = pt1.value - pt2.value;
+            else if (scopeState.mathMode === 'CH1*CH2') mVal = (pt1.value * pt2.value) / 5;
 
             const y = midY - (mVal / (scopeState.ch1ScaleV || 1.0)) * divH;
-            const x = i * xStep;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+            const x = ((t - tStart) / totalSpanSec) * width;
+
+            if (!hasDrawnFirst) {
+              ctx.moveTo(x, y);
+              hasDrawnFirst = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
           }
           ctx.stroke();
+          ctx.shadowBlur = 0;
         }
       }
 
@@ -437,7 +500,7 @@ export function Oscilloscope4CH({
 
     render();
     return () => cancelAnimationFrame(animId);
-  }, [scopeState, waveformData, isSimulating, getChannelPoints]);
+  }, [scopeState, activeWaveformData, isSimulating, getChannelPoints]);
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-4 h-full bg-[#050B14] p-3 text-slate-200 select-none overflow-hidden font-mono text-xs">
@@ -455,7 +518,7 @@ export function Oscilloscope4CH({
             <span className="text-cyan-400 font-bold">CH2: {scopeState.ch2ScaleV || 1.0}V</span>
             {scopeState.ch3Enabled && <span className="text-pink-400 font-bold">CH3: {scopeState.ch3ScaleV || 1.0}V</span>}
             {scopeState.ch4Enabled && <span className="text-emerald-400 font-bold">CH4: {scopeState.ch4ScaleV || 1.0}V</span>}
-            <span className="text-slate-400 font-bold">TB: {scopeState.timebaseMs || 50}ms</span>
+            <span className="text-slate-400 font-bold">TB: {formatTimebase(scopeState.timebaseMs || 50)}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -482,15 +545,21 @@ export function Oscilloscope4CH({
               <span>Auto-Set</span>
             </button>
             <button
-              onClick={() =>
+              onClick={() => {
+                const nextRunning = scopeState.running === false;
+                if (!nextRunning) {
+                  frozenWaveformRef.current = JSON.parse(JSON.stringify(waveformData));
+                } else {
+                  frozenWaveformRef.current = null;
+                }
                 onUpdateInstruments({
                   ...instruments,
                   oscilloscope: {
                     ...scopeState,
-                    running: scopeState.running === false ? true : false,
+                    running: nextRunning,
                   },
-                })
-              }
+                });
+              }}
               className={`flex items-center gap-1 px-3 py-1 rounded font-bold cursor-pointer transition-all ${
                 scopeState.running !== false
                   ? 'bg-rose-950/80 border border-rose-600 text-rose-300 hover:bg-rose-900'
@@ -779,7 +848,7 @@ export function Oscilloscope4CH({
             <div className="p-2.5 rounded bg-slate-950 border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-300 font-bold">
                 <span>HORIZONTAL TIMEBASE</span>
-                <span className="text-cyan-400 font-bold">{scopeState.timebaseMs || 50} ms/Div</span>
+                <span className="text-cyan-400 font-bold">{formatTimebase(scopeState.timebaseMs || 50)}</span>
               </div>
               <select
                 value={scopeState.timebaseMs || 50}
@@ -789,11 +858,11 @@ export function Oscilloscope4CH({
                     oscilloscope: { ...scopeState, timebaseMs: Number(e.target.value) },
                   })
                 }
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
               >
-                {[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].map((t) => (
+                {[0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].map((t) => (
                   <option key={t} value={t}>
-                    {t < 1 ? `${t * 1000} µs / Div` : `${t} ms / Div`}
+                    {formatTimebase(t)}
                   </option>
                 ))}
               </select>
