@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
       'katex',
       'clsx',
       'tailwind-merge',
+      'three',
+      '@react-three/fiber',
+      '@react-three/drei',
     ],
   },
   typescript: {

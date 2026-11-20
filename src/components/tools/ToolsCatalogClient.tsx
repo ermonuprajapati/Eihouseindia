@@ -350,6 +350,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                                 <img
                                   src={logoUrl}
                                   alt={`${tool.name} official logo`}
+                                  loading="lazy"
                                   className="max-h-full max-w-full object-contain"
                                   onError={() =>
                                     setFailedLogoIds((prev) => new Set(prev).add(tool.id))
@@ -602,6 +603,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                               <img
                                 src={getToolLogoUrl(tool)}
                                 alt={`${tool.name} official logo`}
+                                loading="lazy"
                                 className="h-full w-full object-contain"
                                 onError={(e) => {
                                   (e.currentTarget as HTMLElement).style.display = 'none';

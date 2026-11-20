@@ -699,6 +699,7 @@ export function ProductsCatalogClient() {
                           <img
                             src={sup.logoUrl}
                             alt={`${sup.name} logo`}
+                            loading="lazy"
                             className="max-h-full max-w-full object-contain"
                             onError={() => {
                               setFailedLogoIds((prev) => new Set(prev).add(sup.id));

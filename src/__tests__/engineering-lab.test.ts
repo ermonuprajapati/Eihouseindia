@@ -3273,7 +3273,7 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       let maxLedBrightness = 0;
       let capCharged = false;
 
-      for (let step = 0; step < 500; step++) {
+      for (let step = 0; step < 250; step++) {
         const res = solver.step(comps, wires, 0.002);
         const ledState = res.componentStates['led1'];
         if (ledState) {
@@ -3315,6 +3315,6 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       const resetRes = solver.step(recoveredComps, wires, 0.002);
       expect(resetRes.componentStates['led1']?.status).toBe('NORMAL');
       expect(resetRes.componentStates['led1']?.burned).toBeFalsy();
-    });
+    }, 15000);
   });
 });

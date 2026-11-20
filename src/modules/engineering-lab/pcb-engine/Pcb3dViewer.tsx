@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
@@ -85,6 +85,38 @@ export interface Pcb3dViewerProps {
   solderMaskColor?: string; // e.g. '#0B4F28' (Green), '#141619' (Black), '#0E3A75' (Blue), '#7A1216' (Red), '#EAECEF' (White)
   cameraPreset?: 'iso' | 'top' | 'bot' | 'front' | 'reset' | null;
   show3dComponents?: boolean;
+}
+
+function WebGlResourceDisposer() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    return () => {
+      scene.traverse((obj) => {
+        const mesh = obj as unknown as {
+          geometry?: { dispose: () => void };
+          material?: { dispose: () => void } | { dispose: () => void }[];
+        };
+        if (mesh.geometry) {
+          try {
+            mesh.geometry.dispose();
+          } catch {}
+        }
+        if (mesh.material) {
+          try {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m) => m.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          } catch {}
+        }
+      });
+      try {
+        gl.dispose();
+      } catch {}
+    };
+  }, [gl, scene]);
+  return null;
 }
 
 export function Pcb3dViewer({
@@ -375,6 +407,7 @@ export function Pcb3dViewer({
         className="w-full h-full cursor-grab active:cursor-grabbing"
       >
         <color attach="background" args={['#070E1A']} />
+        <WebGlResourceDisposer />
 
         <ambientLight intensity={1.3} />
         <directionalLight position={[60, 120, 80]} intensity={2.2} castShadow />

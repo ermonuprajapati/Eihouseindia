@@ -360,6 +360,38 @@ function DragFrameController({
   return null;
 }
 
+function WebGlResourceDisposer() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    return () => {
+      scene.traverse((obj) => {
+        const mesh = obj as unknown as {
+          geometry?: { dispose: () => void };
+          material?: { dispose: () => void } | { dispose: () => void }[];
+        };
+        if (mesh.geometry) {
+          try {
+            mesh.geometry.dispose();
+          } catch {}
+        }
+        if (mesh.material) {
+          try {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m) => m.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          } catch {}
+        }
+      });
+      try {
+        gl.dispose();
+      } catch {}
+    };
+  }, [gl, scene]);
+  return null;
+}
+
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
   onToggleBreadboard?: () => void;
@@ -863,6 +895,7 @@ export function Studio3DCanvas({
         }}
       >
         <color attach="background" args={['#070E1A']} />
+        <WebGlResourceDisposer />
 
         {/* Ambient & Studio Directional Lights */}
         <ambientLight intensity={1.2} />
