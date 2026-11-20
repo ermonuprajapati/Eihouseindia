@@ -151,15 +151,24 @@ export const ALL_830_HOLES = generate830BreadboardHoles();
 
 /**
  * Finds the nearest local power/ground rail hole directly in or closest to a specific breadboard column.
- * This guarantees short, vertical, tidy power drops rather than long diagonal wires back to the battery.
+ * Guarantees zero wire stacking: never selects an already occupied rail hole.
  */
 export function findNearestRailHoleForColumn(
   col: number,
-  railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg'
+  railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg',
+  occupiedHoleIds?: Set<string>
 ): string {
   const targetX = START_X + (Math.max(1, Math.min(63, col)) - 1) * PITCH_X;
-  const candidateHoles = ALL_830_HOLES.filter((h) => h.section === railType);
-  let bestHole = candidateHoles[0]?.id || `bb_${railType}_1`;
+  const candidateHoles = ALL_830_HOLES.filter(
+    (h) => h.section === railType && (!occupiedHoleIds || !occupiedHoleIds.has(h.id))
+  );
+
+  if (candidateHoles.length === 0) {
+    // Fallback if all holes in this rail section are currently occupied
+    return ALL_830_HOLES.find((h) => h.section === railType)?.id || `bb_${railType}_1`;
+  }
+
+  let bestHole = candidateHoles[0].id;
   let minDx = Infinity;
 
   for (const h of candidateHoles) {
@@ -171,6 +180,56 @@ export function findNearestRailHoleForColumn(
   }
 
   return bestHole;
+}
+
+/**
+ * Finds the nearest unoccupied hole in the same tieGroup, or in the same rail section.
+ * Prevents multiple jumper wires from stacking into the same hole.
+ */
+export function findNearestUnoccupiedHole(
+  holeId: string,
+  occupiedHoleIds: Set<string>
+): string {
+  const targetHole = HOLE_BY_ID.get(holeId);
+  if (!targetHole) return holeId;
+  if (!occupiedHoleIds.has(holeId)) return holeId;
+
+  // 1. Try other holes in the exact same tieGroup (e.g. adjacent holes in same column or tie segment)
+  const tieGroupHoles = HOLES_BY_TIE_GROUP.get(targetHole.tieGroup) || [];
+  const freeInTieGroup = tieGroupHoles.filter((h) => !occupiedHoleIds.has(h.id));
+  if (freeInTieGroup.length > 0) {
+    let best = freeInTieGroup[0];
+    let minD = Math.hypot(best.x - targetHole.x, best.z - targetHole.z);
+    for (const h of freeInTieGroup) {
+      const d = Math.hypot(h.x - targetHole.x, h.z - targetHole.z);
+      if (d < minD) {
+        minD = d;
+        best = h;
+      }
+    }
+    return best.id;
+  }
+
+  // 2. If it's a rail and tieGroup is full, check the entire rail section
+  if (targetHole.section.startsWith('rail_')) {
+    const railHoles = ALL_830_HOLES.filter(
+      (h) => h.section === targetHole.section && !occupiedHoleIds.has(h.id)
+    );
+    if (railHoles.length > 0) {
+      let best = railHoles[0];
+      let minD = Math.abs(best.x - targetHole.x);
+      for (const h of railHoles) {
+        const d = Math.abs(h.x - targetHole.x);
+        if (d < minD) {
+          minD = d;
+          best = h;
+        }
+      }
+      return best.id;
+    }
+  }
+
+  return holeId;
 }
 
 // Fast O(1) Map for lookup

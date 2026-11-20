@@ -347,6 +347,7 @@ export function Virtual3dStudio({
     );
 
     const outWires: Wire3D[] = [];
+    const occupiedRailHoles = new Set<string>();
     const SIGNAL_COLORS = ['#3B82F6', '#10B981', '#EAB308', '#F97316'];
     let sigColorIdx = 0;
 
@@ -354,16 +355,21 @@ export function Virtual3dStudio({
     // Route 1 Red wire from Battery + to Breadboard Top Red + Power Rail (bb_rail_top_pos_1)
     // Route 1 Black wire from Battery - to Breadboard Top Blue - Ground Rail (bb_rail_top_neg_1)
     if (battery) {
+      const batPosHole = 'bb_rail_top_pos_1';
+      const batNegHole = 'bb_rail_top_neg_1';
+      occupiedRailHoles.add(batPosHole);
+      occupiedRailHoles.add(batNegHole);
+
       outWires.push({
         id: `wire_bat_pos_${battery.id}`,
         fromPin: { compId: battery.id, pinId: '+' },
-        toPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_1' },
+        toPin: { compId: 'breadboard', pinId: batPosHole },
         color: '#EF4444',
       });
       outWires.push({
         id: `wire_bat_neg_${battery.id}`,
         fromPin: { compId: battery.id, pinId: '-' },
-        toPin: { compId: 'breadboard', pinId: 'bb_rail_top_neg_1' },
+        toPin: { compId: 'breadboard', pinId: batNegHole },
         color: '#1E293B',
       });
     }
@@ -387,12 +393,13 @@ export function Virtual3dStudio({
         return;
       }
 
-      // If one end connects to battery positive, route it as a short vertical drop from nearest Red (+) rail hole
+      // If one end connects to battery positive, route it as a dedicated vertical drop from nearest unoccupied Red (+) rail hole
       if (fromIsBat && (fPin === 'p' || fPin === '+')) {
         const toComp = components.find((c) => c.id === w.toCompId);
         const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (toComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
+        occupiedRailHoles.add(railHole);
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -406,7 +413,8 @@ export function Virtual3dStudio({
         const fromComp = components.find((c) => c.id === w.fromCompId);
         const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (fromComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
+        occupiedRailHoles.add(railHole);
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -417,12 +425,13 @@ export function Virtual3dStudio({
         return;
       }
 
-      // If one end connects to a schematic GND symbol, drop directly from nearest Blue (-) ground rail hole
+      // If one end connects to a schematic GND symbol, drop directly from nearest unoccupied Blue (-) ground rail hole
       if (fromIsGnd) {
         const toComp = components.find((c) => c.id === w.toCompId);
         const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (toComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
+        occupiedRailHoles.add(railHole);
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },
@@ -436,7 +445,8 @@ export function Virtual3dStudio({
         const fromComp = components.find((c) => c.id === w.fromCompId);
         const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (fromComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
+        occupiedRailHoles.add(railHole);
         outWires.push({
           id: w.id,
           fromPin: { compId: 'breadboard', pinId: railHole },

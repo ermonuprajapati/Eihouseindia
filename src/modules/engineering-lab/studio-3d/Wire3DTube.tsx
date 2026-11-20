@@ -9,6 +9,7 @@ export interface Wire3DTubeProps {
   end: THREE.Vector3;
   color?: string;
   isSelected?: boolean;
+  isHighlighted?: boolean;
   isSimulating?: boolean;
   current?: number;
   onClick?: (id: string) => void;
@@ -21,6 +22,7 @@ export function Wire3DTube({
   end,
   color = '#EF4444',
   isSelected = false,
+  isHighlighted = false,
   onClick,
 }: Wire3DTubeProps) {
   // Generate realistic Dupont jumper arched CatmullRomCurve3
@@ -95,6 +97,11 @@ export function Wire3DTube({
         transparent: true,
         opacity: 0.45,
       }),
+      highlightHalo: new THREE.MeshBasicMaterial({
+        color: '#22D3EE',
+        transparent: true,
+        opacity: 0.65,
+      }),
       dupontHousing: new THREE.MeshStandardMaterial({
         color: '#18181B', // Matte black molded Dupont plastic housing
         roughness: 0.5,
@@ -117,6 +124,11 @@ export function Wire3DTube({
       {/* Selection Glow Halo */}
       {isSelected && (
         <mesh geometry={haloGeometry} material={materials.halo} />
+      )}
+
+      {/* Connected Net / Pin Hover Highlight Glow */}
+      {!isSelected && isHighlighted && (
+        <mesh geometry={haloGeometry} material={materials.highlightHalo} />
       )}
 
       {/* Main Jumper Wire Flexible PVC Insulation Tube */}

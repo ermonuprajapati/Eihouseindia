@@ -24,7 +24,15 @@ import {
 import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Breadboard3D } from './Breadboard3D';
-import { BreadboardHole3D, HOLE_BY_ID, findNearestHole830, findNearestFreeHole830 } from './breadboard-topology';
+import {
+  BreadboardHole3D,
+  HOLE_BY_ID,
+  findNearestHole830,
+  findNearestFreeHole830,
+  findNearestUnoccupiedHole,
+  START_X,
+  PITCH_X,
+} from './breadboard-topology';
 import { ArduinoMega3D, MEGA_PINS } from './models/ArduinoMega3D';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
 import { ArduinoNano3D, NANO_PINS } from './models/ArduinoNano3D';
@@ -287,28 +295,38 @@ function DragFrameController({
       let targetZ = hitPoint.z;
       let targetY = comp.y3d;
 
-      const isThroughHole = [
+      const isDipPackage = [
+        'TIMER_555',
+        'DIP_IC',
+        'ATMEGA328P',
+        'ARDUINO_NANO',
+        'ESP32_DEVKIT',
+        'RASPBERRY_PI_PICO',
+      ].includes(comp.type) || comp.type.includes('DIP') || comp.type.includes('555') || comp.type.includes('328');
+
+      const isThroughHole = isDipPackage || [
         'RESISTOR',
         'LED',
         'LED_RGB',
         'CAPACITOR',
         'CAPACITOR_ELECTROLYTIC',
-        'TIMER_555',
-        'DIP_IC',
         'DIODE',
         'SENSOR_LDR',
         'PUSHBUTTON',
-        'ARDUINO_NANO',
-        'ESP32_DEVKIT',
-        'RASPBERRY_PI_PICO',
       ].includes(comp.type);
 
-      if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
+      if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
+        // Automatic IC Snapping straddling center DIP notch (top pins in Row E, bottom pins in Row F)
+        const nearestCol = Math.max(2, Math.min(62, Math.round((targetX - START_X) / PITCH_X) + 1));
+        targetX = START_X + (nearestCol - 1) * PITCH_X;
+        targetZ = 0;   // Straddle center DIP ravine
+        targetY = 8.5; // Resting flush on breadboard
+      } else if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
         const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
         if (freeHole) {
           targetX = freeHole.x;
           targetZ = freeHole.z;
-          targetY = 5.0; // Breadboard surface elevation
+          targetY = 8.5; // Breadboard surface elevation
         }
       } else {
         targetX = Math.round(targetX / 2.54) * 2.54;
@@ -375,7 +393,6 @@ export interface Studio3DCanvasProps {
 
 export function Studio3DCanvas({
   hasBreadboard = true,
-  onToggleBreadboard: _onToggleBreadboard,
   onToggleMcuUsb,
   components3d,
   wires3d,
@@ -790,11 +807,21 @@ export function Studio3DCanvas({
         wireColor = '#EF4444';
       }
 
+      // Prevent wire stacking in the same breadboard/rail hole:
+      let finalToPin = pinId;
+      if (compId === 'breadboard' && occupiedHoleIds.has(pinId)) {
+        finalToPin = findNearestUnoccupiedHole(pinId, occupiedHoleIds);
+      }
+      let finalFromPin = activeWireStart.pinId;
+      if (activeWireStart.compId === 'breadboard' && occupiedHoleIds.has(activeWireStart.pinId)) {
+        finalFromPin = findNearestUnoccupiedHole(activeWireStart.pinId, occupiedHoleIds);
+      }
+
       // Complete wire connection
       const newWire: Wire3D = {
         id: `wire3d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        fromPin: { compId: activeWireStart.compId, pinId: activeWireStart.pinId },
-        toPin: { compId, pinId },
+        fromPin: { compId: activeWireStart.compId, pinId: finalFromPin },
+        toPin: { compId, pinId: finalToPin },
         color: wireColor,
       };
 
@@ -1612,6 +1639,11 @@ export function Studio3DCanvas({
           const p1 = getPinWorld3D(w.fromPin.compId, w.fromPin.pinId);
           const p2 = getPinWorld3D(w.toPin.compId, w.toPin.pinId);
           const isSelected = selectedWireId === w.id;
+          const isConnectedToHoveredPin = Boolean(
+            hoveredPinInfo &&
+              ((w.fromPin.compId === hoveredPinInfo.compId && w.fromPin.pinId === hoveredPinInfo.pinName) ||
+                (w.toPin.compId === hoveredPinInfo.compId && w.toPin.pinId === hoveredPinInfo.pinName))
+          );
 
           return (
             <Wire3DTube
@@ -1621,6 +1653,7 @@ export function Studio3DCanvas({
               end={p2}
               color={w.color}
               isSelected={isSelected}
+              isHighlighted={isConnectedToHoveredPin}
               isSimulating={isSimulating}
               onClick={(id) => {
                 onSelectWire(id);
@@ -2023,17 +2056,133 @@ export function Studio3DCanvas({
         </div>
       )}
 
-      {/* MCU / Component Pin Hover HUD Badge */}
-      {hoveredPinInfo && (
-        <div className="absolute bottom-4 left-4 bg-slate-900/95 border border-cyan-500/80 rounded-lg px-3 py-1.5 text-xs font-mono text-white pointer-events-none z-20 shadow-xl flex items-center gap-2 backdrop-blur animate-in fade-in duration-100">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="text-cyan-400 font-bold">
-            {components3d.find((c) => c.id === hoveredPinInfo.compId)?.label || hoveredPinInfo.compId}
-          </span>
-          <span className="text-slate-500">➔</span>
-          <span className="text-amber-300 font-bold">Pin: {hoveredPinInfo.pinName}</span>
-        </div>
-      )}
+      {/* MCU / Component Pin Interactive Inspection HUD Badge */}
+      {hoveredPinInfo && (() => {
+        const comp = components3d.find((c) => c.id === hoveredPinInfo.compId);
+        const simState = simulationStates[hoveredPinInfo.compId];
+        const pin = hoveredPinInfo.pinName;
+        const pLower = pin.toLowerCase();
+
+        // 1. Resolve Pin Role / Functional Name:
+        let pinLabel = `Pin: ${pin}`;
+        if (comp?.type === 'TIMER_555' || comp?.type === 'DIP_IC') {
+          const pinNames555: Record<string, string> = {
+            '1': 'Pin 1 · GND (Ground 0V)',
+            '2': 'Pin 2 · TRIG (Trigger Comparator Input)',
+            '3': 'Pin 3 · OUT (Square Wave Output)',
+            '4': 'Pin 4 · RESET (Active-Low Hardware Reset)',
+            '5': 'Pin 5 · CTRL (Control Voltage 2/3 VCC)',
+            '6': 'Pin 6 · THRESH (Threshold Comparator Input)',
+            '7': 'Pin 7 · DISCH (Discharge Open-Collector)',
+            '8': 'Pin 8 · VCC (Supply Voltage 4.5V - 16V)',
+          };
+          pinLabel = pinNames555[pin] || `Pin ${pin}`;
+        } else if (comp?.type.startsWith('ARDUINO') || comp?.type === 'ESP32_DEVKIT') {
+          const pinRoles: Record<string, string> = {
+            'D13': 'Pin D13 · SCK / Onboard Amber LED',
+            'D12': 'Pin D12 · MISO (Master In Slave Out)',
+            'D11': 'Pin D11 · MOSI / Hardware PWM',
+            'D10': 'Pin D10 · SS (Slave Select) / PWM',
+            'D9': 'Pin D9 · Hardware 8-bit Timer PWM',
+            'D6': 'Pin D6 · Hardware Timer PWM',
+            'D5': 'Pin D5 · Hardware Timer PWM',
+            'D3': 'Pin D3 · External INT1 / PWM',
+            'D2': 'Pin D2 · External INT0',
+            'TX': 'Pin TX · UART Serial Transmit',
+            'RX': 'Pin RX · UART Serial Receive',
+            '5V': '5.0V · Regulated Logic Supply Rail',
+            '3V3': '3.3V · Low-Dropout Linear Regulator',
+            'GND': 'GND · Power & Logic System Ground',
+            'GND_1': 'GND · Power Ground Reference',
+            'GND_2': 'GND · Digital Ground Reference',
+            'VIN': 'VIN · Unregulated DC Input (7-12V)',
+            'RESET': 'RESET · Active-Low Microcontroller Reset',
+            'A0': 'Pin A0 · 10-bit ADC Analog In 0',
+            'A1': 'Pin A1 · 10-bit ADC Analog In 1',
+            'A2': 'Pin A2 · 10-bit ADC Analog In 2',
+            'A3': 'Pin A3 · 10-bit ADC Analog In 3',
+            'A4': 'Pin A4 · Analog In 4 / I2C SDA',
+            'A5': 'Pin A5 · Analog In 5 / I2C SCL',
+          };
+          pinLabel = pinRoles[pin] || `Pin ${pin}`;
+        } else if (comp?.type === 'LED') {
+          pinLabel = pLower.includes('a') || pLower === '1' || pLower === '+'
+            ? 'Anode (+) · Positive Forward Bias Lead'
+            : 'Cathode (-) · Negative Ground Lead';
+        } else if (comp?.type === 'RESISTOR') {
+          pinLabel = pin === '1' ? 'Lead 1 · Axial Terminal' : 'Lead 2 · Axial Terminal';
+        }
+
+        // 2. Resolve Live Electrical State (Voltage & Current):
+        let liveState = isSimulating ? 'HIGH-Z / Floating' : 'Standby / Simulation Paused';
+        let stateColor = 'text-slate-400';
+        let bgPulse = 'bg-slate-400';
+
+        if (pLower.includes('gnd') || pLower === '-' || pLower === 'cathode' || pin === '1' && comp?.type === 'TIMER_555') {
+          liveState = 'LOW 0.00V (Ground Reference)';
+          stateColor = 'text-cyan-400';
+          bgPulse = 'bg-cyan-400';
+        } else if (pLower.includes('vcc') || pLower.includes('5v') || (pin === '8' && comp?.type === 'TIMER_555') || pLower === '+') {
+          const v = simState?.voltage && simState.voltage > 0 ? simState.voltage : 9.0;
+          liveState = `HIGH ${v.toFixed(2)}V (Active Power Rail)`;
+          stateColor = 'text-emerald-400';
+          bgPulse = 'bg-emerald-400';
+        } else if (pLower === '3v3') {
+          liveState = 'HIGH 3.30V (Regulated 3V3 Rail)';
+          stateColor = 'text-emerald-400';
+          bgPulse = 'bg-emerald-400';
+        } else if (simState && isSimulating) {
+          const v = simState.voltage ?? 0;
+          const i = Math.abs(simState.current ?? 0) * 1000;
+          if (v > 2.0) {
+            liveState = `HIGH ${v.toFixed(2)}V | ${i.toFixed(1)} mA`;
+            stateColor = 'text-emerald-400';
+            bgPulse = 'bg-emerald-400';
+          } else if (v > 0.05) {
+            liveState = `ACTIVE ${v.toFixed(2)}V | ${i.toFixed(1)} mA`;
+            stateColor = 'text-amber-400';
+            bgPulse = 'bg-amber-400';
+          } else {
+            liveState = `LOW ${v.toFixed(2)}V | 0.0 mA`;
+            stateColor = 'text-slate-300';
+            bgPulse = 'bg-slate-300';
+          }
+        }
+
+        // Find connected wires to this exact pin
+        const connectedWires = wires3d.filter(
+          (w) =>
+            (w.fromPin.compId === hoveredPinInfo.compId && w.fromPin.pinId === hoveredPinInfo.pinName) ||
+            (w.toPin.compId === hoveredPinInfo.compId && w.toPin.pinId === hoveredPinInfo.pinName)
+        );
+
+        return (
+          <div className="absolute bottom-5 left-5 bg-slate-900/98 border border-cyan-500/90 rounded-xl px-4 py-2.5 text-xs font-mono text-white pointer-events-none z-30 shadow-2xl flex flex-col gap-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-w-sm">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${bgPulse} animate-pulse`} />
+              <span className="text-white font-bold text-xs truncate">
+                {comp?.label || hoveredPinInfo.compId}
+              </span>
+              <span className="text-[10px] text-cyan-400 uppercase font-semibold px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
+                {comp?.value || comp?.type}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 pt-0.5 border-t border-slate-800">
+              <span className="text-amber-300 font-bold text-[11px]">{pinLabel}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-[11px] pt-0.5">
+              <span className={`font-semibold ${stateColor}`}>
+                ⚡ {liveState}
+              </span>
+              {connectedWires.length > 0 && (
+                <span className="text-[10px] text-cyan-300 font-mono flex items-center gap-1">
+                  <span>🔗</span> {connectedWires.length} net wire{connectedWires.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Breadboard Hole Hover Overlay */}
       {hoveredHole && !hoveredPinInfo && (
