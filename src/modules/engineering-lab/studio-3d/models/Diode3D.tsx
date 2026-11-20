@@ -68,13 +68,13 @@ export function Diode3D({
             <mesh position={[p.x / 2, 4.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.lead}>
               <cylinderGeometry args={[0.3, 0.3, Math.abs(p.x), 8]} />
             </mesh>
-            {/* Vertical lead leg */}
-            <mesh position={[p.x, 1.5, 0]} material={materials.lead}>
-              <cylinderGeometry args={[0.3, 0.3, 5.0, 8]} />
+            {/* Vertical lead leg extending down through breadboard hole */}
+            <mesh position={[p.x, -0.5, 0]} material={materials.lead}>
+              <cylinderGeometry args={[0.3, 0.3, 9.0, 8]} />
             </mesh>
-            {/* Click target */}
+            {/* Click target at breadboard surface */}
             <mesh
-              position={[p.x, -1.0, 0]}
+              position={[p.x, 0, 0]}
               material={isHovered ? materials.pinHover : materials.lead}
               onClick={(e) => {
                 e.stopPropagation();

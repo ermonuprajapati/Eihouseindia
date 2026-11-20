@@ -142,7 +142,7 @@ export function LabHeader({
   const isFirmware = activeMode === 'firmware';
 
   return (
-    <header className="h-14 bg-[#0B1528] text-white border-b border-slate-800 flex items-center justify-between px-2 sm:px-3 select-none z-30 w-full max-w-full overflow-hidden flex-shrink-0">
+    <header className="h-14 bg-[#0B1528] text-white border-b border-slate-800 flex items-center justify-between px-2 sm:px-3 select-none z-50 w-full max-w-full overflow-visible relative flex-shrink-0">
       {/* Brand & Project Info */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0 min-w-0">
         <Link
@@ -519,7 +519,7 @@ export function LabHeader({
           </button>
 
           {showExportMenu && (
-            <div className="absolute right-0 mt-1 w-64 bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
+            <div className="absolute top-full right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] bg-[#0B1528] border border-slate-700/90 rounded-xl shadow-2xl p-2 z-[100] text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto ring-1 ring-white/10 space-y-0.5">
               {/* 1. Complete Project File & Re-import */}
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 EI House Project
@@ -530,13 +530,13 @@ export function LabHeader({
                   onExportProject('eihouse');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 group transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
-                  <span className="font-medium">EI House Project</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Sparkles className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform shrink-0" />
+                  <span className="font-medium text-xs truncate">EI House Project</span>
                 </span>
-                <span className="text-[10px] font-mono text-cyan-400/90 font-bold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/50">
+                <span className="shrink-0 text-[10px] font-mono text-cyan-400/90 font-bold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/50">
                   .eihouse.json
                 </span>
               </button>
@@ -546,13 +546,13 @@ export function LabHeader({
                   onExportProject('json');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full px-2.5 py-2 text-left text-slate-300 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 group transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <FileJson className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Standard Project File</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <FileJson className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Standard Project File</span>
                 </span>
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                   .json
                 </span>
               </button>
@@ -562,23 +562,23 @@ export function LabHeader({
                   fileInputRef.current?.click();
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-emerald-400 hover:bg-emerald-950/60 hover:text-emerald-300 rounded-lg flex items-center justify-between group transition-colors border border-emerald-500/20 my-0.5"
+                className="w-full px-2.5 py-2 text-left text-emerald-400 hover:bg-emerald-950/60 hover:text-emerald-300 rounded-lg flex items-center justify-between gap-3 group transition-colors border border-emerald-500/25 my-1"
               >
-                <span className="flex items-center gap-2">
-                  <Upload className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="font-medium">Import Project...</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Import Project...</span>
                 </span>
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <span className="shrink-0 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/40">
                   Load
                 </span>
               </button>
 
-              <div className="my-1 border-t border-slate-800/80" />
+              <div className="my-1.5 border-t border-slate-800" />
 
               {/* 2. Context-Aware Tab Export Options */}
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center justify-between">
                 <span>Current View Exports</span>
-                <span className="text-[9px] text-slate-500 font-normal">Context-Aware</span>
+                <span className="text-[9px] text-slate-400 font-normal">Context-Aware</span>
               </div>
 
               {isSchematic && (
@@ -588,26 +588,26 @@ export function LabHeader({
                       onExportProject('png');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Schematic Snapshot</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Schematic Snapshot</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
                   </button>
                   <button
                     onClick={() => {
                       onExportProject('svg');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Vector Drawing</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <FileText className="w-4 h-4 text-purple-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Vector Drawing</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
                   </button>
                 </>
               )}
@@ -618,13 +618,13 @@ export function LabHeader({
                     onExportProject('png');
                     setShowExportMenu(false);
                   }}
-                  className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                  className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                 >
-                  <span className="flex items-center gap-2">
-                    <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-                    <span>3D Studio Photorealistic Shot</span>
+                  <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span className="font-medium text-xs truncate">3D Studio Photorealistic Shot</span>
                   </span>
-                  <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                  <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
                 </button>
               )}
 
@@ -635,26 +635,26 @@ export function LabHeader({
                       onExportProject('gerber');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <Layers className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Gerber & Drill Package</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Gerber & Drill Package</span>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
                   </button>
                   <button
                     onClick={() => {
                       onExportProject('svg');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-purple-400" />
-                      <span>PCB 2D Vector Blueprint</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <FileText className="w-4 h-4 text-purple-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">PCB 2D Vector Blueprint</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
                   </button>
                 </>
               )}
@@ -666,26 +666,26 @@ export function LabHeader({
                       onExportProject('png');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-                      <span>PCB 3D High-Res Snapshot</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">PCB 3D High-Res Snapshot</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
                   </button>
                   <button
                     onClick={() => {
                       onExportProject('gerber');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <Layers className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Gerber Fabrication Package</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Gerber Fabrication Package</span>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
                   </button>
                 </>
               )}
@@ -697,31 +697,31 @@ export function LabHeader({
                       onExportProject('firmware');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <Code2 className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Arduino Sketch</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Code2 className="w-4 h-4 text-purple-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Arduino Sketch</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.ino</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.ino</span>
                   </button>
                   <button
                     onClick={() => {
                       onExportProject('cpp');
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
-                    <span className="flex items-center gap-2">
-                      <Code2 className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>C++ Source File</span>
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Code2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">C++ Source File</span>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.cpp</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.cpp</span>
                   </button>
                 </>
               )}
 
-              <div className="my-1 border-t border-slate-800/80" />
+              <div className="my-1.5 border-t border-slate-800" />
 
               {/* 3. Engineering Deliverables & Netlists */}
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -733,13 +733,13 @@ export function LabHeader({
                   onExportProject('bom');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <Cpu className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bill of Materials</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Bill of Materials</span>
                 </span>
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.csv</span>
+                <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.csv</span>
               </button>
 
               <button
@@ -747,13 +747,13 @@ export function LabHeader({
                   onExportProject('netlist');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>SPICE Netlist</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">SPICE Netlist</span>
                 </span>
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40">.cir</span>
+                <span className="shrink-0 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40">.cir</span>
               </button>
 
               <button
@@ -761,13 +761,13 @@ export function LabHeader({
                   onExportProject('netlist-json');
                   setShowExportMenu(false);
                 }}
-                className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors"
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
               >
-                <span className="flex items-center gap-2">
-                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>JSON Netlist</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">JSON Netlist</span>
                 </span>
-                <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/40">.json</span>
+                <span className="shrink-0 text-[10px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/40">.json</span>
               </button>
             </div>
           )}

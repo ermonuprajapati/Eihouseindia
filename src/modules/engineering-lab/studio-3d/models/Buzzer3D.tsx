@@ -77,11 +77,11 @@ export function Buzzer3D({
         const isHovered = hoveredPin === p.name;
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            <mesh position={[0, -2.0, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
+            <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.35, 0.35, 6.0, 8]} />
             </mesh>
             <mesh
-              position={[0, -3.8, 0]}
+              position={[0, 0, 0]}
               material={isHovered ? materials.pinHover : materials.pinSilver}
               onClick={(e) => {
                 e.stopPropagation();

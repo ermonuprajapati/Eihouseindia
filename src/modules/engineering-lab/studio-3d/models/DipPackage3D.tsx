@@ -211,7 +211,7 @@ export function DipPackage3D({
 
             {/* Vertical pin shank dipping into breadboard spring clips */}
             <mesh
-              position={[0, 0, 0]}
+              position={[0, -0.9, 0]}
               material={
                 isHovered
                   ? materials.pinHover
@@ -220,7 +220,7 @@ export function DipPackage3D({
                   : materials.leadSilver
               }
             >
-              <boxGeometry args={[0.65, 3.2, 0.45]} />
+              <boxGeometry args={[0.65, 5.0, 0.45]} />
             </mesh>
 
             {/* Live Hover Tooltip showing pin number and name */}

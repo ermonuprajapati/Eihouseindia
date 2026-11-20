@@ -62,11 +62,11 @@ export function Ldr3D({
         const isHovered = hoveredPin === p.name;
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            <mesh position={[0, 2.0, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 6.0, 8]} />
+            <mesh position={[0, 0, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.3, 0.3, 10.0, 8]} />
             </mesh>
             <mesh
-              position={[0, -1.0, 0]}
+              position={[0, 0, 0]}
               material={isHovered ? materials.pinHover : materials.pinSilver}
               onClick={(e) => {
                 e.stopPropagation();

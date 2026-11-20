@@ -6,6 +6,7 @@ import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/en
 import { Studio3DCanvas } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { findNearestRailHoleForColumn } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
+import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
 import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders } from 'lucide-react';
 
 interface Virtual3dStudioProps {
@@ -175,14 +176,14 @@ export function Virtual3dStudio({
   }, [components, independentComponents]);
 
   // Convert 2D schematic components to 3D representation without placing any parts floating in air
-  const schematicTo3DComponents = useCallback((): Component3D[] => {
+  const schematicTo3DComponents = useCallback((forceAutoLayout = false, compsList: CircuitComponent[] = components): Component3D[] => {
     let mcuIdx = 0;
     let batteryIdx = 0;
     let sensorIdx = 0;
     let passiveIdx = 0;
 
     // Filter out virtual schematic rails (GND / VCC) - they are physically routed via breadboard power rails
-    const physicalComponents = components.filter(
+    const physicalComponents = compsList.filter(
       (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd')
     );
 
@@ -230,8 +231,8 @@ export function Virtual3dStudio({
         mappedType = 'SENSOR_LDR';
       }
 
-      // Preserve previously saved 3D coordinates if valid
-      if (comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
+      // Preserve previously saved 3D coordinates if valid (unless forceAutoLayout is true)
+      if (!forceAutoLayout && comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
         return {
           id: comp.id,
           type: mappedType,
@@ -340,12 +341,12 @@ export function Virtual3dStudio({
   }, [components]);
 
   // Authentic Breadboard Power Rail Routing & Standard Wire Color Coding
-  const schematicTo3DWires = useCallback((): Wire3D[] => {
-    const battery = components.find(
+  const schematicTo3DWires = useCallback((srcWires: CircuitWire[] = wires, srcComps: CircuitComponent[] = components): Wire3D[] => {
+    const battery = srcComps.find(
       (c) => c.type === 'BATTERY' || c.type === 'BATTERY_9V' || c.id.toLowerCase().startsWith('bat')
     );
     const gndCompIds = new Set(
-      components
+      srcComps
         .filter((c) => c.type === 'GROUND' || c.id.toLowerCase().startsWith('gnd'))
         .map((c) => c.id)
     );
@@ -378,7 +379,7 @@ export function Virtual3dStudio({
       });
     }
 
-    wires.forEach((w) => {
+    srcWires.forEach((w) => {
       const fromIsBat = battery && w.fromCompId === battery.id;
       const toIsBat = battery && w.toCompId === battery.id;
       const fromIsGnd = gndCompIds.has(w.fromCompId);
@@ -399,7 +400,7 @@ export function Virtual3dStudio({
 
       // If one end connects to battery positive, route it as a dedicated vertical drop from nearest unoccupied Red (+) rail hole
       if (fromIsBat && (fPin === 'p' || fPin === '+')) {
-        const toComp = components.find((c) => c.id === w.toCompId);
+        const toComp = srcComps.find((c) => c.id === w.toCompId);
         const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (toComp?.z3d ?? -8) <= 0;
         const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
@@ -414,7 +415,7 @@ export function Virtual3dStudio({
         return;
       }
       if (toIsBat && (tPin === 'p' || tPin === '+')) {
-        const fromComp = components.find((c) => c.id === w.fromCompId);
+        const fromComp = srcComps.find((c) => c.id === w.fromCompId);
         const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (fromComp?.z3d ?? -8) <= 0;
         const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
@@ -431,7 +432,7 @@ export function Virtual3dStudio({
 
       // If one end connects to a schematic GND symbol, drop directly from nearest unoccupied Blue (-) ground rail hole
       if (fromIsGnd) {
-        const toComp = components.find((c) => c.id === w.toCompId);
+        const toComp = srcComps.find((c) => c.id === w.toCompId);
         const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (toComp?.z3d ?? -8) <= 0;
         const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
@@ -446,7 +447,7 @@ export function Virtual3dStudio({
         return;
       }
       if (toIsGnd) {
-        const fromComp = components.find((c) => c.id === w.fromCompId);
+        const fromComp = srcComps.find((c) => c.id === w.fromCompId);
         const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
         const isTop = (fromComp?.z3d ?? -8) <= 0;
         const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
@@ -570,14 +571,50 @@ export function Virtual3dStudio({
   };
 
   // Top Bar Action: Import from 2D Schematic
-  const handleImportFromSchematic = () => {
+  const handleImportFromSchematic = useCallback(() => {
     record3DHistory(activeComponents3d, activeWires3d);
-    const comps = schematicTo3DComponents();
-    const w = schematicTo3DWires();
+    try {
+      localStorage.removeItem('ei_house_virtual3d_project');
+    } catch {}
+
+    const hasPhysicalComps = components.some(
+      (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd')
+    );
+
+    let srcComps = components;
+    let srcWires = wires;
+
+    // If schematic is blank, seed the starter NE555 astable flasher circuit
+    if (!hasPhysicalComps) {
+      TEMPLATE_555_ASTABLE.components.forEach((c) => onAddComponent(c));
+      TEMPLATE_555_ASTABLE.wires.forEach((w) => onAddWire(w));
+      srcComps = TEMPLATE_555_ASTABLE.components;
+      srcWires = TEMPLATE_555_ASTABLE.wires;
+    }
+
+    const comps = schematicTo3DComponents(true, srcComps);
+    const w = schematicTo3DWires(srcWires, srcComps);
+
+    // Sync generated 3D coordinates back to schematic components
+    comps.forEach((c3d) => {
+      const orig = srcComps.find((c) => c.id === c3d.id);
+      if (orig && onUpdateComponent) {
+        onUpdateComponent({
+          ...orig,
+          x3d: c3d.x3d,
+          y3d: c3d.y3d,
+          z3d: c3d.z3d,
+          rot3d: c3d.rotY,
+        });
+      }
+    });
+
     setIndependentComponents(comps);
     setIndependentWires(w);
-    toast.success(`Imported ${comps.length} components and ${w.length} wires from Schematic.`);
-  };
+    onSelectComponent(null);
+    onSelectWire(null);
+    toast.success(`Imported ${comps.length} components and ${w.length} wires from Schematic to 3D Breadboard.`);
+  }, [activeComponents3d, activeWires3d, components, wires, onAddComponent, onAddWire, onSelectComponent, onSelectWire, onUpdateComponent, record3DHistory, schematicTo3DComponents, schematicTo3DWires]);
 
   // Top Bar Action: Save 3D Project / Export JSON
   const handleSave3DProject = () => {

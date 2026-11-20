@@ -687,61 +687,61 @@ export function Studio3DCanvas({
       }
     } else if (comp.type === 'LED') {
       const p = (pinId || '').toLowerCase();
-      if (p === 'anode' || p === 'a' || p === '1' || p === '+') lx = -1.27;
-      else lx = 1.27;
+      if (p === 'anode' || p === 'a' || p === '1' || p === '+') lx = -2.54;
+      else lx = 2.54;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
+      lz = 0;
     } else if (comp.type === 'LED_RGB') {
       if (pinId === 'R' || pinId === '1') lx = -3.81;
       else if (pinId === 'C' || pinId === 'GND' || pinId === '2') lx = -1.27;
       else if (pinId === 'G' || pinId === '3') lx = 1.27;
       else lx = 3.81;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54;
+      lz = 0;
     } else if (comp.type === 'BUZZER_ACTIVE') {
       if (pinId === '+' || pinId === '1') lx = -2.54;
       else lx = 2.54;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54;
+      lz = 0;
     } else if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
       if (pinId === '1' || pinId === 'anode') lx = -5.08;
       else lx = 5.08;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54;
+      lz = 0;
     } else if (comp.type === 'SENSOR_LDR') {
       if (pinId === '1') lx = -2.54;
       else lx = 2.54;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54;
+      lz = 0;
     } else if (comp.type === 'SLIDE_SWITCH') {
       if (pinId === '1') lx = -2.54;
       else if (pinId === '2') lx = 0;
       else lx = 2.54;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54;
+      lz = 0;
     } else if (comp.type === 'RESISTOR') {
       if (pinId === '1') lx = -5.08;
       else lx = 5.08;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
+      lz = 0;
     } else if (comp.type === 'POTENTIOMETER') {
       if (pinId === '1') { lx = -2.54; lz = 0; }
       else if (pinId === '2' || pinId === 'wiper') { lx = 0; lz = 2.54; }
       else { lx = 2.54; lz = 0; }
       ly = 0;
     } else if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
-      if (pinId === '1' || pinId === '+') lx = -1.27;
-      else lx = 1.27;
+      if (pinId === '1' || pinId === '+') lx = -2.54;
+      else lx = 2.54;
       ly = 0;
-      lz = comp.z3d <= 0 ? 2.54 : -2.54; // Adjacent hole in same column (Row D or G)
+      lz = 0;
     } else if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
       const pNum = parseInt(pinId) || 1;
       if (pNum >= 1 && pNum <= 4) {
         lx = -3.81 + (pNum - 1) * 2.54;
-        lz = -5.88; // Adjacent hole in Row D for pins 1..4
+        lz = -3.34; // Row E for pins 1..4
       } else {
         lx = 3.81 - (pNum - 5) * 2.54;
-        lz = 5.88; // Adjacent hole in Row G for pins 5..8
+        lz = 3.34;  // Row F for pins 5..8
       }
       ly = 0;
     } else if (comp.type === 'BATTERY_9V' || comp.type === 'BATTERY') {
@@ -1243,37 +1243,90 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
-                {/* Blue can body */}
+                {/* Blue Aluminum Electrolytic Can Body */}
                 <mesh position={[0, 5.0, 0]}>
                   <cylinderGeometry args={[3.2, 3.2, 8.5, 24]} />
                   <meshStandardMaterial color={isSelected ? '#38BDF8' : '#1E3A8A'} roughness={0.3} />
                 </mesh>
-                {/* White polarity stripe */}
-                <mesh position={[-3.15, 5.0, 0]}>
-                  <boxGeometry args={[0.2, 8.5, 1.2]} />
-                  <meshStandardMaterial color="#F8FAFC" />
-                </mesh>
-                {/* Silver cap */}
+
+                {/* Silver Metal Safety Vent Top */}
                 <mesh position={[0, 9.3, 0]}>
                   <cylinderGeometry args={[3.1, 3.1, 0.2, 24]} />
                   <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
                 </mesh>
-                {/* Two pins */}
-                {[-1.27, 1.27].map((px, i) => (
-                  <mesh
-                    key={i}
-                    position={[px, -1.5, 0]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const pinId = i === 0 ? '+' : '-';
-                      const pPos = getPinWorld3D(comp.id, pinId);
-                      handlePinClick(comp.id, pinId, pPos);
-                    }}
-                  >
-                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
-                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+
+                {/* Negative Polarity Stripe on the - lead side (+X: x = 3.18) */}
+                <group position={[3.15, 5.0, 0]}>
+                  <mesh>
+                    <boxGeometry args={[0.2, 8.5, 1.6]} />
+                    <meshStandardMaterial color="#F1F5F9" roughness={0.4} />
                   </mesh>
-                ))}
+                  {/* Minus "-" Polarity Symbols */}
+                  {[-2.5, 0, 2.5].map((yOff, mi) => (
+                    <mesh key={mi} position={[0.12, yOff, 0]}>
+                      <boxGeometry args={[0.05, 0.35, 1.0]} />
+                      <meshBasicMaterial color="#0F172A" />
+                    </mesh>
+                  ))}
+                </group>
+
+                {/* Positive "+" Polarity Symbol on Anode side (-X: x = -3.18) */}
+                <group position={[-3.15, 5.0, 0]}>
+                  <mesh position={[-0.12, 0, 0]}>
+                    <boxGeometry args={[0.05, 0.3, 0.9]} />
+                    <meshBasicMaterial color="#10B981" />
+                  </mesh>
+                  <mesh position={[-0.12, 0, 0]}>
+                    <boxGeometry args={[0.05, 0.9, 0.3]} />
+                    <meshBasicMaterial color="#10B981" />
+                  </mesh>
+                </group>
+
+                {/* Authentic Radial Bent Wire Leads Firmly Seated Into Breadboard Holes (Spacing: 5.08mm) */}
+                {/* 1. Positive Anode Lead (+) at x = -2.54, extending down to y = -5.0mm */}
+                <mesh position={[-1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+                <mesh position={[-2.54, -2.0, 0]}>
+                  <cylinderGeometry args={[0.3, 0.3, 6.0, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+
+                {/* 2. Negative Cathode Lead (-) at x = 2.54, extending down to y = -4.2mm */}
+                <mesh position={[1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+                <mesh position={[2.54, -1.6, 0]}>
+                  <cylinderGeometry args={[0.3, 0.3, 5.2, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+
+                {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
+                {[-2.54, 2.54].map((px, i) => {
+                  const pinId = i === 0 ? '+' : '-';
+                  const isHovered = hoveredPinInfo?.compId === comp.id && hoveredPinInfo?.pinName === pinId;
+                  return (
+                    <mesh
+                      key={pinId}
+                      position={[px, 0, 0]}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const pPos = getPinWorld3D(comp.id, pinId);
+                        handlePinClick(comp.id, pinId, pPos);
+                      }}
+                      onPointerOver={(e) => {
+                        e.stopPropagation();
+                        setHoveredPinInfo({ compId: comp.id, pinName: pinId });
+                      }}
+                      onPointerOut={() => setHoveredPinInfo(null)}
+                    >
+                      <cylinderGeometry args={[isHovered ? 0.6 : 0.35, 0.35, 1.2, 12]} />
+                      <meshBasicMaterial color={isHovered ? (i === 0 ? '#10B981' : '#38BDF8') : '#CBD5E1'} />
+                    </mesh>
+                  );
+                })}
               </group>
             );
           }
@@ -1291,27 +1344,57 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
-                {/* Tan ceramic disc */}
+                {/* Tan Ceramic Disc Body */}
                 <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]}>
                   <cylinderGeometry args={[3.0, 3.0, 1.2, 24]} />
                   <meshStandardMaterial color={isSelected ? '#38BDF8' : '#D97706'} roughness={0.6} />
                 </mesh>
-                {/* Two leads */}
-                {[-1.27, 1.27].map((px, i) => (
-                  <mesh
-                    key={i}
-                    position={[px, -1.5, 0]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const pinId = i === 0 ? '1' : '2';
-                      const pPos = getPinWorld3D(comp.id, pinId);
-                      handlePinClick(comp.id, pinId, pPos);
-                    }}
-                  >
-                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
-                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
-                  </mesh>
-                ))}
+
+                {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Breadboard Holes (Spacing: 5.08mm) */}
+                {/* Pin 1 at x = -2.54 */}
+                <mesh position={[-1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.3, 0.3, 1.74, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+                <mesh position={[-2.54, -1.5, 0]}>
+                  <cylinderGeometry args={[0.3, 0.3, 7.0, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+
+                {/* Pin 2 at x = 2.54 */}
+                <mesh position={[1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.3, 0.3, 1.74, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+                <mesh position={[2.54, -1.5, 0]}>
+                  <cylinderGeometry args={[0.3, 0.3, 7.0, 8]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                </mesh>
+
+                {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
+                {[-2.54, 2.54].map((px, i) => {
+                  const pinId = i === 0 ? '1' : '2';
+                  const isHovered = hoveredPinInfo?.compId === comp.id && hoveredPinInfo?.pinName === pinId;
+                  return (
+                    <mesh
+                      key={pinId}
+                      position={[px, 0, 0]}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const pPos = getPinWorld3D(comp.id, pinId);
+                        handlePinClick(comp.id, pinId, pPos);
+                      }}
+                      onPointerOver={(e) => {
+                        e.stopPropagation();
+                        setHoveredPinInfo({ compId: comp.id, pinName: pinId });
+                      }}
+                      onPointerOut={() => setHoveredPinInfo(null)}
+                    >
+                      <cylinderGeometry args={[isHovered ? 0.6 : 0.35, 0.35, 1.2, 12]} />
+                      <meshBasicMaterial color={isHovered ? '#38BDF8' : '#CBD5E1'} />
+                    </mesh>
+                  );
+                })}
               </group>
             );
           }
@@ -2143,21 +2226,50 @@ export function Studio3DCanvas({
         } else if (comp?.type === 'LED') {
           pinLabel = pLower.includes('a') || pLower === '1' || pLower === '+'
             ? 'Anode (+) · Positive Forward Bias Lead'
-            : 'Cathode (-) · Negative Ground Lead';
+            : 'Cathode (-) · Negative Ground Lead (Flat Rim Side)';
         } else if (comp?.type === 'RESISTOR') {
-          pinLabel = pin === '1' ? 'Lead 1 · Axial Terminal' : 'Lead 2 · Axial Terminal';
+          pinLabel = pin === '1' ? 'Lead 1 · Axial Terminal (-5.08mm)' : 'Lead 2 · Axial Terminal (+5.08mm)';
+        } else if (comp?.type === 'CAPACITOR_ELECTROLYTIC') {
+          pinLabel = pin === '+' || pin === '1'
+            ? 'Positive (+) · Long Anode Terminal'
+            : 'Negative (-) · Cathode Ground Terminal (Stripe Side)';
+        } else if (comp?.type === 'CAPACITOR') {
+          pinLabel = pin === '1' ? 'Lead 1 · Ceramic Disc Terminal' : 'Lead 2 · Ceramic Disc Terminal';
+        } else if (comp?.type === 'DIODE' || comp?.type === 'DIODE_1N4007') {
+          pinLabel = pin === '1' || pLower.includes('anode')
+            ? 'Anode (+) · P-Type Terminal'
+            : 'Cathode (-) · N-Type Silver Stripe Terminal';
+        } else if (comp?.type === 'BUZZER_ACTIVE') {
+          pinLabel = pin === '+' || pin === '1'
+            ? 'Positive (+) · DC VCC Terminal'
+            : 'Negative (-) · GND Ground Terminal';
+        } else if (comp?.type === 'BATTERY_9V' || comp?.type === 'BATTERY') {
+          pinLabel = pin === '+' || pLower.includes('pos') || pin === '1'
+            ? '+9V · High-Potential Positive Rail Terminal'
+            : '0V · System Ground (GND) Negative Terminal';
+        } else if (comp?.type === 'SENSOR_LDR') {
+          pinLabel = pin === '1' ? 'Lead 1 · Photocell Terminal' : 'Lead 2 · Photocell Terminal';
+        } else if (comp?.type === 'PUSHBUTTON') {
+          pinLabel = `Terminal ${pin} · SPST Momentary Contact`;
         }
 
-        // 2. Resolve Live Electrical State (Voltage & Current):
+        // 2. Resolve Breadboard Hole Placement:
+        const pinPos = getPinWorld3D(hoveredPinInfo.compId, hoveredPinInfo.pinName);
+        const nearestHole = findNearestHole830(pinPos.x, pinPos.z);
+        const seatedHoleName = nearestHole && Math.abs(pinPos.x) <= 85 && Math.abs(pinPos.z) <= 26
+          ? nearestHole.name
+          : null;
+
+        // 3. Resolve Live Electrical State (Voltage & Current):
         let liveState = isSimulating ? 'HIGH-Z / Floating' : 'Standby / Simulation Paused';
         let stateColor = 'text-slate-400';
         let bgPulse = 'bg-slate-400';
 
-        if (pLower.includes('gnd') || pLower === '-' || pLower === 'cathode' || pin === '1' && comp?.type === 'TIMER_555') {
+        if (pLower.includes('gnd') || pLower === '-' || pLower === 'cathode' || (pin === '1' && comp?.type === 'TIMER_555')) {
           liveState = 'LOW 0.00V (Ground Reference)';
           stateColor = 'text-cyan-400';
           bgPulse = 'bg-cyan-400';
-        } else if (pLower.includes('vcc') || pLower.includes('5v') || (pin === '8' && comp?.type === 'TIMER_555') || pLower === '+') {
+        } else if (pLower.includes('vcc') || pLower.includes('5v') || (pin === '8' && comp?.type === 'TIMER_555') || (pLower === '+' && comp?.type?.includes('BAT'))) {
           const v = simState?.voltage && simState.voltage > 0 ? simState.voltage : 9.0;
           liveState = `HIGH ${v.toFixed(2)}V (Active Power Rail)`;
           stateColor = 'text-emerald-400';
@@ -2169,7 +2281,11 @@ export function Studio3DCanvas({
         } else if (simState && isSimulating) {
           const v = simState.voltage ?? 0;
           const i = Math.abs(simState.current ?? 0) * 1000;
-          if (v > 2.0) {
+          if (comp?.type === 'CAPACITOR' || comp?.type === 'CAPACITOR_ELECTROLYTIC') {
+            liveState = `CHARGED ${v.toFixed(2)}V · Exponential Ramp`;
+            stateColor = v >= 3.0 ? 'text-emerald-400' : 'text-amber-400';
+            bgPulse = v >= 3.0 ? 'bg-emerald-400' : 'bg-amber-400';
+          } else if (v > 2.0) {
             liveState = `HIGH ${v.toFixed(2)}V | ${i.toFixed(1)} mA`;
             stateColor = 'text-emerald-400';
             bgPulse = 'bg-emerald-400';
@@ -2201,6 +2317,11 @@ export function Studio3DCanvas({
               <span className="text-[10px] text-cyan-400 uppercase font-semibold px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
                 {comp?.value || comp?.type}
               </span>
+              {seatedHoleName && (
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded">
+                  📍 {seatedHoleName}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 pt-0.5 border-t border-slate-800">
               <span className="text-amber-300 font-bold text-[11px]">{pinLabel}</span>

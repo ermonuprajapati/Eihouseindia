@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { BurnSmokeFX } from './BurnSmokeFX';
 
@@ -46,6 +46,7 @@ export function Led3D({
   const effectiveBrightness = isBurned ? 0 : brightness !== undefined ? brightness : isPowered ? 1.0 : 0;
   const isIlluminated = effectiveBrightness > 0;
 
+  // Stable Three.js materials - Avoid recreating shader programs on every animation frame
   const materials = useMemo(() => {
     if (isBurned) {
       return {
@@ -62,16 +63,22 @@ export function Led3D({
         leadHover: new THREE.MeshBasicMaterial({
           color: '#EF4444',
         }),
+        anodeHover: new THREE.MeshBasicMaterial({
+          color: '#10B981',
+        }),
+        cathodeHover: new THREE.MeshBasicMaterial({
+          color: '#38BDF8',
+        }),
       };
     }
 
     return {
       lens: new THREE.MeshPhysicalMaterial({
         color: hex,
-        emissive: isIlluminated ? hex : '#000000',
-        emissiveIntensity: isIlluminated ? Math.max(0.4, effectiveBrightness * 3.2) : 0,
+        emissive: hex,
+        emissiveIntensity: 0,
         transparent: true,
-        opacity: Math.min(0.95, 0.65 + effectiveBrightness * 0.3),
+        opacity: 0.7,
         roughness: 0.1,
         metalness: 0.05,
         transmission: 0.6,
@@ -84,12 +91,28 @@ export function Led3D({
       leadHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
       }),
+      anodeHover: new THREE.MeshBasicMaterial({
+        color: '#10B981',
+      }),
+      cathodeHover: new THREE.MeshBasicMaterial({
+        color: '#38BDF8',
+      }),
     };
-  }, [hex, isIlluminated, effectiveBrightness, isBurned]);
+  }, [hex, isBurned]);
 
-  // Lead spacing: 2.54mm between Anode (x = -1.27) and Cathode (x = 1.27)
-  const P_ANODE: [number, number, number] = [-1.27, 0, 0];
-  const P_CATHODE: [number, number, number] = [1.27, 0, 0];
+  // Smooth real-time update of optical parameters without WebGL shader compilation lag
+  useEffect(() => {
+    if (materials.lens instanceof THREE.MeshPhysicalMaterial) {
+      materials.lens.emissive.set(isIlluminated ? hex : '#000000');
+      materials.lens.emissiveIntensity = isIlluminated ? Math.max(0.4, effectiveBrightness * 3.2) : 0;
+      materials.lens.opacity = Math.min(0.95, 0.65 + effectiveBrightness * 0.3);
+    }
+  }, [materials, isIlluminated, effectiveBrightness, hex]);
+
+  // Lead spacing: Exactly 5.08mm (2 x 2.54mm breadboard pitch) centered at x = 0
+  // Anode at x = -2.54 (Column N-1), Cathode at x = +2.54 (Column N+1)
+  const P_ANODE: [number, number, number] = [-2.54, 0, 0];
+  const P_CATHODE: [number, number, number] = [2.54, 0, 0];
 
   return (
     <group position={position} rotation={rotation}>
@@ -99,7 +122,7 @@ export function Led3D({
       {/* Selection Ring */}
       {isSelected && (
         <mesh position={[0, 0, 0]}>
-          <ringGeometry args={[4, 4.5, 32]} />
+          <ringGeometry args={[4.5, 5.0, 32]} />
           <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
         </mesh>
       )}
@@ -114,14 +137,42 @@ export function Led3D({
         <cylinderGeometry args={[2.8, 2.8, 0.8, 24]} />
       </mesh>
 
+      {/* Authentic Physical Cathode Flat Notch on Collar (+X rim) */}
+      <mesh position={[2.7, 2.2, 0]} material={materials.lens}>
+        <boxGeometry args={[0.3, 0.82, 2.2]} />
+      </mesh>
+
+      {/* Visible Polarity Embossed Badges on Collar */}
+      {/* Anode (+) Symbol on -X side */}
+      <group position={[-3.1, 2.2, 0]}>
+        <mesh>
+          <boxGeometry args={[0.6, 0.15, 0.1]} />
+          <meshBasicMaterial color="#10B981" />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.15, 0.6, 0.1]} />
+          <meshBasicMaterial color="#10B981" />
+        </mesh>
+      </group>
+      {/* Cathode (-) Symbol on +X side */}
+      <group position={[3.1, 2.2, 0]}>
+        <mesh>
+          <boxGeometry args={[0.6, 0.15, 0.1]} />
+          <meshBasicMaterial color="#38BDF8" />
+        </mesh>
+      </group>
+
       {/* Domed Top Hemisphere */}
       <mesh position={[0, 7.5, 0]} material={materials.lens} castShadow>
         <sphereGeometry args={[2.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
       </mesh>
 
-      {/* Internal Reflective Cup & Post */}
-      <mesh position={[0, 4.5, 0]} material={materials.silverLead}>
-        <coneGeometry args={[0.8, 1.2, 12]} />
+      {/* Internal Reflective Cup & Post (Anode Post & Cathode Anvil) */}
+      <mesh position={[-0.4, 4.5, 0]} material={materials.silverLead}>
+        <coneGeometry args={[0.4, 1.2, 12]} />
+      </mesh>
+      <mesh position={[0.4, 4.5, 0]} material={materials.silverLead}>
+        <boxGeometry args={[0.7, 1.2, 0.2]} />
       </mesh>
 
       {/* Point Light when Illuminated with proportional intensity */}
@@ -135,20 +186,27 @@ export function Led3D({
         />
       )}
 
-      {/* Anode Lead (+ longer, x = -1.27) - 0.6mm wire diameter (0.3mm radius) */}
-      <mesh position={[-1.27, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 5, 12]} />
+      {/* Authentic Bent Metallic Leads Firmly Seated Into Breadboard Holes */}
+      {/* 1. Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -5.0mm */}
+      <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+      </mesh>
+      <mesh position={[-2.54, -1.5, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 7.0, 12]} />
       </mesh>
 
-      {/* Cathode Lead (- shorter, x = 1.27) - 0.6mm wire diameter (0.3mm radius) */}
-      <mesh position={[1.27, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 5, 12]} />
+      {/* 2. Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -4.2mm */}
+      <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 1.54, 8]} />
+      </mesh>
+      <mesh position={[2.54, -1.1, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 6.2, 12]} />
       </mesh>
 
-      {/* Anode Terminal Pin Anchor (Clean lead tip, no oversized ball) */}
+      {/* Anode Terminal Pin Anchor (x = -2.54, y = 0 Breadboard Surface) */}
       <mesh
         position={P_ANODE}
-        material={hoveredPin === 'anode' ? materials.leadHover : materials.silverLead}
+        material={hoveredPin === 'anode' ? materials.anodeHover : materials.silverLead}
         onClick={(e) => {
           e.stopPropagation();
           const w = new THREE.Vector3();
@@ -161,13 +219,13 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <cylinderGeometry args={[0.35, 0.35, 1.0, 12]} />
+        <cylinderGeometry args={[hoveredPin === 'anode' ? 0.6 : 0.35, 0.35, 1.2, 12]} />
       </mesh>
 
-      {/* Cathode Terminal Pin Anchor (Clean lead tip, no oversized ball) */}
+      {/* Cathode Terminal Pin Anchor (x = 2.54, y = 0 Breadboard Surface) */}
       <mesh
         position={P_CATHODE}
-        material={hoveredPin === 'cathode' ? materials.leadHover : materials.silverLead}
+        material={hoveredPin === 'cathode' ? materials.cathodeHover : materials.silverLead}
         onClick={(e) => {
           e.stopPropagation();
           const w = new THREE.Vector3();
@@ -180,7 +238,7 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <cylinderGeometry args={[0.35, 0.35, 1.0, 12]} />
+        <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.6 : 0.35, 0.35, 1.2, 12]} />
       </mesh>
     </group>
   );
