@@ -549,15 +549,21 @@ export function EngineeringLabApp() {
   }, [recordHistory]);
 
   // ----------------------------------------------------------------
-  // SECTION 12: DECOUPLED & THROTTLED SIMULATION LOOP
+  // SECTION 12: 1:1 REAL-TIME SIMULATION TIMESTEP ACCUMULATOR
   // ----------------------------------------------------------------
   useEffect(() => {
     let animId: number;
-    let lastUiUpdate = Date.now();
-    let lastSerialFlush = Date.now();
+    let lastUiUpdate = performance.now();
+    let lastSerialFlush = performance.now();
+    let lastFrameTime = performance.now();
+    let simAccumulator = 0;
     const pendingSerialLines: string[] = [];
 
     const loop = () => {
+      const now = performance.now();
+      const realDt = Math.min((now - lastFrameTime) / 1000, 0.05); // Cap at 50ms to prevent spiral of death
+      lastFrameTime = now;
+
       if (isSimulating && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
         const curFirmware = firmwareRef.current;
         let currentGpioStates: Record<string | number, GpioState> | undefined = undefined;
@@ -582,38 +588,38 @@ export function EngineeringLabApp() {
           }
         }
 
-        // Step Circuit MNA Solver WITH active MCU gpioStates in real-time (8 x 2ms = 16ms per 60fps frame)
+        // 1:1 Real-Time Simulation Speed: Accumulate realDt and step in fixed sub-steps (1ms)
         const solver = solverRef.current;
-        let result: SolverStepResult = solver.step(
-          project.components,
-          project.wires,
-          0.002,
-          1.0,
-          project.instruments,
-          currentGpioStates || mcuRef.current.getGpioState()
-        );
-        for (let sub = 1; sub < 8; sub++) {
-          const subRes = solver.step(
+        simAccumulator += realDt;
+        const SUB_STEP = 0.001;
+        let result: SolverStepResult | null = null;
+        let stepCount = 0;
+
+        while (simAccumulator >= SUB_STEP && stepCount < 50) {
+          const stepRes = solver.step(
             project.components,
             project.wires,
-            0.002,
+            SUB_STEP,
             1.0,
             project.instruments,
             currentGpioStates || mcuRef.current.getGpioState()
           );
-          result = {
-            ...result,
-            faults: subRes.faults && subRes.faults.length > 0 ? [...(result.faults || []), ...subRes.faults] : result.faults,
-            componentStates: subRes.componentStates,
-            nodeVoltages: subRes.nodeVoltages,
-            wireCurrents: subRes.wireCurrents,
-            waveformData: subRes.waveformData,
-          };
+          if (!result) {
+            result = stepRes;
+          } else {
+            result = {
+              ...stepRes,
+              faults: stepRes.faults && stepRes.faults.length > 0
+                ? [...(result.faults || []), ...stepRes.faults]
+                : result.faults,
+            };
+          }
+          simAccumulator -= SUB_STEP;
+          stepCount++;
         }
 
-        const now = Date.now();
         // Fire toast alerts for new component electrical burnout / damage faults
-        if (result.faults && result.faults.length > 0) {
+        if (result && result.faults && result.faults.length > 0) {
           setActiveFaults(result.faults);
           result.faults.forEach((fault) => {
             const faultKey = `${fault.compId}:${fault.type}`;
@@ -632,12 +638,12 @@ export function EngineeringLabApp() {
         }
 
         // Throttle UI commits to ~30 FPS to prevent memory churn and high CPU usage
-        if (now - lastUiUpdate >= 33) {
+        if (result && now - lastUiUpdate >= 33) {
           lastUiUpdate = now;
           setSimStates(result.componentStates);
           setWireCurrents(result.wireCurrents || {});
           setWaveformData(result.waveformData);
-          setSimTime((t) => t + 0.033);
+          setSimTime(solver.getCurrentTime());
         }
 
         // Throttle serial log update to every 150ms to keep 60 FPS buttery smooth

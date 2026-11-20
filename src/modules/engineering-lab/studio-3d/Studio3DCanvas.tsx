@@ -916,8 +916,8 @@ export function Studio3DCanvas({
       <Canvas
         id="virtual-3d-webgl-canvas"
         shadows
-        gl={{ preserveDrawingBuffer: true }}
-        camera={{ position: [0, 130, 150], fov: 45, near: 0.1, far: 2000 }}
+        gl={{ preserveDrawingBuffer: true, logarithmicDepthBuffer: true }}
+        camera={{ position: [0, 130, 150], fov: 45, near: 0.5, far: 500 }}
         className="w-full h-full cursor-grab active:cursor-grabbing"
         onContextMenu={(e) => {
           e.preventDefault();
@@ -946,12 +946,12 @@ export function Studio3DCanvas({
         />
         <directionalLight position={[-80, 80, -60]} intensity={0.8} color="#94A3B8" />
 
-        {/* Grounded ESD Antistatic Workbench Mat */}
-        <group position={[0, -0.1, 0]}>
+        {/* Grounded ESD Antistatic Workbench Mat (Layered at y = -0.08 to prevent any Z-fighting) */}
+        <group position={[0, -0.08, 0]}>
           {/* Main ESD Mat Body */}
           <mesh
             receiveShadow
-            position={[0, 0, 0]}
+            position={[0, -0.02, 0]}
             onClick={(e) => {
               e.stopPropagation();
               onSelectComponent(null);
@@ -960,7 +960,7 @@ export function Studio3DCanvas({
               setEditingWireEndpoint(null);
             }}
           >
-            <boxGeometry args={[440, 0.2, 280]} />
+            <boxGeometry args={[440, 0.04, 280]} />
             <meshStandardMaterial
               color="#0f172a"
               roughness={0.85}
@@ -968,25 +968,25 @@ export function Studio3DCanvas({
             />
           </mesh>
           {/* Mat Bevel Outer Rim */}
-          <mesh receiveShadow position={[0, -0.05, 0]}>
-            <boxGeometry args={[444, 0.2, 284]} />
+          <mesh receiveShadow position={[0, -0.04, 0]}>
+            <boxGeometry args={[444, 0.04, 284]} />
             <meshStandardMaterial color="#090d16" roughness={0.9} />
           </mesh>
           {/* Brass Grounding Snap Stud in Corner */}
-          <mesh position={[205, 0.15, -125]}>
-            <cylinderGeometry args={[4, 4, 0.4, 24]} />
+          <mesh position={[205, 0.01, -125]}>
+            <cylinderGeometry args={[4, 4, 0.02, 24]} />
             <meshStandardMaterial color="#d97706" metalness={0.85} roughness={0.25} />
           </mesh>
-          <mesh position={[205, 0.35, -125]}>
-            <cylinderGeometry args={[2, 2, 0.4, 16]} />
+          <mesh position={[205, 0.03, -125]}>
+            <cylinderGeometry args={[2, 2, 0.02, 16]} />
             <meshStandardMaterial color="#f59e0b" metalness={0.9} roughness={0.2} />
           </mesh>
         </group>
 
-        {/* Workbench Grid Plane */}
+        {/* Workbench Grid Plane (Layered at y = -0.04 to eliminate planar flickering) */}
         <Grid
           infiniteGrid
-          position={[0, 0.05, 0]}
+          position={[0, -0.04, 0]}
           cellSize={10}
           sectionSize={50}
           fadeDistance={400}

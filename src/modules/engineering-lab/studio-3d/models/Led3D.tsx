@@ -47,6 +47,22 @@ export function Led3D({
   const effectiveBrightness = isBurned ? 0 : brightness !== undefined ? brightness : isPowered ? 1.0 : 0;
   const isIlluminated = effectiveBrightness > 0;
 
+  // Authentic physical LED optics: deep jewel tone when OFF, vivid brilliant emission when ON
+  const { offColor, onColor, onEmissive } = useMemo(() => {
+    const lower = hex.toLowerCase();
+    if (lower.includes('10b981') || lower.includes('green')) {
+      return { offColor: '#064e3b', onColor: '#10B981', onEmissive: '#34d399' };
+    }
+    if (lower.includes('3b82f6') || lower.includes('blue')) {
+      return { offColor: '#0c4a6e', onColor: '#3B82F6', onEmissive: '#60a5fa' };
+    }
+    if (lower.includes('f59e0b') || lower.includes('yellow') || lower.includes('amber')) {
+      return { offColor: '#78350f', onColor: '#F59E0B', onEmissive: '#fbbf24' };
+    }
+    // Deep ruby red physical standard
+    return { offColor: '#6b0f0f', onColor: '#ff1a1a', onEmissive: '#ff1a1a' };
+  }, [hex]);
+
   // Stable Three.js materials - Avoid recreating shader programs on every animation frame
   const materials = useMemo(() => {
     if (isBurned) {
@@ -75,14 +91,16 @@ export function Led3D({
 
     return {
       lens: new THREE.MeshPhysicalMaterial({
-        color: hex,
-        emissive: hex,
-        emissiveIntensity: 0,
+        color: isIlluminated ? onColor : offColor,
+        emissive: isIlluminated ? onEmissive : '#000000',
+        emissiveIntensity: isIlluminated ? Math.min(3.5, Math.max(0.6, effectiveBrightness * 3.5)) : 0,
         transparent: true,
-        opacity: 0.7,
-        roughness: 0.1,
+        opacity: isIlluminated ? 0.9 : 0.75,
+        roughness: 0.12,
         metalness: 0.05,
-        transmission: 0.6,
+        transmission: 0.55,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1,
       }),
       silverLead: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
@@ -99,7 +117,7 @@ export function Led3D({
         color: '#38BDF8',
       }),
     };
-  }, [hex, isBurned]);
+  }, [isIlluminated, onColor, offColor, onEmissive, effectiveBrightness, isBurned]);
 
   const lensMeshRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -115,15 +133,15 @@ export function Led3D({
         mat.opacity = 0.95;
       } else if (isIlluminated) {
         const pulse = 0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 10);
-        mat.color.set(hex);
-        mat.emissive.set(hex);
-        mat.emissiveIntensity = Math.max(0.6, effectiveBrightness * 3.6) * pulse;
+        mat.color.set(onColor);
+        mat.emissive.set(onEmissive);
+        mat.emissiveIntensity = Math.min(3.5, Math.max(0.6, effectiveBrightness * 3.5)) * pulse;
         mat.opacity = Math.min(0.95, 0.7 + effectiveBrightness * 0.25);
       } else {
-        mat.color.set(hex);
+        mat.color.set(offColor);
         mat.emissive.set('#000000');
         mat.emissiveIntensity = 0;
-        mat.opacity = 0.7;
+        mat.opacity = 0.75;
       }
     }
     if (lightRef.current) {
@@ -131,8 +149,8 @@ export function Led3D({
         lightRef.current.intensity = 0;
       } else {
         const pulse = 0.92 + 0.08 * Math.sin(state.clock.elapsedTime * 10);
-        lightRef.current.color.set(hex);
-        lightRef.current.intensity = Math.max(1.0, effectiveBrightness * 4.2) * pulse;
+        lightRef.current.color.set(onEmissive);
+        lightRef.current.intensity = Math.min(4.5, Math.max(1.0, effectiveBrightness * 4.2)) * pulse;
       }
     }
   });
@@ -210,6 +228,12 @@ export function Led3D({
       </mesh>
       <mesh position={[0.4, 4.5, 0]} material={materials.silverLead}>
         <boxGeometry args={[0.7, 1.2, 0.2]} />
+      </mesh>
+
+      {/* Vivid Glowing Semiconductor Die Core inside Lens */}
+      <mesh position={[0, 4.7, 0]}>
+        <sphereGeometry args={[0.42, 12, 12]} />
+        <meshBasicMaterial color={isIlluminated ? onEmissive : offColor} />
       </mesh>
 
       {/* Point Light when Illuminated with proportional intensity */}

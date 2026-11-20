@@ -126,6 +126,10 @@ export class CircuitSolver {
     this.currentTime = 0;
   }
 
+  public getCurrentTime(): number {
+    return this.currentTime;
+  }
+
   public resetBurntComponent(compId: string) {
     this.burnedComponents.delete(compId);
     this.burnFaultReasons.delete(compId);

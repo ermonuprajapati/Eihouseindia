@@ -355,3 +355,106 @@ export function findNearestFreeHole830(
   return null;
 }
 
+export interface OccupantRecord {
+  type: 'component_pin' | 'wire_end';
+  ownerId: string;
+  pinId?: string;
+  label?: string;
+}
+
+/**
+ * Deterministic 830-Point Breadboard Occupancy Map
+ * Enforces the strict Zero-Shared-Holes & One-Wire-Per-Hole Rule:
+ * Phase 1 reserves exact hole coordinates for all component pins.
+ * Phase 2 routes wires exclusively to unoccupied holes in the corresponding tie group or power rail.
+ */
+export class BreadboardOccupancyMap {
+  private occupancy = new Map<string, OccupantRecord>();
+
+  public get(holeId: string): OccupantRecord | undefined {
+    return this.occupancy.get(holeId);
+  }
+
+  public isOccupied(holeId: string): boolean {
+    return this.occupancy.has(holeId);
+  }
+
+  public occupy(holeId: string, record: OccupantRecord): boolean {
+    if (this.occupancy.has(holeId)) return false;
+    this.occupancy.set(holeId, record);
+    return true;
+  }
+
+  public forceOccupy(holeId: string, record: OccupantRecord): void {
+    this.occupancy.set(holeId, record);
+  }
+
+  public release(holeId: string): boolean {
+    return this.occupancy.delete(holeId);
+  }
+
+  public releaseOwner(ownerId: string): void {
+    for (const [id, rec] of this.occupancy.entries()) {
+      if (rec.ownerId === ownerId) {
+        this.occupancy.delete(id);
+      }
+    }
+  }
+
+  public getOccupiedIds(): Set<string> {
+    return new Set(this.occupancy.keys());
+  }
+
+  public clear(): void {
+    this.occupancy.clear();
+  }
+
+  /**
+   * Find an unoccupied hole in the given tie group (e.g. bb_tie_col_31_top).
+   * Preference is given to holes adjacent to the component lead to keep jumper lengths clean.
+   */
+  public findFreeHoleInTieGroup(tieGroup: string): BreadboardHole3D | null {
+    const holes = HOLES_BY_TIE_GROUP.get(tieGroup);
+    if (!holes || holes.length === 0) return null;
+    for (const h of holes) {
+      if (!this.occupancy.has(h.id)) {
+        return h;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find an unoccupied hole in the given power/ground rail section closest to the specified column.
+   */
+  public findFreeRailHole(
+    col: number,
+    railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg'
+  ): BreadboardHole3D | null {
+    const targetX = START_X + (Math.max(1, Math.min(63, col)) - 1) * PITCH_X;
+    const candidates = ALL_830_HOLES.filter(
+      (h) => h.section === railType && !this.occupancy.has(h.id)
+    );
+    if (candidates.length === 0) return null;
+    let best = candidates[0];
+    let minDx = Math.abs(best.x - targetX);
+    for (const h of candidates) {
+      const dx = Math.abs(h.x - targetX);
+      if (dx < minDx) {
+        minDx = dx;
+        best = h;
+      }
+    }
+    return best;
+  }
+}
+
+export function getTieGroupForHole(holeId: string): string | undefined {
+  return HOLE_BY_ID.get(holeId)?.tieGroup;
+}
+
+export function getAllHolesInTieGroup(tieGroup: string): BreadboardHole3D[] {
+  return HOLES_BY_TIE_GROUP.get(tieGroup) || [];
+}
+
+

@@ -4,7 +4,12 @@ import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import { Studio3DCanvas } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
-import { findNearestRailHoleForColumn } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
+import {
+  BreadboardOccupancyMap,
+  getTieGroupForHole,
+  START_X,
+  PITCH_X,
+} from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
 import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders } from 'lucide-react';
@@ -325,8 +330,57 @@ export function Virtual3dStudio({
     });
   }, [components]);
 
-  // Authentic Breadboard Power Rail Routing & Standard Wire Color Coding
+  // Helper: Resolve exact breadboard hole for a component's lead pin
+  const getBreadboardHoleForComponentPin = useCallback((comp: Component3D, pinId: string): string | null => {
+    const isDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type.includes('DIP') || comp.type.includes('555');
+    if (isDip) {
+      const centerCol = Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1;
+      const pinNum = parseInt(pinId, 10);
+      if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 8) {
+        if (pinNum <= 4) {
+          const col = Math.max(1, Math.min(63, centerCol - 1 + (pinNum - 1)));
+          return `bb_col_${col}_E`;
+        } else {
+          const col = Math.max(1, Math.min(63, centerCol - 1 + (8 - pinNum)));
+          return `bb_col_${col}_F`;
+        }
+      }
+    }
+
+    const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
+    const isTop = (comp.z3d ?? 0) <= 0;
+    const row = isTop ? 'C' : 'H';
+
+    if (comp.type === 'RESISTOR') {
+      const col = pinId === '1' ? centerCol - 2 : centerCol + 2;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
+      const isPin1 = pinId === '1' || pinId === '+' || pinId.toLowerCase().includes('pos') || pinId.toLowerCase().includes('anode');
+      const col = isPin1 ? centerCol - 1 : centerCol + 1;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (comp.type === 'LED') {
+      const p = pinId.toLowerCase();
+      const isAnode = p === 'anode' || p === 'a' || p === '1' || p === '+';
+      const col = isAnode ? centerCol - 1 : centerCol + 1;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
+      const isAnode = pinId === '1' || pinId === 'anode' || pinId === 'a';
+      const col = isAnode ? centerCol - 2 : centerCol + 2;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    return `bb_col_${Math.max(1, Math.min(63, centerCol))}_${row}`;
+  }, []);
+
+  // Authentic Breadboard Power Rail Routing & Strict Zero-Shared-Holes Allocation
   const schematicTo3DWires = useCallback((srcWires: CircuitWire[] = wires, srcComps: CircuitComponent[] = components): Wire3D[] => {
+    const comps3d = independentComponents !== null ? independentComponents : schematicTo3DComponents();
     const battery = srcComps.find(
       (c) => c.type === 'BATTERY' || c.type === 'BATTERY_9V' || c.id.toLowerCase().startsWith('bat')
     );
@@ -337,18 +391,47 @@ export function Virtual3dStudio({
     );
 
     const outWires: Wire3D[] = [];
-    const occupiedRailHoles = new Set<string>();
+    const occupancy = new BreadboardOccupancyMap();
+
+    // PHASE 1: Reserve exact hole coordinates for ALL component leads on the breadboard
+    for (const c3d of comps3d) {
+      if (['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(c3d.type)) continue;
+
+      if (c3d.type === 'TIMER_555' || c3d.type === 'DIP_IC') {
+        for (let p = 1; p <= 8; p++) {
+          const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
+          if (holeId) {
+            occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: String(p) });
+          }
+        }
+      } else if (c3d.type === 'RESISTOR') {
+        ['1', '2'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'CAPACITOR' || c3d.type === 'CAPACITOR_ELECTROLYTIC') {
+        ['1', '2'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'LED') {
+        ['anode', 'cathode'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      }
+    }
+
+    // PHASE 2: Route Power Rails & Zero-Collision Jumper Wires
     const SIGNAL_COLORS = ['#3B82F6', '#10B981', '#EAB308', '#F97316'];
     let sigColorIdx = 0;
 
-    // Strict Rule 1: Battery has STRICTLY 2 physical terminals:
-    // Route 1 Red wire from Battery + to Breadboard Top Red + Power Rail (bb_rail_top_pos_1)
-    // Route 1 Black wire from Battery - to Breadboard Top Blue - Ground Rail (bb_rail_top_neg_1)
+    // 1. Battery Connections to Top Rails at Col 1
     if (battery) {
       const batPosHole = 'bb_rail_top_pos_1';
       const batNegHole = 'bb_rail_top_neg_1';
-      occupiedRailHoles.add(batPosHole);
-      occupiedRailHoles.add(batNegHole);
+      occupancy.occupy(batPosHole, { type: 'wire_end', ownerId: battery.id });
+      occupancy.occupy(batNegHole, { type: 'wire_end', ownerId: battery.id });
 
       outWires.push({
         id: `wire_bat_pos_${battery.id}`,
@@ -362,8 +445,56 @@ export function Virtual3dStudio({
         toPin: { compId: 'breadboard', pinId: batNegHole },
         color: '#1E293B',
       });
+
+      // 2. Power Rail Bridges connecting Top <-> Bottom Rails on far left (Col 2) and far right (Col 50)
+      const bridgePosLeft = 'bb_rail_top_pos_2';
+      const bridgePosLeftBot = 'bb_rail_bottom_pos_2';
+      const bridgeNegLeft = 'bb_rail_top_neg_2';
+      const bridgeNegLeftBot = 'bb_rail_bottom_neg_2';
+
+      occupancy.occupy(bridgePosLeft, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
+      occupancy.occupy(bridgePosLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
+      occupancy.occupy(bridgeNegLeft, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
+      occupancy.occupy(bridgeNegLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
+
+      outWires.push({
+        id: 'wire_rail_bridge_pos_left',
+        fromPin: { compId: 'breadboard', pinId: bridgePosLeft },
+        toPin: { compId: 'breadboard', pinId: bridgePosLeftBot },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: 'wire_rail_bridge_neg_left',
+        fromPin: { compId: 'breadboard', pinId: bridgeNegLeft },
+        toPin: { compId: 'breadboard', pinId: bridgeNegLeftBot },
+        color: '#1E293B',
+      });
+
+      const bridgePosRight = 'bb_rail_top_pos_50';
+      const bridgePosRightBot = 'bb_rail_bottom_pos_50';
+      const bridgeNegRight = 'bb_rail_top_neg_50';
+      const bridgeNegRightBot = 'bb_rail_bottom_neg_50';
+
+      occupancy.occupy(bridgePosRight, { type: 'wire_end', ownerId: 'rail_bridge_pos_r' });
+      occupancy.occupy(bridgePosRightBot, { type: 'wire_end', ownerId: 'rail_bridge_pos_r' });
+      occupancy.occupy(bridgeNegRight, { type: 'wire_end', ownerId: 'rail_bridge_neg_r' });
+      occupancy.occupy(bridgeNegRightBot, { type: 'wire_end', ownerId: 'rail_bridge_neg_r' });
+
+      outWires.push({
+        id: 'wire_rail_bridge_pos_right',
+        fromPin: { compId: 'breadboard', pinId: bridgePosRight },
+        toPin: { compId: 'breadboard', pinId: bridgePosRightBot },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: 'wire_rail_bridge_neg_right',
+        fromPin: { compId: 'breadboard', pinId: bridgeNegRight },
+        toPin: { compId: 'breadboard', pinId: bridgeNegRightBot },
+        color: '#1E293B',
+      });
     }
 
+    // 3. Circuit Jumper Wires & Power Drops
     srcWires.forEach((w) => {
       const fromIsBat = battery && w.fromCompId === battery.id;
       const toIsBat = battery && w.toCompId === battery.id;
@@ -374,84 +505,106 @@ export function Virtual3dStudio({
       const tPin = (w.toPinId || '').toLowerCase();
 
       // Skip direct battery-to-gnd wires since battery - is already connected to blue rail
-      if ((fromIsBat && toIsGnd) || (toIsBat && fromIsGnd)) {
-        return;
-      }
+      if ((fromIsBat && toIsGnd) || (toIsBat && fromIsGnd)) return;
+      if ((fromIsBat && (fPin === 'n' || fPin === '-')) || (toIsBat && (tPin === 'n' || tPin === '-'))) return;
 
-      // If one end connects to battery negative, skip extra battery connections (1 hole = 1 pin)
-      if ((fromIsBat && (fPin === 'n' || fPin === '-')) || (toIsBat && (tPin === 'n' || tPin === '-'))) {
-        return;
-      }
-
-      // If one end connects to battery positive, route it as a dedicated vertical drop from nearest unoccupied Red (+) rail hole
+      // Positive Power Drop from closest unoccupied Red (+) rail hole
       if (fromIsBat && (fPin === 'p' || fPin === '+')) {
-        const toComp = srcComps.find((c) => c.id === w.toCompId);
-        const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
-        const isTop = (toComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
-        occupiedRailHoles.add(railHole);
-        outWires.push({
-          id: w.id,
-          fromPin: { compId: 'breadboard', pinId: railHole },
-          toPin: { compId: w.toCompId, pinId: w.toPinId },
-          color: '#EF4444',
-          current: w.current,
-        });
+        const toComp = comps3d.find((c) => c.id === w.toCompId);
+        if (!toComp) return;
+        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
+        const isTop = (toComp.z3d ?? -8) <= 0;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        if (freeHole && railHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+          outWires.push({
+            id: w.id,
+            fromPin: { compId: 'breadboard', pinId: railHole.id },
+            toPin: { compId: 'breadboard', pinId: freeHole.id },
+            color: '#EF4444',
+            current: w.current,
+          });
+        }
         return;
       }
       if (toIsBat && (tPin === 'p' || tPin === '+')) {
-        const fromComp = srcComps.find((c) => c.id === w.fromCompId);
-        const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
-        const isTop = (fromComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', occupiedRailHoles);
-        occupiedRailHoles.add(railHole);
-        outWires.push({
-          id: w.id,
-          fromPin: { compId: 'breadboard', pinId: railHole },
-          toPin: { compId: w.fromCompId, pinId: w.fromPinId },
-          color: '#EF4444',
-          current: w.current,
-        });
+        const fromComp = comps3d.find((c) => c.id === w.fromCompId);
+        if (!fromComp) return;
+        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
+        const isTop = (fromComp.z3d ?? -8) <= 0;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        if (freeHole && railHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+          outWires.push({
+            id: w.id,
+            fromPin: { compId: 'breadboard', pinId: railHole.id },
+            toPin: { compId: 'breadboard', pinId: freeHole.id },
+            color: '#EF4444',
+            current: w.current,
+          });
+        }
         return;
       }
 
-      // If one end connects to a schematic GND symbol, drop directly from nearest unoccupied Blue (-) ground rail hole
+      // Ground Drop from closest unoccupied Blue (-) ground rail hole
       if (fromIsGnd) {
-        const toComp = srcComps.find((c) => c.id === w.toCompId);
-        const col = toComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
-        const isTop = (toComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
-        occupiedRailHoles.add(railHole);
-        outWires.push({
-          id: w.id,
-          fromPin: { compId: 'breadboard', pinId: railHole },
-          toPin: { compId: w.toCompId, pinId: w.toPinId },
-          color: '#1E293B',
-          current: w.current,
-        });
+        const toComp = comps3d.find((c) => c.id === w.toCompId);
+        if (!toComp) return;
+        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
+        const isTop = (toComp.z3d ?? -8) <= 0;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        if (freeHole && railHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+          outWires.push({
+            id: w.id,
+            fromPin: { compId: 'breadboard', pinId: railHole.id },
+            toPin: { compId: 'breadboard', pinId: freeHole.id },
+            color: '#1E293B',
+            current: w.current,
+          });
+        }
         return;
       }
       if (toIsGnd) {
-        const fromComp = srcComps.find((c) => c.id === w.fromCompId);
-        const col = fromComp?.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - (-78.74)) / 2.54) + 1)) : 25;
-        const isTop = (fromComp?.z3d ?? -8) <= 0;
-        const railHole = findNearestRailHoleForColumn(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', occupiedRailHoles);
-        occupiedRailHoles.add(railHole);
-        outWires.push({
-          id: w.id,
-          fromPin: { compId: 'breadboard', pinId: railHole },
-          toPin: { compId: w.fromCompId, pinId: w.fromPinId },
-          color: '#1E293B',
-          current: w.current,
-        });
+        const fromComp = comps3d.find((c) => c.id === w.fromCompId);
+        if (!fromComp) return;
+        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
+        const isTop = (fromComp.z3d ?? -8) <= 0;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        if (freeHole && railHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+          outWires.push({
+            id: w.id,
+            fromPin: { compId: 'breadboard', pinId: railHole.id },
+            toPin: { compId: 'breadboard', pinId: freeHole.id },
+            color: '#1E293B',
+            current: w.current,
+          });
+        }
         return;
       }
 
-      // Circuit jumper between components: assign standard wire colors
+      // Signal Jumper between two circuit components
       let wireColor = w.color;
       if (!wireColor || wireColor === '#EF4444') {
         if (fPin.includes('gnd') || tPin.includes('gnd') || fPin === '-' || tPin === '-') {
-          wireColor = '#1E293B'; // Ground: Black
+          wireColor = '#1E293B';
         } else if (
           fPin.includes('vcc') || tPin.includes('vcc') ||
           fPin.includes('5v') || tPin.includes('5v') ||
@@ -459,28 +612,57 @@ export function Virtual3dStudio({
           fPin.includes('vin') || tPin.includes('vin') ||
           fPin === '+' || tPin === '+'
         ) {
-          wireColor = '#EF4444'; // Power: Red
+          wireColor = '#EF4444';
         } else if ((fPin === '2' && tPin === '6') || (fPin === '6' && tPin === '2')) {
-          wireColor = '#EAB308'; // 555 Trigger-Threshold Tie: Yellow
+          wireColor = '#EAB308';
         } else if ((fPin === '4' && tPin === '8') || (fPin === '8' && tPin === '4')) {
-          wireColor = '#EF4444'; // 555 Reset-VCC Tie: Red
+          wireColor = '#EF4444';
         } else {
           wireColor = SIGNAL_COLORS[sigColorIdx % SIGNAL_COLORS.length];
           sigColorIdx++;
         }
       }
 
+      const compA = comps3d.find((c) => c.id === w.fromCompId);
+      const compB = comps3d.find((c) => c.id === w.toCompId);
+
+      const isA_Breadboard = compA && !['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(compA.type);
+      const isB_Breadboard = compB && !['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(compB.type);
+
+      let fromEnd: { compId: string; pinId: string } = { compId: w.fromCompId, pinId: w.fromPinId };
+      let toEnd: { compId: string; pinId: string } = { compId: w.toCompId, pinId: w.toPinId };
+
+      if (isA_Breadboard && compA) {
+        const compHole = getBreadboardHoleForComponentPin(compA, w.fromPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        if (freeHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          fromEnd = { compId: 'breadboard', pinId: freeHole.id };
+        }
+      }
+
+      if (isB_Breadboard && compB) {
+        const compHole = getBreadboardHoleForComponentPin(compB, w.toPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
+        if (freeHole) {
+          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
+          toEnd = { compId: 'breadboard', pinId: freeHole.id };
+        }
+      }
+
       outWires.push({
         id: w.id,
-        fromPin: { compId: w.fromCompId, pinId: w.fromPinId },
-        toPin: { compId: w.toCompId, pinId: w.toPinId },
+        fromPin: fromEnd,
+        toPin: toEnd,
         color: wireColor,
         current: w.current,
       });
     });
 
     return outWires;
-  }, [wires, components]);
+  }, [wires, components, independentComponents, schematicTo3DComponents, getBreadboardHoleForComponentPin]);
 
   // Active 3D components and wires in the workbench
   const activeComponents3d: Component3D[] = useMemo(() => {

@@ -73,8 +73,8 @@ export const TEMPLATE_555_ASTABLE: EngineeringProject = {
       x: 280,
       y: 120,
       rotation: 0,
-      value: '1kΩ',
-      parameters: { resistance: 1000, powerRatingW: 0.25, tolerancePercent: 5 },
+      value: '10kΩ',
+      parameters: { resistance: 10000, powerRatingW: 0.25, tolerancePercent: 5 },
       pins: [
         { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
         { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
@@ -91,8 +91,8 @@ export const TEMPLATE_555_ASTABLE: EngineeringProject = {
       x: 280,
       y: 220,
       rotation: 0,
-      value: '14.3kΩ',
-      parameters: { resistance: 14300, powerRatingW: 0.25, tolerancePercent: 5 },
+      value: '47kΩ',
+      parameters: { resistance: 47000, powerRatingW: 0.25, tolerancePercent: 5 },
       pins: [
         { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
         { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
@@ -109,8 +109,8 @@ export const TEMPLATE_555_ASTABLE: EngineeringProject = {
       x: 280,
       y: 340,
       rotation: 0,
-      value: '100µF',
-      parameters: { capacitance: 0.0001, voltageRatingV: 25, polarized: true },
+      value: '10µF',
+      parameters: { capacitance: 0.00001, voltageRatingV: 25, polarized: true },
       pins: [
         { id: '1', name: '+', x: -25, y: 0, pinType: 'passive' },
         { id: '2', name: '-', x: 25, y: 0, pinType: 'passive' },
