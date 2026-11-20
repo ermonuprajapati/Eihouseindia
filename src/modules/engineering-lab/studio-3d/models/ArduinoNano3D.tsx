@@ -165,7 +165,7 @@ export function ArduinoNano3D({
         <boxGeometry args={[7.5, 4.0, 7.8]} />
       </mesh>
 
-      {/* Wokwi-Style USB Cable Plug */}
+      {/* EI House Interactive USB Cable Plug */}
       {isUsbPlugged ? (
         <group
           position={[-20, 2.5, 0]}

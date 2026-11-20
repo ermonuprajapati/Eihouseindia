@@ -701,7 +701,7 @@ export const TEMPLATE_LDR_NIGHT_LIGHT: EngineeringProject = {
 };
 
 // ---------------------------------------------------------------------------
-// CURATED COMMUNITY SHOWCASE REPOSITORY (Wokwi-Grade)
+// CURATED COMMUNITY SHOWCASE REPOSITORY (EI House Lab Verified)
 // ---------------------------------------------------------------------------
 export const CURATED_COMMUNITY_PROJECTS: CommunityProject[] = [
   {

@@ -2651,9 +2651,9 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
   });
 
   // --------------------------------------------------------------------------
-  // TEST AM - Wokwi-Style MCU USB Power Plug Simulation
+  // TEST AM - EI House MCU USB Power Plug Simulation
   // --------------------------------------------------------------------------
-  it('TEST AM: verifies Wokwi-style MCU USB power plug provides 5V/3.3V and anchors GND', () => {
+  it('TEST AM: verifies EI House MCU USB power plug provides 5V/3.3V and anchors GND', () => {
     const testSolver = new CircuitSolver();
 
     const mcuUno: CircuitComponent = {
@@ -3239,6 +3239,82 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         { x: 30, y: 0 },
         { x: 30, y: 100 },
       ]);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AQ - 3D Breadboard NE555 Astable Simulation & Fault Diagnostics
+  // --------------------------------------------------------------------------
+  describe('TEST AQ: 3D Breadboard NE555 Astable Simulation & Fault Diagnostics', () => {
+    it('simulates NE555 3D circuit with non-zero branch current, visible LED pulsing, and fault burnout triggers', () => {
+      const solver = new CircuitSolver();
+
+      // Components seated with authentic 3D breadboard coordinates
+      const coords3d: Record<string, { x3d: number; y3d: number; z3d: number }> = {
+        bat1: { x3d: -95, y3d: 0, z3d: 0 },
+        ic1: { x3d: -5.08, y3d: 8.5, z3d: 0 },
+        r1: { x3d: -55.88, y3d: 8.5, z3d: -8.42 },
+        r2: { x3d: -40.64, y3d: 8.5, z3d: 8.42 },
+        c1: { x3d: -25.40, y3d: 8.5, z3d: -8.42 },
+        r_led: { x3d: 15.24, y3d: 8.5, z3d: 8.42 },
+        led1: { x3d: 30.48, y3d: 8.5, z3d: -8.42 },
+      };
+
+      const comps: CircuitComponent[] = TEMPLATE_555_ASTABLE.components.map((c) => ({
+        ...c,
+        ...(coords3d[c.id] || {}),
+        parameters: { ...c.parameters, ...(c.id === 'led1' ? { maxCurrentA: 0.03 } : {}) },
+      }));
+
+      const wires: CircuitWire[] = TEMPLATE_555_ASTABLE.wires;
+
+      // Part 1: Verify non-zero branch current and LED pulsation
+      let maxLedCurrent = 0;
+      let maxLedBrightness = 0;
+      let capCharged = false;
+
+      for (let step = 0; step < 500; step++) {
+        const res = solver.step(comps, wires, 0.002);
+        const ledState = res.componentStates['led1'];
+        if (ledState) {
+          if (ledState.current && ledState.current > maxLedCurrent) {
+            maxLedCurrent = ledState.current;
+          }
+          if (ledState.brightness && ledState.brightness > maxLedBrightness) {
+            maxLedBrightness = ledState.brightness;
+          }
+        }
+        const c1State = res.componentStates['c1'];
+        if (c1State && c1State.voltage > 2.0) {
+          capCharged = true;
+        }
+      }
+
+      expect(maxLedCurrent).toBeGreaterThan(0.01); // Over 10 mA branch current (typically ~18-20mA)
+      expect(maxLedBrightness).toBeGreaterThan(0.5); // Emissive LED brightness proportional to current
+      expect(capCharged).toBe(true); // C1 charged past 1/3 VCC threshold
+
+      // Part 2: Verify real-time fault detection and burnout trigger
+      // Drop ballast resistor to 10Ω to cause massive forward current over 30mA rating
+      const overloadedComps = comps.map((c) =>
+        c.id === 'r_led' ? { ...c, parameters: { ...c.parameters, resistance: 10 } } : c
+      );
+
+      const faultRes = solver.step(overloadedComps, wires, 0.002);
+      expect(faultRes.faults).toBeDefined();
+      expect(faultRes.faults!.length).toBeGreaterThan(0);
+      const ledFault = faultRes.faults!.find((f) => f.compId === 'led1');
+      expect(ledFault).toBeDefined();
+      expect(faultRes.componentStates['led1']?.status).toBe('BURNED');
+
+      // Part 3: Verify fault reset restores component to normal
+      solver.resetBurntComponents();
+      const recoveredComps = comps.map((c) =>
+        c.id === 'r_led' ? { ...c, parameters: { ...c.parameters, resistance: 470 } } : c
+      );
+      const resetRes = solver.step(recoveredComps, wires, 0.002);
+      expect(resetRes.componentStates['led1']?.status).toBe('NORMAL');
+      expect(resetRes.componentStates['led1']?.burned).toBeFalsy();
     });
   });
 });

@@ -174,10 +174,10 @@ export function Virtual3dStudio({
 
   // Convert 2D schematic components to 3D representation without placing any parts floating in air
   const schematicTo3DComponents = useCallback((): Component3D[] => {
-    let breadboardCol = 0;
     let mcuIdx = 0;
     let batteryIdx = 0;
     let sensorIdx = 0;
+    let passiveIdx = 0;
 
     // Filter out virtual schematic rails (GND / VCC) - they are physically routed via breadboard power rails
     const physicalComponents = components.filter(
@@ -296,10 +296,10 @@ export function Virtual3dStudio({
 
       // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
       // Straddle breadboard center isolation trench directly seated flush at y = 8.5
-      // Col 25 center aligns pins exactly with breadboard columns 24..27
+      // Col 30 center aligns DIP pins cleanly with breadboard columns 29..32
       if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
-        const colX = -19.05 + (breadboardCol % 3) * 35.56;
-        breadboardCol++;
+        // Col 30 is at START_X + 29 * PITCH_X = -78.74 + 73.66 = -5.08 mm
+        const colX = -5.08;
         return {
           id: comp.id,
           type: mappedType,
@@ -314,10 +314,13 @@ export function Virtual3dStudio({
       }
 
       // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs):
-      // Snap directly into breadboard 5-hole terminal rows seated at y = 8.5
-      const colX = -55 + (breadboardCol * 15.24) % 110;
-      const isTopStrip = breadboardCol % 2 === 0;
-      breadboardCol++;
+      // Assign non-overlapping, dedicated breadboard columns separated by multiple empty rows/cols:
+      // Left of IC: Cols 10, 16, 22. Right of IC: Cols 38, 44, 50, 56.
+      const DEDICATED_COLS = [10, 16, 22, 38, 44, 50, 56];
+      const assignedCol = DEDICATED_COLS[passiveIdx % DEDICATED_COLS.length];
+      const colX = -78.74 + (assignedCol - 1) * 2.54;
+      const isTopStrip = passiveIdx % 2 === 0;
+      passiveIdx++;
       return {
         id: comp.id,
         type: mappedType,

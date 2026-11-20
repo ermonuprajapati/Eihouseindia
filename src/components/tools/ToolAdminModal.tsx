@@ -489,7 +489,7 @@ export function ToolAdminModal({
                   id="toolName"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. KiCad, Autodesk Fusion, Wokwi"
+                  placeholder="e.g. KiCad, Autodesk Fusion, EI House Lab"
                   required
                 />
               </div>

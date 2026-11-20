@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { BurnSmokeFX } from './BurnSmokeFX';
 
 export interface DipPinInfo {
   id: string;
@@ -157,6 +158,9 @@ export function DipPackage3D({
 
   return (
     <group ref={groupRef} position={position} rotation={rotation}>
+      {/* 3D Burnout Overheat FX & Smoke Particles */}
+      {isBurned && <BurnSmokeFX position={[0, chipHeight, 0]} heightOffset={1} />}
+
       {/* Molded Epoxy DIP Body */}
       <mesh position={[0, chipHeight / 2, 0]} material={materials.icBody} castShadow>
         <boxGeometry args={[chipLength, chipHeight, chipWidth]} />

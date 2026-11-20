@@ -65,7 +65,7 @@ export const TOOL_OFFICIAL_LOGOS: Record<string, string> = {
   kicad: 'https://cdn.simpleicons.org/kicad/314CB0',
   'autodesk-fusion': 'https://www.google.com/s2/favicons?domain=autodesk.com&sz=128',
   fusion360: 'https://www.google.com/s2/favicons?domain=autodesk.com&sz=128',
-  wokwi: 'https://www.google.com/s2/favicons?domain=wokwi.com&sz=128',
+  'eihouse-virtual-lab': '/logo.png',
   freecad: 'https://cdn.simpleicons.org/freecad/CB333B',
   ansys: 'https://cdn.simpleicons.org/ansys/FFB71B',
   vscode: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg',
@@ -214,8 +214,8 @@ function buildToolInterfaceSvg(tool: Partial<EngineeringTool>): string {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }
 
-  // 3. Microcontroller & Circuit Simulators (Wokwi, Tinkercad, Proteus, Factory I/O)
-  if (slug.includes('wokwi') || slug.includes('tinkercad') || slug.includes('proteus') || slug.includes('factory')) {
+  // 3. Microcontroller & Circuit Simulators (EI House Virtual Lab, Tinkercad, Proteus, Factory I/O)
+  if (slug.includes('eihouse') || slug.includes('tinkercad') || slug.includes('proteus') || slug.includes('factory')) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
       <rect width="480" height="270" fill="#0F172A"/>
       <rect x="0" y="0" width="480" height="28" fill="#1E293B"/>
@@ -470,22 +470,22 @@ export const DEFAULT_ENGINEERING_TOOLS: EngineeringTool[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'tool_wokwi',
-    name: 'Wokwi',
-    slug: 'wokwi',
+    id: 'tool_eihouse_lab',
+    name: 'EI House Virtual Lab',
+    slug: 'eihouse-virtual-lab',
     domain: 'Electronics & Embedded',
     category: 'Electronics',
-    badge: 'Browser Simulation',
-    mainApplication: 'Arduino, ESP32, STM32 & Raspberry Pi Pico simulation',
-    officialWebsite: 'https://wokwi.com/',
+    badge: 'Interactive Studio',
+    mainApplication: 'Arduino, ESP32, 555 Timer & SPICE-grade circuit simulation',
+    officialWebsite: '/engineering-lab',
     licenseType: 'Free',
     platform: 'Web Browser',
-    summary: 'Simulate microcontrollers, sensors, and electronic parts directly in your browser without hardware.',
-    description: 'Wokwi is an online electronics simulator designed for makers, students, and engineers. Simulate WiFi, Bluetooth, OLED displays, and IoT code on ESP32, Pico, and Arduino.',
+    summary: 'Simulate microcontrollers, sensors, and electronic parts directly in your browser with 3D breadboard.',
+    description: 'EI House Virtual Lab is an online electronics and embedded simulator designed for makers, students, and engineers. Simulate real-time circuits, MNA mathematics, and IoT code.',
     toolType: 'software',
     featured: true,
     order: 3,
-    tags: ['Arduino', 'ESP32', 'Pico', 'IoT', 'Simulator'],
+    tags: ['EI House', 'Arduino', 'ESP32', 'Circuits', 'Simulator'],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },

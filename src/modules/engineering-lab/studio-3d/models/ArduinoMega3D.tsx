@@ -291,7 +291,7 @@ export function ArduinoMega3D({
         <boxGeometry args={[14, 11, 12]} />
       </mesh>
 
-      {/* Wokwi-Style Interactive USB Type-B Cable Plug */}
+      {/* EI House Interactive USB Type-B Cable Plug */}
       {isUsbPlugged ? (
         <group
           position={[-44, 5.5, -14]}

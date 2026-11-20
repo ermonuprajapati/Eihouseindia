@@ -138,7 +138,7 @@ export function CommunityProjectsModal({
                   <span>Community Projects Hub</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                     <Radio className="w-2.5 h-2.5 animate-pulse text-emerald-400" />
-                    Wokwi-Grade Explorer
+                    EI House Verified Projects
                   </span>
                 </h2>
               </div>

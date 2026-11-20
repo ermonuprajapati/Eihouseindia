@@ -43,7 +43,7 @@ const TECH_TICKER_ITEMS = [
   { icon: '🚀', iconColor: 'text-emerald-400', name: 'ESP32-S3 Dual-Core' },
   { icon: '📐', iconColor: 'text-blue-400', name: 'KiCad 8 EDA Suite' },
   { icon: '⚙️', iconColor: 'text-orange-400', name: 'Autodesk Fusion 360' },
-  { icon: '🔬', iconColor: 'text-cyan-400', name: 'Wokwi Web Simulator' },
+  { icon: '🔬', iconColor: 'text-cyan-400', name: 'EI House Lab Simulator' },
   { icon: '🧊', iconColor: 'text-red-400', name: 'FreeCAD Parametric' },
   { icon: '💻', iconColor: 'text-indigo-400', name: 'Visual Studio Code' },
   { icon: '🌐', iconColor: 'text-amber-400', name: 'Cisco Packet Tracer' },

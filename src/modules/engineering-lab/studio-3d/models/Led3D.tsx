@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
+import { BurnSmokeFX } from './BurnSmokeFX';
 
 export interface Led3DProps {
   position?: [number, number, number];
@@ -49,13 +50,13 @@ export function Led3D({
     if (isBurned) {
       return {
         lens: new THREE.MeshStandardMaterial({
-          color: '#1C1917',
-          roughness: 0.9,
-          metalness: 0.1,
+          color: '#18181B',
+          roughness: 0.95,
+          metalness: 0.05,
         }),
         silverLead: new THREE.MeshStandardMaterial({
-          color: '#78716C',
-          metalness: 0.5,
+          color: '#71717A',
+          metalness: 0.4,
           roughness: 0.6,
         }),
         leadHover: new THREE.MeshBasicMaterial({
@@ -68,17 +69,17 @@ export function Led3D({
       lens: new THREE.MeshPhysicalMaterial({
         color: hex,
         emissive: isIlluminated ? hex : '#000000',
-        emissiveIntensity: isIlluminated ? Math.max(0.2, effectiveBrightness * 2.8) : 0,
+        emissiveIntensity: isIlluminated ? Math.max(0.4, effectiveBrightness * 3.2) : 0,
         transparent: true,
-        opacity: Math.min(0.95, 0.6 + effectiveBrightness * 0.35),
+        opacity: Math.min(0.95, 0.65 + effectiveBrightness * 0.3),
         roughness: 0.1,
         metalness: 0.05,
         transmission: 0.6,
       }),
       silverLead: new THREE.MeshStandardMaterial({
-        color: '#CBD5E1',
-        metalness: 0.9,
-        roughness: 0.2,
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.15,
       }),
       leadHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -92,6 +93,9 @@ export function Led3D({
 
   return (
     <group position={position} rotation={rotation}>
+      {/* 3D Burnout Overheat FX & Smoke Particles */}
+      {isBurned && <BurnSmokeFX position={[0, 5, 0]} heightOffset={2} />}
+
       {/* Selection Ring */}
       {isSelected && (
         <mesh position={[0, 0, 0]}>
@@ -124,24 +128,24 @@ export function Led3D({
       {isIlluminated && (
         <pointLight
           color={hex}
-          intensity={Math.max(0.4, effectiveBrightness * 3.5)}
-          distance={20 + 20 * effectiveBrightness}
+          intensity={Math.max(0.6, effectiveBrightness * 4.0)}
+          distance={25 + 25 * effectiveBrightness}
           decay={2}
           position={[0, 7, 0]}
         />
       )}
 
-      {/* Anode Lead (+ longer, x = -1.27) */}
+      {/* Anode Lead (+ longer, x = -1.27) - 0.6mm wire diameter (0.3mm radius) */}
       <mesh position={[-1.27, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 5, 8]} />
+        <cylinderGeometry args={[0.3, 0.3, 5, 12]} />
       </mesh>
 
-      {/* Cathode Lead (- shorter, x = 1.27) */}
+      {/* Cathode Lead (- shorter, x = 1.27) - 0.6mm wire diameter (0.3mm radius) */}
       <mesh position={[1.27, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 5, 8]} />
+        <cylinderGeometry args={[0.3, 0.3, 5, 12]} />
       </mesh>
 
-      {/* Anode Terminal Pin Anchor */}
+      {/* Anode Terminal Pin Anchor (Clean lead tip, no oversized ball) */}
       <mesh
         position={P_ANODE}
         material={hoveredPin === 'anode' ? materials.leadHover : materials.silverLead}
@@ -157,10 +161,10 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <sphereGeometry args={[0.8, 12, 12]} />
+        <cylinderGeometry args={[0.35, 0.35, 1.0, 12]} />
       </mesh>
 
-      {/* Cathode Terminal Pin Anchor */}
+      {/* Cathode Terminal Pin Anchor (Clean lead tip, no oversized ball) */}
       <mesh
         position={P_CATHODE}
         material={hoveredPin === 'cathode' ? materials.leadHover : materials.silverLead}
@@ -176,7 +180,7 @@ export function Led3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <sphereGeometry args={[0.8, 12, 12]} />
+        <cylinderGeometry args={[0.35, 0.35, 1.0, 12]} />
       </mesh>
     </group>
   );

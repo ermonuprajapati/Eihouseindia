@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { getResistorColorBands } from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
+import { BurnSmokeFX } from './BurnSmokeFX';
 
 export interface Resistor3DProps {
   position?: [number, number, number];
@@ -30,13 +31,14 @@ export function Resistor3D({
   const materials = useMemo(() => {
     return {
       body: new THREE.MeshStandardMaterial({
-        color: isBurned ? '#1C1917' : '#D4A373', // Charred black or light beige ceramic body
-        roughness: isBurned ? 0.9 : 0.5,
+        color: isBurned ? '#18181B' : '#D4A373', // Charred black or light beige ceramic body
+        roughness: isBurned ? 0.95 : 0.5,
+        metalness: isBurned ? 0.05 : 0.1,
       }),
       silverLead: new THREE.MeshStandardMaterial({
-        color: isBurned ? '#78716C' : '#CBD5E1',
-        metalness: isBurned ? 0.4 : 0.9,
-        roughness: isBurned ? 0.7 : 0.2,
+        color: isBurned ? '#71717A' : '#E2E8F0',
+        metalness: isBurned ? 0.4 : 0.95,
+        roughness: isBurned ? 0.6 : 0.15,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -49,6 +51,9 @@ export function Resistor3D({
 
   return (
     <group position={position} rotation={rotation}>
+      {/* 3D Burnout Overheat FX & Smoke Particles */}
+      {isBurned && <BurnSmokeFX position={[0, 4, 0]} heightOffset={1} />}
+
       {/* Selection Box */}
       {isSelected && (
         <mesh position={[0, 4, 0]}>
@@ -69,31 +74,31 @@ export function Resistor3D({
         return (
           <mesh key={idx} position={[ringX, 4, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[1.53, 1.53, 0.6, 24]} />
-            <meshBasicMaterial color={bandHex} />
+            <meshBasicMaterial color={isBurned ? '#27272A' : bandHex} />
           </mesh>
         );
       })}
 
-      {/* Axial Silver Leads */}
+      {/* Axial Silver Leads - 0.6mm wire diameter (0.3mm radius) bent cleanly at 90 deg */}
       {/* Left horizontal stem */}
-      <mesh position={[-4.5, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 3, 8]} />
+      <mesh position={[-4.04, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 2.08, 12]} />
       </mesh>
-      {/* Left bent leg down to breadboard */}
+      {/* Left bent leg extending down into breadboard hole */}
       <mesh position={[-5.08, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 8, 8]} />
+        <cylinderGeometry args={[0.3, 0.3, 8, 12]} />
       </mesh>
 
       {/* Right horizontal stem */}
-      <mesh position={[4.5, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 3, 8]} />
+      <mesh position={[4.04, 4, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.3, 0.3, 2.08, 12]} />
       </mesh>
-      {/* Right bent leg down to breadboard */}
+      {/* Right bent leg extending down into breadboard hole */}
       <mesh position={[5.08, 0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.3, 0.3, 8, 8]} />
+        <cylinderGeometry args={[0.3, 0.3, 8, 12]} />
       </mesh>
 
-      {/* Pin 1 Clickable Terminal Anchor */}
+      {/* Pin 1 Clean Clickable Terminal Anchor (No chunky discs) */}
       <mesh
         position={P_PIN1}
         material={hoveredPin === '1' ? materials.pinHover : materials.silverLead}
@@ -109,10 +114,10 @@ export function Resistor3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <sphereGeometry args={[0.8, 12, 12]} />
+        <cylinderGeometry args={[0.35, 0.35, 1.2, 12]} />
       </mesh>
 
-      {/* Pin 2 Clickable Terminal Anchor */}
+      {/* Pin 2 Clean Clickable Terminal Anchor (No chunky discs) */}
       <mesh
         position={P_PIN2}
         material={hoveredPin === '2' ? materials.pinHover : materials.silverLead}
@@ -128,7 +133,7 @@ export function Resistor3D({
         }}
         onPointerOut={() => onHoverPin?.(null)}
       >
-        <sphereGeometry args={[0.8, 12, 12]} />
+        <cylinderGeometry args={[0.35, 0.35, 1.2, 12]} />
       </mesh>
     </group>
   );

@@ -247,8 +247,11 @@ export class CircuitSolver {
           const pinAKey = `${comp.id}:${comp.pins[0].id}`;
           const pinBKey = `${comp.id}:${comp.pins[1].id}`;
 
-          let colA = Math.round((comp.x3d - (isRotated ? 0 : 2.54) - startX) / pitchX) + 1;
-          let colB = Math.round((comp.x3d + (isRotated ? 0 : 2.54) - startX) / pitchX) + 1;
+          const isLedOrCap = comp.type === 'LED' || comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC' || comp.type === 'DIODE';
+          const halfSpan = isLedOrCap ? 1.27 : 5.08;
+
+          let colA = Math.round((comp.x3d - (isRotated ? 0 : halfSpan) - startX) / pitchX) + 1;
+          let colB = Math.round((comp.x3d + (isRotated ? 0 : halfSpan) - startX) / pitchX) + 1;
           colA = Math.max(1, Math.min(63, colA));
           colB = Math.max(1, Math.min(63, colB));
           if (colA === colB && !isRotated) {
@@ -561,6 +564,18 @@ export class CircuitSolver {
               }
             }
           }
+        }
+      }
+    }
+
+    // Initialize dynamic capacitor node voltages from previous time step
+    for (const comp of components) {
+      if (comp.type === 'CAPACITOR') {
+        const pin1 = this.netMap.get(`${comp.id}:1`);
+        const pin2 = this.netMap.get(`${comp.id}:2`);
+        const prevVc = this.capacitorVoltages.get(comp.id) ?? 0;
+        if (pin1 && pin2 && pin1 !== pin2 && !fixedNodes.has(pin1)) {
+          nodeVoltages[pin1] = (nodeVoltages[pin2] || 0) + prevVc;
         }
       }
     }
@@ -977,9 +992,6 @@ export class CircuitSolver {
 
             sumGV[pin2] += gEq * v1 - iEq;
             sumG[pin2] += gEq;
-
-            const newVc = prevVc + 0.1 * ((v1 - v2) - prevVc);
-            this.capacitorVoltages.set(comp.id, newVc);
           }
         } else if (comp.type === 'DIODE' || comp.type === 'LED') {
           const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:anode`);
@@ -1155,19 +1167,23 @@ export class CircuitSolver {
             this.timer555State.set(comp.id, state);
           }
 
-          if (vTrig < lowerThresh) {
-            state.flipFlop = true;
-          } else if (vThresh > upperThresh) {
-            state.flipFlop = false;
+          if (iter > 5) {
+            if (vTrig <= lowerThresh * 1.10) {
+              state.flipFlop = true;
+            } else if (vThresh >= upperThresh * 0.90) {
+              state.flipFlop = false;
+            }
           }
 
           state.outV = state.flipFlop ? (vcc - 0.2) : (gnd + 0.1);
 
           if (outPin && !fixedNodes.has(outPin)) {
             nodeVoltages[outPin] = state.outV;
+            fixedNodes.add(outPin);
           }
           if (dischPin && !state.flipFlop && !fixedNodes.has(dischPin)) {
-            nodeVoltages[dischPin] = gnd;
+            nodeVoltages[dischPin] = gnd + 0.05;
+            fixedNodes.add(dischPin);
           }
         }
       }
@@ -1177,6 +1193,19 @@ export class CircuitSolver {
         if (!fixedNodes.has(net) && sumG[net] > 0) {
           const calculatedV = sumGV[net] / sumG[net];
           nodeVoltages[net] = nodeVoltages[net] * 0.3 + calculatedV * 0.7;
+        }
+      }
+    }
+
+    // Update dynamic capacitor state from solved node voltages for next time step
+    for (const comp of components) {
+      if (comp.type === 'CAPACITOR') {
+        const pin1 = this.netMap.get(`${comp.id}:1`);
+        const pin2 = this.netMap.get(`${comp.id}:2`);
+        if (pin1 && pin2 && pin1 !== pin2) {
+          const v1 = nodeVoltages[pin1] || 0;
+          const v2 = nodeVoltages[pin2] || 0;
+          this.capacitorVoltages.set(comp.id, v1 - v2);
         }
       }
     }

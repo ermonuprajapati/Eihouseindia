@@ -173,7 +173,7 @@ export function Esp32DevKit3D({
         <boxGeometry args={[6.0, 3.2, 7.5]} />
       </mesh>
 
-      {/* Wokwi-Style USB Micro Cable Plug */}
+      {/* EI House Interactive USB Micro Cable Plug */}
       {isUsbPlugged ? (
         <group
           position={[-23, 2.5, 0]}

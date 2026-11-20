@@ -248,7 +248,7 @@ export function LabHeader({
           <button
             onClick={onOpenCommunityProjects}
             className="px-1.5 xl:px-2 py-1.5 rounded-md flex items-center gap-1 font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 transition-all border-l border-slate-800 relative group flex-shrink-0"
-            title="Explore Wokwi-grade community projects & open in 1 click"
+            title="Explore EI House community projects & open in 1 click"
           >
             <Globe className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform" />
             <span className="hidden 2xl:inline">Community Hub</span>

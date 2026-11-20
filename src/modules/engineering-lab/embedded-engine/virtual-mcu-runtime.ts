@@ -82,7 +82,7 @@ export class VirtualMcuRuntime {
       };
     }
 
-    // Wokwi-style MCU power verification: halt firmware if unpowered
+    // EI House Lab MCU power verification: halt firmware if unpowered
     if (sensorContext?.isPowered === false) {
       return {
         serialLines: ['[PWR] Board unpowered: Plug in USB Cable or DC Barrel Jack to start firmware execution.'],

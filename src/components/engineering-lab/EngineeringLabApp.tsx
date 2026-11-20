@@ -1266,7 +1266,7 @@ export function EngineeringLabApp() {
         onLoadExperiment={handleLoadExperiment}
       />
 
-      {/* Wokwi-Grade Community Projects Showcase & Discovery Hub */}
+      {/* EI House Community Projects Showcase & Discovery Hub */}
       <CommunityProjectsModal
         isOpen={isCommunityModalOpen}
         onClose={() => setIsCommunityModalOpen(false)}

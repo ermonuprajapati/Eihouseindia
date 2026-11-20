@@ -201,7 +201,7 @@ export function ToolsCatalogClient({ initialTools }: ToolsCatalogClientProps) {
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
                     type="search"
-                    placeholder="Search software (e.g. KiCad, Fusion, FreeCAD, Wokwi, Ansys, Docker)..."
+                    placeholder="Search software (e.g. KiCad, Fusion, FreeCAD, EI House Lab, Ansys, Docker)..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-11 bg-white/10 border-white/20 text-white placeholder:text-slate-400 pl-10 pr-4 text-sm focus:bg-white focus:text-[#0B1528] transition-colors"
