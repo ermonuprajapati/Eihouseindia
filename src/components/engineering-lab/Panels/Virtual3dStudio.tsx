@@ -989,7 +989,7 @@ export function Virtual3dStudio({
   return (
     <div className="relative w-full h-full flex flex-col bg-[#070D18] select-none overflow-hidden">
       {/* Top 3D Studio Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 sm:px-4 z-10 shrink-0 overflow-x-auto overflow-y-hidden min-w-0 max-w-full scrollbar-none gap-2">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 sm:px-4 z-10 shrink-0 overflow-x-auto overflow-y-hidden min-w-0 max-w-full no-scrollbar touch-scroll gap-2">
         <div className="flex items-center gap-2 shrink-0">
           <Box className="w-4 h-4 text-cyan-400" />
           <span className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider hidden sm:inline">

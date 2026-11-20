@@ -513,7 +513,7 @@ export function Oscilloscope4CH({
   }, [scopeState, activeWaveformData, isSimulating, getChannelPoints]);
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row gap-4 h-full bg-[#050B14] p-3 text-slate-200 select-none overflow-hidden font-mono text-xs">
+    <div className="flex-1 flex flex-col lg:flex-row gap-4 h-full bg-[#050B14] p-2 sm:p-3 text-slate-200 select-none overflow-y-auto lg:overflow-hidden font-mono text-xs">
       {/* Scope Main Screen Column */}
       <div className="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 shadow-2xl relative min-w-0">
         {/* Top Scope Status & Channel Header */}

@@ -350,7 +350,7 @@ export function FirmwareEditor({
         {/* Top IDE Toolbar */}
         <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 gap-2">
           {/* Board Selector & Specs */}
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-scroll">
             <div className="flex items-center gap-1.5 font-mono text-xs text-slate-300">
               <Cpu className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="hidden sm:inline text-slate-400">Board:</span>
@@ -442,7 +442,7 @@ export function FirmwareEditor({
         </div>
 
         {/* Project Files Tabs */}
-        <div className="h-9 bg-[#091120] border-b border-slate-800 flex items-center justify-between px-2 overflow-x-auto scrollbar-none">
+        <div className="h-9 bg-[#091120] border-b border-slate-800 flex items-center justify-between px-2 overflow-x-auto no-scrollbar touch-scroll">
           <div className="flex items-center gap-1">
             {projectFiles.map((file) => (
               <div
@@ -535,7 +535,7 @@ export function FirmwareEditor({
       </div>
 
       {/* RIGHT COLUMN: SERIAL MONITOR, PLOTTER, REGISTERS, BUILD LOGS */}
-      <div className="w-full lg:w-[460px] flex flex-col bg-slate-950 border-t lg:border-t-0 border-slate-800">
+      <div className="w-full lg:w-[460px] h-[340px] lg:h-auto flex flex-col bg-slate-950 border-t lg:border-t-0 border-slate-800 shrink-0">
         {/* Right Panel Tabs */}
         <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2">
           <div className="flex items-center gap-1">

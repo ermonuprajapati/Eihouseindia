@@ -889,14 +889,14 @@ export function SchematicCanvas({
           setActiveWaypoints([]);
         }
       }}
-      className={`relative w-full h-full bg-[#070D18] overflow-hidden select-none ${
+      className={`relative w-full h-full bg-[#070D18] overflow-hidden select-none touch-none ${
         toolMode === 'pan' ? 'cursor-grab active:cursor-grabbing' : toolMode === 'wire' ? 'cursor-crosshair' : 'cursor-default'
       }`}
     >
       {/* ========================================================================= */}
       {/* STEP 2: CLEAN SLEEK TOOLBAR (ONLY ESSENTIAL WORKING EDA TOOLS)             */}
       {/* ========================================================================= */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 border border-slate-700/80 rounded-xl px-2 py-1 shadow-2xl z-40 backdrop-blur max-w-[95vw] overflow-x-auto">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 border border-slate-700/80 rounded-xl px-2 py-1 shadow-2xl z-40 backdrop-blur max-w-[95vw] overflow-x-auto no-scrollbar touch-scroll">
         {/* Select (V) */}
         <button
           onClick={() => setToolMode('select')}

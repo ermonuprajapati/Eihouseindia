@@ -906,7 +906,7 @@ export function Studio3DCanvas({
 
   return (
     <div
-      className="relative w-full h-full bg-[#050B14] select-none overflow-hidden"
+      className="relative w-full h-full bg-[#050B14] select-none overflow-hidden touch-none"
       onContextMenu={(e) => {
         e.preventDefault();
         if (activeWireStart) setActiveWireStart(null);
@@ -918,7 +918,7 @@ export function Studio3DCanvas({
         shadows
         gl={{ preserveDrawingBuffer: true, logarithmicDepthBuffer: true }}
         camera={{ position: [0, 130, 150], fov: 45, near: 0.5, far: 500 }}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        className="w-full h-full cursor-grab active:cursor-grabbing touch-none"
         onContextMenu={(e) => {
           e.preventDefault();
           if (activeWireStart) {

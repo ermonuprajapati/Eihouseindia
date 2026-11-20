@@ -77,7 +77,7 @@ export function PcbView({
   return (
     <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* 3D Top Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 shrink-0 overflow-hidden">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 sm:px-4 shrink-0 overflow-x-auto no-scrollbar touch-scroll min-w-0 max-w-full">
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="flex items-center gap-1.5 font-mono text-xs text-slate-300">
             <Box className="w-4 h-4 text-emerald-400" />

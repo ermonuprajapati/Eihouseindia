@@ -44,8 +44,8 @@ export function QuickProbeOverlay({
   const points = waveformData[selectedTarget] || Object.values(waveformData)[0] || [];
 
   return (
-    <div className="absolute top-14 right-4 z-30 font-mono text-xs select-none">
-      <div className="bg-slate-900/95 border border-cyan-500/60 rounded-xl p-3 shadow-2xl backdrop-blur w-72 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+    <div className="absolute top-14 right-2 sm:right-4 z-30 font-mono text-xs select-none max-w-[calc(100vw-1rem)]">
+      <div className="bg-slate-900/95 border border-cyan-500/60 rounded-xl p-3 shadow-2xl backdrop-blur w-72 max-w-full space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-[11px] font-bold">
           <span className="flex items-center gap-1.5 text-cyan-400">

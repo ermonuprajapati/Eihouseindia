@@ -45,7 +45,7 @@ export function InstrumentPanel({
   return (
     <div className="flex-1 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* Benchtop Chassis Sub-Navigation Bar */}
-      <div className="h-11 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-3 sm:px-4 shrink-0 shadow-lg backdrop-blur overflow-x-auto min-w-0 max-w-full">
+      <div className="h-11 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-2 sm:px-4 shrink-0 shadow-lg backdrop-blur overflow-x-auto no-scrollbar touch-scroll min-w-0 max-w-full">
         <div className="flex items-center gap-1.5 text-xs font-mono min-w-0 shrink-0">
           <button
             onClick={() => setActiveTab('scope')}
@@ -115,10 +115,11 @@ export function InstrumentPanel({
                 isSimulating ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-500'
               }`}
             />
-            <span>{isSimulating ? 'ENGINE RUNNING (60 FPS)' : 'ENGINE PAUSED'}</span>
+            <span className="hidden sm:inline">{isSimulating ? 'ENGINE RUNNING (60 FPS)' : 'ENGINE PAUSED'}</span>
+            <span className="sm:hidden">{isSimulating ? 'RUNNING' : 'PAUSED'}</span>
           </div>
 
-          <div className="text-[11px] font-mono text-cyan-400 flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+          <div className="text-[11px] font-mono text-cyan-400 hidden xl:flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span>MNA Solver Bench Online</span>
           </div>

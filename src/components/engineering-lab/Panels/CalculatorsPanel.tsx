@@ -269,7 +269,7 @@ export function CalculatorsPanel() {
           </h2>
         </div>
 
-        <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 lg:space-y-1 pb-1.5 lg:pb-0 scrollbar-none text-xs font-medium">
+        <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 lg:space-y-1 pb-1.5 lg:pb-0 no-scrollbar touch-scroll text-xs font-medium">
           <button
             onClick={() => setActiveTab('555')}
             className={`px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all text-left shrink-0 whitespace-nowrap lg:whitespace-normal ${
@@ -348,7 +348,7 @@ export function CalculatorsPanel() {
       </div>
 
       {/* Right Content Body */}
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 p-3 sm:p-6 overflow-y-auto min-w-0">
         {/* 1. NE555 ASTABLE CALCULATOR */}
         {activeTab === '555' && (
           <div className="max-w-2xl space-y-6">

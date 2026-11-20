@@ -1215,7 +1215,7 @@ export function EngineeringLabApp() {
             <main className="flex-1 min-h-0 min-w-0 h-full relative overflow-hidden">
               {/* Circuit Overload / Component Burnout Alert Banner (Positioned Below Floating Toolbar) */}
               {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) && (
-                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
+                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl w-[calc(100%-1.5rem)]">
                   <span className="font-bold text-rose-400 flex items-center gap-1.5 shrink-0">
                     <span>💥</span>
                     <span>CIRCUIT FAULT:</span>
@@ -1293,7 +1293,7 @@ export function EngineeringLabApp() {
               <button
                 type="button"
                 onClick={() => setIsQuickProbeOpen((o) => !o)}
-                className={`absolute bottom-4 left-56 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+                className={`absolute bottom-4 left-3 sm:left-56 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
                   isQuickProbeOpen
                     ? 'bg-cyan-600 text-white border border-cyan-400'
                     : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
@@ -1359,7 +1359,7 @@ export function EngineeringLabApp() {
             <button
               type="button"
               onClick={() => setIsQuickProbeOpen((o) => !o)}
-              className={`absolute bottom-4 left-64 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
+              className={`absolute bottom-4 left-3 sm:left-64 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold cursor-pointer transition-all shadow-xl backdrop-blur ${
                 isQuickProbeOpen
                   ? 'bg-cyan-600 text-white border border-cyan-400'
                   : 'bg-slate-900/90 text-cyan-300 border border-slate-700 hover:bg-slate-800'
@@ -1383,7 +1383,7 @@ export function EngineeringLabApp() {
             <div className="flex-1 h-full w-full relative overflow-hidden min-w-0">
               {/* Circuit Overload / Electrical Fault Alert Banner (3D Studio) */}
               {(Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) || (activeFaults && activeFaults.length > 0)) && (
-                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
+                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl w-[calc(100%-1.5rem)]">
                   <span className="font-bold text-rose-400 flex items-center gap-1.5 shrink-0">
                     <span>💥</span>
                     <span>CIRCUIT FAULT:</span>

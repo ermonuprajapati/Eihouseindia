@@ -1768,7 +1768,7 @@ export function Pcb2dEditor({
                   ? 'grab'
                   : 'default',
             }}
-            className="max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
+            className="touch-none max-w-full max-h-full rounded-xl border border-slate-800 shadow-2xl"
           />
         </div>
 

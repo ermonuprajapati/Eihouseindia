@@ -33,7 +33,7 @@ export function LabStatusBar({
           </span>
         </div>
 
-        <div className="hidden sm:flex items-center gap-1 text-slate-400">
+        <div className="flex items-center gap-1 text-slate-400 text-[10px] sm:text-[11px]">
           <Clock className="w-3 h-3 text-slate-500" />
           <span>Sim Time: {(simTime).toFixed(3)}s</span>
         </div>
@@ -61,7 +61,7 @@ export function LabStatusBar({
           <span><kbd className="bg-slate-900 border border-slate-800 px-1 py-0.5 rounded text-[10px] text-slate-300">Space</kbd> Run/Stop</span>
         </div>
 
-        <div className="flex items-center gap-1 text-emerald-400/80">
+        <div className="hidden sm:flex items-center gap-1 text-emerald-400/80">
           <CheckCircle className="w-3 h-3" />
           <span>Engine: MNA 60 FPS</span>
         </div>
