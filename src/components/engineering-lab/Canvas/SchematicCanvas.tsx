@@ -78,7 +78,10 @@ export interface SchematicCanvasProps {
       on?: boolean;
       brightness?: number;
       status?: 'NORMAL' | 'WARNING' | 'BURNED';
+      faultState?: 'NORMAL' | 'WARNING' | 'BURNED';
       burned?: boolean;
+      isBurnedOut?: boolean;
+      thermalStress?: number;
       fault?: string;
       digitalOut?: number;
       onRed?: boolean;
@@ -241,14 +244,30 @@ export function SchematicCanvas({
     wireId: string;
     segmentIndex: number;
     isHorizontal: boolean;
-    startCoord: number;
-    initialWaypoints: { x: number; y: number }[];
+    initialVertices: Point[];
   } | null>(null);
 
   const [draggingVertex, setDraggingVertex] = useState<{
     wireId: string;
     vertexIndex: number;
+    initialVertices: Point[];
   } | null>(null);
+
+  // Throttled wire dragging updater via requestAnimationFrame
+  const pendingWireUpdateRef = useRef<CircuitWire | null>(null);
+  const rafWireUpdateIdRef = useRef<number | null>(null);
+
+  const scheduleWireUpdate = (wire: CircuitWire) => {
+    pendingWireUpdateRef.current = wire;
+    if (rafWireUpdateIdRef.current === null) {
+      rafWireUpdateIdRef.current = requestAnimationFrame(() => {
+        rafWireUpdateIdRef.current = null;
+        if (pendingWireUpdateRef.current && onUpdateWire) {
+          onUpdateWire(pendingWireUpdateRef.current);
+        }
+      });
+    }
+  };
 
   // Zoom & Pan transforms
   const [zoom, setZoom] = useState(1.0);
@@ -571,6 +590,12 @@ export function SchematicCanvas({
     const curY = (e.clientY - rect.top - pan.y) / zoom;
 
     if (e.button === 0) {
+      // Dismiss wire floating toolbar when clicking on empty canvas
+      if (selectedWireId && !e.shiftKey) {
+        setWireSelected(null);
+        if (onSelectWire) onSelectWire(null);
+      }
+
       // If drawing a wire, clicking canvas locks a clean 90° corner waypoint
       if (activeWireStart && toolMode === 'wire') {
         const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
@@ -672,70 +697,40 @@ export function SchematicCanvas({
       return;
     }
 
-    // Interactive Wire Segment Dragging (Short / Long adjustment)
+    // Interactive Wire Segment Dragging (Clean Orthogonal Adjustment, No Infinite Staircase Splits)
     if (draggingSegment && onUpdateWire) {
       const targetWire = wires.find((w) => w.id === draggingSegment.wireId);
-      if (targetWire) {
-        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
-        const toComp = components.find((c) => c.id === targetWire.toCompId);
-        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
-        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
-        if (fromComp && toComp && fromPin && toPin) {
-          const p1 = getPinWorldCoord(fromComp, fromPin);
-          const p2 = getPinWorldCoord(toComp, toPin);
-          const currentVertices = getFullWireVertices(
-            p1,
-            p2,
-            targetWire.points,
-            targetWire.style || activeRoutingStyle,
-            elbowOrientation
-          );
-          const targetCoord = draggingSegment.isHorizontal ? curCanvasY : curCanvasX;
-          const updatedWaypoints = slideWireSegment(
-            currentVertices,
-            draggingSegment.segmentIndex,
-            targetCoord,
-            10
-          );
-          onUpdateWire({
-            ...targetWire,
-            points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-          });
-          return;
-        }
+      if (targetWire && draggingSegment.initialVertices && draggingSegment.initialVertices.length >= 2) {
+        const targetCoord = draggingSegment.isHorizontal ? curCanvasY : curCanvasX;
+        const updatedWaypoints = slideWireSegment(
+          draggingSegment.initialVertices,
+          draggingSegment.segmentIndex,
+          targetCoord,
+          10
+        );
+        scheduleWireUpdate({
+          ...targetWire,
+          points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+        });
+        return;
       }
     }
 
     // Interactive Corner Vertex Dragging
     if (draggingVertex && onUpdateWire) {
       const targetWire = wires.find((w) => w.id === draggingVertex.wireId);
-      if (targetWire) {
-        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
-        const toComp = components.find((c) => c.id === targetWire.toCompId);
-        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
-        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
-        if (fromComp && toComp && fromPin && toPin) {
-          const p1 = getPinWorldCoord(fromComp, fromPin);
-          const p2 = getPinWorldCoord(toComp, toPin);
-          const currentVertices = getFullWireVertices(
-            p1,
-            p2,
-            targetWire.points,
-            targetWire.style || activeRoutingStyle,
-            elbowOrientation
-          );
-          const updatedWaypoints = dragWireCornerVertex(
-            currentVertices,
-            draggingVertex.vertexIndex,
-            { x: curCanvasX, y: curCanvasY },
-            10
-          );
-          onUpdateWire({
-            ...targetWire,
-            points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-          });
-          return;
-        }
+      if (targetWire && draggingVertex.initialVertices && draggingVertex.initialVertices.length >= 2) {
+        const updatedWaypoints = dragWireCornerVertex(
+          draggingVertex.initialVertices,
+          draggingVertex.vertexIndex,
+          { x: curCanvasX, y: curCanvasY },
+          10
+        );
+        scheduleWireUpdate({
+          ...targetWire,
+          points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+        });
+        return;
       }
     }
 
@@ -758,6 +753,30 @@ export function SchematicCanvas({
     setIsMarqueeSelecting(false);
     setMarqueeStart(null);
     setMarqueeEnd(null);
+
+    // Cancel pending animation frame and commit final pruned/simplified collinear wire waypoints
+    if (rafWireUpdateIdRef.current !== null) {
+      cancelAnimationFrame(rafWireUpdateIdRef.current);
+      rafWireUpdateIdRef.current = null;
+    }
+    if (pendingWireUpdateRef.current && onUpdateWire) {
+      const finalWire = { ...pendingWireUpdateRef.current };
+      if (finalWire.points && finalWire.points.length > 0) {
+        const fromComp = components.find((c) => c.id === finalWire.fromCompId);
+        const toComp = components.find((c) => c.id === finalWire.toCompId);
+        const fromPin = fromComp?.pins.find((p) => p.id === finalWire.fromPinId);
+        const toPin = toComp?.pins.find((p) => p.id === finalWire.toPinId);
+        if (fromComp && toComp && fromPin && toPin) {
+          const p1 = getPinWorldCoord(fromComp, fromPin);
+          const p2 = getPinWorldCoord(toComp, toPin);
+          const full = [p1, ...finalWire.points, p2];
+          const simplified = simplifyCollinearPoints(full).slice(1, -1);
+          finalWire.points = simplified.length > 0 ? simplified : undefined;
+        }
+      }
+      onUpdateWire(finalWire);
+      pendingWireUpdateRef.current = null;
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -1313,8 +1332,7 @@ export function SchematicCanvas({
                               wireId: wire.id,
                               segmentIndex: sIdx,
                               isHorizontal: isH,
-                              startCoord: isH ? cY : cX,
-                              initialWaypoints: wire.points ? [...wire.points] : [],
+                              initialVertices: [...fullVertices],
                             });
                           }
                         }}
@@ -1336,15 +1354,11 @@ export function SchematicCanvas({
                           onMouseDown={(e) => {
                             if (e.button === 0 && toolMode === 'select') {
                               e.stopPropagation();
-                              const rect = containerRef.current?.getBoundingClientRect();
-                              const cX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
-                              const cY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
                               setDraggingSegment({
                                 wireId: wire.id,
                                 segmentIndex: sIdx,
                                 isHorizontal: isH,
-                                startCoord: isH ? cY : cX,
-                                initialWaypoints: wire.points ? [...wire.points] : [],
+                                initialVertices: [...fullVertices],
                               });
                             }
                           }}
@@ -1374,6 +1388,7 @@ export function SchematicCanvas({
                           setDraggingVertex({
                             wireId: wire.id,
                             vertexIndex: vIdx + 1,
+                            initialVertices: [...fullVertices],
                           });
                         }
                       }}
@@ -1705,39 +1720,27 @@ export function SchematicCanvas({
       </div>
 
       {/* ========================================================================= */}
-      {/* STEP 2: SIMPLIFIED MINIMAL FLOATING WIRE ACTION BAR                       */}
+      {/* STEP 2: NON-OBSTRUCTIVE FLOATING WIRE ACTION BAR (DOCKED AT BOTTOM-CENTER) */}
       {/* ========================================================================= */}
       {(() => {
-        if (!selectedWireId || wireContextMenu) return null;
+        // Auto-hide toolbar while dragging or editing
+        if (
+          !selectedWireId ||
+          wireContextMenu ||
+          draggingSegment ||
+          draggingVertex ||
+          draggingCompId ||
+          isPanning ||
+          isMarqueeSelecting
+        ) {
+          return null;
+        }
         const targetWire = wires.find((w) => w.id === selectedWireId);
         if (!targetWire) return null;
 
-        const fromComp = components.find((c) => c.id === targetWire.fromCompId);
-        const toComp = components.find((c) => c.id === targetWire.toCompId);
-        const fromPin = fromComp?.pins.find((p) => p.id === targetWire.fromPinId);
-        const toPin = toComp?.pins.find((p) => p.id === targetWire.toPinId);
-        if (!fromComp || !toComp || !fromPin || !toPin) return null;
-
-        const p1 = getPinWorldCoord(fromComp, fromPin);
-        const p2 = getPinWorldCoord(toComp, toPin);
-
-        let midWorld = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-        if (targetWire.points && targetWire.points.length > 0) {
-          const midIdx = Math.floor(targetWire.points.length / 2);
-          midWorld = targetWire.points[midIdx];
-        }
-
-        const screenX = midWorld.x * zoom + pan.x;
-        const screenY = midWorld.y * zoom + pan.y;
-
         return (
           <div
-            className="absolute z-40 flex items-center gap-2 bg-[#0B1528]/95 border border-slate-700/90 px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur font-mono text-xs select-none pointer-events-auto"
-            style={{
-              left: `${Math.max(140, Math.min(window.innerWidth - 220, screenX))}px`,
-              top: `${Math.max(45, screenY - 50)}px`,
-              transform: 'translateX(-50%)',
-            }}
+            className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-[#0B1528]/95 border border-slate-700/90 px-3.5 py-1.5 rounded-xl shadow-2xl backdrop-blur font-mono text-xs select-none pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-150"
             onMouseDown={(e) => {
               e.stopPropagation();
             }}

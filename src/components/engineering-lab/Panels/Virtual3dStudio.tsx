@@ -31,7 +31,10 @@ interface Virtual3dStudioProps {
       on?: boolean;
       brightness?: number;
       status?: 'NORMAL' | 'WARNING' | 'BURNED';
+      faultState?: 'NORMAL' | 'WARNING' | 'BURNED';
       burned?: boolean;
+      isBurnedOut?: boolean;
+      thermalStress?: number;
       fault?: string;
       onRed?: boolean;
       onGreen?: boolean;

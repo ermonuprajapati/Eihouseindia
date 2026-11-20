@@ -226,26 +226,7 @@ export function EngineeringLabApp() {
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(true);
   const [simTime, setSimTime] = useState(0);
-  const [simStates, setSimStates] = useState<
-    Record<
-      string,
-      {
-        voltage: number;
-        current: number;
-        on?: boolean;
-        brightness?: number;
-        status?: 'NORMAL' | 'WARNING' | 'BURNED';
-        burned?: boolean;
-        fault?: string;
-        onRed?: boolean;
-        onGreen?: boolean;
-        onBlue?: boolean;
-        redBrightness?: number;
-        greenBrightness?: number;
-        blueBrightness?: number;
-      }
-    >
-  >({});
+  const [simStates, setSimStates] = useState<SolverStepResult['componentStates']>({});
   const [wireCurrents, setWireCurrents] = useState<Record<string, number>>({});
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
 
@@ -261,6 +242,96 @@ export function EngineeringLabApp() {
   useEffect(() => {
     firmwareRef.current = project.firmware;
   }, [project.firmware]);
+
+  // Reset all component electrical faults, burned states, and thermal stress
+  const handleResetFaults = useCallback(() => {
+    solverRef.current.resetBurntComponents();
+    notifiedFaultsRef.current.clear();
+    setSimStates((prevStates) => {
+      const resetStates = { ...prevStates };
+      Object.keys(resetStates).forEach((k) => {
+        if (resetStates[k]) {
+          resetStates[k] = {
+            ...resetStates[k],
+            status: 'NORMAL',
+            faultState: 'NORMAL',
+            burned: false,
+            isBurnedOut: false,
+            thermalStress: 0,
+            fault: undefined,
+          };
+        }
+      });
+      return resetStates;
+    });
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.map((c) => {
+        if (!c.state) return c;
+        return {
+          ...c,
+          state: {
+            ...c.state,
+            faultState: 'NORMAL',
+            status: 'NORMAL',
+            burned: false,
+            isBurnedOut: false,
+            thermalStress: 0,
+            fault: undefined,
+          },
+        };
+      }),
+    }));
+    toast.success('Faults cleared & circuit components restored to normal');
+  }, []);
+
+  // Toggle simulation with automatic fault reset on simulation start/restart
+  const handleToggleSimulation = useCallback(() => {
+    setIsSimulating((prev) => {
+      const next = !prev;
+      if (next) {
+        // Automatically reset faultState, isBurnedOut, and thermalStress for ALL components on simulation restart
+        solverRef.current.resetBurntComponents();
+        notifiedFaultsRef.current.clear();
+        setSimStates((prevStates) => {
+          const resetStates = { ...prevStates };
+          Object.keys(resetStates).forEach((k) => {
+            if (resetStates[k]) {
+              resetStates[k] = {
+                ...resetStates[k],
+                status: 'NORMAL',
+                faultState: 'NORMAL',
+                burned: false,
+                isBurnedOut: false,
+                thermalStress: 0,
+                fault: undefined,
+              };
+            }
+          });
+          return resetStates;
+        });
+        setProject((prev) => ({
+          ...prev,
+          components: prev.components.map((c) => {
+            if (!c.state) return c;
+            return {
+              ...c,
+              state: {
+                ...c.state,
+                faultState: 'NORMAL',
+                status: 'NORMAL',
+                burned: false,
+                isBurnedOut: false,
+                thermalStress: 0,
+                fault: undefined,
+              },
+            };
+          }),
+        }));
+      }
+      return next;
+    });
+  }, []);
 
   // Save current project state to Undo stack before changes
   const recordHistory = useCallback(() => {
@@ -339,7 +410,14 @@ export function EngineeringLabApp() {
             const faultKey = `${fault.compId}:${fault.type}`;
             if (!notifiedFaultsRef.current.has(faultKey)) {
               notifiedFaultsRef.current.add(faultKey);
-              toast.error(fault.message, { id: 'fault-' + fault.compId, duration: 6000 });
+              toast.error(fault.message, {
+                id: 'fault-' + fault.compId,
+                duration: 6000,
+                action: {
+                  label: 'Reset Faults',
+                  onClick: handleResetFaults,
+                },
+              });
             }
           });
         }
@@ -734,7 +812,7 @@ export function EngineeringLabApp() {
 
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
-        setIsSimulating((s) => !s);
+        handleToggleSimulation();
       } else if (e.key === 'b' || e.key === 'B') {
         setIsBrowserOpen((o) => !o);
       } else if (e.key === 'i' || e.key === 'I') {
@@ -777,13 +855,11 @@ export function EngineeringLabApp() {
         activeMode={activeMode}
         onModeChange={setActiveMode}
         isSimulating={isSimulating}
-        onToggleSimulation={() => setIsSimulating((s) => !s)}
+        onToggleSimulation={handleToggleSimulation}
         onResetSimulation={() => {
-          solverRef.current.reset();
-          notifiedFaultsRef.current.clear();
+          handleResetFaults();
           mcuRef.current.resetGpio();
           setSimTime(0);
-          toast.info('Simulation reset');
         }}
         onNewProject={() => {
           recordHistory();
@@ -830,27 +906,27 @@ export function EngineeringLabApp() {
             />
 
             <main className="flex-1 min-h-0 min-w-0 h-full relative overflow-hidden">
-              {/* Circuit Overload / Component Burnout Alert Banner */}
-              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned) && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in duration-200">
-                  <span className="font-bold text-rose-400 flex items-center gap-1.5">
+              {/* Circuit Overload / Component Burnout Alert Banner (Positioned Below Floating Toolbar) */}
+              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) && (
+                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
+                  <span className="font-bold text-rose-400 flex items-center gap-1.5 shrink-0">
                     <span>💥</span>
                     <span>CIRCUIT FAULT:</span>
                   </span>
-                  <span className="text-rose-100 max-w-md truncate">
-                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned) && s.fault)?.fault ||
+                  <span
+                    className="text-rose-100 flex-1 truncate"
+                    title={Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault}
+                  >
+                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault ||
                       'Component burned out due to electrical overload!'}
                   </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      solverRef.current.reset();
-                      notifiedFaultsRef.current.clear();
-                      toast.info('Faults cleared & simulation reset');
-                    }}
-                    className="px-2.5 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded cursor-pointer transition-colors"
+                    onClick={handleResetFaults}
+                    className="px-3 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded-lg cursor-pointer transition-colors shrink-0 shadow flex items-center gap-1.5"
                   >
-                    Reset Faults
+                    <span>↺</span>
+                    <span>Reset Faults</span>
                   </button>
                 </div>
               )}
@@ -999,26 +1075,26 @@ export function EngineeringLabApp() {
 
             <div className="flex-1 h-full w-full relative overflow-hidden">
               {/* Circuit Overload / Component Burnout Alert Banner (3D Studio) */}
-              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned) && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in duration-200">
-                  <span className="font-bold text-rose-400 flex items-center gap-1.5">
+              {Object.values(simStates).some((s) => s.status === 'BURNED' || s.burned || s.isBurnedOut) && (
+                <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-40 bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 font-mono text-xs backdrop-blur animate-in fade-in slide-in-from-top-2 duration-200 max-w-2xl">
+                  <span className="font-bold text-rose-400 flex items-center gap-1.5 shrink-0">
                     <span>💥</span>
                     <span>CIRCUIT FAULT:</span>
                   </span>
-                  <span className="text-rose-100 max-w-md truncate">
-                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned) && s.fault)?.fault ||
+                  <span
+                    className="text-rose-100 flex-1 truncate"
+                    title={Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault}
+                  >
+                    {Object.values(simStates).find((s) => (s.status === 'BURNED' || s.burned || s.isBurnedOut) && s.fault)?.fault ||
                       'Component burned out due to electrical overload!'}
                   </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      solverRef.current.reset();
-                      notifiedFaultsRef.current.clear();
-                      toast.info('Faults cleared & simulation reset');
-                    }}
-                    className="px-2.5 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded cursor-pointer transition-colors"
+                    onClick={handleResetFaults}
+                    className="px-3 py-1 bg-rose-800 hover:bg-rose-700 text-white font-bold rounded-lg cursor-pointer transition-colors shrink-0 shadow flex items-center gap-1.5"
                   >
-                    Reset Faults
+                    <span>↺</span>
+                    <span>Reset Faults</span>
                   </button>
                 </div>
               )}
@@ -1064,7 +1140,7 @@ export function EngineeringLabApp() {
             wires={project.wires}
             simStates={simStates}
             wireCurrents={wireCurrents}
-            onToggleSimulation={() => setIsSimulating((s) => !s)}
+            onToggleSimulation={handleToggleSimulation}
           />
         )}
 

@@ -8,7 +8,10 @@ export interface SolverStepResult {
     on?: boolean;
     brightness?: number;
     status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    faultState?: 'NORMAL' | 'WARNING' | 'BURNED';
     burned?: boolean;
+    isBurnedOut?: boolean;
+    thermalStress?: number;
     fault?: string;
     digitalOut?: number;
     onRed?: boolean;
@@ -127,6 +130,16 @@ export class CircuitSolver {
     this.burnedComponents.delete(compId);
     this.burnFaultReasons.delete(compId);
     this.recordedFaults = this.recordedFaults.filter((f) => f.compId !== compId);
+  }
+
+  public resetBurntComponents() {
+    this.burnedComponents.clear();
+    this.burnFaultReasons.clear();
+    this.recordedFaults = [];
+  }
+
+  public resetFaults() {
+    this.resetBurntComponents();
   }
 
   public getBurntComponentIds(): string[] {
@@ -766,6 +779,12 @@ export class CircuitSolver {
           const cPin = this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`);
           const ePin = this.netMap.get(`${comp.id}:e`) || this.netMap.get(`${comp.id}:E`) || this.netMap.get(`${comp.id}:3`);
           if (bPin && cPin && ePin) {
+            if (this.burnedComponents.has(comp.id)) {
+              sumG[bPin] += 1e-12;
+              sumG[cPin] += 1e-12;
+              sumG[ePin] += 1e-12;
+              continue;
+            }
             const vb = nodeVoltages[bPin] || 0;
             const vc = nodeVoltages[cPin] || 0;
             const ve = nodeVoltages[ePin] || 0;
@@ -800,6 +819,12 @@ export class CircuitSolver {
           const dPin = this.netMap.get(`${comp.id}:d`) || this.netMap.get(`${comp.id}:D`) || this.netMap.get(`${comp.id}:2`);
           const sPin = this.netMap.get(`${comp.id}:s`) || this.netMap.get(`${comp.id}:S`) || this.netMap.get(`${comp.id}:3`);
           if (gPin && dPin && sPin) {
+            if (this.burnedComponents.has(comp.id)) {
+              sumG[gPin] += 1e-12;
+              sumG[dPin] += 1e-12;
+              sumG[sPin] += 1e-12;
+              continue;
+            }
             const vg = nodeVoltages[gPin] || 0;
             const vd = nodeVoltages[dPin] || 0;
             const vs = nodeVoltages[sPin] || 0;
@@ -808,7 +833,7 @@ export class CircuitSolver {
             const vth = Number(comp.parameters?.vgsTh ?? 3.0);
             const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
 
-            const isConducting = vgs >= vth && vds > 0.01;
+            const isConducting = vgs >= vth;
             const gds = isConducting ? Math.min(1.0 / rdsOn, Math.max(0.1, (vgs - vth) * 10.0)) : 1e-9;
 
             // Insulated gate leakage resistance for MNA numerical stability
@@ -884,6 +909,13 @@ export class CircuitSolver {
           const pin1 = this.netMap.get(`${comp.id}:1`);
           const pin2 = this.netMap.get(`${comp.id}:2`);
           if (pin1 && pin2 && pin1 !== pin2) {
+            if (this.burnedComponents.has(comp.id)) {
+              // Burned out open circuit: minimal leakage
+              const gCap = 1e-12;
+              sumG[pin1] += gCap;
+              sumG[pin2] += gCap;
+              continue;
+            }
             const cVal = Number(comp.parameters?.capacitance ?? 0.0000001); // 100nF default
             const gEq = cVal / Math.max(dt, 0.00001);
             const prevVc = this.capacitorVoltages.get(comp.id) ?? 0;
@@ -1106,7 +1138,10 @@ export class CircuitSolver {
 
     for (const comp of components) {
       let status: 'NORMAL' | 'WARNING' | 'BURNED' = this.burnedComponents.has(comp.id) ? 'BURNED' : 'NORMAL';
+      let faultState: 'NORMAL' | 'WARNING' | 'BURNED' = status;
       let burned = this.burnedComponents.has(comp.id);
+      let isBurnedOut = burned;
+      let thermalStress = burned ? 1.5 : 0;
       let fault = this.burnFaultReasons.get(comp.id);
       let brightness = 0;
 
@@ -1133,7 +1168,10 @@ export class CircuitSolver {
           current: Math.round(totalCurrent * 100000) / 100000,
           on: Math.abs(vA - vB) > 0.01 || Math.abs(vWiper - vB) > 0.01,
           status,
+          faultState,
           burned,
+          isBurnedOut,
+          thermalStress,
           fault,
         };
         continue;
@@ -1154,18 +1192,24 @@ export class CircuitSolver {
             current = 0;
             on = false;
             status = 'BURNED';
+            faultState = 'BURNED';
             burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
             fault = this.burnFaultReasons.get(comp.id);
           } else {
             const r = Math.max(Number(comp.parameters?.resistance ?? 1000), 0.01);
             current = vDiff / r;
             const p = Math.abs(vDiff * current);
-            const pMax = Number(comp.parameters?.powerRating ?? 0.25);
-            if (p > 4.0 * pMax) {
+            const pMax = Number(comp.parameters?.powerRating ?? comp.parameters?.ratedPower ?? 0.25);
+            thermalStress = p / pMax;
+            if (p > pMax) {
               this.burnedComponents.add(comp.id);
               burned = true;
+              isBurnedOut = true;
               status = 'BURNED';
-              fault = `FAULT: ${comp.label || 'Resistor'} burned out (Power: ${p.toFixed(2)}W exceeded ${pMax}W rating).`;
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Resistor'} burned out: ${p.toFixed(2)}W exceeded ${pMax}W rating.`;
               this.burnFaultReasons.set(comp.id, fault);
               this.recordedFaults.push({
                 compId: comp.id,
@@ -1175,8 +1219,72 @@ export class CircuitSolver {
                 timestamp: Date.now(),
               });
               current = 0;
-            } else if (p > pMax) {
+            } else if (p > 0.8 * pMax) {
               status = 'WARNING';
+              faultState = 'WARNING';
+            }
+          }
+        } else if (comp.type === 'CAPACITOR') {
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const absVc = Math.abs(vDiff);
+            const vRated = Number(comp.parameters?.voltageRating ?? comp.parameters?.ratedVoltage ?? 16.0);
+            thermalStress = absVc / vRated;
+            const isPolarized = comp.parameters?.polarized === true ||
+              comp.subCategory === 'electrolytic' ||
+              comp.subCategory === 'tantalum' ||
+              (comp.label || '').toLowerCase().includes('electrolytic') ||
+              (comp.value || '').toLowerCase().includes('electrolytic');
+
+            if (absVc > vRated) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Capacitor'} destroyed by dielectric breakdown (${absVc.toFixed(1)}V exceeded ${vRated}V rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Capacitor',
+                type: 'OVERVOLTAGE',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+            } else if (isPolarized && vDiff < -0.5) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Electrolytic Capacitor'} destroyed by reverse polarity (${vDiff.toFixed(2)}V exceeded -0.5V reverse limit).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Electrolytic Capacitor',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+            } else {
+              current = (comp.parameters?.capacitance ? Number(comp.parameters.capacitance) : 0.0000001) * absVc / Math.max(dt, 0.00001);
+              on = Math.abs(current) > 0.0001;
+              if (absVc > 0.85 * vRated) {
+                status = 'WARNING';
+                faultState = 'WARNING';
+              }
             }
           }
         } else if (comp.type === 'INDUCTOR') {
@@ -1185,10 +1293,50 @@ export class CircuitSolver {
         } else if (comp.type === 'SWITCH_SPST') {
           on = comp.parameters?.closed !== false;
           current = on ? vDiff / 0.01 : 0;
-        } else if (comp.type === 'BJT_NPN') {
-          const bjt = this.bjtCurrents.get(comp.id) ?? { ib: 0, ic: 0 };
-          current = bjt.ic > 0 ? bjt.ic : bjt.ib;
-          on = current > 0.0001;
+        } else if (comp.type === 'BJT_NPN' || comp.type === 'BJT_PNP') {
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const bjt = this.bjtCurrents.get(comp.id) ?? { ib: 0, ic: 0 };
+            current = bjt.ic > 0 ? bjt.ic : bjt.ib;
+            on = current > 0.0001;
+            const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:1`);
+            const cPin = this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:2`);
+            const ePin = this.netMap.get(`${comp.id}:e`) || this.netMap.get(`${comp.id}:3`);
+            const vc = cPin ? (nodeVoltages[cPin] || 0) : 0;
+            const ve = ePin ? (nodeVoltages[ePin] || 0) : 0;
+            const vce = Math.abs(vc - ve);
+            const p = vce * current;
+            const maxIc = Number(comp.parameters?.maxIc ?? 0.8);
+            const maxPower = Number(comp.parameters?.maxPower ?? 0.625);
+            thermalStress = Math.max(current / maxIc, p / maxPower);
+
+            if (current > maxIc || p > maxPower) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'BJT'} destroyed (${p.toFixed(2)}W or ${(current * 1000).toFixed(0)}mA exceeded rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'BJT',
+                type: current > maxIc ? 'OVERCURRENT' : 'OVERPOWER',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+            }
+          }
         } else if (comp.type.startsWith('REGULATOR_')) {
           current = Math.abs(vDiff) > 1.0 ? 0.02 : 0;
           on = Math.abs(vDiff) > 3.0;
@@ -1356,7 +1504,10 @@ export class CircuitSolver {
             greenBrightness,
             blueBrightness,
             status,
+            faultState: status,
             burned,
+            isBurnedOut: burned,
+            thermalStress: burned ? 1.5 : (brightness > 0 ? 0.7 : 0),
             fault,
           };
           let waveHist = this.waveformHistory.get(comp.id);
@@ -1367,17 +1518,241 @@ export class CircuitSolver {
           waveHist.push({ time: this.currentTime, value: vDiff });
           continue;
         } else if (comp.type === 'DIODE') {
-          current = vDiff > 0.7 ? (vDiff - 0.7) / 10 : 0;
-          on = current > 0.001;
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:anode`) || netA;
+            const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:cathode`) || netB;
+            const va = aPin ? (nodeVoltages[aPin] || 0) : 0;
+            const vk = kPin ? (nodeVoltages[kPin] || 0) : 0;
+            const forwardDrop = va - vk;
+            vDiff = forwardDrop;
+            const maxI = Number(comp.parameters?.maxCurrent ?? 1.0);
+            const maxVr = Number(comp.parameters?.maxReverseVoltage ?? 100.0);
+
+            if (forwardDrop < -maxVr) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Diode'} destroyed by peak inverse voltage (${(-forwardDrop).toFixed(1)}V exceeded ${maxVr}V rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Diode',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+            } else if (forwardDrop > 0.7) {
+              current = (forwardDrop - 0.7) / 10;
+              thermalStress = current / maxI;
+              if (current > maxI) {
+                this.burnedComponents.add(comp.id);
+                burned = true;
+                isBurnedOut = true;
+                status = 'BURNED';
+                faultState = 'BURNED';
+                fault = `FAULT: ${comp.label || 'Diode'} burned out: ${current.toFixed(2)}A exceeded ${maxI}A rating.`;
+                this.burnFaultReasons.set(comp.id, fault);
+                this.recordedFaults.push({
+                  compId: comp.id,
+                  compLabel: comp.label || 'Diode',
+                  type: 'OVERCURRENT',
+                  message: fault,
+                  timestamp: Date.now(),
+                });
+                current = 0;
+                on = false;
+              } else {
+                on = current > 0.001;
+                if (current > 0.8 * maxI) {
+                  status = 'WARNING';
+                  faultState = 'WARNING';
+                }
+              }
+            } else {
+              current = 0;
+              on = false;
+            }
+          }
         } else if (comp.type === 'TIMER_555') {
           if (this.burnedComponents.has(comp.id)) {
             on = false;
             status = 'BURNED';
+            faultState = 'BURNED';
             burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
             fault = this.burnFaultReasons.get(comp.id);
           } else {
             const state = this.timer555State.get(comp.id);
             on = Boolean(state?.flipFlop);
+            const vccPin = this.netMap.get(`${comp.id}:8`);
+            const gndPin = this.netMap.get(`${comp.id}:1`);
+            const outPin = this.netMap.get(`${comp.id}:3`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 9.0) : 9.0;
+            const gnd = gndPin ? (nodeVoltages[gndPin] || 0.0) : 0.0;
+            const vSpan = vcc - gnd;
+            vDiff = outPin ? (nodeVoltages[outPin] || 0) : 0;
+
+            if (vSpan > 16.0) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'NE555'} burned out (Supply voltage ${vSpan.toFixed(1)}V exceeded 16V max rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'NE555',
+                type: 'OVERVOLTAGE',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            } else if (vSpan < -0.3) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'NE555'} destroyed by reverse supply polarity (${vSpan.toFixed(1)}V).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'NE555',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            }
+          }
+        } else if (comp.type.startsWith('OPAMP_')) {
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const vccPin = this.netMap.get(`${comp.id}:vcc`);
+            const veePin = this.netMap.get(`${comp.id}:vee`);
+            const outPin = this.netMap.get(`${comp.id}:out`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const vSpan = vcc - vee;
+            on = vSpan > 3.0;
+            vDiff = outPin ? (nodeVoltages[outPin] || 0) : 0;
+
+            if (vSpan > 36.0) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Op-Amp'} burned out (Supply ${vSpan.toFixed(1)}V exceeded 36V max rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Op-Amp',
+                type: 'OVERVOLTAGE',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            } else if (vSpan < -0.3) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'Op-Amp'} destroyed by reverse supply polarity (${vSpan.toFixed(1)}V).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'Op-Amp',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            }
+          }
+        } else if (
+          comp.type.startsWith('ARDUINO_') ||
+          comp.type.startsWith('ESP32') ||
+          comp.type.startsWith('STM32') ||
+          comp.type.startsWith('RASPBERRY_PI_PICO') ||
+          comp.type === 'MCU_ARDUINO_UNO' ||
+          comp.type.includes('MCU')
+        ) {
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
+            const gndPin = this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:GND_1`);
+            const v5V = pwr5VPin ? (nodeVoltages[pwr5VPin] || 0) : 0;
+            const vGnd = gndPin ? (nodeVoltages[gndPin] || 0) : 0;
+            const vSpan5V = v5V - vGnd;
+            on = vSpan5V > 4.0;
+            vDiff = vSpan5V;
+
+            if (vSpan5V > 5.8) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'MCU'} burned out (Supply voltage ${vSpan5V.toFixed(1)}V exceeded 5.5V max rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'MCU',
+                type: 'OVERVOLTAGE',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            } else if (vSpan5V < -0.3) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'MCU'} destroyed by reverse polarity (${vSpan5V.toFixed(1)}V).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'MCU',
+                type: 'REVERSE_POLARITY',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              on = false;
+            }
           }
         } else if (comp.type.startsWith('LOGIC_')) {
           const outPin = this.netMap.get(`${comp.id}:out`);
@@ -1405,20 +1780,55 @@ export class CircuitSolver {
           const rLdr = Math.max(Number(comp.parameters?.lightResistance ?? 500), 10);
           current = vDiff / rLdr;
           on = true;
-        } else if (comp.type === 'MOSFET_N') {
-          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:1`);
-          const dPin = this.netMap.get(`${comp.id}:d`) || this.netMap.get(`${comp.id}:2`);
-          const sPin = this.netMap.get(`${comp.id}:s`) || this.netMap.get(`${comp.id}:3`);
-          const vg = gPin ? (nodeVoltages[gPin] || 0) : 0;
-          const vd = dPin ? (nodeVoltages[dPin] || 0) : 0;
-          const vs = sPin ? (nodeVoltages[sPin] || 0) : 0;
-          const vgs = vg - vs;
-          const vds = vd - vs;
-          const vth = Number(comp.parameters?.vgsTh ?? 3.0);
-          const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
-          on = vgs >= vth && vds > 0.05;
-          current = on ? vds / rdsOn : 0;
-          vDiff = vds;
+        } else if (comp.type === 'MOSFET_N' || comp.type === 'MOSFET_P') {
+          if (this.burnedComponents.has(comp.id)) {
+            current = 0;
+            on = false;
+            status = 'BURNED';
+            faultState = 'BURNED';
+            burned = true;
+            isBurnedOut = true;
+            thermalStress = 1.5;
+            fault = this.burnFaultReasons.get(comp.id);
+          } else {
+            const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:1`);
+            const dPin = this.netMap.get(`${comp.id}:d`) || this.netMap.get(`${comp.id}:2`);
+            const sPin = this.netMap.get(`${comp.id}:s`) || this.netMap.get(`${comp.id}:3`);
+            const vg = gPin ? (nodeVoltages[gPin] || 0) : 0;
+            const vd = dPin ? (nodeVoltages[dPin] || 0) : 0;
+            const vs = sPin ? (nodeVoltages[sPin] || 0) : 0;
+            const vgs = vg - vs;
+            const vds = vd - vs;
+            const vth = Number(comp.parameters?.vgsTh ?? 3.0);
+            const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
+            on = vgs >= vth;
+            current = on ? Math.abs(vds) / rdsOn : 0;
+            vDiff = Math.abs(vds);
+            const p = vDiff * current;
+            const maxId = Number(comp.parameters?.maxId ?? 10.0);
+            const maxVds = Number(comp.parameters?.maxVds ?? 60.0);
+            const maxPower = Number(comp.parameters?.maxPower ?? 20.0);
+            thermalStress = Math.max(current / maxId, p / maxPower, vDiff / maxVds);
+
+            if (current > maxId || vDiff > maxVds || p > maxPower) {
+              this.burnedComponents.add(comp.id);
+              burned = true;
+              isBurnedOut = true;
+              status = 'BURNED';
+              faultState = 'BURNED';
+              fault = `FAULT: ${comp.label || 'MOSFET'} burned out (${p.toFixed(2)}W or ${current.toFixed(1)}A exceeded rating).`;
+              this.burnFaultReasons.set(comp.id, fault);
+              this.recordedFaults.push({
+                compId: comp.id,
+                compLabel: comp.label || 'MOSFET',
+                type: current > maxId ? 'OVERCURRENT' : 'OVERPOWER',
+                message: fault,
+                timestamp: Date.now(),
+              });
+              current = 0;
+              on = false;
+            }
+          }
         } else if (comp.type === 'BATTERY' || comp.type === 'DC_VOLTAGE') {
           current = Math.abs(vDiff) / 1000;
         }
@@ -1429,7 +1839,10 @@ export class CircuitSolver {
           on,
           brightness,
           status,
+          faultState,
           burned,
+          isBurnedOut,
+          thermalStress,
           fault,
         };
 
@@ -1471,6 +1884,57 @@ export class CircuitSolver {
         iVal = vA >= vB ? compCurrent : -compCurrent;
       }
       wireCurrents[wire.id] = iVal;
+    }
+
+    // Validate MCU GPIO Pin Current Ratings (max 40mA per pin)
+    for (const comp of components) {
+      if (
+        comp.type.startsWith('ARDUINO_') ||
+        comp.type.startsWith('ESP32') ||
+        comp.type.startsWith('STM32') ||
+        comp.type.startsWith('RASPBERRY_PI_PICO') ||
+        comp.type === 'MCU_ARDUINO_UNO' ||
+        comp.type.includes('MCU')
+      ) {
+        if (!this.burnedComponents.has(comp.id)) {
+          for (const wire of wires) {
+            let mcuPinId: string | null = null;
+            let otherCompId: string | null = null;
+            if (wire.fromCompId === comp.id) {
+              mcuPinId = wire.fromPinId;
+              otherCompId = wire.toCompId;
+            } else if (wire.toCompId === comp.id) {
+              mcuPinId = wire.toPinId;
+              otherCompId = wire.fromCompId;
+            }
+            if (mcuPinId && (mcuPinId.startsWith('D') || /^\d+$/.test(mcuPinId))) {
+              const otherSt = otherCompId ? componentStates[otherCompId] : null;
+              const wireI = Math.abs(wireCurrents[wire.id] || (otherSt?.current ?? 0));
+              if (wireI > 0.040) {
+                this.burnedComponents.add(comp.id);
+                const curMa = (wireI * 1000).toFixed(0);
+                const fault = `FAULT: ${comp.label || 'MCU'} GPIO pin ${mcuPinId} damaged (Current: ${curMa}mA exceeded 40mA max pin rating).`;
+                this.burnFaultReasons.set(comp.id, fault);
+                this.recordedFaults.push({
+                  compId: comp.id,
+                  compLabel: comp.label || 'MCU',
+                  type: 'OVERCURRENT',
+                  message: fault,
+                  timestamp: Date.now(),
+                });
+                if (componentStates[comp.id]) {
+                  componentStates[comp.id].status = 'BURNED';
+                  componentStates[comp.id].faultState = 'BURNED';
+                  componentStates[comp.id].burned = true;
+                  componentStates[comp.id].isBurnedOut = true;
+                  componentStates[comp.id].fault = fault;
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
     }
 
     // 5. Synthesize Function Generator Signal and Inject into Circuit if active

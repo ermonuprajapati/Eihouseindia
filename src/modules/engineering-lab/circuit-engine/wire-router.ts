@@ -312,11 +312,11 @@ export function dragWireCornerVertex(
   const updated = vertices.map((v) => ({ ...v }));
   updated[vertexIndex] = snapped;
 
-  // Orthogonal correction for adjacent segments
+  // Orthogonal correction for adjacent interior segments (endpoints remain anchored to component pins)
   const prev = updated[vertexIndex - 1];
   const next = updated[vertexIndex + 1];
 
-  if (prev) {
+  if (prev && vertexIndex - 1 > 0) {
     if (Math.abs(prev.y - vertices[vertexIndex].y) < 1) {
       prev.y = snapped.y; // Keep previous segment horizontal
     } else if (Math.abs(prev.x - vertices[vertexIndex].x) < 1) {
@@ -324,13 +324,17 @@ export function dragWireCornerVertex(
     }
   }
 
-  if (next) {
+  if (next && vertexIndex + 1 < updated.length - 1) {
     if (Math.abs(next.y - vertices[vertexIndex].y) < 1) {
       next.y = snapped.y; // Keep next segment horizontal
     } else if (Math.abs(next.x - vertices[vertexIndex].x) < 1) {
       next.x = snapped.x; // Keep next segment vertical
     }
   }
+
+  // Strictly preserve terminal pin endpoints
+  updated[0] = vertices[0];
+  updated[updated.length - 1] = vertices[vertices.length - 1];
 
   const simplified = simplifyCollinearPoints(updated);
   return simplified.slice(1, -1);

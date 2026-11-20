@@ -6,6 +6,7 @@ import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-expo
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { CircuitComponent, CircuitWire, EngineeringProject, PcbTrack } from '@/modules/engineering-lab/types';
 import { computeWireSvgPath } from '@/components/engineering-lab/Canvas/SchematicCanvas';
+import { slideWireSegment } from '@/modules/engineering-lab/circuit-engine/wire-router';
 import { TEMPLATE_555_ASTABLE, TEMPLATE_ARDUINO_BLINK } from '@/modules/engineering-lab/templates/starter-templates';
 import { COMPONENT_CATALOG, createComponentInstance, ComponentTemplate } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TARGET_BOARDS, TargetBoardSpec } from '@/modules/engineering-lab/embedded-engine/board-definitions';
@@ -3019,6 +3020,225 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       // Noticeably dimmed: brightness should be between 0.08 and 0.25 (not off, not full)
       expect(ledState.brightness).toBeGreaterThan(0.05);
       expect(ledState.brightness).toBeLessThan(0.30);
+    });
+
+    // CASE E: Universal Electrical Rating - Resistor Overpower Burnout
+    it('Case E: Resistor burns out with OVERPOWER fault when power dissipation exceeds rated power', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'DC_VOLTAGE',
+        label: '12V Supply',
+        value: '12V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BATTERY',
+        category: 'power',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'passive' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'passive' },
+        ],
+        parameters: { voltage: 12 },
+      };
+      const resistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '100',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'RESISTOR_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 100, powerRating: 0.25 },
+      };
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      // 12V across 100Ω = 1.44W (exceeds 0.25W rating)
+      const res = solver.step([battery, resistor], wires, 0.001);
+      const rState = res.componentStates['r1'];
+
+      expect(rState).toBeDefined();
+      expect(rState.status).toBe('BURNED');
+      expect(rState.faultState).toBe('BURNED');
+      expect(rState.burned).toBe(true);
+      expect(rState.isBurnedOut).toBe(true);
+      expect(rState.thermalStress).toBeGreaterThan(1.0);
+      expect(rState.fault).toContain('burned out');
+      expect(rState.fault).toContain('1.44W exceeded 0.25W rating');
+
+      expect(res.faults).toBeDefined();
+      const fault = res.faults?.find((f) => f.compId === 'r1');
+      expect(fault).toBeDefined();
+      expect(fault?.type).toBe('OVERPOWER');
+    });
+
+    // CASE F: Universal Electrical Rating - Capacitor Overvoltage & Reverse Polarity
+    it('Case F: Capacitor triggers OVERVOLTAGE on over-rating, and electrolytic triggers REVERSE_POLARITY on reversed bias', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'DC_VOLTAGE',
+        label: '24V Supply',
+        value: '24V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BATTERY',
+        category: 'power',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'passive' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'passive' },
+        ],
+        parameters: { voltage: 24 },
+      };
+      const cap: CircuitComponent = {
+        id: 'c1',
+        type: 'CAPACITOR',
+        label: 'C1',
+        value: '10uF',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'CAP_RADIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { capacitance: 0.00001, voltageRating: 16 },
+      };
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'c1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'c1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      // 24V exceeds 16V rating
+      const res = solver.step([battery, cap], wires, 0.001);
+      const cState = res.componentStates['c1'];
+
+      expect(cState.status).toBe('BURNED');
+      expect(cState.burned).toBe(true);
+      expect(cState.fault).toContain('dielectric breakdown');
+      const fault = res.faults?.find((f) => f.compId === 'c1');
+      expect(fault?.type).toBe('OVERVOLTAGE');
+    });
+
+    // CASE G: Auto-Reset Component Faults & Simulation Restart Recovery
+    it('Case G: Auto-resets burned components and allows recovery when voltage is reduced and faults are reset', () => {
+      const solver = new CircuitSolver();
+      const battery: CircuitComponent = {
+        id: 'bat1',
+        type: 'DC_VOLTAGE',
+        label: '9V Battery',
+        value: '9V',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        footprint: 'BATTERY',
+        category: 'power',
+        pins: [
+          { id: '1', name: '+', x: 0, y: -10, pinType: 'passive' },
+          { id: '2', name: '-', x: 0, y: 10, pinType: 'passive' },
+        ],
+        parameters: { voltage: 9 },
+      };
+      const led: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        x: 50,
+        y: 0,
+        rotation: 0,
+        footprint: 'LED_5MM',
+        category: 'semiconductors',
+        pins: [
+          { id: '1', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardV: 2.0 },
+      };
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'led1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      // Step 1: Direct 9V across LED -> Burnout
+      let res = solver.step([battery, led], wires, 0.001);
+      expect(res.componentStates['led1']?.status).toBe('BURNED');
+      expect(solver.getBurntComponentIds()).toContain('led1');
+
+      // Step 2: Add 330Ω resistor and reset faults
+      solver.resetBurntComponents();
+      expect(solver.getBurntComponentIds()).not.toContain('led1');
+
+      const resistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '330',
+        x: 30,
+        y: 0,
+        rotation: 0,
+        footprint: 'RESISTOR_AXIAL',
+        category: 'passive',
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 330 },
+      };
+      const safeWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bat1', fromPinId: '1', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'led1', toPinId: '1' },
+        { id: 'w3', fromCompId: 'led1', fromPinId: '2', toCompId: 'bat1', toPinId: '2' },
+      ];
+
+      // Step 3: Run sim again -> Clean normal operation
+      res = solver.step([battery, resistor, led], safeWires, 0.001);
+      expect(res.componentStates['led1']?.status).toBe('NORMAL');
+      expect(res.componentStates['led1']?.burned).toBeFalsy();
+      expect(res.componentStates['led1']?.on).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST AP - Smooth Orthogonal Wire Segment Dragging Without Staircase Glitch
+  // --------------------------------------------------------------------------
+  describe('TEST AP: Smooth Orthogonal Wire Segment Dragging', () => {
+    it('moves horizontal segment Y-coordinate without generating runaway staircase vertices', () => {
+      // 4-vertex orthogonal wire: (0,0) -> (50,0) -> (50,100) -> (100,100)
+      const initialVertices = [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 50, y: 100 },
+        { x: 100, y: 100 },
+      ];
+
+      // Drag vertical segment 1 (x = 50) horizontally to x = 80
+      const waypoints1 = slideWireSegment(initialVertices, 1, 80, 10);
+      expect(waypoints1).toEqual([
+        { x: 80, y: 0 },
+        { x: 80, y: 100 },
+      ]);
+
+      // Repeated calls with new coordinates using the same baseline initialVertices
+      // do NOT accumulate staircase vertices
+      const waypoints2 = slideWireSegment(initialVertices, 1, 30, 10);
+      expect(waypoints2.length).toBe(2);
+      expect(waypoints2).toEqual([
+        { x: 30, y: 0 },
+        { x: 30, y: 100 },
+      ]);
     });
   });
 });

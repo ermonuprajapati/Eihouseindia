@@ -94,6 +94,12 @@ export interface CircuitComponent {
     current?: number;
     on?: boolean;
     digitalOut?: number;
+    faultState?: 'NORMAL' | 'WARNING' | 'BURNED';
+    isBurnedOut?: boolean;
+    thermalStress?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
   };
 }
 
@@ -114,10 +120,20 @@ export interface ComponentSimTelemetry {
   voltage: number;
   current: number;
   on?: boolean;
+  brightness?: number;
+  status?: 'NORMAL' | 'WARNING' | 'BURNED';
+  faultState?: 'NORMAL' | 'WARNING' | 'BURNED';
+  burned?: boolean;
+  isBurnedOut?: boolean;
+  thermalStress?: number;
+  fault?: string;
   digitalOut?: number;
   onRed?: boolean;
   onGreen?: boolean;
   onBlue?: boolean;
+  redBrightness?: number;
+  greenBrightness?: number;
+  blueBrightness?: number;
 }
 
 export interface CircuitProbe {
