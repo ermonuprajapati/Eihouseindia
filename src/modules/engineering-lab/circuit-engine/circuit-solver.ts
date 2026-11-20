@@ -247,8 +247,8 @@ export class CircuitSolver {
           const pinAKey = `${comp.id}:${comp.pins[0].id}`;
           const pinBKey = `${comp.id}:${comp.pins[1].id}`;
 
-          const isLedOrCap = comp.type === 'LED' || comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC' || comp.type === 'DIODE';
-          const halfSpan = isLedOrCap ? 1.27 : 5.08;
+          const isLedOrCap = comp.type === 'LED' || comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC' || comp.type === 'SENSOR_LDR';
+          const halfSpan = isLedOrCap ? 2.54 : 5.08;
 
           let colA = Math.round((comp.x3d - (isRotated ? 0 : halfSpan) - startX) / pitchX) + 1;
           let colB = Math.round((comp.x3d + (isRotated ? 0 : halfSpan) - startX) / pitchX) + 1;
@@ -277,7 +277,8 @@ export class CircuitSolver {
           }
         } else if (comp.pins.length === 8 || comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
           // DIP-8 straddles center isolation notch: Pins 1..4 on Row E (top), Pins 5..8 on Row F (bottom)
-          const centerCol = Math.round((comp.x3d - startX) / pitchX) + 1;
+          // Package center sits halfway between columns: centerCol represents the column left of center (e.g. Col 30)
+          const centerCol = Math.round((comp.x3d - startX) / pitchX + 0.5);
           for (let pIdx = 1; pIdx <= 8; pIdx++) {
             const pinObj = comp.pins.find((p) => p.id === String(pIdx) || p.name === String(pIdx)) || comp.pins[pIdx - 1];
             if (!pinObj) continue;
@@ -285,10 +286,10 @@ export class CircuitSolver {
             let col = centerCol;
             let isTop = true;
             if (pIdx >= 1 && pIdx <= 4) {
-              col = centerCol - 2 + (pIdx - 1);
+              col = centerCol - 1 + (pIdx - 1);
               isTop = true;
             } else {
-              col = centerCol + 1 - (pIdx - 5);
+              col = centerCol + 2 - (pIdx - 5);
               isTop = false;
             }
             col = Math.max(1, Math.min(63, col));

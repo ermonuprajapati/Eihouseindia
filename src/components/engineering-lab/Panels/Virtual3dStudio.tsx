@@ -70,6 +70,7 @@ export function Virtual3dStudio({
   onDeleteWire = () => {},
   isSimulating,
   simulationStates,
+  wireCurrents,
   isInspectorOpen,
   onToggleInspector,
   onSaveWorkspace,
@@ -301,10 +302,9 @@ export function Virtual3dStudio({
 
       // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
       // Straddle breadboard center isolation trench directly seated flush at y = 8.5
-      // Col 30 center aligns DIP pins cleanly with breadboard columns 29..32
+      // For DIP-8 (NE555), center is at -3.81mm (START_X + 29.5 * PITCH_X) to seat pins 1..4 in cols 29..32 (Row E) and pins 5..8 in cols 32..29 (Row F)
       if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
-        // Col 30 is at START_X + 29 * PITCH_X = -78.74 + 73.66 = -5.08 mm
-        const colX = -5.08;
+        const colX = mappedType === 'TIMER_555' ? -3.81 : -5.08;
         return {
           id: comp.id,
           type: mappedType,
@@ -944,6 +944,7 @@ export function Virtual3dStudio({
           onUpdateWire3D={handleUpdateWire3D}
           isSimulating={isSimulating}
           simulationStates={simulationStates}
+          wireCurrents={wireCurrents}
         />
       </div>
     </div>

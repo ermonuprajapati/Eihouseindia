@@ -317,8 +317,15 @@ function DragFrameController({
 
       if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
         // Automatic IC Snapping straddling center DIP notch (top pins in Row E, bottom pins in Row F)
-        const nearestCol = Math.max(2, Math.min(62, Math.round((targetX - START_X) / PITCH_X) + 1));
-        targetX = START_X + (nearestCol - 1) * PITCH_X;
+        // For even-pin DIP packages (like DIP-8), offset by 0.5 pitch so pins land centered on integer columns
+        const isEvenDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC';
+        if (isEvenDip) {
+          const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
+          targetX = START_X + (nearestCol - 0.5) * PITCH_X;
+        } else {
+          const nearestCol = Math.max(2, Math.min(62, Math.round((targetX - START_X) / PITCH_X) + 1));
+          targetX = START_X + (nearestCol - 1) * PITCH_X;
+        }
         targetZ = 0;   // Straddle center DIP ravine
         targetY = 8.5; // Resting flush on breadboard
       } else if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
@@ -421,6 +428,7 @@ export interface Studio3DCanvasProps {
       fault?: string;
     }
   >;
+  wireCurrents?: Record<string, number>;
 }
 
 export function Studio3DCanvas({
@@ -440,6 +448,7 @@ export function Studio3DCanvas({
   onUpdateWire3D,
   isSimulating = false,
   simulationStates = {},
+  wireCurrents = {},
 }: Studio3DCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
@@ -1773,6 +1782,7 @@ export function Studio3DCanvas({
               isSelected={isSelected}
               isHighlighted={isConnectedToHoveredPin}
               isSimulating={isSimulating}
+              current={wireCurrents?.[w.id] ?? w.current}
               onClick={(id) => {
                 onSelectWire(id);
                 onSelectComponent(null);

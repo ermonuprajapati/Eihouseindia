@@ -23,6 +23,8 @@ export function Wire3DTube({
   color = '#EF4444',
   isSelected = false,
   isHighlighted = false,
+  isSimulating = false,
+  current,
   onClick,
 }: Wire3DTubeProps) {
   // Generate realistic Dupont jumper arched CatmullRomCurve3
@@ -85,12 +87,15 @@ export function Wire3DTube({
     };
   }, [geometry, haloGeometry]);
 
+  const hasCurrent = isSimulating && current !== undefined && Math.abs(current) > 0.0001;
   const materials = useMemo(() => {
     return {
       insulation: new THREE.MeshStandardMaterial({
         color: isSelected ? '#F59E0B' : color,
         roughness: 0.38,
         metalness: 0.12,
+        emissive: hasCurrent ? color : '#000000',
+        emissiveIntensity: hasCurrent ? 0.35 : 0,
       }),
       halo: new THREE.MeshBasicMaterial({
         color: '#F59E0B',
@@ -117,7 +122,7 @@ export function Wire3DTube({
         roughness: 0.15,
       }),
     };
-  }, [color, isSelected]);
+  }, [color, isSelected, hasCurrent]);
 
   return (
     <group>
