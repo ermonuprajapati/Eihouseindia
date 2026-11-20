@@ -346,8 +346,6 @@ export function Virtual3dStudio({
     const outWires: Wire3D[] = [];
     const SIGNAL_COLORS = ['#3B82F6', '#10B981', '#EAB308', '#F97316'];
     let sigColorIdx = 0;
-    let posRailHoleIdx = 3;
-    let negRailHoleIdx = 3;
 
     // Strict Rule 1: Battery has STRICTLY 2 physical terminals:
     // Route 1 Red wire from Battery + to Breadboard Top Red + Power Rail (bb_rail_top_pos_1)
