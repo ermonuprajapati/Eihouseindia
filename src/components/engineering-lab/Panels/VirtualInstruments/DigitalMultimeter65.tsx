@@ -30,11 +30,10 @@ export function DigitalMultimeter65({
   instruments,
   onUpdateInstruments,
   components = [],
-  _wires = [],
   simStates = {},
   wireCurrents = {},
   waveformData = {},
-}: DigitalMultimeter65Props & { _wires?: CircuitWire[] }) {
+}: DigitalMultimeter65Props) {
   const dmm = instruments.multimeter;
   const [audioEnabled, setAudioEnabled] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);

@@ -24,8 +24,7 @@ export function DdsFunctionGenerator({
   instruments,
   onUpdateInstruments,
   components = [],
-  _wires = [],
-}: DdsFunctionGeneratorProps & { _wires?: CircuitWire[] }) {
+}: DdsFunctionGeneratorProps) {
   const fg = instruments.functionGenerator;
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 

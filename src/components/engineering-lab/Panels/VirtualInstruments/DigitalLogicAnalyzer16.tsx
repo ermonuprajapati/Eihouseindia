@@ -29,10 +29,9 @@ export function DigitalLogicAnalyzer16({
   instruments,
   onUpdateInstruments,
   components = [],
-  _wires = [],
   waveformData = {},
   isSimulating = false,
-}: DigitalLogicAnalyzer16Props & { _wires?: CircuitWire[] }) {
+}: DigitalLogicAnalyzer16Props) {
   const la = instruments.logicAnalyzer;
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

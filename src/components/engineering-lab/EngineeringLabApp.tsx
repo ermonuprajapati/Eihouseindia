@@ -625,7 +625,7 @@ export function EngineeringLabApp() {
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [isSimulating, project.components, project.wires, project.instruments]);
+  }, [isSimulating, project.components, project.wires, project.instruments, handleResetFaults]);
 
   // Sync PCB whenever components or wires change
   useEffect(() => {
@@ -668,7 +668,7 @@ export function EngineeringLabApp() {
     }));
   };
 
-  const handleRotateComponent = (id: string) => {
+  const handleRotateComponent = useCallback((id: string) => {
     recordHistory();
     setProject((prev) => ({
       ...prev,
@@ -678,9 +678,9 @@ export function EngineeringLabApp() {
         return { ...c, rotation: nextRot };
       }),
     }));
-  };
+  }, [recordHistory]);
 
-  const handleMirrorComponent = (id: string) => {
+  const handleMirrorComponent = useCallback((id: string) => {
     recordHistory();
     setProject((prev) => ({
       ...prev,
@@ -689,18 +689,18 @@ export function EngineeringLabApp() {
         return { ...c, mirrored: !c.mirrored };
       }),
     }));
-  };
+  }, [recordHistory]);
 
-  const handleDeleteComponent = (id: string) => {
+  const handleDeleteComponent = useCallback((id: string) => {
     recordHistory();
     setProject((prev) => ({
       ...prev,
       components: prev.components.filter((c) => c.id !== id),
       wires: prev.wires.filter((w) => w.fromCompId !== id && w.toCompId !== id),
     }));
-    if (selectedCompId === id) setSelectedCompId(null);
+    setSelectedCompId((prev) => (prev === id ? null : prev));
     toast.info('Component deleted');
-  };
+  }, [recordHistory]);
 
   // Component Clipboard state for Copy/Paste & Duplicate
   const [componentClipboard, setComponentClipboard] = useState<CircuitComponent | null>(null);

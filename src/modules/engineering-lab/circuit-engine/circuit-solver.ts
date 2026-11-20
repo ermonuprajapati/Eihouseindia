@@ -892,7 +892,6 @@ export class CircuitSolver {
             const vd = nodeVoltages[dPin] || 0;
             const vs = nodeVoltages[sPin] || 0;
             const vgs = vg - vs;
-            const vds = vd - vs;
             const vth = Number(comp.parameters?.vgsTh ?? 3.0);
             const rdsOn = Math.max(Number(comp.parameters?.rdsOn ?? 0.044), 0.001);
 
@@ -1385,7 +1384,6 @@ export class CircuitSolver {
             const bjt = this.bjtCurrents.get(comp.id) ?? { ib: 0, ic: 0 };
             current = bjt.ic > 0 ? bjt.ic : bjt.ib;
             on = current > 0.0001;
-            const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:1`);
             const cPin = this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:2`);
             const ePin = this.netMap.get(`${comp.id}:e`) || this.netMap.get(`${comp.id}:3`);
             const vc = cPin ? (nodeVoltages[cPin] || 0) : 0;

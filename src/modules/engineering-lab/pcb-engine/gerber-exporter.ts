@@ -157,6 +157,7 @@ export class GerberExporter {
    * Generates Bottom Silkscreen (.gbo / B_SilkS.GBO)
    */
   public static exportBottomSilkscreen(_pcb: PcbLayout): string {
+    void _pcb;
     let out = `%TF.FileFunction,Legend,Bot*%\n`;
     out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
     out += `%ADD13C,0.150000*%\n`;

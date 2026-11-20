@@ -553,6 +553,8 @@ export function SchematicCanvas({
     onRotateComponent,
     mousePos,
     setWireSelected,
+    activeWireStart,
+    toolMode,
     onBatchDelete,
     onSelectComponent,
     handleZoomToFit,
@@ -1325,9 +1327,6 @@ export function SchematicCanvas({
                             e.stopPropagation();
                             setWireSelected(wire.id);
                             onSelectComponent(null);
-                            const rect = containerRef.current?.getBoundingClientRect();
-                            const cX = rect ? (e.clientX - rect.left - pan.x) / zoom : 0;
-                            const cY = rect ? (e.clientY - rect.top - pan.y) / zoom : 0;
                             setDraggingSegment({
                               wireId: wire.id,
                               segmentIndex: sIdx,

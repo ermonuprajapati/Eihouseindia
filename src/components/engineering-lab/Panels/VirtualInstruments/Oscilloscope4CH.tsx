@@ -33,8 +33,7 @@ export function Oscilloscope4CH({
   waveformData,
   isSimulating,
   components = [],
-  _wires = [],
-}: Oscilloscope4CHProps & { _wires?: CircuitWire[] }) {
+}: Oscilloscope4CHProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scopeState = instruments.oscilloscope;
 

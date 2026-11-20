@@ -25,13 +25,11 @@ export interface QuickProbeOverlayProps {
 
 export function QuickProbeOverlay({
   components = [],
-  _wires = [],
   simStates = {},
-  _wireCurrents = {},
   waveformData = {},
   isOpen = true,
   onClose,
-}: QuickProbeOverlayProps & { _wires?: CircuitWire[]; _wireCurrents?: Record<string, number> }) {
+}: QuickProbeOverlayProps) {
   const [selectedTarget, setSelectedTarget] = useState<string>(components[0]?.id || 'VCC');
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
 
