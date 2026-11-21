@@ -314,6 +314,53 @@ interface DragFrameControllerProps {
   onUpdateComponent3D: (comp: Component3D) => void;
 }
 
+function getComponentFootprint(type: string): { halfW: number; halfD: number } {
+  switch (type) {
+    case 'ARDUINO_UNO':
+      return { halfW: 34.0, halfD: 26.5 };
+    case 'ARDUINO_MEGA':
+      return { halfW: 50.5, halfD: 26.5 };
+    case 'ARDUINO_NANO':
+      return { halfW: 21.5, halfD: 9.0 };
+    case 'ESP32_DEVKIT':
+      return { halfW: 27.5, halfD: 14.0 };
+    case 'RASPBERRY_PI_PICO':
+      return { halfW: 25.5, halfD: 10.5 };
+    case 'LCD_1602':
+    case 'DISPLAY_LCD1602':
+      return { halfW: 40.0, halfD: 18.0 };
+    case 'HC_SR04':
+      return { halfW: 22.5, halfD: 10.0 };
+    case 'SERVO_SG90':
+      return { halfW: 16.0, halfD: 12.0 };
+    case 'BATTERY_9V':
+    case 'BATTERY':
+    case 'DC_VOLTAGE':
+      return { halfW: 13.0, halfD: 8.5 };
+    case 'POTENTIOMETER':
+      return { halfW: 5.0, halfD: 5.0 };
+    case 'PUSHBUTTON':
+      return { halfW: 4.0, halfD: 4.0 };
+    case 'BUZZER_ACTIVE':
+      return { halfW: 6.0, halfD: 6.0 };
+    case 'TIMER_555':
+    case 'DIP_IC':
+    case 'ATMEGA328P':
+      return { halfW: 5.5, halfD: 4.0 };
+    case 'LED_RGB':
+    case 'ACTUATOR_RGB_LED':
+    case 'LED':
+      return { halfW: 3.0, halfD: 3.0 };
+    case 'RESISTOR':
+      return { halfW: 6.0, halfD: 2.5 };
+    case 'CAPACITOR':
+    case 'CAPACITOR_ELECTROLYTIC':
+      return { halfW: 3.5, halfD: 3.5 };
+    default:
+      return { halfW: 3.5, halfD: 3.5 };
+  }
+}
+
 function DragFrameController({
   draggingCompId,
   components3d,
@@ -391,6 +438,31 @@ function DragFrameController({
       targetX = Math.round(targetX * 100) / 100;
       targetY = Math.round(targetY * 100) / 100;
       targetZ = Math.round(targetZ * 100) / 100;
+
+      // 2D AABB Footprint Collision Guard against other components on the same surface
+      const myFp = getComponentFootprint(comp.type);
+      const cMinX = targetX - myFp.halfW;
+      const cMaxX = targetX + myFp.halfW;
+      const cMinZ = targetZ - myFp.halfD;
+      const cMaxZ = targetZ + myFp.halfD;
+
+      const collides = components3d.some((other) => {
+        if (other.id === comp.id) return false;
+        // Only guard against components at approximately the same vertical elevation (table vs breadboard)
+        if (Math.abs(other.y3d - targetY) >= 4) return false;
+        const otherFp = getComponentFootprint(other.type);
+        const oMinX = other.x3d - otherFp.halfW;
+        const oMaxX = other.x3d + otherFp.halfW;
+        const oMinZ = other.z3d - otherFp.halfD;
+        const oMaxZ = other.z3d + otherFp.halfD;
+
+        // Check AABB overlap with small 0.2mm tolerance
+        return cMinX + 0.2 < oMaxX && cMaxX - 0.2 > oMinX && cMinZ + 0.2 < oMaxZ && cMaxZ - 0.2 > oMinZ;
+      });
+
+      if (collides) {
+        return; // Reject move into overlapping bounding box
+      }
 
       if (
         !lastTargetRef.current ||
@@ -755,11 +827,12 @@ export function Studio3DCanvas({
       else lx = 2.54;
       ly = 0;
       lz = 0;
-    } else if (comp.type === 'LED_RGB') {
-      if (pinId === 'R' || pinId === '1') lx = -3.81;
-      else if (pinId === 'C' || pinId === 'GND' || pinId === '2') lx = -1.27;
-      else if (pinId === 'G' || pinId === '3') lx = 1.27;
-      else lx = 3.81;
+    } else if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED') {
+      const p = (pinId || '').trim().toLowerCase();
+      if (p === 'r' || p === '1' || p === 'red') lx = -3.81;
+      else if (p === 'c' || p === 'cc' || p === 'com' || p === 'gnd' || p === 'cathode' || p === '2') lx = -1.27;
+      else if (p === 'g' || p === '3' || p === 'green') lx = 1.27;
+      else lx = 3.81; // 'b', '4', 'blue'
       ly = 0;
       lz = 0;
     } else if (comp.type === 'BUZZER_ACTIVE') {
@@ -831,10 +904,29 @@ export function Studio3DCanvas({
       else lx = -16.0;
       ly = 5;
       lz = pinId === 'GND' ? -2.54 : pinId === 'VCC' ? 0 : 2.54;
-    } else if (comp.type === 'LCD_1602') {
-      const pIdx = parseInt(pinId.replace(/\D/g, '')) || 1;
-      lx = -25.0 + (-19.05 + (pIdx - 1) * 2.54);
-      ly = 34.0;
+    } else if (comp.type === 'LCD_1602' || comp.type === 'DISPLAY_LCD1602') {
+      const LCD_PIN_NAMES = [
+        'VSS', 'VDD', 'V0', 'RS', 'RW', 'E',
+        'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7',
+        'A', 'K'
+      ];
+      const pClean = (pinId || '').trim();
+      const pUpper = pClean.toUpperCase();
+      let pIdx = LCD_PIN_NAMES.indexOf(pUpper) + 1;
+      if (pIdx === 0) {
+        const num = parseInt(pClean.replace(/\D/g, ''), 10);
+        if (num >= 1 && num <= 16) {
+          pIdx = num;
+        } else {
+          const aliasMap: Record<string, number> = {
+            'GND': 1, 'GROUND': 1, 'VCC': 2, '5V': 2, 'CONTRAST': 3,
+            'EN': 6, 'ENABLE': 6, 'LED+': 15, 'LEDA': 15, 'LED-': 16, 'LEDK': 16
+          };
+          pIdx = aliasMap[pUpper] || 1;
+        }
+      }
+      lx = -16.0 + (-19.05 + (pIdx - 1) * 2.54);
+      ly = 33.5;
       lz = 0;
     }
 
@@ -1444,30 +1536,32 @@ export function Studio3DCanvas({
                 {/* 3D Burnout Overheat FX & Smoke Particles */}
                 {isBurned && <BurnSmokeFX position={[0, 4.5, 0]} heightOffset={1} />}
 
-                {/* Tan Ceramic Disc Body (Charred dark if burned) */}
-                <mesh position={[0, 4.5, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[3.0, 3.0, 1.2, 24]} />
+                {/* Tan Ceramic Disc Body (Upright orientation with flat circular faces towards Z) */}
+                <mesh position={[0, 5.0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                  <cylinderGeometry args={[3.2, 3.2, 1.4, 32]} />
                   <meshStandardMaterial color={isBurned ? '#18181B' : (isSelected ? '#38BDF8' : '#D97706')} roughness={isBurned ? 0.95 : 0.6} />
                 </mesh>
 
-                {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Breadboard Holes (radius 0.38mm) */}
-                {/* Pin 1 at x = -2.54 */}
-                <mesh position={[-1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.38, 0.38, 1.74, 12]} />
+                {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Disc Body (radius 0.38mm) */}
+                {/* Pin 1 at x = -2.54: Upper angled stem emerging from inside disc [x = -1.27, y = 3.2] down to [x = -2.54, y = 1.6] */}
+                <mesh position={[-1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(-1.27, 1.6)]}>
+                  <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                <mesh position={[-2.54, -1.5, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
+                {/* Pin 1 vertical leg extending into breadboard down to y = -4.5mm */}
+                <mesh position={[-2.54, -1.45, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 6.1, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
-                {/* Pin 2 at x = 2.54 */}
-                <mesh position={[1.67, 2.0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.38, 0.38, 1.74, 12]} />
+                {/* Pin 2 at x = 2.54: Upper angled stem emerging from inside disc [x = 1.27, y = 3.2] down to [x = 2.54, y = 1.6] */}
+                <mesh position={[1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(1.27, 1.6)]}>
+                  <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                <mesh position={[2.54, -1.5, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
+                {/* Pin 2 vertical leg extending into breadboard down to y = -4.5mm */}
+                <mesh position={[2.54, -1.45, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 6.1, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
@@ -1689,7 +1783,7 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'LCD_1602') {
+          if (comp.type === 'LCD_1602' || comp.type === 'DISPLAY_LCD1602') {
             return (
               <group
                 key={comp.id}
@@ -1716,7 +1810,7 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'LED_RGB') {
+          if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED') {
             const isPowered = Boolean(simState?.on || isSimulating);
             return (
               <group
