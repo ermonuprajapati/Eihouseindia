@@ -135,9 +135,9 @@ export function TransistorTO92_3D({
               <cylinderGeometry args={[0.3, 0.3, stemHypot, 8]} />
             </mesh>
 
-            {/* Vertical shank extending from y = 1.6 down to y = -4.0 (5.6mm length, zero gap) */}
-            <mesh position={[p.x, -1.2, 0]} material={materials.silverLead}>
-              <cylinderGeometry args={[0.3, 0.3, 5.6, 8]} />
+            {/* Vertical shank extending from y = 1.6 down into breadboard holes (y = -7.0) */}
+            <mesh position={[p.x, -2.7, 0]} material={materials.silverLead}>
+              <cylinderGeometry args={[0.3, 0.3, 8.6, 8]} />
             </mesh>
 
             {/* Interactive Pin Click/Hover Target at breadboard surface (y = 0) */}

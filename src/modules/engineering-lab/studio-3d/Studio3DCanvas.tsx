@@ -22,7 +22,14 @@ import {
   Cable,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
+import { Component3D, Wire3D, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
+
+declare module '@/modules/engineering-lab/types' {
+  interface Component3D {
+    rotX?: number;
+    rotZ?: number;
+  }
+}
 import { COMPONENT_CATALOG } from '../circuit-engine/component-catalog';
 import { Breadboard3D } from './Breadboard3D';
 import {
@@ -920,6 +927,8 @@ export interface Studio3DCanvasProps {
     }
   >;
   wireCurrents?: Record<string, number>;
+  circuitWires?: CircuitWire[];
+  circuitComponents?: CircuitComponent[];
 }
 
 export function Studio3DCanvas({
@@ -940,6 +949,8 @@ export function Studio3DCanvas({
   isSimulating = false,
   simulationStates = {},
   wireCurrents = {},
+  circuitWires = [],
+  circuitComponents: _circuitComponents = [],
 }: Studio3DCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
@@ -1143,10 +1154,6 @@ export function Studio3DCanvas({
 
     const comp = components3d.find((c) => c.id === compId);
     if (!comp) return new THREE.Vector3(0, 0, 0);
-
-    const rad = ((comp.rotY || 0) * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
 
     let lx = 0;
     let ly = 0;
@@ -1359,10 +1366,16 @@ export function Studio3DCanvas({
       }
     }
 
-    const rx = lx * cos - lz * sin;
-    const rz = lx * sin + lz * cos;
+    const euler = new THREE.Euler(
+      THREE.MathUtils.degToRad(comp.rotX || 0),
+      THREE.MathUtils.degToRad(comp.rotY || 0),
+      THREE.MathUtils.degToRad(comp.rotZ || 0),
+      'XYZ'
+    );
+    const localVec = new THREE.Vector3(lx, ly, lz);
+    localVec.applyEuler(euler);
 
-    return new THREE.Vector3(comp.x3d + rx, comp.y3d + ly, comp.z3d + rz);
+    return new THREE.Vector3(comp.x3d + localVec.x, comp.y3d + localVec.y, comp.z3d + localVec.z);
   }, [components3d]);
 
   // Strictly maintain Map<holeId, occupiedBy> for all 830 breadboard holes (1 hole = 1 pin, zero stacking)
@@ -1394,6 +1407,35 @@ export function Studio3DCanvas({
           });
         } else if (c.type === 'CAPACITOR' || c.type === 'CAPACITOR_ELECTROLYTIC') {
           ['1', '2', '+', '-'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (c.type === 'LED_RGB' || c.type === 'ACTUATOR_RGB_LED') {
+          ['r', 'cc', 'g', 'b'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (c.type === 'BUZZER_ACTIVE' || c.type === 'ACTUATOR_BUZZER_ACTIVE' || c.type === 'BUZZER') {
+          ['+', '-'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (c.type === 'HC_SR04' || c.type === 'SENSOR_ULTRASONIC') {
+          ['VCC', 'TRIG', 'ECHO', 'GND'].forEach((p) => {
+            const pw = getPinWorld3D(c.id, p);
+            const h = findNearestHole830(pw.x, pw.z);
+            if (h) map.set(h.id, `${c.id}:${p}`);
+          });
+        } else if (
+          c.type === 'MODULE_BLUETOOTH_HC05' ||
+          c.type === 'BLUETOOTH' ||
+          c.type === 'HC05' ||
+          c.type.includes('BLUETOOTH')
+        ) {
+          ['STATE', 'RXD', 'TXD', 'GND', 'VCC', 'EN'].forEach((p) => {
             const pw = getPinWorld3D(c.id, p);
             const h = findNearestHole830(pw.x, pw.z);
             if (h) map.set(h.id, `${c.id}:${p}`);
@@ -1636,7 +1678,11 @@ export function Studio3DCanvas({
           const isDraggingThis = draggingCompId === comp.id;
           // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release
           const pos: [number, number, number] = [comp.x3d, isDraggingThis ? comp.y3d + 3.5 : comp.y3d, comp.z3d];
-          const rot: [number, number, number] = [0, ((comp.rotY || 0) * Math.PI) / 180, 0];
+          const rot: [number, number, number] = [
+            THREE.MathUtils.degToRad(comp.rotX || 0),
+            THREE.MathUtils.degToRad(comp.rotY || 0),
+            THREE.MathUtils.degToRad(comp.rotZ || 0),
+          ];
           const myFp = getComponentFootprint(comp.type);
           const simState = simulationStates[comp.id];
 
@@ -1929,23 +1975,23 @@ export function Studio3DCanvas({
                 </group>
 
                 {/* Realistic Radial Bent Metallic Wire Leads Seated Into Breadboard Holes (radius 0.38mm) */}
-                {/* 1. Positive Anode Lead (+) at x = -2.54, extending down to y = -5.5mm */}
+                {/* 1. Positive Anode Lead (+) at x = -2.54, extending down to y = -8.2mm */}
                 <mesh position={[-1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
                   <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                <mesh position={[-2.54, -2.0, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 6.4, 12]} />
+                <mesh position={[-2.54, -3.5, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 9.4, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
-                {/* 2. Negative Cathode Lead (-) at x = 2.54, extending down to y = -4.5mm */}
+                {/* 2. Negative Cathode Lead (-) at x = 2.54, extending down to y = -7.4mm */}
                 <mesh position={[1.77, 1.0, 0]} rotation={[0, 0, Math.PI / 2]}>
                   <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                <mesh position={[2.54, -1.6, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 5.6, 12]} />
+                <mesh position={[2.54, -3.1, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 8.6, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
@@ -2014,9 +2060,9 @@ export function Studio3DCanvas({
                   <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                {/* Pin 1 vertical leg extending into breadboard down to y = -4.5mm */}
-                <mesh position={[-2.54, -1.45, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 6.1, 12]} />
+                {/* Pin 1 vertical leg extending into breadboard down to y = -7.5mm */}
+                <mesh position={[-2.54, -2.95, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 9.1, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
@@ -2025,9 +2071,9 @@ export function Studio3DCanvas({
                   <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
-                {/* Pin 2 vertical leg extending into breadboard down to y = -4.5mm */}
-                <mesh position={[2.54, -1.45, 0]}>
-                  <cylinderGeometry args={[0.38, 0.38, 6.1, 12]} />
+                {/* Pin 2 vertical leg extending into breadboard down to y = -7.5mm */}
+                <mesh position={[2.54, -2.95, 0]}>
+                  <cylinderGeometry args={[0.38, 0.38, 9.1, 12]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
@@ -2389,24 +2435,54 @@ export function Studio3DCanvas({
             let gLevel = 0;
             let bLevel = 0;
 
-            // Direct simulation telemetry
+            // Direct simulation telemetry from MNA / SPICE engine
             if (simState && typeof simState === 'object') {
               const sAny = simState as Record<string, unknown>;
-              if (sAny.onRed) rLevel = 1.0;
-              if (sAny.onGreen) gLevel = 1.0;
-              if (sAny.onBlue) bLevel = 1.0;
-              if (typeof sAny.rLevel === 'number') rLevel = sAny.rLevel;
-              if (typeof sAny.gLevel === 'number') gLevel = sAny.gLevel;
-              if (typeof sAny.bLevel === 'number') bLevel = sAny.bLevel;
+              if (sAny.onRed) rLevel = Math.max(rLevel, typeof sAny.redBrightness === 'number' ? sAny.redBrightness : 1.0);
+              if (sAny.onGreen) gLevel = Math.max(gLevel, typeof sAny.greenBrightness === 'number' ? sAny.greenBrightness : 1.0);
+              if (sAny.onBlue) bLevel = Math.max(bLevel, typeof sAny.blueBrightness === 'number' ? sAny.blueBrightness : 1.0);
+              if (typeof sAny.rLevel === 'number') rLevel = Math.max(rLevel, sAny.rLevel);
+              if (typeof sAny.gLevel === 'number') gLevel = Math.max(gLevel, sAny.gLevel);
+              if (typeof sAny.bLevel === 'number') bLevel = Math.max(bLevel, sAny.bLevel);
+              if (typeof sAny.redBrightness === 'number' && sAny.redBrightness > 0) rLevel = Math.max(rLevel, sAny.redBrightness);
+              if (typeof sAny.greenBrightness === 'number' && sAny.greenBrightness > 0) gLevel = Math.max(gLevel, sAny.greenBrightness);
+              if (typeof sAny.blueBrightness === 'number' && sAny.blueBrightness > 0) bLevel = Math.max(bLevel, sAny.blueBrightness);
               if (sAny.channels && typeof sAny.channels === 'object') {
                 const ch = sAny.channels as Record<string, number>;
-                if (typeof ch.r === 'number') rLevel = ch.r;
-                if (typeof ch.g === 'number') gLevel = ch.g;
-                if (typeof ch.b === 'number') bLevel = ch.b;
+                if (typeof ch.r === 'number') rLevel = Math.max(rLevel, ch.r);
+                if (typeof ch.g === 'number') gLevel = Math.max(gLevel, ch.g);
+                if (typeof ch.b === 'number') bLevel = Math.max(bLevel, ch.b);
               }
             }
 
-            // Wire connection conduction tracing
+            // Circuit Schematic Wires conduction tracing
+            circuitWires?.forEach((cw) => {
+              let pin = '';
+              let otherCompId = '';
+              if (cw.fromCompId === comp.id) {
+                pin = cw.fromPinId || '';
+                otherCompId = cw.toCompId;
+              } else if (cw.toCompId === comp.id) {
+                pin = cw.toPinId || '';
+                otherCompId = cw.fromCompId;
+              }
+              if (!pin) return;
+
+              const pLower = pin.toLowerCase();
+              const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+              const otherSim = simulationStates[otherCompId];
+              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && otherSim?.on);
+
+              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
+                if (hasPower && isSimulating) rLevel = Math.max(rLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
+              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
+                if (hasPower && isSimulating) gLevel = Math.max(gLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
+              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
+                if (hasPower && isSimulating) bLevel = Math.max(bLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
+              }
+            });
+
+            // 3D Wire connection conduction tracing
             wires3d.forEach((w) => {
               let pin = '';
               let otherCompId = '';
@@ -2419,17 +2495,17 @@ export function Studio3DCanvas({
               }
               if (!pin) return;
 
-              const pUpper = pin.toUpperCase();
-              const currentA = wireCurrents?.[w.id] ?? 0;
+              const pLower = pin.toLowerCase();
+              const currentA = wireCurrents?.[w.id] ?? w.current ?? 0;
               const otherSim = simulationStates[otherCompId];
-              const hasPower = Math.abs(currentA) > 0.0005 || (otherSim?.voltage && otherSim.voltage > 1.8);
+              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on));
 
-              if (pUpper === 'R' || pUpper === '1') {
-                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) rLevel = 1.0;
-              } else if (pUpper === 'G' || pUpper === '3') {
-                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) gLevel = 1.0;
-              } else if (pUpper === 'B' || pUpper === '4') {
-                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) bLevel = 1.0;
+              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
+                if (hasPower && isSimulating) rLevel = Math.max(rLevel, 1.0);
+              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
+                if (hasPower && isSimulating) gLevel = Math.max(gLevel, 1.0);
+              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
+                if (hasPower && isSimulating) bLevel = Math.max(bLevel, 1.0);
               }
             });
 
@@ -2480,7 +2556,31 @@ export function Studio3DCanvas({
 
           if (comp.type === 'BUZZER_ACTIVE' || comp.type === 'ACTUATOR_BUZZER_ACTIVE' || comp.type === 'BUZZER' || comp.parameters?.model3d === 'buzzer_active_piezo') {
             const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
-            const isSounding = isSimulating && !isBurned && Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001) || (simState?.voltage && Math.abs(simState.voltage) > 1.5));
+            let isSounding = isSimulating && !isBurned && Boolean(
+              simState?.on ||
+              (simState?.current && Math.abs(simState.current) > 0.0005) ||
+              (simState?.voltage && Math.abs(simState.voltage) > 1.8)
+            );
+
+            // Conduction tracing from circuit wires and 3d wires
+            if (!isSounding && isSimulating && !isBurned) {
+              circuitWires?.forEach((cw) => {
+                if (cw.fromCompId === comp.id || cw.toCompId === comp.id) {
+                  const cur = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+                  if (Math.abs(cur) > 0.0005) isSounding = true;
+                  const otherId = cw.fromCompId === comp.id ? cw.toCompId : cw.fromCompId;
+                  const otherSim = simulationStates[otherId];
+                  if (otherSim?.on || (otherSim?.voltage && Math.abs(otherSim.voltage) > 2.0)) isSounding = true;
+                }
+              });
+              wires3d.forEach((w) => {
+                if (w.fromPin.compId === comp.id || w.toPin.compId === comp.id) {
+                  const cur = wireCurrents?.[w.id] ?? w.current ?? 0;
+                  if (Math.abs(cur) > 0.0005) isSounding = true;
+                }
+              });
+            }
+
             const frequency = Number(comp.parameters?.frequencyHz || comp.parameters?.frequency || 2300);
             return (
               <group
@@ -3120,99 +3220,201 @@ export function Studio3DCanvas({
 
       {/* Floating Component Action Bar when a component is selected */}
       {selectedComp && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/80 rounded-xl px-4 py-2.5 shadow-2xl z-30 font-mono text-xs flex items-center gap-3 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold uppercase text-[10px]">Part:</span>
-            <span className="text-white font-semibold">{selectedComp.label}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
-              {selectedComp.value || selectedComp.type}
-            </span>
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/80 rounded-xl px-4 py-2 shadow-2xl z-30 font-mono text-xs flex flex-col gap-2 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-[95vw]">
+          {/* Row 1: Part Info, Nudge, and Delete */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-cyan-400 font-bold uppercase text-[10px]">Part:</span>
+              <span className="text-white font-semibold">{selectedComp.label}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
+                {selectedComp.value || selectedComp.type}
+              </span>
+            </div>
+
+            <div className="h-4 w-px bg-slate-700" />
+
+            {/* Rotate 90 deg */}
+            <button
+              onClick={() => {
+                onUpdateComponent3D({
+                  ...selectedComp,
+                  rotY: ((selectedComp.rotY || 0) + 90) % 360,
+                });
+              }}
+              className="flex items-center gap-1.5 text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
+              title="Rotate 90° Clockwise [R]"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Rotate [R]</span>
+            </button>
+
+            {/* Position Nudge Controls (2.54mm breadboard pitch) */}
+            <div className="flex items-center gap-1 bg-slate-800/80 px-1 py-0.5 rounded border border-slate-700/60" title="Nudge component on workbench [Arrow Keys]">
+              <span className="text-[10px] text-slate-400 font-bold px-0.5">Nudge:</span>
+              <button
+                onClick={() => {
+                  onUpdateComponent3D({
+                    ...selectedComp,
+                    x3d: Math.round((selectedComp.x3d - 2.54) * 100) / 100,
+                  });
+                }}
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Nudge Left -2.54mm [Left Arrow]"
+              >
+                <MoveLeft className="w-3 h-3 text-cyan-400" />
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateComponent3D({
+                    ...selectedComp,
+                    x3d: Math.round((selectedComp.x3d + 2.54) * 100) / 100,
+                  });
+                }}
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Nudge Right +2.54mm [Right Arrow]"
+              >
+                <MoveRight className="w-3 h-3 text-cyan-400" />
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateComponent3D({
+                    ...selectedComp,
+                    z3d: Math.round((selectedComp.z3d - 2.54) * 100) / 100,
+                  });
+                }}
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Nudge Forward -2.54mm [Up Arrow]"
+              >
+                <MoveUp className="w-3 h-3 text-cyan-400" />
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateComponent3D({
+                    ...selectedComp,
+                    z3d: Math.round((selectedComp.z3d + 2.54) * 100) / 100,
+                  });
+                }}
+                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                title="Nudge Backward +2.54mm [Down Arrow]"
+              >
+                <MoveDown className="w-3 h-3 text-cyan-400" />
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-slate-700" />
+
+            {/* Delete Component Button */}
+            <button
+              onClick={() => {
+                onDeleteComponent3D(selectedComp.id);
+                onSelectComponent(null);
+              }}
+              className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 font-semibold cursor-pointer transition-colors ml-auto"
+              title="Delete this component and attached wires [Delete]"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete [Del]</span>
+            </button>
           </div>
 
-          <div className="h-4 w-px bg-slate-700" />
+          {/* Row 2: 3D Orientation & Free-Angle Flip Control Bar */}
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-800 text-[11px] overflow-x-auto">
+            <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider">3D Angles:</span>
 
-          {/* Rotate 90 deg */}
-          <button
-            onClick={() => {
-              onUpdateComponent3D({
-                ...selectedComp,
-                rotY: ((selectedComp.rotY || 0) + 90) % 360,
-              });
-            }}
-            className="flex items-center gap-1.5 text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
-            title="Rotate 90° Clockwise [R]"
-          >
-            <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Rotate [R]</span>
-          </button>
+            {/* Quick Action Buttons */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  const curY = selectedComp.rotY || 0;
+                  const nextY = (curY + 45) > 180 ? curY + 45 - 360 : curY + 45;
+                  onUpdateComponent3D({ ...selectedComp, rotY: nextY });
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium text-[10px] transition-colors"
+                title="Rotate +45° Yaw around Y"
+              >
+                +45°
+              </button>
+              <button
+                onClick={() => {
+                  const curX = selectedComp.rotX || 0;
+                  const nextX = curX > 0 ? curX - 180 : curX + 180;
+                  onUpdateComponent3D({ ...selectedComp, rotX: nextX });
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-medium text-[10px] transition-colors"
+                title="Flip Tilt 180° around X axis"
+              >
+                Flip X (180°)
+              </button>
+              <button
+                onClick={() => {
+                  const curY = selectedComp.rotY || 0;
+                  const nextY = curY > 0 ? curY - 180 : curY + 180;
+                  onUpdateComponent3D({ ...selectedComp, rotY: nextY });
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-medium text-[10px] transition-colors"
+                title="Flip Yaw 180° around Y axis"
+              >
+                Flip Y (180°)
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateComponent3D({ ...selectedComp, rotX: 0, rotY: 0, rotZ: 0 });
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 font-medium text-[10px] transition-colors"
+                title="Reset X, Y, Z rotations to 0°"
+              >
+                Reset
+              </button>
+            </div>
 
-          {/* Position Nudge Controls (2.54mm breadboard pitch) */}
-          <div className="flex items-center gap-1 bg-slate-800/80 px-1 py-0.5 rounded border border-slate-700/60" title="Nudge component on workbench [Arrow Keys]">
-            <span className="text-[10px] text-slate-400 font-bold px-0.5">Nudge:</span>
-            <button
-              onClick={() => {
-                onUpdateComponent3D({
-                  ...selectedComp,
-                  x3d: Math.round((selectedComp.x3d - 2.54) * 100) / 100,
-                });
-              }}
-              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-              title="Nudge Left -2.54mm [Left Arrow]"
-            >
-              <MoveLeft className="w-3 h-3 text-cyan-400" />
-            </button>
-            <button
-              onClick={() => {
-                onUpdateComponent3D({
-                  ...selectedComp,
-                  x3d: Math.round((selectedComp.x3d + 2.54) * 100) / 100,
-                });
-              }}
-              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-              title="Nudge Right +2.54mm [Right Arrow]"
-            >
-              <MoveRight className="w-3 h-3 text-cyan-400" />
-            </button>
-            <button
-              onClick={() => {
-                onUpdateComponent3D({
-                  ...selectedComp,
-                  z3d: Math.round((selectedComp.z3d - 2.54) * 100) / 100,
-                });
-              }}
-              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-              title="Nudge Forward -2.54mm [Up Arrow]"
-            >
-              <MoveUp className="w-3 h-3 text-cyan-400" />
-            </button>
-            <button
-              onClick={() => {
-                onUpdateComponent3D({
-                  ...selectedComp,
-                  z3d: Math.round((selectedComp.z3d + 2.54) * 100) / 100,
-                });
-              }}
-              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-              title="Nudge Backward +2.54mm [Down Arrow]"
-            >
-              <MoveDown className="w-3 h-3 text-cyan-400" />
-            </button>
+            <div className="h-3 w-px bg-slate-800" />
+
+            {/* Free-angle Sliders + Numeric inputs for X, Y, Z */}
+            <div className="flex items-center gap-3">
+              {(['X', 'Y', 'Z'] as const).map((axis) => {
+                const key = axis === 'X' ? 'rotX' : axis === 'Y' ? 'rotY' : 'rotZ';
+                const label = axis === 'X' ? 'X (Tilt Up/Down)' : axis === 'Y' ? 'Y (Rotate L/R)' : 'Z (Roll)';
+                const val = selectedComp[key] || 0;
+                return (
+                  <div key={axis} className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-400">{axis}:</span>
+                    <input
+                      type="range"
+                      min={-180}
+                      max={180}
+                      step={1}
+                      value={val}
+                      onChange={(e) => {
+                        const num = parseInt(e.target.value, 10);
+                        onUpdateComponent3D({
+                          ...selectedComp,
+                          [key]: isNaN(num) ? 0 : num,
+                        });
+                      }}
+                      className="w-16 h-1 accent-cyan-400 bg-slate-800 rounded cursor-pointer"
+                      title={`${label} slider (-180° to +180°)`}
+                    />
+                    <input
+                      type="number"
+                      min={-180}
+                      max={180}
+                      value={val}
+                      onChange={(e) => {
+                        const num = parseInt(e.target.value, 10);
+                        onUpdateComponent3D({
+                          ...selectedComp,
+                          [key]: isNaN(num) ? 0 : Math.max(-180, Math.min(180, num)),
+                        });
+                      }}
+                      className="w-12 text-[10px] bg-slate-900 text-cyan-300 text-center rounded border border-slate-700 px-1 py-0.5 focus:outline-none focus:border-cyan-400"
+                      title={`${label} angle in degrees`}
+                    />
+                    <span className="text-[9px] text-slate-500">°</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-
-          <div className="h-4 w-px bg-slate-700" />
-
-          {/* Delete Component Button */}
-          <button
-            onClick={() => {
-              onDeleteComponent3D(selectedComp.id);
-              onSelectComponent(null);
-            }}
-            className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 font-semibold cursor-pointer transition-colors"
-            title="Delete this component and attached wires [Delete]"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete [Del]</span>
-          </button>
         </div>
       )}
 

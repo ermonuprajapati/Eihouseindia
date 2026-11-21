@@ -132,9 +132,9 @@ export function TransistorTO220_3D({
 
         return (
           <group key={p.name}>
-            {/* Lead shank extending from y = 4.0 down to y = -4.0 (8.0mm length, zero gap) */}
-            <mesh position={[p.x, 0.0, 0.6]} material={materials.silverLead}>
-              <boxGeometry args={[0.7, 8.0, 0.5]} />
+            {/* Lead shank extending from y = 4.0 down into breadboard (y = -7.0, zero gap) */}
+            <mesh position={[p.x, -1.5, 0.6]} material={materials.silverLead}>
+              <boxGeometry args={[0.7, 11.0, 0.5]} />
             </mesh>
 
             {/* Interactive Pin Click/Hover Target at breadboard surface (y = 0) */}

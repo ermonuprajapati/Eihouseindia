@@ -630,6 +630,40 @@ export function SchematicSymbol({
         );
       }
 
+      case 'MODULE_BLUETOOTH_HC05':
+      case 'BLUETOOTH':
+      case 'HC05':
+      case 'HC06':
+      case 'RF_BLUETOOTH':
+        return (
+          <g>
+            {/* Bluetooth Breakout PCB Body */}
+            <rect x="-30" y="-25" width="60" height="50" rx="3" stroke="#0284C7" strokeWidth="2" fill="#0C4A6E" />
+            {/* Meander Antenna Trace Area */}
+            <rect x="-14" y="-23" width="28" height="6" rx="1" fill="#F59E0B" opacity="0.8" />
+            {/* Shield / RF Can */}
+            <rect x="-16" y="-12" width="32" height="20" rx="2" stroke="#64748B" strokeWidth="1" fill="#1E293B" />
+            <text x="0" y="1" fill="#38BDF8" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+              HC-05
+            </text>
+            <text x="0" y="21" fill="#94A3B8" fontSize="5.5" fontFamily="monospace" textAnchor="middle">
+              BLUETOOTH
+            </text>
+            {/* Left Pin Labels: VCC (-20), GND (-7), TXD (7), RXD (20) */}
+            <g fontSize="5.5" fontFamily="monospace" fill="#E2E8F0" fontWeight="bold" textAnchor="start">
+              <text x="-26" y="-18" fill="#EF4444">VCC</text>
+              <text x="-26" y="-5" fill="#94A3B8">GND</text>
+              <text x="-26" y="9" fill="#10B981">TXD</text>
+              <text x="-26" y="22" fill="#38BDF8">RXD</text>
+            </g>
+            {/* Right Pin Labels: STATE (-10), EN (10) */}
+            <g fontSize="5.5" fontFamily="monospace" fill="#E2E8F0" fontWeight="bold" textAnchor="end">
+              <text x="26" y="-8" fill="#F59E0B">STATE</text>
+              <text x="26" y="12" fill="#A855F7">EN</text>
+            </g>
+          </g>
+        );
+
       case 'SENSOR_ULTRASONIC':
       case 'HC_SR04':
         return (

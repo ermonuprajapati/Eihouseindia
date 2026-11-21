@@ -87,6 +87,16 @@ export function mapCircuitCompTo3DType(comp: CircuitComponent): string {
       : 'CAPACITOR';
   }
   if (type.includes('ULTRASONIC') || type.includes('SR04')) return 'HC_SR04';
+  if (
+    type.includes('BLUETOOTH') ||
+    type.includes('HC05') ||
+    type.includes('HC06') ||
+    type.includes('RF_BLUETOOTH') ||
+    model3d.includes('bluetooth') ||
+    model3d.includes('hc05')
+  ) {
+    return 'MODULE_BLUETOOTH_HC05';
+  }
   if (type.includes('SERVO')) return 'SERVO_SG90';
   if (type.includes('LCD') || type.includes('1602')) return 'LCD_1602';
   if (type.includes('BUZZER')) return 'BUZZER_ACTIVE';
@@ -141,7 +151,23 @@ export function Virtual3dStudio({
   }, []);
 
 
-  // Forensically synchronize changes made to components externally (e.g. Inspector MCU Physical Representation, Power switch, values)
+  // Helper: Strip undefined fields so parameters matches Record<string, string | number | boolean>
+  const cleanParams = (
+    params?: Record<string, string | number | boolean>,
+    model3d?: string,
+    footprint?: string,
+    packageType?: string,
+    mirrored?: boolean
+  ): Record<string, string | number | boolean> => {
+    const res: Record<string, string | number | boolean> = { ...(params || {}) };
+    if (model3d) res.model3d = model3d;
+    if (footprint) res.footprint = footprint;
+    if (packageType) res.packageType = packageType;
+    if (mirrored !== undefined) res.mirrored = mirrored;
+    return res;
+  };
+
+  // Forensically synchronize changes made to components externally (e.g. Inspector MCU Physical Representation, Power switch, values, rotation, footprint)
   useEffect(() => {
     if (independentComponents === null) return;
     setIndependentComponents((prev) => {
@@ -152,16 +178,43 @@ export function Virtual3dStudio({
         if (!matching) return c3d;
 
         const mappedType = mapCircuitCompTo3DType(matching);
-
+        const targetRot = matching.rot3d !== undefined ? matching.rot3d : (matching.rotation ?? 0);
+        const rotChanged = (c3d.rotY ?? 0) !== targetRot;
+        const rotXChanged = (c3d.rotX ?? 0) !== (matching.parameters?.rotX ?? 0);
+        const rotZChanged = (c3d.rotZ ?? 0) !== (matching.parameters?.rotZ ?? 0);
         const paramsChanged = JSON.stringify(c3d.parameters || {}) !== JSON.stringify(matching.parameters || {});
-        if (c3d.type !== mappedType || c3d.value !== matching.value || c3d.label !== matching.label || paramsChanged) {
+        const model3dChanged = c3d.parameters?.model3d !== matching.model3d;
+        const footprintChanged = c3d.parameters?.footprint !== matching.footprint;
+        const packageChanged = c3d.parameters?.packageType !== matching.packageType;
+
+        if (
+          c3d.type !== mappedType ||
+          c3d.value !== matching.value ||
+          c3d.label !== matching.label ||
+          paramsChanged ||
+          rotChanged ||
+          rotXChanged ||
+          rotZChanged ||
+          model3dChanged ||
+          footprintChanged ||
+          packageChanged
+        ) {
           changed = true;
           return {
             ...c3d,
             type: mappedType,
             value: matching.value,
             label: matching.label,
-            parameters: { ...matching.parameters },
+            rotY: targetRot,
+            rotX: typeof matching.parameters?.rotX === 'number' ? matching.parameters.rotX : (c3d.rotX || 0),
+            rotZ: typeof matching.parameters?.rotZ === 'number' ? matching.parameters.rotZ : (c3d.rotZ || 0),
+            parameters: {
+              ...(matching.parameters || {}),
+              ...(matching.model3d ? { model3d: matching.model3d } : {}),
+              ...(matching.footprint ? { footprint: matching.footprint } : {}),
+              ...(matching.packageType ? { packageType: matching.packageType } : {}),
+              ...(matching.mirrored !== undefined ? { mirrored: matching.mirrored } : {}),
+            },
           };
         }
         return c3d;
@@ -178,11 +231,19 @@ export function Virtual3dStudio({
             type: mapped,
             label: comp.label,
             value: comp.value,
-            parameters: comp.parameters || {},
+            parameters: {
+              ...(comp.parameters || {}),
+              ...(comp.model3d ? { model3d: comp.model3d } : {}),
+              ...(comp.footprint ? { footprint: comp.footprint } : {}),
+              ...(comp.packageType ? { packageType: comp.packageType } : {}),
+              ...(comp.mirrored !== undefined ? { mirrored: comp.mirrored } : {}),
+            },
             x3d: comp.x3d ?? -20,
             y3d: comp.y3d ?? 8.5,
             z3d: comp.z3d ?? 8.42,
-            rotY: comp.rot3d ?? 0,
+            rotY: comp.rot3d !== undefined ? comp.rot3d : (comp.rotation ?? 0),
+            rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+            rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
           };
         });
 
@@ -219,7 +280,9 @@ export function Virtual3dStudio({
           x3d: comp.x3d,
           y3d: comp.y3d,
           z3d: comp.z3d,
-          rotY: comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0),
+          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
         };
       }
 
@@ -233,11 +296,13 @@ export function Virtual3dStudio({
           type: mappedType,
           label: comp.label,
           value: comp.value,
-          parameters: comp.parameters || {},
+          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
           y3d: 0, // Flat on workbench
           z3d: 65, // In front of breadboard
           rotY: 0,
+          rotX: 0,
+          rotZ: 0,
         };
       }
 
@@ -250,16 +315,18 @@ export function Virtual3dStudio({
           type: mappedType,
           label: comp.label,
           value: comp.value,
-          parameters: comp.parameters || {},
+          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
           y3d: 0, // Flat on workbench
           z3d: 0,
           rotY: 0,
+          rotX: 0,
+          rotZ: 0,
         };
       }
 
       // C. Heavy Modules / Displays: Place flat on workbench table to the right (y = 0)
-      if (['HC_SR04', 'SERVO_SG90', 'LCD_1602'].includes(mappedType)) {
+      if (['HC_SR04', 'SERVO_SG90', 'LCD_1602', 'MODULE_BLUETOOTH_HC05'].includes(mappedType)) {
         const x3d = 95 + (sensorIdx % 2) * 35;
         const z3d = -35 + Math.floor(sensorIdx / 2) * 45;
         sensorIdx++;
@@ -268,11 +335,13 @@ export function Virtual3dStudio({
           type: mappedType,
           label: comp.label,
           value: comp.value,
-          parameters: comp.parameters || {},
+          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
           y3d: 0,
           z3d,
-          rotY: 0,
+          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
         };
       }
 
@@ -286,15 +355,17 @@ export function Virtual3dStudio({
           type: mappedType,
           label: comp.label,
           value: comp.value,
-          parameters: comp.parameters || {},
+          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d: colX,
           y3d: 8.5, // Resting flush on breadboard
           z3d: 0,   // Straddling center isolation trench (pins in rows E and F)
-          rotY: 0,
+          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
         };
       }
 
-      // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs):
+      // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs, RGB LED, Buzzer):
       // Assign non-overlapping, dedicated breadboard columns separated by multiple empty rows/cols:
       // Left of IC: Cols 10, 16, 22. Right of IC: Cols 38, 44, 50, 56.
       const DEDICATED_COLS = [10, 16, 22, 38, 44, 50, 56];
@@ -307,11 +378,13 @@ export function Virtual3dStudio({
         type: mappedType,
         label: comp.label,
         value: comp.value,
-        parameters: comp.parameters || {},
+        parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
         x3d: colX,
         y3d: 8.5, // Firmly plugged into breadboard holes
         z3d: isTopStrip ? -8.42 : 8.42, // Seated in terminal rows
-        rotY: 0,
+        rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+        rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+        rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
       };
     });
   }, [components]);
@@ -361,6 +434,71 @@ export function Virtual3dStudio({
       return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
+    if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED' || comp.parameters?.model3d === 'led_rgb_5mm') {
+      const p = (pinId || '').trim().toLowerCase();
+      let colOffset = 0;
+      if (p === 'r' || p === '1' || p === 'red') colOffset = -1;
+      else if (p === 'c' || p === 'cc' || p === 'com' || p === 'gnd' || p === '-' || p === '2') colOffset = 0;
+      else if (p === 'g' || p === '3' || p === 'green') colOffset = 1;
+      else if (p === 'b' || p === '4' || p === 'blue') colOffset = 2;
+      const col = centerCol + colOffset;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (
+      comp.type === 'BUZZER_ACTIVE' ||
+      comp.type === 'ACTUATOR_BUZZER_ACTIVE' ||
+      comp.type === 'BUZZER' ||
+      comp.type === 'ACTUATOR_BUZZER_PIEZO' ||
+      comp.parameters?.model3d === 'buzzer_active_piezo'
+    ) {
+      const p = (pinId || '').trim().toLowerCase();
+      const isPos = p === '+' || p === '1' || p === 'pos' || p === 'p' || p === 'anode';
+      const col = isPos ? centerCol - 1 : centerCol + 1;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
+      const p = (pinId || '').trim().toLowerCase();
+      let colOffset = 0;
+      if (p === 'vcc' || p === '1' || p === '5v') colOffset = -1;
+      else if (p === 'trig' || p === '2') colOffset = 0;
+      else if (p === 'echo' || p === '3') colOffset = 1;
+      else if (p === 'gnd' || p === '4' || p === '-') colOffset = 2;
+      const col = centerCol + colOffset;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (
+      comp.type === 'MODULE_BLUETOOTH_HC05' ||
+      comp.type === 'BLUETOOTH' ||
+      comp.type === 'HC05' ||
+      comp.type === 'HC06' ||
+      comp.type.includes('BLUETOOTH') ||
+      comp.parameters?.model3d === 'module_bluetooth_hc05'
+    ) {
+      const p = (pinId || '').trim().toLowerCase();
+      let colOffset = 0;
+      if (p === 'state' || p === '1') colOffset = -2;
+      else if (p === 'rxd' || p === 'rx' || p === '2') colOffset = -1;
+      else if (p === 'txd' || p === 'tx' || p === '3') colOffset = 0;
+      else if (p === 'gnd' || p === '4' || p === '-') colOffset = 1;
+      else if (p === 'vcc' || p === '5v' || p === '5' || p === '+') colOffset = 2;
+      else if (p === 'en' || p === 'key' || p === '6') colOffset = 3;
+      const col = centerCol + colOffset;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
+    if (comp.type === 'BJT_NPN' || comp.type === 'BJT_PNP' || comp.type === 'TRANSISTOR_NPN' || comp.type === 'TRANSISTOR_PNP') {
+      const p = (pinId || '').trim().toLowerCase();
+      let colOffset = 0;
+      if (p === 'e' || p === 'emitter' || p === '1') colOffset = -1;
+      else if (p === 'b' || p === 'base' || p === '2') colOffset = 0;
+      else if (p === 'c' || p === 'collector' || p === '3') colOffset = 1;
+      const col = centerCol + colOffset;
+      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+    }
+
     return `bb_col_${Math.max(1, Math.min(63, centerCol))}_${row}`;
   }, []);
 
@@ -402,6 +540,48 @@ export function Virtual3dStudio({
         });
       } else if (c3d.type === 'LED') {
         ['anode', 'cathode'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'LED_RGB' || c3d.type === 'ACTUATOR_RGB_LED' || c3d.parameters?.model3d === 'led_rgb_5mm') {
+        ['r', 'cc', 'g', 'b'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (
+        c3d.type === 'BUZZER_ACTIVE' ||
+        c3d.type === 'ACTUATOR_BUZZER_ACTIVE' ||
+        c3d.type === 'BUZZER' ||
+        c3d.type === 'ACTUATOR_BUZZER_PIEZO' ||
+        c3d.parameters?.model3d === 'buzzer_active_piezo'
+      ) {
+        ['+', '-'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'HC_SR04' || c3d.type === 'SENSOR_ULTRASONIC') {
+        ['vcc', 'trig', 'echo', 'gnd'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (
+        c3d.type === 'MODULE_BLUETOOTH_HC05' ||
+        c3d.type === 'BLUETOOTH' ||
+        c3d.type === 'HC05' ||
+        c3d.type.includes('BLUETOOTH') ||
+        c3d.parameters?.model3d === 'module_bluetooth_hc05'
+      ) {
+        ['state', 'rxd', 'txd', 'gnd', 'vcc', 'en'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'DIODE' || c3d.type === 'DIODE_1N4007') {
+        ['1', '2'].forEach((p) => {
+          const holeId = getBreadboardHoleForComponentPin(c3d, p);
+          if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
+        });
+      } else if (c3d.type === 'BJT_NPN' || c3d.type === 'BJT_PNP' || c3d.type === 'TRANSISTOR_NPN' || c3d.type === 'TRANSISTOR_PNP') {
+        ['e', 'b', 'c'].forEach((p) => {
           const holeId = getBreadboardHoleForComponentPin(c3d, p);
           if (holeId) occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: p });
         });
@@ -900,16 +1080,75 @@ export function Virtual3dStudio({
     }
     const comp = components.find((c) => c.id === c3d.id);
     if (comp && onUpdateComponent) {
+      const nextRot = ((((c3d.rotY % 360) + 360) % 360)) as 0 | 90 | 180 | 270;
       onUpdateComponent({
         ...comp,
         x3d: c3d.x3d,
         y3d: c3d.y3d,
         z3d: c3d.z3d,
         rot3d: c3d.rotY,
-        parameters: { ...comp.parameters, ...c3d.parameters },
+        rotation: [0, 90, 180, 270].includes(nextRot) ? nextRot : comp.rotation,
+        parameters: {
+          ...comp.parameters,
+          ...c3d.parameters,
+          rotX: c3d.rotX ?? comp.parameters?.rotX ?? 0,
+          rotY: c3d.rotY ?? comp.parameters?.rotY ?? 0,
+          rotZ: c3d.rotZ ?? comp.parameters?.rotZ ?? 0,
+        },
       });
     }
   }, [activeComponents3d, components, onUpdateComponent, onUpdateComponent3DPosition]);
+
+  const handleRotateSelected = useCallback(() => {
+    if (!selectedCompId) return;
+    const comp = activeComponents3d.find((c) => c.id === selectedCompId);
+    if (!comp) return;
+    const newRotY = ((comp.rotY || 0) + 90) % 360;
+    handleUpdateComponent3D({
+      ...comp,
+      rotY: newRotY,
+    });
+    toast.info(`Rotated ${comp.label} to ${newRotY}°`);
+  }, [selectedCompId, activeComponents3d, handleUpdateComponent3D]);
+
+  const handleMirrorSelected = useCallback(() => {
+    if (!selectedCompId) return;
+    const comp = components.find((c) => c.id === selectedCompId);
+    const c3d = activeComponents3d.find((c) => c.id === selectedCompId);
+    if (!comp || !c3d) return;
+    const nextMirrored = !comp.mirrored;
+    if (onUpdateComponent) {
+      onUpdateComponent({
+        ...comp,
+        mirrored: nextMirrored,
+        parameters: { ...comp.parameters, mirrored: nextMirrored },
+      });
+    }
+    handleUpdateComponent3D({
+      ...c3d,
+      parameters: { ...c3d.parameters, mirrored: nextMirrored },
+    });
+    toast.info(`Flipped ${comp.label} ${nextMirrored ? 'mirrored' : 'normal'}`);
+  }, [selectedCompId, components, activeComponents3d, onUpdateComponent, handleUpdateComponent3D]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'r' || e.key === 'R') {
+        if (selectedCompId) {
+          e.preventDefault();
+          handleRotateSelected();
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (selectedCompId) {
+          e.preventDefault();
+          handleMirrorSelected();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedCompId, handleRotateSelected, handleMirrorSelected]);
 
   // Delete component from 3D studio
   const handleDeleteComponent3D = useCallback((id: string) => {
@@ -1030,6 +1269,29 @@ export function Virtual3dStudio({
             </button>
           </div>
 
+          {/* Rotate / Flip Component in 3D */}
+          {selectedCompId && (
+            <div className="flex items-center gap-1 border-r border-slate-700/60 pr-1.5">
+              <button
+                type="button"
+                onClick={handleRotateSelected}
+                className="flex items-center gap-1 px-2 py-1 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-semibold rounded text-xs transition-colors cursor-pointer"
+                title="Rotate 3D Component by 90° (R key)"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Rotate (R)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleMirrorSelected}
+                className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold rounded text-xs transition-colors cursor-pointer"
+                title="Flip / Mirror 3D Component (F key)"
+              >
+                <span className="hidden sm:inline">Flip (F)</span>
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleNewBlank3D}
@@ -1101,6 +1363,8 @@ export function Virtual3dStudio({
           isSimulating={isSimulating}
           simulationStates={simulationStates}
           wireCurrents={wireCurrents}
+          circuitWires={wires}
+          circuitComponents={components}
         />
       </div>
     </div>

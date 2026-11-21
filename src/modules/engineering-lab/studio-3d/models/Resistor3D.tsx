@@ -91,8 +91,8 @@ export function Resistor3D({
         <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
       {/* Left bent leg entering straight into exact center of breadboard hole */}
-      <mesh position={[-5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 10, 12]} />
+      <mesh position={[-5.08, -2.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 13, 12]} />
       </mesh>
 
       {/* Right horizontal stem */}
@@ -100,8 +100,8 @@ export function Resistor3D({
         <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
       {/* Right bent leg entering straight into exact center of breadboard hole */}
-      <mesh position={[5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 10, 12]} />
+      <mesh position={[5.08, -2.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 13, 12]} />
       </mesh>
 
       {/* Pin 1 Clean Clickable Terminal Anchor (No chunky discs) */}

@@ -1883,6 +1883,11 @@ export function PropertiesInspector({
                         else if (pkg.id === 'mcu_nano') mappedType = 'ARDUINO_NANO';
                         else if (pkg.id === 'mcu_esp32') mappedType = 'ESP32_DEVKIT';
                         else if (pkg.id === 'mcu_pico') mappedType = 'RASPBERRY_PI_PICO';
+                        else if (pkg.id === 'bt_hc05_module') mappedType = 'MODULE_BLUETOOTH_HC05';
+                        else if (pkg.id === 'buzzer_active_5v') mappedType = 'ACTUATOR_BUZZER_ACTIVE';
+                        else if (pkg.id === 'led_rgb_5mm') mappedType = 'ACTUATOR_RGB_LED';
+                        else if (pkg.id === 'sen_hcsr04') mappedType = 'HC_SR04';
+                        else if (pkg.id === 'disp_lcd1602') mappedType = 'DISPLAY_LCD1602';
 
                         onUpdateComponent({
                           ...component,
@@ -1988,6 +1993,11 @@ export function PropertiesInspector({
                       else if (m3dVal === 'arduino_nano_v3') mappedType = 'ARDUINO_NANO';
                       else if (m3dVal.startsWith('esp32')) mappedType = 'ESP32_DEVKIT';
                       else if (m3dVal === 'raspberry_pi_pico') mappedType = 'RASPBERRY_PI_PICO';
+                      else if (m3dVal === 'module_bluetooth_hc05') mappedType = 'MODULE_BLUETOOTH_HC05';
+                      else if (m3dVal === 'buzzer_active_piezo') mappedType = 'ACTUATOR_BUZZER_ACTIVE';
+                      else if (m3dVal === 'led_rgb_5mm') mappedType = 'ACTUATOR_RGB_LED';
+                      else if (m3dVal === 'hcsr04_ultrasonic') mappedType = 'HC_SR04';
+                      else if (m3dVal === 'lcd1602_hd44780') mappedType = 'DISPLAY_LCD1602';
 
                       onUpdateComponent({
                         ...component,

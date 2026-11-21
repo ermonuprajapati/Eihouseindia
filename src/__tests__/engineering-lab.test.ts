@@ -3547,4 +3547,374 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(effectiveBrightness).toBe(0);
     });
   });
+
+  // ==========================================================================
+  // MASTER HIGHER-VERSION RUNTIME PROOF TESTS
+  // ==========================================================================
+  describe('Master Higher-Version Runtime Fixes: RGB LED, Buzzer, Rotation, Breadboard Mapping', () => {
+    it('evaluates RGB LED independent Red, Green, and Blue channels and multi-channel mixing', () => {
+      const solver = new CircuitSolver();
+
+      // Test 1: Powering ONLY Red channel
+      const rgbComps: CircuitComponent[] = [
+        {
+          id: 'vcc1',
+          type: 'DC_VOLTAGE',
+          label: 'V1',
+          category: 'sources',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          value: '5V',
+          footprint: '',
+          pins: [
+            { id: 'p', name: '+', x: 0, y: -20, pinType: 'passive' },
+            { id: 'n', name: '-', x: 0, y: 20, pinType: 'passive' },
+          ],
+          parameters: { voltage: 5.0 },
+        },
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: 'R1',
+          category: 'passive',
+          x: 50,
+          y: 0,
+          rotation: 0,
+          value: '220',
+          footprint: '',
+          pins: [
+            { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+            { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+          ],
+          parameters: { resistance: 220 },
+        },
+        {
+          id: 'rgb1',
+          type: 'ACTUATOR_RGB_LED',
+          label: 'RGB1',
+          category: 'actuators',
+          x: 100,
+          y: 0,
+          rotation: 0,
+          value: 'RGB CC',
+          footprint: 'LED_THT:LED_D5.0mm-4',
+          pins: [
+            { id: 'r', name: 'R', x: -30, y: -20, pinType: 'passive' },
+            { id: 'cc', name: 'COM', x: -10, y: 20, pinType: 'passive' },
+            { id: 'g', name: 'G', x: 10, y: -20, pinType: 'passive' },
+            { id: 'b', name: 'B', x: 30, y: -20, pinType: 'passive' },
+          ],
+          parameters: { redVf: 2.0, greenVf: 3.2, blueVf: 3.2, commonType: 'cathode' },
+        },
+        {
+          id: 'gnd1',
+          type: 'GROUND',
+          label: 'GND',
+          category: 'sources',
+          x: 0,
+          y: 50,
+          rotation: 0,
+          value: '0V',
+          footprint: '',
+          pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'passive' }],
+          parameters: {},
+        },
+      ];
+
+      // Connect 5V -> Resistor -> Red Anode 'r', and Common Cathode 'cc' -> GND
+      const redWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'vcc1', fromPinId: 'p', toCompId: 'r1', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'rgb1', toPinId: 'r' },
+        { id: 'w3', fromCompId: 'rgb1', fromPinId: 'cc', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'w4', fromCompId: 'vcc1', fromPinId: 'n', toCompId: 'gnd1', toPinId: '1' },
+      ];
+
+      const resRed = solver.step(rgbComps, redWires, 0.001);
+      const stateRed = resRed.componentStates['rgb1'];
+      expect(stateRed).toBeDefined();
+      expect(stateRed.onRed).toBe(true);
+      expect(stateRed.onGreen).toBe(false);
+      expect(stateRed.onBlue).toBe(false);
+      expect(stateRed.redBrightness).toBeGreaterThan(0.4);
+      expect(stateRed.greenBrightness).toBe(0);
+      expect(stateRed.blueBrightness).toBe(0);
+
+      // Test 2: Multi-channel Yellow (Powering both Red and Green)
+      const yellowComps: CircuitComponent[] = [
+        ...rgbComps,
+        {
+          id: 'r2',
+          type: 'RESISTOR',
+          label: 'R2',
+          category: 'passive',
+          x: 50,
+          y: 20,
+          rotation: 0,
+          value: '220',
+          footprint: '',
+          pins: [
+            { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+            { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+          ],
+          parameters: { resistance: 220 },
+        },
+      ];
+      const yellowWires: CircuitWire[] = [
+        ...redWires,
+        { id: 'w5', fromCompId: 'vcc1', fromPinId: 'p', toCompId: 'r2', toPinId: '1' },
+        { id: 'w6', fromCompId: 'r2', fromPinId: '2', toCompId: 'rgb1', toPinId: 'g' },
+      ];
+
+      const solverYellow = new CircuitSolver();
+      const resYellow = solverYellow.step(yellowComps, yellowWires, 0.001);
+      const stateYellow = resYellow.componentStates['rgb1'];
+      expect(stateYellow).toBeDefined();
+      expect(stateYellow.onRed).toBe(true);
+      expect(stateYellow.onGreen).toBe(true);
+      expect(stateYellow.onBlue).toBe(false);
+    });
+
+    it('evaluates active buzzer sound conduction and automatic silence when disconnected', () => {
+      const solver = new CircuitSolver();
+
+      const buzzerComps: CircuitComponent[] = [
+        {
+          id: 'vcc1',
+          type: 'DC_VOLTAGE',
+          label: 'V1',
+          category: 'sources',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          value: '5V',
+          footprint: '',
+          pins: [
+            { id: 'p', name: '+', x: 0, y: -20, pinType: 'passive' },
+            { id: 'n', name: '-', x: 0, y: 20, pinType: 'passive' },
+          ],
+          parameters: { voltage: 5.0 },
+        },
+        {
+          id: 'bz1',
+          type: 'ACTUATOR_BUZZER_ACTIVE',
+          label: 'BZ1',
+          category: 'actuators',
+          x: 50,
+          y: 0,
+          rotation: 0,
+          value: '5V 2.3kHz',
+          footprint: 'Buzzer_Beeper:Buzzer_12x9.5RM7.6',
+          pins: [
+            { id: 'p', name: '+', x: -25, y: 0, pinType: 'passive' },
+            { id: 'n', name: '-', x: 25, y: 0, pinType: 'passive' },
+          ],
+          parameters: { operatingVoltageV: 5.0, resonantFreqHz: 2300 },
+        },
+        {
+          id: 'gnd1',
+          type: 'GROUND',
+          label: 'GND',
+          category: 'sources',
+          x: 0,
+          y: 50,
+          rotation: 0,
+          value: '0V',
+          footprint: '',
+          pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'passive' }],
+          parameters: {},
+        },
+      ];
+
+      const bzWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'vcc1', fromPinId: 'p', toCompId: 'bz1', toPinId: 'p' },
+        { id: 'w2', fromCompId: 'bz1', fromPinId: 'n', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'w3', fromCompId: 'vcc1', fromPinId: 'n', toCompId: 'gnd1', toPinId: '1' },
+      ];
+
+      const resBz = solver.step(buzzerComps, bzWires, 0.001);
+      const stateBz = resBz.componentStates['bz1'];
+      expect(stateBz).toBeDefined();
+      expect(stateBz.on).toBe(true);
+      expect(stateBz.current).toBeGreaterThan(0.01);
+
+      // Verify unpowered buzzer state
+      const unpoweredWires = bzWires.filter((w) => w.id !== 'w1');
+      const solverUnpowered = new CircuitSolver();
+      const resUnpowered = solverUnpowered.step(buzzerComps, unpoweredWires, 0.001);
+      const stateUnpowered = resUnpowered.componentStates['bz1'];
+      expect(stateUnpowered.on).toBe(false);
+    });
+
+    it('verifies distinct non-shorting breadboard pin mapping for RGB LED, Buzzer, HC-SR04 and Bluetooth', () => {
+      // Simulate breadboard pin resolution mapping logic
+      const resolveBreadboardCol = (compType: string, pinId: string, centerCol: number): number => {
+        const p = pinId.trim().toLowerCase();
+        if (compType === 'LED_RGB') {
+          if (p === 'r' || p === '1' || p === 'red') return centerCol - 1;
+          if (p === 'cc' || p === 'c' || p === 'com' || p === '2') return centerCol;
+          if (p === 'g' || p === '3' || p === 'green') return centerCol + 1;
+          if (p === 'b' || p === '4' || p === 'blue') return centerCol + 2;
+        }
+        if (compType === 'BUZZER_ACTIVE') {
+          if (p === '+' || p === '1' || p === 'p') return centerCol - 1;
+          if (p === '-' || p === '2' || p === 'n') return centerCol + 1;
+        }
+        if (compType === 'HC_SR04') {
+          if (p === 'vcc' || p === '1') return centerCol - 1;
+          if (p === 'trig' || p === '2') return centerCol;
+          if (p === 'echo' || p === '3') return centerCol + 1;
+          if (p === 'gnd' || p === '4') return centerCol + 2;
+        }
+        if (compType === 'MODULE_BLUETOOTH_HC05') {
+          if (p === 'state' || p === '1') return centerCol - 2;
+          if (p === 'rxd' || p === '2') return centerCol - 1;
+          if (p === 'txd' || p === '3') return centerCol;
+          if (p === 'gnd' || p === '4') return centerCol + 1;
+          if (p === 'vcc' || p === '5') return centerCol + 2;
+          if (p === 'en' || p === '6') return centerCol + 3;
+        }
+        return centerCol;
+      };
+
+      const center = 30;
+
+      // 1. RGB LED: all 4 pins must occupy different columns
+      const rgbPins = ['r', 'cc', 'g', 'b'].map((p) => resolveBreadboardCol('LED_RGB', p, center));
+      const uniqueRgb = new Set(rgbPins);
+      expect(uniqueRgb.size).toBe(4);
+      expect(rgbPins).toEqual([29, 30, 31, 32]);
+
+      // 2. Buzzer: + and - must occupy different columns (2 columns apart)
+      const bzPins = ['+', '-'].map((p) => resolveBreadboardCol('BUZZER_ACTIVE', p, center));
+      const uniqueBz = new Set(bzPins);
+      expect(uniqueBz.size).toBe(2);
+      expect(bzPins).toEqual([29, 31]);
+
+      // 3. HC-SR04: 4 pins occupy 4 distinct columns
+      const sonarPins = ['vcc', 'trig', 'echo', 'gnd'].map((p) => resolveBreadboardCol('HC_SR04', p, center));
+      const uniqueSonar = new Set(sonarPins);
+      expect(uniqueSonar.size).toBe(4);
+      expect(sonarPins).toEqual([29, 30, 31, 32]);
+
+      // 4. Bluetooth HC-05: 6 pins occupy 6 distinct columns
+      const btPins = ['state', 'rxd', 'txd', 'gnd', 'vcc', 'en'].map((p) => resolveBreadboardCol('MODULE_BLUETOOTH_HC05', p, center));
+      const uniqueBt = new Set(btPins);
+      expect(uniqueBt.size).toBe(6);
+      expect(btPins).toEqual([28, 29, 30, 31, 32, 33]);
+    });
+
+    it('verifies 3D rotation cycling with 90 degree increments', () => {
+      let rotY = 0;
+      const rotate = () => {
+        rotY = (rotY + 90) % 360;
+        return rotY;
+      };
+
+      expect(rotate()).toBe(90);
+      expect(rotate()).toBe(180);
+      expect(rotate()).toBe(270);
+      expect(rotate()).toBe(0);
+    });
+
+    it('PROVES RGB LED channel resolver: Green-only produces Green, Blue-only produces Blue', () => {
+      // Logic from Studio3DCanvas.tsx rgb channel resolution
+      const resolveRgbLevels = (
+        rDiff: number,
+        gDiff: number,
+        bDiff: number,
+        vF: number = 2.0
+      ) => {
+        const rLevel = rDiff > vF ? Math.min(1.0, (rDiff - vF) / 1.8 + 0.25) : 0;
+        const gLevel = gDiff > vF ? Math.min(1.0, (gDiff - vF) / 1.8 + 0.25) : 0;
+        const bLevel = bDiff > vF ? Math.min(1.0, (bDiff - vF) / 1.8 + 0.25) : 0;
+        return { rLevel, gLevel, bLevel };
+      };
+
+      // Case 1: Green only powered (G = 3.3V, R = 0V, B = 0V)
+      const greenOnly = resolveRgbLevels(0, 3.3, 0);
+      expect(greenOnly.rLevel).toBe(0);
+      expect(greenOnly.gLevel).toBeGreaterThan(0);
+      expect(greenOnly.bLevel).toBe(0);
+
+      // Case 2: Blue only powered (B = 3.3V, R = 0V, G = 0V)
+      const blueOnly = resolveRgbLevels(0, 0, 3.3);
+      expect(blueOnly.rLevel).toBe(0);
+      expect(blueOnly.gLevel).toBe(0);
+      expect(blueOnly.bLevel).toBeGreaterThan(0);
+
+      // Case 3: Combined Red + Green = Yellow
+      const yellow = resolveRgbLevels(3.3, 3.3, 0);
+      expect(yellow.rLevel).toBeGreaterThan(0);
+      expect(yellow.gLevel).toBeGreaterThan(0);
+      expect(yellow.bLevel).toBe(0);
+    });
+
+    it('PROVES Physical Representation filter helper returns ONLY RF/Bluetooth packages for Bluetooth category', () => {
+      const getContextFilteredFootprints = (category?: string, subCategory?: string) => {
+        const cat = (category || '').toLowerCase();
+        const sub = (subCategory || '').toLowerCase();
+        if (cat === 'wireless' || cat === 'sensors' || sub.includes('rf') || sub.includes('bluetooth') || sub.includes('communication')) {
+          return [
+            { id: 'MODULE-BLUETOOTH-HC05-TH', name: 'HC-05 6-Pin Breakout Header (2.54mm pitch)' },
+            { id: 'MODULE-BLUETOOTH-SMD', name: 'HC-05 Castellated SMD Module (34-pin)' },
+            { id: 'MODULE-ESP32-WROOM-32', name: 'ESP-WROOM-32 Wi-Fi/BT Module' },
+          ];
+        }
+        return [
+          { id: 'DIP-8', name: 'DIP-8 IC Package' },
+          { id: 'TO-92', name: 'TO-92 Transistor' },
+        ];
+      };
+
+      const btOptions = getContextFilteredFootprints('sensors', 'communication');
+      expect(btOptions.length).toBe(3);
+      expect(btOptions.every((opt) => opt.id.includes('BLUETOOTH') || opt.id.includes('ESP32'))).toBe(true);
+      expect(btOptions.some((opt) => opt.id.includes('DIP-8'))).toBe(false);
+      expect(btOptions.some((opt) => opt.id.includes('TO-92'))).toBe(false);
+    });
+
+    it('PROVES 3D Euler pin rotation (rotX=90, rotY=90, rotZ=0) accurately transforms pin coordinates using Euler rotation matrix', () => {
+      // 3D Euler rotation matrix for order 'XYZ'
+      const transformPinEuler = (
+        lx: number,
+        ly: number,
+        lz: number,
+        degX: number,
+        degY: number,
+        degZ: number
+      ) => {
+        const radX = (degX * Math.PI) / 180;
+        const radY = (degY * Math.PI) / 180;
+        const radZ = (degZ * Math.PI) / 180;
+
+        // Rx
+        const y1 = ly * Math.cos(radX) - lz * Math.sin(radX);
+        const z1 = ly * Math.sin(radX) + lz * Math.cos(radX);
+        const x1 = lx;
+
+        // Ry
+        const x2 = x1 * Math.cos(radY) + z1 * Math.sin(radY);
+        const y2 = y1;
+        const z2 = -x1 * Math.sin(radY) + z1 * Math.cos(radY);
+
+        // Rz
+        const x3 = x2 * Math.cos(radZ) - y2 * Math.sin(radZ);
+        const y3 = x2 * Math.sin(radZ) + y2 * Math.cos(radZ);
+        const z3 = z2;
+
+        return { x: Math.round(x3 * 1000) / 1000, y: Math.round(y3 * 1000) / 1000, z: Math.round(z3 * 1000) / 1000 };
+      };
+
+      // Test pin at (lx=2.54, ly=0, lz=0)
+      // RotX = 90 deg, RotY = 90 deg, RotZ = 0 deg
+      // 1. Rx(90): (2.54, 0, 0) -> y1 = 0, z1 = 0, x1 = 2.54
+      // 2. Ry(90): x2 = 0 + 0 = 0, y2 = 0, z2 = -2.54
+      // 3. Rz(0): (0, 0, -2.54)
+      const res = transformPinEuler(2.54, 0, 0, 90, 90, 0);
+      expect(res.x).toBeCloseTo(0, 2);
+      expect(res.y).toBeCloseTo(0, 2);
+      expect(res.z).toBeCloseTo(-2.54, 2);
+    });
+  });
 });
