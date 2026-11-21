@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Component3D, Wire3D } from '@/modules/engineering-lab/types';
+import { COMPONENT_CATALOG } from '../circuit-engine/component-catalog';
 import { Breadboard3D } from './Breadboard3D';
 import {
   BreadboardHole3D,
@@ -101,7 +102,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'ATmega328P',
     desc: 'Breadboard-friendly compact MCU with 30-pin DIP footprint',
-    defaultPos: [0, 5, 0] as [number, number, number],
+    defaultPos: [0, 8.5, 0] as [number, number, number],
     params: { mcu: 'ATmega328P', clock: '16MHz', logicVoltage: 5 },
   },
   {
@@ -123,7 +124,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'RP2040',
     desc: 'Dual ARM Cortex-M0+ 133MHz microcontroller with 40-pin breadboard-friendly layout',
-    defaultPos: [0, 5, -50] as [number, number, number],
+    defaultPos: [0, 8.5, -50] as [number, number, number],
     params: { mcu: 'RP2040', clock: '133MHz', logicVoltage: 3.3 },
   },
   {
@@ -147,7 +148,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '1kΩ',
     desc: 'Axial ceramic body with 4-band EIA color coding and bent wire leads',
-    defaultPos: [10, 5, -3.34] as [number, number, number],
+    defaultPos: [10, 8.5, -3.34] as [number, number, number],
     params: { resistance: 1000, powerRating: 0.25 },
   },
   {
@@ -158,7 +159,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '10kΩ',
     desc: '3-pin breadboard-mountable trimmer with rotating control dial',
-    defaultPos: [-30, 5, -3.34] as [number, number, number],
+    defaultPos: [-30, 8.5, -3.34] as [number, number, number],
     params: { totalResistance: 10000, wiperPosition: 0.5 },
   },
   {
@@ -169,7 +170,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '100nF',
     desc: '100nF (0.1µF) decoupling ceramic disc capacitor (Code 104)',
-    defaultPos: [25, 5, -3.34] as [number, number, number],
+    defaultPos: [25, 8.5, -3.34] as [number, number, number],
     params: { capacitance: 1e-7, maxVoltage: 50 },
   },
   {
@@ -180,7 +181,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '10µF',
     desc: 'Radial aluminum electrolytic can with white negative polarity stripe',
-    defaultPos: [35, 5, -3.34] as [number, number, number],
+    defaultPos: [35, 8.5, -3.34] as [number, number, number],
     params: { capacitance: 1e-5, maxVoltage: 25 },
   },
   {
@@ -191,7 +192,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'NO',
     desc: '4-pin SPST momentary tactile switch straddling breadboard center',
-    defaultPos: [-15, 5, 0] as [number, number, number],
+    defaultPos: [-15, 8.5, 0] as [number, number, number],
     params: { switchState: false },
   },
 
@@ -204,7 +205,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'Red',
     desc: '5mm diffused domed lens with live brightness and color emission',
-    defaultPos: [0, 5, -3.34] as [number, number, number],
+    defaultPos: [0, 8.5, -3.34] as [number, number, number],
     params: { color: '#EF4444', forwardVoltage: 2.0, forwardCurrent: 0.02 },
   },
   {
@@ -215,7 +216,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'RGB',
     desc: '4-lead RGB through-hole LED with independent Red, Green, Blue control',
-    defaultPos: [50, 5, -3.34] as [number, number, number],
+    defaultPos: [50, 8.5, -3.34] as [number, number, number],
     params: { color: 'RGB', type: 'common_cathode' },
   },
   {
@@ -226,7 +227,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'NE555',
     desc: 'Classic 8-pin precision bipolar timer IC for astable & monostable pulses',
-    defaultPos: [-45, 5, 0] as [number, number, number],
+    defaultPos: [-45, 8.5, 0] as [number, number, number],
     params: { ic: 'NE555', supplyMin: 4.5, supplyMax: 16 },
   },
 
@@ -272,7 +273,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '5V Piezo',
     desc: 'Continuous tone piezo sound transducer with top acoustic aperture',
-    defaultPos: [-60, 5, -3.34] as [number, number, number],
+    defaultPos: [-60, 8.5, -3.34] as [number, number, number],
     params: { frequencyHz: 2300, ratedVoltage: 5 },
   },
   {
@@ -283,7 +284,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '1000V 1A',
     desc: 'Standard silicon rectifier diode in DO-41 package with cathode band',
-    defaultPos: [15, 5, 8.42] as [number, number, number],
+    defaultPos: [15, 8.5, 8.42] as [number, number, number],
     params: { forwardV: 0.7, maxCurrent: 1.0 },
   },
   {
@@ -294,7 +295,7 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: '10k-1MΩ',
     desc: 'Light-dependent resistor with serpentine cadmium-sulfide photoconductive track',
-    defaultPos: [-20, 5, 8.42] as [number, number, number],
+    defaultPos: [-20, 8.5, 8.42] as [number, number, number],
     params: { darkResistance: 1000000, lightResistance: 10000 },
   },
   {
@@ -305,8 +306,96 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     is3DReady: true,
     value: 'SPDT',
     desc: '3-pin breadboard-friendly slide switch for DC power and signal routing',
-    defaultPos: [-5, 5, 8.42] as [number, number, number],
+    defaultPos: [-5, 8.5, 8.42] as [number, number, number],
     params: { closed: false },
+  },
+  {
+    type: 'INDUCTOR',
+    label: 'Fixed Inductor 10mH (Axial)',
+    category: 'passive',
+    subCategory: 'inductive',
+    is3DReady: true,
+    value: '10mH',
+    desc: 'Axial molded RF choke with color code rings and tinned wire leads',
+    defaultPos: [45, 8.5, 8.42] as [number, number, number],
+    params: { inductance: 0.01 },
+  },
+  {
+    type: 'BJT_NPN',
+    label: 'NPN Transistor (2N2222A / TO-92)',
+    category: 'semiconductors',
+    subCategory: 'transistors',
+    is3DReady: true,
+    value: '2N2222A',
+    desc: 'Bipolar NPN transistor in TO-92 plastic package with E-B-C pinout',
+    defaultPos: [20, 8.5, 0] as [number, number, number],
+    params: { beta: 100 },
+  },
+  {
+    type: 'BJT_PNP',
+    label: 'PNP Transistor (2N2907A / TO-92)',
+    category: 'semiconductors',
+    subCategory: 'transistors',
+    is3DReady: true,
+    value: '2N2907A',
+    desc: 'Bipolar PNP transistor in TO-92 plastic package with E-B-C pinout',
+    defaultPos: [30, 8.5, 0] as [number, number, number],
+    params: { beta: 100 },
+  },
+  {
+    type: 'MOSFET_N',
+    label: 'N-Channel Power MOSFET (IRF540N / TO-220)',
+    category: 'semiconductors',
+    subCategory: 'transistors',
+    is3DReady: true,
+    value: 'IRF540N',
+    desc: '100V 33A N-channel power MOSFET with TO-220 metal tab heatsink',
+    defaultPos: [-45, 8.5, -8.42] as [number, number, number],
+    params: { vgsTh: 3.0, rdsOn: 0.044 },
+  },
+  {
+    type: 'MOSFET_P',
+    label: 'P-Channel Power MOSFET (IRF9540N / TO-220)',
+    category: 'semiconductors',
+    subCategory: 'transistors',
+    is3DReady: true,
+    value: 'IRF9540N',
+    desc: '-100V 23A P-channel power MOSFET with TO-220 metal tab heatsink',
+    defaultPos: [-35, 8.5, -8.42] as [number, number, number],
+    params: { vgsTh: -3.0, rdsOn: 0.117 },
+  },
+  {
+    type: 'OPAMP_LM358',
+    label: 'LM358 Dual Op-Amp (DIP-8)',
+    category: 'semiconductors',
+    subCategory: 'ics',
+    is3DReady: true,
+    value: 'LM358',
+    desc: 'Dual low-power operational amplifier in standard 8-pin DIP package',
+    defaultPos: [-25, 8.5, 0] as [number, number, number],
+    params: { ic: 'LM358' },
+  },
+  {
+    type: 'OPAMP_LM741',
+    label: 'LM741 Single Op-Amp (DIP-8)',
+    category: 'semiconductors',
+    subCategory: 'ics',
+    is3DReady: true,
+    value: 'LM741',
+    desc: 'Classic general purpose operational amplifier in 8-pin DIP package',
+    defaultPos: [-10, 8.5, 0] as [number, number, number],
+    params: { ic: 'LM741' },
+  },
+  {
+    type: 'REGULATOR_7805',
+    label: 'LM7805 5V Voltage Regulator (TO-220)',
+    category: 'semiconductors',
+    subCategory: 'power',
+    is3DReady: true,
+    value: 'LM7805',
+    desc: '3-terminal 1.5A positive voltage regulator in TO-220 package',
+    defaultPos: [5, 8.5, -8.42] as [number, number, number],
+    params: { vOut: 5.0 },
   },
 ];
 
@@ -433,17 +522,35 @@ function DragFrameController({
         'ARDUINO_NANO',
         'ESP32_DEVKIT',
         'RASPBERRY_PI_PICO',
-      ].includes(comp.type) || comp.type.includes('DIP') || comp.type.includes('555') || comp.type.includes('328');
+        'OPAMP_LM358',
+        'OPAMP_LM741',
+        'COMPARATOR_LM393',
+      ].includes(comp.type) || comp.type.includes('DIP') || comp.type.includes('555') || comp.type.includes('328') || comp.type.includes('OPAMP');
 
       const isThroughHole = isDipPackage || [
         'RESISTOR',
         'LED',
         'LED_RGB',
+        'ACTUATOR_RGB_LED',
         'CAPACITOR',
         'CAPACITOR_ELECTROLYTIC',
         'DIODE',
+        'DIODE_1N4007',
+        'INDUCTOR',
+        'BJT_NPN',
+        'BJT_PNP',
+        'TRANSISTOR_NPN',
+        'TRANSISTOR_PNP',
+        'MOSFET_N',
+        'MOSFET_P',
+        'REGULATOR_7805',
+        'REGULATOR_LM317',
         'SENSOR_LDR',
         'PUSHBUTTON',
+        'BUZZER_ACTIVE',
+        'ACTUATOR_BUZZER_ACTIVE',
+        'POTENTIOMETER',
+        'SLIDE_SWITCH',
       ].includes(comp.type);
 
       if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
@@ -478,29 +585,42 @@ function DragFrameController({
       targetY = Math.round(targetY * 100) / 100;
       targetZ = Math.round(targetZ * 100) / 100;
 
-      // 2D AABB Footprint Collision Guard against other components on the same surface
+      // Smooth Sliding 2D AABB Footprint Collision Guard
       const myFp = getComponentFootprint(comp.type);
-      const cMinX = targetX - myFp.halfW;
-      const cMaxX = targetX + myFp.halfW;
-      const cMinZ = targetZ - myFp.halfD;
-      const cMaxZ = targetZ + myFp.halfD;
 
-      const collides = components3d.some((other) => {
-        if (other.id === comp.id) return false;
-        // Only guard against components at approximately the same vertical elevation (table vs breadboard)
-        if (Math.abs(other.y3d - targetY) >= 4) return false;
-        const otherFp = getComponentFootprint(other.type);
-        const oMinX = other.x3d - otherFp.halfW;
-        const oMaxX = other.x3d + otherFp.halfW;
-        const oMinZ = other.z3d - otherFp.halfD;
-        const oMaxZ = other.z3d + otherFp.halfD;
+      const checkCollisionAt = (tx: number, tz: number) => {
+        const cMinX = tx - myFp.halfW;
+        const cMaxX = tx + myFp.halfW;
+        const cMinZ = tz - myFp.halfD;
+        const cMaxZ = tz + myFp.halfD;
 
-        // Check AABB overlap with small 0.2mm tolerance
-        return cMinX + 0.2 < oMaxX && cMaxX - 0.2 > oMinX && cMinZ + 0.2 < oMaxZ && cMaxZ - 0.2 > oMinZ;
-      });
+        return components3d.some((other) => {
+          if (other.id === comp.id) return false;
+          if (Math.abs(other.y3d - targetY) >= 4) return false;
+          const otherFp = getComponentFootprint(other.type);
+          const oMinX = other.x3d - otherFp.halfW;
+          const oMaxX = other.x3d + otherFp.halfW;
+          const oMinZ = other.z3d - otherFp.halfD;
+          const oMaxZ = other.z3d + otherFp.halfD;
 
-      if (collides) {
-        return; // Reject move into overlapping bounding box
+          return cMinX + 0.2 < oMaxX && cMaxX - 0.2 > oMinX && cMinZ + 0.2 < oMaxZ && cMaxZ - 0.2 > oMinZ;
+        });
+      };
+
+      if (checkCollisionAt(targetX, targetZ)) {
+        // Try sliding along X-only (preserve previous Z)
+        const prevZ = lastTargetRef.current ? lastTargetRef.current.z : comp.z3d;
+        if (!checkCollisionAt(targetX, prevZ)) {
+          targetZ = prevZ;
+        } else {
+          // Try sliding along Z-only (preserve previous X)
+          const prevX = lastTargetRef.current ? lastTargetRef.current.x : comp.x3d;
+          if (!checkCollisionAt(prevX, targetZ)) {
+            targetX = prevX;
+          } else {
+            return; // Blocked on both axes: freeze movement cleanly
+          }
+        }
       }
 
       if (
@@ -1000,8 +1120,18 @@ export function Studio3DCanvas({
         }
       }
       lx = -16.0 + (-19.05 + (pIdx - 1) * 2.54);
-      ly = 33.5;
-      lz = 0;
+      ly = 7.8;
+      lz = -14.0;
+    }
+
+    // Fallback pin resolution for any custom or catalog component
+    if (lx === 0 && ly === 0 && lz === 0) {
+      const pNum = parseInt(pinId, 10);
+      if (!isNaN(pNum)) {
+        lx = -2.54 + (pNum - 1) * 2.54;
+        ly = 0;
+        lz = 0;
+      }
     }
 
     const rx = lx * cos - lz * sin;
@@ -1278,8 +1408,11 @@ export function Studio3DCanvas({
         {/* 3D Components */}
         {components3d.map((comp) => {
           const isSelected = selectedCompId === comp.id;
-          const pos: [number, number, number] = [comp.x3d, comp.y3d, comp.z3d];
+          const isDraggingThis = draggingCompId === comp.id;
+          // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release
+          const pos: [number, number, number] = [comp.x3d, isDraggingThis ? comp.y3d + 3.5 : comp.y3d, comp.z3d];
           const rot: [number, number, number] = [0, ((comp.rotY || 0) * Math.PI) / 180, 0];
+          const myFp = getComponentFootprint(comp.type);
           const simState = simulationStates[comp.id];
 
           const handleCompPointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -2132,7 +2265,167 @@ export function Studio3DCanvas({
             );
           }
 
-          return null;
+          // 100% Physical Representation Package-Aware Hardware Fallback Renderer
+          const catalogItem = COMPONENT_CATALOG.find((t) => t.type === comp.type);
+          const pinCount = catalogItem?.pins?.length || 2;
+          const isDipFallback = pinCount >= 4 && pinCount <= 28;
+          const is3PinTht = pinCount === 3;
+          const is2PinTht = pinCount <= 2;
+          const isModulePackage = !isDipFallback && !is3PinTht && !is2PinTht;
+
+          return (
+            <group
+              key={comp.id}
+              position={pos}
+              rotation={rot}
+              onPointerDown={handleCompPointerDown}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectComponent(comp.id);
+                onSelectWire(null);
+              }}
+            >
+              {/* Invisible Grab Hit Mesh for Effortless Pick-and-Place Acquisition */}
+              <mesh position={[0, 4.0, 0]} visible={false}>
+                <boxGeometry args={[Math.max(14, myFp.halfW * 2 + 4), 16, Math.max(12, myFp.halfD * 2 + 4)]} />
+                <meshBasicMaterial transparent opacity={0} />
+              </mesh>
+
+              {/* Selection Highlight Reticle */}
+              {isSelected && (
+                <mesh position={[0, 4.0, 0]}>
+                  <boxGeometry args={[Math.max(14, myFp.halfW * 2 + 1), 8.5, Math.max(12, myFp.halfD * 2 + 1)]} />
+                  <meshBasicMaterial color="#38BDF8" wireframe />
+                </mesh>
+              )}
+
+              {/* Dynamic Pick-and-Place Elevation Ground Reticle */}
+              {isDraggingThis && (
+                <mesh position={[0, -3.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[myFp.halfW * 0.8, myFp.halfW + 2.0, 32]} />
+                  <meshBasicMaterial color="#38BDF8" transparent opacity={0.6} side={THREE.DoubleSide} />
+                </mesh>
+              )}
+
+              {/* Sub-Branch A: 2-Pin THT (Axial/Radial Cylindrical Component) */}
+              {is2PinTht && (
+                <group position={[0, 4.5, 0]}>
+                  <mesh rotation={[0, 0, Math.PI / 2]}>
+                    <cylinderGeometry args={[2.2, 2.2, 6.0, 24]} />
+                    <meshStandardMaterial color={isSelected ? '#38BDF8' : '#334155'} roughness={0.4} />
+                  </mesh>
+                  {/* Leads */}
+                  {[-3.81, 3.81].map((px, pi) => (
+                    <group key={pi} position={[px, 0, 0]}>
+                      <mesh position={[0, -4.5, 0]}>
+                        <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                      </mesh>
+                      <mesh
+                        position={[0, -4.5, 0]}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pId = String(pi + 1);
+                          handlePinClick(comp.id, pId, getPinWorld3D(comp.id, pId));
+                        }}
+                      >
+                        <sphereGeometry args={[0.8, 8, 8]} />
+                        <meshBasicMaterial color="#38BDF8" />
+                      </mesh>
+                    </group>
+                  ))}
+                </group>
+              )}
+
+              {/* Sub-Branch B: 3-Pin THT (TO-92 / Transistor Package) */}
+              {is3PinTht && (
+                <group position={[0, 3.5, 0]}>
+                  <mesh>
+                    <cylinderGeometry args={[2.5, 2.5, 5.0, 24, 1, false, -Math.PI / 2, Math.PI]} />
+                    <meshStandardMaterial color={isSelected ? '#38BDF8' : '#18181B'} roughness={0.6} />
+                  </mesh>
+                  {[-2.54, 0, 2.54].map((px, pi) => (
+                    <group key={pi} position={[px, -3.5, 0]}>
+                      <mesh>
+                        <boxGeometry args={[0.45, 7.0, 0.45]} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                      </mesh>
+                      <mesh
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pId = String(pi + 1);
+                          handlePinClick(comp.id, pId, getPinWorld3D(comp.id, pId));
+                        }}
+                      >
+                        <sphereGeometry args={[0.8, 8, 8]} />
+                        <meshBasicMaterial color="#38BDF8" />
+                      </mesh>
+                    </group>
+                  ))}
+                </group>
+              )}
+
+              {/* Sub-Branch C: 4..28 Pin DIP IC Package */}
+              {isDipFallback && (
+                <group position={[0, 2.5, 0]}>
+                  <mesh>
+                    <boxGeometry args={[Math.max(9.5, Math.ceil(pinCount / 2) * 2.54 + 2), 3.5, 6.4]} />
+                    <meshStandardMaterial color={isSelected ? '#38BDF8' : '#18181B'} roughness={0.6} />
+                  </mesh>
+                  {/* Notch on left edge */}
+                  <mesh position={[-Math.max(9.5, Math.ceil(pinCount / 2) * 2.54 + 2) / 2 + 0.3, 1.8, 0]}>
+                    <cylinderGeometry args={[0.8, 0.8, 0.4, 16, 1, false, -Math.PI / 2, Math.PI]} />
+                    <meshBasicMaterial color="#09090B" />
+                  </mesh>
+                  {/* Pin rows on both sides */}
+                  {Array.from({ length: Math.ceil(pinCount / 2) }).map((_, i) => {
+                    const startX = -((Math.ceil(pinCount / 2) - 1) * 2.54) / 2;
+                    const px = startX + i * 2.54;
+                    return (
+                      <group key={i}>
+                        {/* Row E pin */}
+                        <mesh position={[px, -2.0, -3.34]}>
+                          <boxGeometry args={[0.65, 4.5, 0.45]} />
+                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        </mesh>
+                        {/* Row F pin */}
+                        <mesh position={[px, -2.0, 3.34]}>
+                          <boxGeometry args={[0.65, 4.5, 0.45]} />
+                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        </mesh>
+                      </group>
+                    );
+                  })}
+                </group>
+              )}
+
+              {/* Sub-Branch D: Module / Sensor / Breakout / Industrial Board */}
+              {isModulePackage && (
+                <group position={[0, 0.8, 0]}>
+                  {/* Flat FR-4 PCB */}
+                  <mesh material={new THREE.MeshStandardMaterial({ color: isSelected ? '#059669' : '#0F766E', roughness: 0.35 })}>
+                    <boxGeometry args={[Math.max(30, myFp.halfW * 2), 1.6, Math.max(20, myFp.halfD * 2)]} />
+                  </mesh>
+                  {/* Black Header Strip */}
+                  <mesh position={[0, 2.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                    <boxGeometry args={[Math.max(16, pinCount * 2.54), 2.5, 2.5]} />
+                    <meshStandardMaterial color="#18181B" roughness={0.8} />
+                  </mesh>
+                  {/* Square Pins */}
+                  {Array.from({ length: Math.min(pinCount, 16) }).map((_, pi) => {
+                    const startX = -((Math.min(pinCount, 16) - 1) * 2.54) / 2;
+                    const px = startX + pi * 2.54;
+                    return (
+                      <mesh key={pi} position={[px, 4.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                        <boxGeometry args={[0.64, 5.0, 0.64]} />
+                        <meshStandardMaterial color="#F59E0B" metalness={0.85} />
+                      </mesh>
+                    );
+                  })}
+                </group>
+              )}
+            </group>
+          );
         })}
 
         {/* 3D Jumper Wires */}

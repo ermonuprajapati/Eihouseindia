@@ -758,27 +758,35 @@ export function SchematicSymbol({
       case 'LCD_1602':
         return (
           <g>
-            <rect x="-45" y="-25" width="90" height="50" rx="3" stroke="#047857" strokeWidth="2" fill="#064E3B" />
-            <rect x="-38" y="-16" width="76" height="26" rx="2" fill="#022C22" stroke="#059669" />
+            <rect x="-48" y="-28" width="96" height="56" rx="3" stroke="#047857" strokeWidth="2" fill="#064E3B" />
+            <rect x="-38" y="-14" width="76" height="24" rx="2" fill="#022C22" stroke="#059669" />
             <text x="0" y="-2" fill="#34D399" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
               EI HOUSE LAB
             </text>
-            <text x="0" y="7" fill="#6EE7B7" fontSize="7" fontFamily="monospace" textAnchor="middle">
-              LCD 16x2 I2C
+            <text x="0" y="6" fill="#6EE7B7" fontSize="6.5" fontFamily="monospace" textAnchor="middle">
+              LCD 16x2 (HD44780)
             </text>
-            {/* Left pins: VSS, VDD, RS, EN */}
-            <g fontSize="6" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold">
-              <text x="-42" y="-18">VSS</text>
-              <text x="-42" y="-8">VDD</text>
-              <text x="-42" y="2">RS</text>
-              <text x="-42" y="12">EN</text>
+            {/* Full 16 Hardware Pins: Left side (Power & Control: VSS, VDD, V0, RS, RW, E, A, K) */}
+            <g fontSize="5.5" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold">
+              <text x="-45" y="-20">1:VSS</text>
+              <text x="-45" y="-14">2:VDD</text>
+              <text x="-45" y="-8">3:V0</text>
+              <text x="-45" y="-2">4:RS</text>
+              <text x="-45" y="4">5:RW</text>
+              <text x="-45" y="10">6:E</text>
+              <text x="-45" y="16">15:A</text>
+              <text x="-45" y="22">16:K</text>
             </g>
-            {/* Right pins: D4, D5, D6, D7 */}
-            <g fontSize="6" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold" textAnchor="end">
-              <text x="42" y="-18">D4</text>
-              <text x="42" y="-8">D5</text>
-              <text x="42" y="2">D6</text>
-              <text x="42" y="12">D7</text>
+            {/* Full 16 Hardware Pins: Right side (8-bit Data Bus: D0..D7) */}
+            <g fontSize="5.5" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold" textAnchor="end">
+              <text x="45" y="-20">7:D0</text>
+              <text x="45" y="-14">8:D1</text>
+              <text x="45" y="-8">9:D2</text>
+              <text x="45" y="-2">10:D3</text>
+              <text x="45" y="4">11:D4</text>
+              <text x="45" y="10">12:D5</text>
+              <text x="45" y="16">13:D6</text>
+              <text x="45" y="22">14:D7</text>
             </g>
           </g>
         );
@@ -1838,8 +1846,8 @@ export function SchematicSymbol({
   const halfW = compW / 2;
   const halfH = compH / 2;
 
-  // Tight label offset right next to the component body without floating into empty space
-  const labelOffsetY = isMcu ? -(halfH + 8) : -(Math.min(halfH, 22) + 6);
+  // Professional EDA standard label clearance: never overlaps component body or terminal pins
+  const labelOffsetY = isMcu ? -(halfH + 12) : -(Math.max(halfH, 18) + 9);
 
   return (
     <div
@@ -1874,17 +1882,26 @@ export function SchematicSymbol({
         {renderSymbolGraphic()}
       </svg>
 
-      {/* Standard Reference Designator & Nominal Value Labels (Tight to body, counter-rotated to stay readable) */}
+      {/* 1. Component Reference Designator (Cleanly ABOVE symbol bounding box, zero overlap) */}
       <div
-        className="absolute left-1/2 top-1/2 flex flex-col items-center pointer-events-none whitespace-nowrap z-20"
+        className="absolute left-1/2 top-1/2 flex items-center justify-center pointer-events-none whitespace-nowrap z-20"
         style={{
-          transform: `translate(-50%, calc(-50% + ${labelOffsetY}px)) rotate(${-rotation}deg)`,
+          transform: `translate(-50%, calc(-50% - ${halfH + 12}px)) rotate(${-rotation}deg)`,
         }}
       >
-        <span className="font-mono text-[11px] font-bold text-emerald-400 tracking-wide drop-shadow-sm leading-tight">
+        <span className="font-mono text-[11px] font-bold text-emerald-400 tracking-wide drop-shadow-sm leading-tight bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800">
           {designator}
         </span>
-        <span className="font-mono text-[10px] text-slate-200 font-semibold bg-slate-950/85 px-1 py-0.5 rounded border border-slate-800 leading-tight">
+      </div>
+
+      {/* 2. Component Nominal Value (Cleanly BELOW symbol bounding box, zero overlap) */}
+      <div
+        className="absolute left-1/2 top-1/2 flex items-center justify-center pointer-events-none whitespace-nowrap z-20"
+        style={{
+          transform: `translate(-50%, calc(-50% + ${halfH + 14}px)) rotate(${-rotation}deg)`,
+        }}
+      >
+        <span className="font-mono text-[10px] text-slate-200 font-semibold bg-slate-950/90 px-1.5 py-0.5 rounded border border-slate-800 shadow-sm leading-tight">
           {value}
         </span>
       </div>
