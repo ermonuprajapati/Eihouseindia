@@ -122,11 +122,9 @@ export function Wire3DTube({
   const materials = useMemo(() => {
     return {
       insulation: new THREE.MeshStandardMaterial({
-        color: isSelected ? '#F59E0B' : color,
+        color: '#EF4444',
         roughness: 0.38,
         metalness: 0.12,
-        emissive: hasCurrent ? (isSelected ? '#F59E0B' : color) : '#000000',
-        emissiveIntensity: hasCurrent ? 0.35 : (isSelected ? 0.3 : 0),
       }),
       halo: new THREE.MeshBasicMaterial({
         color: '#F59E0B',
@@ -153,7 +151,20 @@ export function Wire3DTube({
         roughness: 0.15,
       }),
     };
-  }, [color, isSelected, hasCurrent]);
+  }, []);
+
+  useEffect(() => {
+    materials.insulation.color.set(isSelected ? '#F59E0B' : color);
+    materials.insulation.emissive.set(hasCurrent ? (isSelected ? '#F59E0B' : color) : '#000000');
+    materials.insulation.emissiveIntensity = hasCurrent ? 0.35 : (isSelected ? 0.3 : 0);
+    materials.insulation.needsUpdate = true;
+  }, [materials, color, isSelected, hasCurrent]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(materials).forEach((m) => m.dispose());
+    };
+  }, [materials]);
 
   return (
     <group>

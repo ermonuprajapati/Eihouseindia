@@ -574,6 +574,7 @@ export function EngineeringLabApp() {
     let lastSerialFlush = performance.now();
     let lastFrameTime = performance.now();
     let simAccumulator = 0;
+    let lastNodeVoltages: Record<string, number> = {};
     const pendingSerialLines: string[] = [];
 
     const loop = () => {
@@ -591,11 +592,36 @@ export function EngineeringLabApp() {
           const dhtComp = project.components.find((c) => c.type === 'SENSOR_DHT11');
           const ldrComp = project.components.find((c) => c.type === 'SENSOR_LDR');
 
+          const mcuComp = project.components.find((c) =>
+            c.type.startsWith('ARDUINO_') ||
+            c.type.startsWith('ESP32') ||
+            c.type.startsWith('STM32') ||
+            c.type.startsWith('RASPBERRY_PI_PICO') ||
+            c.type === 'MCU_ARDUINO_UNO' ||
+            c.type.includes('MCU')
+          );
+
+          const pinVoltages: Record<string, number> = {};
+          if (mcuComp && mcuComp.pins && solverRef.current) {
+            for (const pin of mcuComp.pins) {
+              if (solverRef.current.getNetForPin(mcuComp.id, pin.id)) {
+                const v = solverRef.current.getPinVoltage(mcuComp.id, pin.id, lastNodeVoltages);
+                pinVoltages[pin.id] = v;
+                const stripped = pin.id.replace(/^[D|GP|GPIO]/, '');
+                if (stripped && stripped !== pin.id) {
+                  pinVoltages[stripped] = v;
+                }
+              }
+            }
+          }
+
           const mcuRes = mcuRef.current.executeCycle(curFirmware, {
             distanceCm: Number(sonarComp?.parameters?.distanceCm ?? 45.0),
             temperatureC: Number(dhtComp?.parameters?.temperatureC ?? 24.0),
             humidityPercent: Number(dhtComp?.parameters?.humidityPercent ?? 45.0),
             lightLux: Number(ldrComp?.parameters?.lightLux ?? 350.0),
+            isPowered: Boolean(mcuComp?.parameters?.usbPlugged !== false || mcuComp?.parameters?.dcJackPlugged === true),
+            pinVoltages,
           });
 
           currentGpioStates = mcuRes.gpioUpdates;
@@ -630,6 +656,9 @@ export function EngineeringLabApp() {
                 ? [...(result.faults || []), ...stepRes.faults]
                 : result.faults,
             };
+          }
+          if (stepRes && stepRes.nodeVoltages) {
+            lastNodeVoltages = stepRes.nodeVoltages;
           }
           simAccumulator -= SUB_STEP;
           stepCount++;

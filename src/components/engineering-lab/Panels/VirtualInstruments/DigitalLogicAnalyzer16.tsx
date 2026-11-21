@@ -79,40 +79,256 @@ export function DigitalLogicAnalyzer16({
     return list;
   }, [components, waveformData]);
 
-  // Decode mock UART / I2C / SPI / PWM packets from simulated timing
+  // Decode genuine UART / I2C / SPI / PWM bitstreams from real sampled channel voltages
   const decodedPackets = useMemo(() => {
+    if (protocolDecoder === 'none') return [];
+
+    const getChannelBits = (ch: number): { time: number; bit: number }[] => {
+      const explicitPin = channelPinMap[ch];
+      const keys = Object.keys(activeWaveformData);
+      const waveKey = explicitPin && activeWaveformData[explicitPin] ? explicitPin : keys[ch % Math.max(1, keys.length)];
+      const pts = waveKey ? activeWaveformData[waveKey] : undefined;
+      if (!pts || pts.length < 2) return [];
+      return pts.map((p) => ({ time: p.time, bit: p.value >= logicThreshold ? 1 : 0 }));
+    };
+
+    const getBitAt = (stream: { time: number; bit: number }[], t: number): number => {
+      let low = 0;
+      let high = stream.length - 1;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (stream[mid].time < t) low = mid + 1;
+        else high = mid - 1;
+      }
+      const idx = Math.min(stream.length - 1, Math.max(0, low));
+      return stream[idx].bit;
+    };
+
     if (protocolDecoder === 'uart') {
-      return [
-        { time: '0.012s', raw: '0x48', char: "'H'", parity: 'OK' },
-        { time: '0.024s', raw: '0x45', char: "'E'", parity: 'OK' },
-        { time: '0.036s', raw: '0x4C', char: "'L'", parity: 'OK' },
-        { time: '0.048s', raw: '0x4C', char: "'L'", parity: 'OK' },
-        { time: '0.060s', raw: '0x4F', char: "'O'", parity: 'OK' },
-        { time: '0.072s', raw: '0x21', char: "'!'", parity: 'OK' },
-      ];
+      const rxCh = triggerCh < channelCount ? triggerCh : 0;
+      const rx = getChannelBits(rxCh);
+      if (rx.length < 12) return [];
+
+      // Determine bit period from shortest pulse duration
+      let minPulse = Infinity;
+      let runStart = 0;
+      for (let i = 1; i < rx.length; i++) {
+        if (rx[i].bit !== rx[i - 1].bit) {
+          const dt = rx[i].time - rx[runStart].time;
+          if (dt > 1e-7 && dt < minPulse) {
+            minPulse = dt;
+          }
+          runStart = i;
+        }
+      }
+      if (!Number.isFinite(minPulse) || minPulse <= 1e-7) return [];
+      const bitPeriod = minPulse;
+
+      const packets: { time: string; raw: string; char: string; parity: string }[] = [];
+      let i = 1;
+
+      while (i < rx.length) {
+        // Detect falling edge: IDLE(1) -> START(0)
+        if (rx[i - 1].bit === 1 && rx[i].bit === 0) {
+          const tStart = rx[i].time;
+          // Verify center of START bit is low
+          const startCenter = getBitAt(rx, tStart + 0.5 * bitPeriod);
+          if (startCenter === 0) {
+            let byteVal = 0;
+            let valid = true;
+
+            // Sample 8 data bits LSB-first
+            for (let b = 0; b < 8; b++) {
+              const sampleTime = tStart + (1.5 + b) * bitPeriod;
+              if (sampleTime > rx[rx.length - 1].time) {
+                valid = false;
+                break;
+              }
+              const bit = getBitAt(rx, sampleTime);
+              byteVal |= (bit << b);
+            }
+
+            // Verify STOP bit is high
+            const stopTime = tStart + 9.5 * bitPeriod;
+            if (valid && stopTime <= rx[rx.length - 1].time) {
+              const stopBit = getBitAt(rx, stopTime);
+              if (stopBit === 1) {
+                const hex = `0x${byteVal.toString(16).toUpperCase().padStart(2, '0')}`;
+                const charRep = byteVal >= 32 && byteVal <= 126 ? `'${String.fromCharCode(byteVal)}'` : `[${byteVal}]`;
+                packets.push({
+                  time: `${tStart.toFixed(4)}s`,
+                  raw: hex,
+                  char: charRep,
+                  parity: 'OK',
+                });
+                // Advance past frame
+                while (i < rx.length && rx[i].time < stopTime + 0.5 * bitPeriod) {
+                  i++;
+                }
+                continue;
+              }
+            }
+          }
+        }
+        i++;
+      }
+      return packets;
     }
+
     if (protocolDecoder === 'i2c') {
-      return [
-        { time: '0.015s', raw: '0x3C', char: 'ADDR [0x3C W]', parity: 'ACK' },
-        { time: '0.028s', raw: '0x00', char: 'REG [COMMAND]', parity: 'ACK' },
-        { time: '0.041s', raw: '0xAF', char: 'DATA [DISPLAY ON]', parity: 'ACK' },
-      ];
+      const sda = getChannelBits(0);
+      const scl = getChannelBits(1);
+      if (sda.length < 10 || scl.length < 10) return [];
+
+      let inFrame = false;
+      let currentBits: number[] = [];
+      let isAddressPhase = true;
+      const packets: { time: string; raw: string; char: string; parity: string }[] = [];
+
+      for (let i = 1; i < scl.length; i++) {
+        const t = scl[i].time;
+        const sdaPrev = getBitAt(sda, scl[i - 1].time);
+        const sdaCurr = getBitAt(sda, t);
+        const sclPrev = scl[i - 1].bit;
+        const sclCurr = scl[i].bit;
+
+        // START condition: SDA falling while SCL is HIGH
+        if (sclPrev === 1 && sclCurr === 1 && sdaPrev === 1 && sdaCurr === 0) {
+          inFrame = true;
+          currentBits = [];
+          isAddressPhase = true;
+          continue;
+        }
+
+        // STOP condition: SDA rising while SCL is HIGH
+        if (sclPrev === 1 && sclCurr === 1 && sdaPrev === 0 && sdaCurr === 1) {
+          inFrame = false;
+          currentBits = [];
+          continue;
+        }
+
+        // Sample on SCL rising edge (0 -> 1)
+        if (inFrame && sclPrev === 0 && sclCurr === 1) {
+          currentBits.push(sdaCurr);
+          if (currentBits.length === 9) {
+            const byteBits = currentBits.slice(0, 8);
+            const ackBit = currentBits[8];
+            let val = 0;
+            for (let b = 0; b < 8; b++) {
+              val = (val << 1) | byteBits[b];
+            }
+            const ackStr = ackBit === 0 ? 'ACK' : 'NACK';
+            const hex = `0x${val.toString(16).toUpperCase().padStart(2, '0')}`;
+
+            if (isAddressPhase) {
+              const addr = val >> 1;
+              const rw = (val & 1) === 1 ? 'R' : 'W';
+              packets.push({
+                time: `${t.toFixed(4)}s`,
+                raw: hex,
+                char: `ADDR [0x${addr.toString(16).toUpperCase()} ${rw}]`,
+                parity: ackStr,
+              });
+              isAddressPhase = false;
+            } else {
+              const charRep = val >= 32 && val <= 126 ? `DATA ['${String.fromCharCode(val)}']` : `DATA [${hex}]`;
+              packets.push({
+                time: `${t.toFixed(4)}s`,
+                raw: hex,
+                char: charRep,
+                parity: ackStr,
+              });
+            }
+            currentBits = [];
+          }
+        }
+      }
+      return packets;
     }
+
     if (protocolDecoder === 'spi') {
-      return [
-        { time: '0.010s', raw: '0x06', char: 'WREN (0x06)', parity: 'OK' },
-        { time: '0.022s', raw: '0x02', char: 'WRITE (0x02)', parity: 'OK' },
-        { time: '0.034s', raw: '0xAA', char: 'DATA (0xAA)', parity: 'OK' },
-      ];
+      const cs = getChannelBits(0);
+      const sclk = getChannelBits(1);
+      const mosi = getChannelBits(2);
+      const miso = getChannelBits(3);
+      if (cs.length < 8 || sclk.length < 8 || mosi.length < 8) return [];
+
+      let mosiBits: number[] = [];
+      let misoBits: number[] = [];
+      const packets: { time: string; raw: string; char: string; parity: string }[] = [];
+
+      for (let i = 1; i < sclk.length; i++) {
+        const t = sclk[i].time;
+        const isCsActive = getBitAt(cs, t) === 0;
+        if (!isCsActive) {
+          mosiBits = [];
+          misoBits = [];
+          continue;
+        }
+
+        // SCLK rising edge (Mode 0)
+        if (sclk[i - 1].bit === 0 && sclk[i].bit === 1) {
+          mosiBits.push(getBitAt(mosi, t));
+          misoBits.push(miso.length > 0 ? getBitAt(miso, t) : 0);
+
+          if (mosiBits.length === 8) {
+            let mosiByte = 0;
+            let misoByte = 0;
+            for (let b = 0; b < 8; b++) {
+              mosiByte = (mosiByte << 1) | mosiBits[b];
+              misoByte = (misoByte << 1) | misoBits[b];
+            }
+            const mosiHex = `0x${mosiByte.toString(16).toUpperCase().padStart(2, '0')}`;
+            const misoHex = `0x${misoByte.toString(16).toUpperCase().padStart(2, '0')}`;
+            packets.push({
+              time: `${t.toFixed(4)}s`,
+              raw: mosiHex,
+              char: `MOSI: ${mosiHex} / MISO: ${misoHex}`,
+              parity: 'OK',
+            });
+            mosiBits = [];
+            misoBits = [];
+          }
+        }
+      }
+      return packets;
     }
+
     if (protocolDecoder === 'pwm') {
-      return [
-        { time: 'CH0 (D0)', raw: '490 Hz', char: 'Duty: 64%', parity: 'PWM ~' },
-        { time: 'CH1 (D1)', raw: '980 Hz', char: 'Duty: 25%', parity: 'PWM ~' },
-      ];
+      const packets: { time: string; raw: string; char: string; parity: string }[] = [];
+      for (let ch = 0; ch < Math.min(4, channelCount); ch++) {
+        const stream = getChannelBits(ch);
+        if (stream.length < 5) continue;
+
+        let highCount = 0;
+        const crossings: number[] = [];
+        for (let i = 0; i < stream.length; i++) {
+          if (stream[i].bit === 1) highCount++;
+          if (i > 0 && stream[i - 1].bit !== stream[i].bit) {
+            crossings.push(stream[i].time);
+          }
+        }
+
+        if (crossings.length >= 2) {
+          const period = ((crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1)) * 2;
+          if (period > 1e-7) {
+            const f = 1 / period;
+            const duty = Math.round((highCount / stream.length) * 100);
+            const freqStr = f >= 1000 ? `${(f / 1000).toFixed(1)} kHz` : `${f.toFixed(0)} Hz`;
+            packets.push({
+              time: `CH${ch} (D${ch})`,
+              raw: freqStr,
+              char: `Duty: ${duty}%`,
+              parity: 'PWM ~',
+            });
+          }
+        }
+      }
+      return packets;
     }
+
     return [];
-  }, [protocolDecoder]);
+  }, [protocolDecoder, channelPinMap, activeWaveformData, logicThreshold, triggerCh, channelCount]);
 
   // Per-channel live metrics (Frequency, Pulse Width, Duty)
   const channelMetrics = useMemo(() => {
@@ -235,10 +451,9 @@ export function DigitalLogicAnalyzer16({
             }
           });
         } else {
-          // Synthetic digital level
-          const isHigh = ch % 2 === 0;
-          ctx.moveTo(0, isHigh ? highY : lowY);
-          ctx.lineTo(width, isHigh ? highY : lowY);
+          // Inactive digital baseline (0 / LOW)
+          ctx.moveTo(0, lowY);
+          ctx.lineTo(width, lowY);
         }
 
         ctx.stroke();
@@ -470,15 +685,21 @@ export function DigitalLogicAnalyzer16({
             <span className="text-slate-500">Threshold: {logicThreshold}V • Synchronous Capture</span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-[10px] font-mono pt-1">
-            {decodedPackets.map((pkt, idx) => (
-              <div key={idx} className="p-1.5 rounded bg-slate-900 border border-slate-800 flex justify-between items-center">
-                <span className="text-slate-400">{pkt.time}</span>
-                <span className="text-cyan-300 font-bold">{pkt.raw}</span>
-                <span className="text-emerald-400 font-bold">{pkt.char}</span>
-              </div>
-            ))}
-          </div>
+          {decodedPackets.length === 0 ? (
+            <div className="py-2.5 text-center text-slate-500 text-[11px] italic">
+              Idle — No valid {protocolDecoder.toUpperCase()} frames detected in captured signal
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-[10px] font-mono pt-1">
+              {decodedPackets.map((pkt, idx) => (
+                <div key={idx} className="p-1.5 rounded bg-slate-900 border border-slate-800 flex justify-between items-center">
+                  <span className="text-slate-400">{pkt.time}</span>
+                  <span className="text-cyan-300 font-bold">{pkt.raw}</span>
+                  <span className="text-emerald-400 font-bold">{pkt.char}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

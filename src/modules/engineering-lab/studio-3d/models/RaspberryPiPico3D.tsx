@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 
 export interface RaspberryPiPico3DProps {
@@ -162,6 +162,12 @@ export function RaspberryPiPico3D({
     texture.needsUpdate = true;
     return texture;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      silkscreenTexture?.dispose();
+    };
+  }, [silkscreenTexture]);
 
   const activePowered = isUsbPlugged || isPowered;
 

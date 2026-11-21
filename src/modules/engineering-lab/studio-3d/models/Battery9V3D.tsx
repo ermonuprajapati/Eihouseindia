@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 
 export interface Battery9V3DProps {
@@ -92,6 +92,12 @@ export function Battery9V3D({
     texture.needsUpdate = true;
     return texture;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      silkscreenTexture?.dispose();
+    };
+  }, [silkscreenTexture]);
 
   const P_POS: [number, number, number] = [-6.5, 48, 0];
   const P_NEG: [number, number, number] = [6.5, 48, 0];

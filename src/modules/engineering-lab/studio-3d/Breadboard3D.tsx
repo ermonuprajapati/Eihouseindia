@@ -140,6 +140,12 @@ export function Breadboard3D({
     return texture;
   }, []);
 
+  useEffect(() => {
+    return () => {
+      silkscreenTexture?.dispose();
+    };
+  }, [silkscreenTexture]);
+
   const materials = useMemo(() => {
     return {
       absBody: new THREE.MeshStandardMaterial({

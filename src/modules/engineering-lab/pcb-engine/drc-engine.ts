@@ -7,11 +7,82 @@ import { PcbLayout, PcbTrack, CircuitWire } from '../types';
 
 export interface DrcViolation {
   id: string;
-  rule: 'edge_clearance' | 'min_track_width' | 'track_clearance' | 'pad_clearance' | 'unrouted_nets' | 'hole_clearance';
+  rule: 'edge_clearance' | 'min_track_width' | 'track_clearance' | 'pad_clearance' | 'unrouted_nets' | 'hole_clearance' | 'annular_ring';
   message: string;
   severity: 'error' | 'warning';
   targetId?: string;
   location?: { x: number; y: number };
+}
+
+/**
+ * 2D Geometric Helper Functions for IPC Clearance & Crossing Detection
+ */
+function pointToSegmentDistance(
+  p: { x: number; y: number },
+  s1: { x: number; y: number },
+  s2: { x: number; y: number }
+): number {
+  const dx = s2.x - s1.x;
+  const dy = s2.y - s1.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(p.x - s1.x, p.y - s1.y);
+  const t = Math.max(0, Math.min(1, ((p.x - s1.x) * dx + (p.y - s1.y) * dy) / lenSq));
+  const projX = s1.x + t * dx;
+  const projY = s1.y + t * dy;
+  return Math.hypot(p.x - projX, p.y - projY);
+}
+
+function orientation(p: { x: number; y: number }, q: { x: number; y: number }, r: { x: number; y: number }): number {
+  const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+  if (Math.abs(val) < 1e-9) return 0; // Collinear
+  return val > 0 ? 1 : 2; // Clockwise or Counterclockwise
+}
+
+function onSegment(p: { x: number; y: number }, q: { x: number; y: number }, r: { x: number; y: number }): boolean {
+  return (
+    q.x <= Math.max(p.x, r.x) + 1e-9 &&
+    q.x >= Math.min(p.x, r.x) - 1e-9 &&
+    q.y <= Math.max(p.y, r.y) + 1e-9 &&
+    q.y >= Math.min(p.y, r.y) - 1e-9
+  );
+}
+
+function segmentsIntersect(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number }
+): boolean {
+  const o1 = orientation(a1, a2, b1);
+  const o2 = orientation(a1, a2, b2);
+  const o3 = orientation(b1, b2, a1);
+  const o4 = orientation(b1, b2, a2);
+
+  // General intersecting case
+  if (o1 !== o2 && o3 !== o4) return true;
+
+  // Special collinear cases
+  if (o1 === 0 && onSegment(a1, b1, a2)) return true;
+  if (o2 === 0 && onSegment(a1, b2, a2)) return true;
+  if (o3 === 0 && onSegment(b1, a1, b2)) return true;
+  if (o4 === 0 && onSegment(b1, a2, b2)) return true;
+
+  return false;
+}
+
+function segmentToSegmentDistance(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number }
+): number {
+  if (segmentsIntersect(a1, a2, b1, b2)) return 0;
+  return Math.min(
+    pointToSegmentDistance(a1, b1, b2),
+    pointToSegmentDistance(a2, b1, b2),
+    pointToSegmentDistance(b1, a1, a2),
+    pointToSegmentDistance(b2, a1, a2)
+  );
 }
 
 export class DrcEngine {
@@ -102,23 +173,40 @@ export class DrcEngine {
       for (let j = i + 1; j < tracks.length; j++) {
         const t1 = tracks[i];
         const t2 = tracks[j];
-        if (t1.layer === t2.layer && (!t1.netId || !t2.netId || t1.netId !== t2.netId)) {
-          // Midpoint approximate distance check
-          const m1 = { x: (t1.from.x + t1.to.x) / 2, y: (t1.from.y + t1.to.y) / 2 };
-          const m2 = { x: (t2.from.x + t2.to.x) / 2, y: (t2.from.y + t2.to.y) / 2 };
-          const dist = Math.hypot(m1.x - m2.x, m1.y - m2.y);
-          const allowedDist = (t1.widthMm + t2.widthMm) / 2 + minClearanceMm;
+        if (t1.layer !== t2.layer) continue;
+        if (t1.netId && t2.netId && t1.netId === t2.netId) continue;
 
-          if (dist < allowedDist && dist > 0.001) {
-            violations.push({
-              id: `drc_clearance_${t1.id}_${t2.id}`,
-              rule: 'track_clearance',
-              message: `Clearance between track ${t1.id} and ${t2.id} is below ${minClearanceMm}mm on ${t1.layer === 'top_copper' ? 'F.Cu' : 'B.Cu'}.`,
-              severity: 'error',
-              targetId: t1.id,
-              location: m1,
-            });
-          }
+        // Skip consecutive segments of an un-netted manual polyline sharing an endpoint within 0.02mm
+        const shareEndpoint =
+          Math.hypot(t1.from.x - t2.from.x, t1.from.y - t2.from.y) < 0.02 ||
+          Math.hypot(t1.from.x - t2.to.x, t1.from.y - t2.to.y) < 0.02 ||
+          Math.hypot(t1.to.x - t2.from.x, t1.to.y - t2.from.y) < 0.02 ||
+          Math.hypot(t1.to.x - t2.to.x, t1.to.y - t2.to.y) < 0.02;
+        if (!t1.netId && !t2.netId && shareEndpoint) continue;
+
+        const dist = segmentToSegmentDistance(t1.from, t1.to, t2.from, t2.to);
+        const allowedDist = (t1.widthMm + t2.widthMm) / 2 + minClearanceMm;
+        const layerName = t1.layer === 'top_copper' ? 'F.Cu' : 'B.Cu';
+        const midPoint = { x: (t1.from.x + t1.to.x) / 2, y: (t1.from.y + t1.to.y) / 2 };
+
+        if (dist <= 1e-4) {
+          violations.push({
+            id: `drc_short_${t1.id}_${t2.id}`,
+            rule: 'track_clearance',
+            message: `Short circuit / crossing detected between track ${t1.id} and ${t2.id} on ${layerName}.`,
+            severity: 'error',
+            targetId: t1.id,
+            location: midPoint,
+          });
+        } else if (dist < allowedDist - 1e-4) {
+          violations.push({
+            id: `drc_clearance_${t1.id}_${t2.id}`,
+            rule: 'track_clearance',
+            message: `Clearance between track ${t1.id} and ${t2.id} (${dist.toFixed(3)}mm) is below required ${minClearanceMm}mm on ${layerName}.`,
+            severity: 'error',
+            targetId: t1.id,
+            location: midPoint,
+          });
         }
       }
     }
@@ -175,6 +263,35 @@ export class DrcEngine {
         }
       }
     }
+
+    // 5b. Through-Hole Annular Ring Check
+    pads.forEach((pad) => {
+      if (pad.holeMm && pad.holeMm > 0) {
+        const padDia =
+          pad.diameterMm ??
+          Math.min((pad as { widthMm?: number }).widthMm ?? 1.8, (pad as { heightMm?: number }).heightMm ?? 1.8);
+        const ring = (padDia - pad.holeMm) / 2;
+        if (ring < 0.05) {
+          violations.push({
+            id: `drc_ring_breakout_${pad.id}`,
+            rule: 'annular_ring',
+            message: `Pad ${pad.pinId} (${pad.componentId}) annular ring width (${ring.toFixed(3)}mm) causes drill breakout (min 0.05mm).`,
+            severity: 'error',
+            targetId: pad.id,
+            location: { x: pad.x, y: pad.y },
+          });
+        } else if (ring < 0.125) {
+          violations.push({
+            id: `drc_ring_warning_${pad.id}`,
+            rule: 'annular_ring',
+            message: `Pad ${pad.pinId} (${pad.componentId}) annular ring width (${ring.toFixed(3)}mm) is below standard fab minimum (0.125mm).`,
+            severity: 'warning',
+            targetId: pad.id,
+            location: { x: pad.x, y: pad.y },
+          });
+        }
+      }
+    });
 
     // 6. Unrouted Nets / Airwires Check (Multi-Segment Graph Connectivity)
     if (wires.length > 0 && tracks.length > 0) {

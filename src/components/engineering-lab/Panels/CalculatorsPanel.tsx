@@ -29,6 +29,20 @@ function findNearestE12(rOhms: number): number {
   return Math.round(best * Math.pow(10, exponent) * 100) / 100;
 }
 
+function findCeilE12(rOhms: number): number {
+  if (rOhms <= 0 || !isFinite(rOhms)) return 0;
+  for (let decade = 0; decade <= 7; decade++) {
+    const mult = Math.pow(10, decade);
+    for (const base of E12_SERIES) {
+      const val = Math.round(base * mult * 100) / 100;
+      if (val >= rOhms - 1e-6) {
+        return val;
+      }
+    }
+  }
+  return 10000000;
+}
+
 function formatResistance(r: number): string {
   if (r <= 0 || !isFinite(r)) return '0 Ω';
   if (r >= 1e6) return `${(r / 1e6).toFixed(2)} MΩ`;
@@ -69,9 +83,16 @@ export function CalculatorsPanel() {
     switch (ohmMode) {
       case 'VR': {
         v = (parseFloat(ohmVVal) || 0) * multV;
-        r = Math.max((parseFloat(ohmRVal) || 0) * multR, 1e-9);
-        i = v / r;
-        p = v * i;
+        const rawR = (parseFloat(ohmRVal) || 0) * multR;
+        if (rawR <= 0) {
+          r = 0;
+          i = 0;
+          p = 0;
+        } else {
+          r = rawR;
+          i = v / r;
+          p = v * i;
+        }
         break;
       }
       case 'VI': {
@@ -103,10 +124,18 @@ export function CalculatorsPanel() {
         break;
       }
       case 'RP': {
-        r = Math.max((parseFloat(ohmRVal) || 0) * multR, 1e-9);
+        const rawR = (parseFloat(ohmRVal) || 0) * multR;
         p = Math.max((parseFloat(ohmPVal) || 0) * multP, 0);
-        v = Math.sqrt(p * r);
-        i = Math.sqrt(p / r);
+        if (rawR <= 0) {
+          r = 0;
+          i = 0;
+          v = 0;
+          p = 0;
+        } else {
+          r = rawR;
+          v = Math.sqrt(p * r);
+          i = Math.sqrt(p / r);
+        }
         break;
       }
     }
@@ -129,14 +158,17 @@ export function CalculatorsPanel() {
     const vin = parseFloat(divVin) || 0;
     const r1 = parseFloat(divR1) || 0;
     const r2 = parseFloat(divR2) || 0;
-    const vout = r1 + r2 > 0 ? (vin * r2) / (r1 + r2) : 0;
-    const req = r1 + r2 > 0 ? (r1 * r2) / (r1 + r2) : 0;
-    const iTot = r1 + r2 > 0 ? vin / (r1 + r2) : 0;
+    if (r1 < 0 || r2 < 0 || r1 + r2 <= 0) {
+      return { vout: 0, req: 0, currentMa: 0, ratio: 0 };
+    }
+    const vout = (vin * r2) / (r1 + r2);
+    const req = (r1 * r2) / (r1 + r2);
+    const iTot = vin / (r1 + r2);
     return {
       vout: Math.round(vout * 1000) / 1000,
       req: Math.round(req * 10) / 10,
       currentMa: Math.round(iTot * 100000) / 100,
-      ratio: r1 + r2 > 0 ? Math.round((r2 / (r1 + r2)) * 1000) / 10 : 0,
+      ratio: Math.round((r2 / (r1 + r2)) * 1000) / 10,
     };
   };
 
@@ -148,10 +180,10 @@ export function CalculatorsPanel() {
     const ra = parseFloat(ra555) || 0;
     const rb = parseFloat(rb555) || 0;
     const c = (parseFloat(c555) || 0) * 1e-6; // convert uF to F
-    if (ra <= 0 || rb <= 0 || c <= 0) return { freq: 0, th: 0, tl: 0, period: 0, duty: 0 };
+    if (ra <= 0 || rb <= 0 || c <= 0) return { freq: 0, thSec: 0, tlSec: 0, periodSec: 0, duty: 0 };
 
-    const th = 0.693 * (ra + rb) * c;
-    const tl = 0.693 * rb * c;
+    const th = Math.LN2 * (ra + rb) * c;
+    const tl = Math.LN2 * rb * c;
     const period = th + tl;
     const freq = period > 0 ? 1 / period : 0;
     const duty = period > 0 ? (th / period) * 100 : 0;
@@ -174,25 +206,15 @@ export function CalculatorsPanel() {
     const vf = parseFloat(ledVf) || 0;
     const ifMa = parseFloat(ledIf) || 0;
     const ifA = ifMa / 1000;
-    if (vs <= vf || ifA <= 0) return { r: 0, powerMw: 0, standardE12: 0 };
+    if (vs <= vf || vf < 0 || ifA <= 0) return { rExact: 0, nearestE12: 0, powerMw: 0 };
 
     const rExact = (vs - vf) / ifA;
     const powerMw = ifA * ifA * rExact * 1000;
-
-    // Nearest standard E12 series resistor
-    const standardE12 = [100, 120, 150, 180, 220, 270, 330, 390, 470, 560, 680, 820, 1000];
-    let nearest = standardE12[0];
-    let minDiff = Infinity;
-    for (const val of standardE12) {
-      if (Math.abs(val - rExact) < minDiff) {
-        minDiff = Math.abs(val - rExact);
-        nearest = val;
-      }
-    }
+    const nearestE12 = findCeilE12(rExact);
 
     return {
       rExact: Math.round(rExact * 10) / 10,
-      nearestE12: nearest,
+      nearestE12,
       powerMw: Math.round(powerMw * 10) / 10,
     };
   };
@@ -203,7 +225,7 @@ export function CalculatorsPanel() {
   const calcRc = () => {
     const r = parseFloat(rcR) || 0;
     const c = (parseFloat(rcC) || 0) * 1e-6;
-    if (r <= 0 || c <= 0) return { tauSec: 0, fc: 0 };
+    if (r <= 0 || c <= 0) return { tauSec: 0, tauMs: 0, fcHz: 0 };
     const tau = r * c;
     const fc = 1 / (2 * Math.PI * r * c);
     return {
@@ -219,7 +241,7 @@ export function CalculatorsPanel() {
   const calcLc = () => {
     const l = (parseFloat(lcL) || 0) * 1e-3;
     const c = (parseFloat(lcC) || 0) * 1e-9;
-    if (l <= 0 || c <= 0) return { f0: 0 };
+    if (l <= 0 || c <= 0) return { f0Hz: 0, f0Khz: 0 };
     const f0 = 1 / (2 * Math.PI * Math.sqrt(l * c));
     return {
       f0Hz: Math.round(f0 * 10) / 10,
@@ -227,17 +249,29 @@ export function CalculatorsPanel() {
     };
   };
 
-  // 7. PCB Trace Width (IPC-2152) State
+  // 7. PCB Trace Width (IPC-2221) State
   const [pcbCurrent, setPcbCurrent] = useState<string>('1.5'); // 1.5 Amps
   const [pcbTempRise, setPcbTempRise] = useState<string>('10'); // 10 deg C
-  const [pcbCuOz, setPcbCuOz] = useState<string>('1'); // 1 oz / 1.37 mil
+  const [pcbCuOz, setPcbCuOz] = useState<string>('1'); // 1 oz / 1.378 mil
   const calcPcbTrace = () => {
-    const i = parseFloat(pcbCurrent) || 1.0;
-    const deltaT = parseFloat(pcbTempRise) || 10.0;
-    const cuOz = parseFloat(pcbCuOz) || 1.0;
-    const thicknessMils = cuOz * 1.37; // 1 oz = 1.37 mils = 0.035 mm
+    const i = parseFloat(pcbCurrent);
+    const deltaT = parseFloat(pcbTempRise);
+    const cuOz = parseFloat(pcbCuOz);
 
-    // IPC-2152 External layer: A = (I / (k * deltaT^0.44))^(1 / 0.725)
+    if (
+      !Number.isFinite(i) ||
+      !Number.isFinite(deltaT) ||
+      !Number.isFinite(cuOz) ||
+      i <= 0 ||
+      deltaT <= 0 ||
+      cuOz <= 0
+    ) {
+      return { extWidthMils: 0, extWidthMm: 0, intWidthMils: 0, intWidthMm: 0 };
+    }
+
+    const thicknessMils = cuOz * 1.378; // 1 oz = 1.378 mils = 0.035 mm (35 um)
+
+    // IPC-2221 External layer: A = (I / (k * deltaT^0.44))^(1 / 0.725)
     // k = 0.048 for external layer
     const kExt = 0.048;
     const areaMils2Ext = Math.pow(i / (kExt * Math.pow(deltaT, 0.44)), 1 / 0.725);
@@ -337,7 +371,7 @@ export function CalculatorsPanel() {
             }`}
           >
             <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>PCB Trace Width (IPC-2152)</span>
+            <span>PCB Trace Width (IPC-2221)</span>
           </button>
         </nav>
 
@@ -891,14 +925,14 @@ export function CalculatorsPanel() {
         {activeTab === 'pcb' && (
           <div className="max-w-xl space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-white">PCB Trace Width (IPC-2152 Standard)</h3>
+              <h3 className="text-lg font-bold text-white">PCB Trace Width (IPC-2221 Standard)</h3>
               <p className="text-xs text-slate-400 mt-1">
                 Calculates required copper trace width for target current and acceptable temperature rise.
               </p>
             </div>
 
             <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-emerald-300">
-              I = k · ΔT^0.44 · A^0.725 (IPC-2152 formulation)
+              I = k · ΔT^0.44 · A^0.725 (IPC-2221 formulation)
             </div>
 
             <div className="grid grid-cols-3 gap-4">

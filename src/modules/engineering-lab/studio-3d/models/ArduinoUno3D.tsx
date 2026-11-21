@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 
 export interface ArduinoUno3DProps {
@@ -81,7 +81,7 @@ export function ArduinoUno3D({
   const materials = useMemo(() => {
     return {
       pcb: new THREE.MeshStandardMaterial({
-        color: isSelected ? '#00A896' : '#00979D', // Arduino turquoise
+        color: '#00979D', // Arduino turquoise
         roughness: 0.3,
         metalness: 0.1,
       }),
@@ -96,7 +96,7 @@ export function ArduinoUno3D({
         roughness: 0.15,
       }),
       usbCablePvc: new THREE.MeshStandardMaterial({
-        color: usbHovered ? '#38BDF8' : '#0284C7', // Arduino blue cable jacket
+        color: '#0284C7', // Arduino blue cable jacket
         roughness: 0.4,
       }),
       barrelPlastic: new THREE.MeshStandardMaterial({
@@ -138,7 +138,12 @@ export function ArduinoUno3D({
         roughness: 0.8,
       }),
     };
-  }, [isSelected, usbHovered]);
+  }, []);
+
+  useEffect(() => {
+    materials.usbCablePvc.color.set(usbHovered ? '#38BDF8' : '#0284C7');
+    materials.pcb.color.set(isSelected ? '#00A896' : '#00979D');
+  }, [materials, usbHovered, isSelected]);
 
   const silkscreenTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
@@ -211,6 +216,13 @@ export function ArduinoUno3D({
     texture.needsUpdate = true;
     return texture;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(materials).forEach((m) => m.dispose());
+      silkscreenTexture?.dispose();
+    };
+  }, [materials, silkscreenTexture]);
 
   const activePowered = isUsbPlugged || isDcJackPlugged || isPowered;
 
