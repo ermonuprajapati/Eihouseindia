@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { BurnSmokeFX } from './BurnSmokeFX';
 
@@ -102,6 +102,12 @@ export function DipPackage3D({
     texture.needsUpdate = true;
     return texture;
   }, [partName]);
+
+  useEffect(() => {
+    return () => {
+      topTexture?.dispose();
+    };
+  }, [topTexture]);
 
   const materials = useMemo(() => {
     return {

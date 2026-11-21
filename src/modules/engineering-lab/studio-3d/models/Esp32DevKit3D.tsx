@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 
 export interface Esp32DevKit3DProps {
@@ -128,6 +128,12 @@ export function Esp32DevKit3D({
     texture.needsUpdate = true;
     return texture;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      silkscreenTexture?.dispose();
+    };
+  }, [silkscreenTexture]);
 
   const activePowered = isUsbPlugged || isPowered;
 
