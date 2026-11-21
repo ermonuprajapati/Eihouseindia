@@ -34,11 +34,17 @@ export function Resistor3D({
         color: isBurned ? '#18181B' : '#D4A373', // Charred black or light beige ceramic body
         roughness: isBurned ? 0.95 : 0.5,
         metalness: isBurned ? 0.05 : 0.1,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       silverLead: new THREE.MeshStandardMaterial({
         color: isBurned ? '#71717A' : '#E2E8F0',
         metalness: isBurned ? 0.4 : 0.95,
         roughness: isBurned ? 0.6 : 0.15,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

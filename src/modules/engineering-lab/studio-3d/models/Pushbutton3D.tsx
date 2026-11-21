@@ -28,14 +28,23 @@ export function Pushbutton3D({
         color: '#CBD5E1',
         metalness: 0.9,
         roughness: 0.2,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       bodyPlastic: new THREE.MeshStandardMaterial({
         color: '#1E293B',
         roughness: 0.5,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       buttonPlunger: new THREE.MeshStandardMaterial({
         color: '#0284C7',
         roughness: 0.3,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

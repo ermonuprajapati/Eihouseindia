@@ -25,6 +25,9 @@ export function Ldr3D({
       disc: new THREE.MeshStandardMaterial({
         color: isSelected ? '#38BDF8' : '#EA580C', // Orange/tan ceramic photocell substrate
         roughness: 0.5,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       track: new THREE.MeshBasicMaterial({
         color: '#18181B', // Dark CdS serpentine track
@@ -32,6 +35,10 @@ export function Ldr3D({
       pinSilver: new THREE.MeshStandardMaterial({
         color: '#CBD5E1',
         metalness: 0.9,
+        roughness: 0.2,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

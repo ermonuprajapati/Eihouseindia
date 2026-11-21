@@ -25,16 +25,25 @@ export function Battery9V3D({
       body: new THREE.MeshStandardMaterial({
         color: '#1E293B',
         roughness: 0.4,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       goldLabel: new THREE.MeshStandardMaterial({
         color: '#D97706',
         roughness: 0.3,
         metalness: 0.3,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       snapMetal: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
         metalness: 0.95,
         roughness: 0.15,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

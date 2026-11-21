@@ -27,10 +27,17 @@ export function Buzzer3D({
       body: new THREE.MeshStandardMaterial({
         color: isSelected ? '#38BDF8' : '#18181B', // Black cylindrical housing
         roughness: 0.35,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinSilver: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
         metalness: 0.9,
+        roughness: 0.2,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
