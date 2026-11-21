@@ -151,6 +151,50 @@ export class CircuitSolver {
   }
 
   /**
+   * Evaluates instantaneous voltage for any standard or custom periodic waveform
+   */
+  private evaluateWaveform(
+    waveform: string,
+    freqHz: number,
+    ampV: number,
+    offsetV: number,
+    dutyCycle: number | undefined,
+    phaseDeg: number | undefined,
+    timeSec: number
+  ): number {
+    const safeFreq = Number.isFinite(freqHz) ? Math.max(0.1, freqHz) : 1000;
+    const safeAmp = Number.isFinite(ampV) ? ampV : 5.0;
+    const safeOffset = Number.isFinite(offsetV) ? offsetV : 0.0;
+    const safeTime = Number.isFinite(timeSec) ? timeSec : 0.0;
+
+    let duty = 0.5;
+    if (dutyCycle !== undefined && Number.isFinite(dutyCycle)) {
+      const rawDuty = dutyCycle > 1 ? dutyCycle / 100 : dutyCycle;
+      duty = Math.min(0.99, Math.max(0.01, rawDuty));
+    }
+
+    const phaseOffset = (((phaseDeg || 0) % 360) + 360) % 360 / 360;
+    const rawPhase = ((safeTime * safeFreq) + phaseOffset) % 1.0;
+    const phase = (rawPhase + 1.0) % 1.0;
+
+    const wave = (waveform || 'sine').toLowerCase();
+    if (wave === 'square') {
+      return safeOffset + (phase < duty ? safeAmp : -safeAmp);
+    } else if (wave === 'triangle') {
+      return safeOffset + safeAmp * (4 * Math.abs(phase - 0.5) - 1);
+    } else if (wave === 'sawtooth') {
+      return safeOffset + safeAmp * (2 * phase - 1);
+    } else if (wave === 'pulse') {
+      return safeOffset + (phase < duty ? safeAmp : 0);
+    } else if (wave === 'noise') {
+      return safeOffset + (Math.random() * 2 - 1) * safeAmp;
+    } else {
+      // default: 'sine'
+      return safeOffset + safeAmp * Math.sin(2 * Math.PI * phase);
+    }
+  }
+
+  /**
    * Build electrical nets (nodes) from components and connecting wires
    */
   private buildNets(components: CircuitComponent[], wires: CircuitWire[]) {
@@ -466,30 +510,30 @@ export class CircuitSolver {
           }
         }
       } else if (comp.type === 'FUNCTION_GENERATOR') {
-        const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`);
-        const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`);
+        const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:+`);
+        const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:-`);
         const amp = Number(comp.parameters?.amplitude ?? 5.0);
         const freq = Number(comp.parameters?.frequency ?? 1000);
         const offset = Number(comp.parameters?.offset ?? 0);
-        const wave = comp.parameters?.waveform ?? 'sine';
-        let instantV = offset;
+        const wave = String(comp.parameters?.waveform ?? 'sine');
+        const duty = comp.parameters?.dutyCycle !== undefined ? Number(comp.parameters.dutyCycle) : undefined;
+        const phaseDeg = comp.parameters?.phaseDeg !== undefined ? Number(comp.parameters.phaseDeg) : undefined;
 
-        const phase = (this.currentTime * freq) % 1.0;
-        if (wave === 'square') {
-          instantV = offset + (phase < 0.5 ? amp : -amp);
-        } else if (wave === 'triangle') {
-          instantV = offset + amp * (phase < 0.5 ? 4 * phase - 1 : 3 - 4 * phase);
-        } else {
-          instantV = offset + amp * Math.sin(2 * Math.PI * freq * this.currentTime);
-        }
+        const instantV = this.evaluateWaveform(wave, freq, amp, offset, duty, phaseDeg, this.currentTime);
 
-        if (pNet && nNet) {
-          if (nNet === this.gndNetId) {
-            nodeVoltages[pNet] = instantV;
-            fixedNodes.add(pNet);
+        if (pNet && nNet && pNet !== nNet) {
+          if (nNet === this.gndNetId || fixedNodes.has(nNet)) {
+            if (!fixedNodes.has(pNet)) {
+              nodeVoltages[pNet] = (nodeVoltages[nNet] || 0) + instantV;
+              fixedNodes.add(pNet);
+            }
+          } else if (pNet === this.gndNetId || fixedNodes.has(pNet)) {
+            if (!fixedNodes.has(nNet)) {
+              nodeVoltages[nNet] = (nodeVoltages[pNet] || 0) - instantV;
+              fixedNodes.add(nNet);
+            }
           } else {
-            nodeVoltages[pNet] = (nodeVoltages[nNet] || 0) + instantV;
-            fixedNodes.add(pNet);
+            dcSources.push({ comp, pNet, nNet, vVal: instantV });
           }
         }
       } else if (
@@ -637,6 +681,80 @@ export class CircuitSolver {
       }
     }
 
+    // Pre-compute Bench AWG CH1 & CH2 voltages ONCE per step before the KCL relaxation loop
+    let instantGenV = 0;
+    let hasGen1 = false;
+    let instantGenV2 = 0;
+    let hasGen2 = false;
+
+    const awgTheveninSources: Array<{ net: string; voltage: number; g: number }> = [];
+
+    if (instruments?.functionGenerator?.enabled) {
+      const fg = instruments.functionGenerator;
+      instantGenV = this.evaluateWaveform(
+        fg.waveform,
+        fg.frequencyHz,
+        fg.amplitudeV,
+        fg.offsetV,
+        fg.dutyCycle,
+        fg.phaseDeg,
+        this.currentTime
+      );
+      hasGen1 = true;
+
+      const resolvedNet = fg.outputNet
+        ? (this.netMap.get(fg.outputNet) || (this.nets.has(fg.outputNet) ? fg.outputNet : undefined))
+        : undefined;
+
+      if (resolvedNet && resolvedNet !== this.gndNetId) {
+        if (fg.outputImpedance === '50') {
+          awgTheveninSources.push({ net: resolvedNet, voltage: instantGenV, g: 1 / 50 });
+        } else {
+          // 'High-Z' or default ideal voltage drive
+          if (!fixedNodes.has(resolvedNet)) {
+            nodeVoltages[resolvedNet] = instantGenV;
+            fixedNodes.add(resolvedNet);
+          } else {
+            // If already fixed by another power source, stamp with g = 0.02 instead of colliding
+            awgTheveninSources.push({ net: resolvedNet, voltage: instantGenV, g: 0.02 });
+          }
+        }
+      }
+    }
+
+    if (instruments?.functionGenerator?.channel2?.enabled) {
+      const fg = instruments.functionGenerator;
+      const fg2 = fg.channel2!;
+      instantGenV2 = this.evaluateWaveform(
+        fg2.waveform,
+        fg2.frequencyHz,
+        fg2.amplitudeV,
+        fg2.offsetV,
+        fg2.dutyCycle,
+        undefined,
+        this.currentTime
+      );
+      hasGen2 = true;
+
+      const resolvedNet2 = fg2.outputNet
+        ? (this.netMap.get(fg2.outputNet) || (this.nets.has(fg2.outputNet) ? fg2.outputNet : undefined))
+        : undefined;
+
+      if (resolvedNet2 && resolvedNet2 !== this.gndNetId) {
+        const imp2 = (fg2 as { outputImpedance?: string })?.outputImpedance || fg.outputImpedance;
+        if (imp2 === '50') {
+          awgTheveninSources.push({ net: resolvedNet2, voltage: instantGenV2, g: 1 / 50 });
+        } else {
+          if (!fixedNodes.has(resolvedNet2)) {
+            nodeVoltages[resolvedNet2] = instantGenV2;
+            fixedNodes.add(resolvedNet2);
+          } else {
+            awgTheveninSources.push({ net: resolvedNet2, voltage: instantGenV2, g: 0.02 });
+          }
+        }
+      }
+    }
+
     // 2. Iterative Modified Nodal Analysis (MNA) with KCL Conductance Formulation
     const iterations = 120;
     for (let iter = 0; iter < iterations; iter++) {
@@ -647,6 +765,12 @@ export class CircuitSolver {
       for (const net of this.nets) {
         sumGV[net] = 0;
         sumG[net] = 0;
+      }
+
+      // Stamp active AWG Thevenin sources inside EVERY iteration
+      for (const src of awgTheveninSources) {
+        sumGV[src.net] += src.g * src.voltage;
+        sumG[src.net] += src.g;
       }
 
       for (const comp of components) {
@@ -681,6 +805,35 @@ export class CircuitSolver {
               }
               if (!nFixed) {
                 sumGV[nNet] += gSrc * (vp - vVal);
+                sumG[nNet] += gSrc;
+              }
+            }
+          }
+        } else if (comp.type === 'FUNCTION_GENERATOR') {
+          const pNet = this.netMap.get(`${comp.id}:p`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:+`);
+          const nNet = this.netMap.get(`${comp.id}:n`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:-`);
+          if (pNet && nNet && pNet !== nNet) {
+            const pFixed = fixedNodes.has(pNet);
+            const nFixed = fixedNodes.has(nNet);
+            if (!pFixed || !nFixed) {
+              const amp = Number(comp.parameters?.amplitude ?? 5.0);
+              const freq = Number(comp.parameters?.frequency ?? 1000);
+              const offset = Number(comp.parameters?.offset ?? 0);
+              const wave = String(comp.parameters?.waveform ?? 'sine');
+              const duty = comp.parameters?.dutyCycle !== undefined ? Number(comp.parameters.dutyCycle) : undefined;
+              const phaseDeg = comp.parameters?.phaseDeg !== undefined ? Number(comp.parameters.phaseDeg) : undefined;
+              const instantV = this.evaluateWaveform(wave, freq, amp, offset, duty, phaseDeg, this.currentTime);
+
+              const gSrc = 10.0;
+              const vp = nodeVoltages[pNet] || 0;
+              const vn = nodeVoltages[nNet] || 0;
+
+              if (!pFixed) {
+                sumGV[pNet] += gSrc * (vn + instantV);
+                sumG[pNet] += gSrc;
+              }
+              if (!nFixed) {
+                sumGV[nNet] += gSrc * (vp - instantV);
                 sumG[nNet] += gSrc;
               }
             }
@@ -2163,31 +2316,8 @@ export class CircuitSolver {
       }
     }
 
-    // 5. Synthesize Function Generator Signal and Inject into Circuit if active
-    if (instruments?.functionGenerator?.enabled) {
-      const fg = instruments.functionGenerator;
-      let instantGenV = fg.offsetV || 0;
-      const f = Math.max(0.1, fg.frequencyHz || 1000);
-      const a = fg.amplitudeV !== undefined ? fg.amplitudeV : 5;
-      const t = this.currentTime;
-      const phase = (t * f) % 1.0;
-
-      if (fg.waveform === 'square') {
-        const duty = Math.min(0.99, Math.max(0.01, fg.dutyCycle ?? 0.5));
-        instantGenV += phase < duty ? a : -a;
-      } else if (fg.waveform === 'triangle') {
-        instantGenV += a * (4 * Math.abs(phase - 0.5) - 1);
-      } else if (fg.waveform === 'sawtooth') {
-        instantGenV += a * (2 * phase - 1);
-      } else if (fg.waveform === 'pulse') {
-        instantGenV += phase < 0.1 ? a : 0;
-      } else if (fg.waveform === 'noise') {
-        instantGenV += (Math.random() * 2 - 1) * a;
-      } else {
-        // sine wave default
-        instantGenV += a * Math.sin(2 * Math.PI * f * t);
-      }
-
+    // 5. Record Bench AWG Waveform History for Scope CH1/CH2 tapping
+    if (hasGen1) {
       let genHist = this.waveformHistory.get('gen:out');
       if (!genHist) {
         genHist = [];
@@ -2195,36 +2325,9 @@ export class CircuitSolver {
       }
       genHist.push({ time: this.currentTime, value: instantGenV });
       if (genHist.length > this.maxHistoryPoints) genHist.shift();
-
-      if (fg.outputNet) {
-        nodeVoltages[fg.outputNet] = instantGenV;
-      }
     }
 
-    // 5b. Synthesize Function Generator Channel 2 Signal and Inject into Circuit if active
-    if (instruments?.functionGenerator?.channel2?.enabled) {
-      const fg2 = instruments.functionGenerator.channel2;
-      let instantGenV2 = fg2.offsetV || 0;
-      const f2 = Math.max(0.1, fg2.frequencyHz || 1000);
-      const a2 = fg2.amplitudeV !== undefined ? fg2.amplitudeV : 5;
-      const t = this.currentTime;
-      const phase2 = (t * f2) % 1.0;
-
-      if (fg2.waveform === 'square') {
-        const duty2 = Math.min(0.99, Math.max(0.01, fg2.dutyCycle ?? 0.5));
-        instantGenV2 += phase2 < duty2 ? a2 : -a2;
-      } else if (fg2.waveform === 'triangle') {
-        instantGenV2 += a2 * (4 * Math.abs(phase2 - 0.5) - 1);
-      } else if (fg2.waveform === 'sawtooth') {
-        instantGenV2 += a2 * (2 * phase2 - 1);
-      } else if (fg2.waveform === 'pulse') {
-        instantGenV2 += phase2 < 0.1 ? a2 : 0;
-      } else if (fg2.waveform === 'noise') {
-        instantGenV2 += (Math.random() * 2 - 1) * a2;
-      } else {
-        instantGenV2 += a2 * Math.sin(2 * Math.PI * f2 * t);
-      }
-
+    if (hasGen2) {
       let genHist2 = this.waveformHistory.get('gen:out2');
       if (!genHist2) {
         genHist2 = [];
@@ -2232,10 +2335,6 @@ export class CircuitSolver {
       }
       genHist2.push({ time: this.currentTime, value: instantGenV2 });
       if (genHist2.length > this.maxHistoryPoints) genHist2.shift();
-
-      if (fg2.outputNet) {
-        nodeVoltages[fg2.outputNet] = instantGenV2;
-      }
     }
 
     // 6. Record Waveform History for all Circuit Nets and Component Pins
