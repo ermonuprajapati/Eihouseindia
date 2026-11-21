@@ -57,6 +57,8 @@ interface Library3DItem {
   type: string;
   label: string;
   category: 'boards' | 'passive' | 'semiconductors' | 'sensors';
+  subCategory?: string;
+  is3DReady?: boolean;
   value: string;
   desc: string;
   defaultPos: [number, number, number];
@@ -69,6 +71,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'ARDUINO_MEGA',
     label: 'Arduino Mega 2560 R3',
     category: 'boards',
+    subCategory: 'mcu',
+    is3DReady: true,
     value: 'ATmega2560',
     desc: 'High-performance MCU with 54 Digital I/O, 16 Analog Inputs, 4 UARTs, and 16MHz clock',
     defaultPos: [0, 0, 75] as [number, number, number],
@@ -78,6 +82,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'ARDUINO_UNO',
     label: 'Arduino Uno R3',
     category: 'boards',
+    subCategory: 'mcu',
+    is3DReady: true,
     value: 'ATmega328P',
     desc: 'Classic dev board with ATmega328P, 16MHz, USB, and digital/analog headers',
     defaultPos: [0, 0, 65] as [number, number, number],
@@ -87,6 +93,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'ARDUINO_NANO',
     label: 'Arduino Nano V3',
     category: 'boards',
+    subCategory: 'mcu',
+    is3DReady: true,
     value: 'ATmega328P',
     desc: 'Breadboard-friendly compact MCU with 30-pin DIP footprint',
     defaultPos: [0, 5, 0] as [number, number, number],
@@ -96,6 +104,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'ESP32_DEVKIT',
     label: 'ESP32 DevKit V1',
     category: 'boards',
+    subCategory: 'mcu',
+    is3DReady: true,
     value: 'ESP32-WROOM-32',
     desc: 'Dual-core 240MHz Wi-Fi & Bluetooth microcontroller with 30-pin header',
     defaultPos: [0, 0, -65] as [number, number, number],
@@ -105,6 +115,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'RASPBERRY_PI_PICO',
     label: 'Raspberry Pi Pico (RP2040)',
     category: 'boards',
+    subCategory: 'mcu',
+    is3DReady: true,
     value: 'RP2040',
     desc: 'Dual ARM Cortex-M0+ 133MHz microcontroller with 40-pin breadboard-friendly layout',
     defaultPos: [0, 5, -50] as [number, number, number],
@@ -114,6 +126,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'BATTERY_9V',
     label: '9V Alkaline Battery',
     category: 'boards',
+    subCategory: 'power',
+    is3DReady: true,
     value: '9V',
     desc: 'Standard 9V block battery with top positive & negative snap terminals',
     defaultPos: [-95, 0, 0] as [number, number, number],
@@ -125,6 +139,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'RESISTOR',
     label: 'Resistor 1/4W (Axial)',
     category: 'passive',
+    subCategory: 'resistive',
+    is3DReady: true,
     value: '1kΩ',
     desc: 'Axial ceramic body with 4-band EIA color coding and bent wire leads',
     defaultPos: [10, 5, -3.34] as [number, number, number],
@@ -134,6 +150,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'POTENTIOMETER',
     label: 'Rotary Potentiometer 10k',
     category: 'passive',
+    subCategory: 'resistive',
+    is3DReady: true,
     value: '10kΩ',
     desc: '3-pin breadboard-mountable trimmer with rotating control dial',
     defaultPos: [-30, 5, -3.34] as [number, number, number],
@@ -143,6 +161,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'CAPACITOR',
     label: 'Ceramic Disc Capacitor',
     category: 'passive',
+    subCategory: 'capacitive',
+    is3DReady: true,
     value: '100nF',
     desc: '100nF (0.1µF) decoupling ceramic disc capacitor (Code 104)',
     defaultPos: [25, 5, -3.34] as [number, number, number],
@@ -152,6 +172,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'CAPACITOR_ELECTROLYTIC',
     label: 'Electrolytic Capacitor 10µF',
     category: 'passive',
+    subCategory: 'capacitive',
+    is3DReady: true,
     value: '10µF',
     desc: 'Radial aluminum electrolytic can with white negative polarity stripe',
     defaultPos: [35, 5, -3.34] as [number, number, number],
@@ -161,6 +183,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'PUSHBUTTON',
     label: 'Tactile Pushbutton 6mm',
     category: 'passive',
+    subCategory: 'switches',
+    is3DReady: true,
     value: 'NO',
     desc: '4-pin SPST momentary tactile switch straddling breadboard center',
     defaultPos: [-15, 5, 0] as [number, number, number],
@@ -172,6 +196,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'LED',
     label: '5mm LED (Diffused Red)',
     category: 'semiconductors',
+    subCategory: 'diodes',
+    is3DReady: true,
     value: 'Red',
     desc: '5mm diffused domed lens with live brightness and color emission',
     defaultPos: [0, 5, -3.34] as [number, number, number],
@@ -181,6 +207,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'LED_RGB',
     label: 'RGB LED (Common Cathode)',
     category: 'semiconductors',
+    subCategory: 'diodes',
+    is3DReady: true,
     value: 'RGB',
     desc: '4-lead RGB through-hole LED with independent Red, Green, Blue control',
     defaultPos: [50, 5, -3.34] as [number, number, number],
@@ -190,6 +218,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'TIMER_555',
     label: 'NE555 Timer IC (DIP-8)',
     category: 'semiconductors',
+    subCategory: 'ics',
+    is3DReady: true,
     value: 'NE555',
     desc: 'Classic 8-pin precision bipolar timer IC for astable & monostable pulses',
     defaultPos: [-45, 5, 0] as [number, number, number],
@@ -201,6 +231,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'HC_SR04',
     label: 'HC-SR04 Ultrasonic Sonar',
     category: 'sensors',
+    subCategory: 'sensors',
+    is3DReady: true,
     value: '2-400cm',
     desc: 'Distance sensor with Transmitter & Receiver transducers and 4-pin header',
     defaultPos: [95, 0, 0] as [number, number, number],
@@ -210,6 +242,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'SERVO_SG90',
     label: 'SG90 Micro Servo 9g',
     category: 'sensors',
+    subCategory: 'actuators',
+    is3DReady: true,
     value: '180°',
     desc: 'Miniature 9-gram servo motor with geared rotating horn and 3-pin cable',
     defaultPos: [95, 0, -45] as [number, number, number],
@@ -219,6 +253,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'LCD_1602',
     label: 'LCD 16x2 Character Display',
     category: 'sensors',
+    subCategory: 'displays',
+    is3DReady: true,
     value: '16x2 HD44780',
     desc: '16-character by 2-line alphanumeric LCD module with LED backlight',
     defaultPos: [0, 0, -100] as [number, number, number],
@@ -228,6 +264,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'BUZZER_ACTIVE',
     label: 'Active Piezo Buzzer 5V',
     category: 'sensors',
+    subCategory: 'actuators',
+    is3DReady: true,
     value: '5V Piezo',
     desc: 'Continuous tone piezo sound transducer with top acoustic aperture',
     defaultPos: [-60, 5, -3.34] as [number, number, number],
@@ -237,6 +275,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'DIODE',
     label: '1N4007 Rectifier Diode',
     category: 'semiconductors',
+    subCategory: 'diodes',
+    is3DReady: true,
     value: '1000V 1A',
     desc: 'Standard silicon rectifier diode in DO-41 package with cathode band',
     defaultPos: [15, 5, 8.42] as [number, number, number],
@@ -246,6 +286,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'SENSOR_LDR',
     label: 'Photoresistor (LDR GL5528)',
     category: 'sensors',
+    subCategory: 'sensors',
+    is3DReady: true,
     value: '10k-1MΩ',
     desc: 'Light-dependent resistor with serpentine cadmium-sulfide photoconductive track',
     defaultPos: [-20, 5, 8.42] as [number, number, number],
@@ -255,6 +297,8 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
     type: 'SLIDE_SWITCH',
     label: 'Mini Slide Switch (SPDT)',
     category: 'passive',
+    subCategory: 'switches',
+    is3DReady: true,
     value: 'SPDT',
     desc: '3-pin breadboard-friendly slide switch for DC power and signal routing',
     defaultPos: [-5, 5, 8.42] as [number, number, number],
@@ -463,6 +507,7 @@ export function Studio3DCanvas({
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [libSearch, setLibSearch] = useState('');
   const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
+  const [libSubCategory, setLibSubCategory] = useState<string>('all');
   const [toolMode3D, setToolMode3D] = useState<'inspect' | 'wire'>('inspect');
   const [editingWireEndpoint, setEditingWireEndpoint] = useState<{ wireId: string; end: 'from' | 'to' } | null>(null);
   const [activeWireStart, setActiveWireStart] = useState<{
@@ -533,17 +578,34 @@ export function Studio3DCanvas({
     );
   }, [components3d, onToggleMcuUsb, onUpdateComponent3D]);
 
-  const filteredLibrary = useMemo(() => {
-    return LIBRARY_3D_COMPONENTS.filter((item) => {
+  const available3DSubCategories = useMemo(() => {
+    const subs = new Set<string>();
+    LIBRARY_3D_COMPONENTS.forEach((item) => {
       const matchCat = libCategory === 'all' || item.category === libCategory;
       const matchSearch =
         !libSearch ||
         item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
         item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
         item.desc.toLowerCase().includes(libSearch.toLowerCase());
-      return matchCat && matchSearch;
+      if (matchCat && matchSearch && item.subCategory) {
+        subs.add(item.subCategory);
+      }
     });
+    return Array.from(subs).sort();
   }, [libCategory, libSearch]);
+
+  const filteredLibrary = useMemo(() => {
+    return LIBRARY_3D_COMPONENTS.filter((item) => {
+      const matchCat = libCategory === 'all' || item.category === libCategory;
+      const matchSub = libSubCategory === 'all' || item.subCategory === libSubCategory;
+      const matchSearch =
+        !libSearch ||
+        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
+        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
+        item.desc.toLowerCase().includes(libSearch.toLowerCase());
+      return matchCat && matchSub && matchSearch;
+    });
+  }, [libCategory, libSubCategory, libSearch]);
 
   // Keyboard shortcut listener (R to rotate, Arrows to nudge, Delete to remove, Esc to cancel wire)
   useEffect(() => {
@@ -1984,7 +2046,10 @@ export function Studio3DCanvas({
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setLibCategory(tab.id as typeof libCategory)}
+                onClick={() => {
+                  setLibCategory(tab.id as typeof libCategory);
+                  setLibSubCategory('all');
+                }}
                 className={`px-2 py-0.5 rounded-full transition-colors ${
                   libCategory === tab.id
                     ? 'bg-cyan-600 text-white font-bold'
@@ -1996,8 +2061,37 @@ export function Studio3DCanvas({
             ))}
           </div>
 
+          {/* Subcategory Filter Pills when options exist */}
+          {available3DSubCategories.length > 1 && (
+            <div className="flex flex-wrap gap-1 text-[9px] pt-0.5 border-t border-slate-800/60">
+              <button
+                onClick={() => setLibSubCategory('all')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  libSubCategory === 'all'
+                    ? 'bg-slate-700 text-white font-bold'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                All
+              </button>
+              {available3DSubCategories.map((sub) => (
+                <button
+                  key={sub}
+                  onClick={() => setLibSubCategory(sub)}
+                  className={`px-1.5 py-0.5 rounded transition-colors capitalize ${
+                    libSubCategory === sub
+                      ? 'bg-cyan-700 text-white font-bold'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {sub.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* 2-Column Compact Component-Type Grid with Click-to-Place */}
-          <div className="max-h-80 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
+          <div className="max-h-72 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
             {filteredLibrary.map((item) => (
               <button
                 key={item.type}
@@ -2026,6 +2120,9 @@ export function Studio3DCanvas({
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono">
                       {item.value}
+                    </span>
+                    <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 uppercase">
+                      {item.is3DReady !== false ? '3D Ready' : 'Symbol Only'}
                     </span>
                   </div>
                   <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight">
