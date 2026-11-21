@@ -58,6 +58,196 @@ import { Inductor3D } from './models/Inductor3D';
 import { HcSr04_3D } from './models/HcSr04_3D';
 import { Wire3DTube } from './Wire3DTube';
 
+
+// =========================================================================
+// Hardware-Grade HC-05 Serial Bluetooth SPP Module 3D Model
+// =========================================================================
+export function BluetoothHC05_3D({
+  position = [0, 0, 0],
+  rotation = [0, 0, 0],
+  isSelected = false,
+  isPowered = true,
+  onPinClick,
+  hoveredPin,
+  onHoverPin,
+}: {
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  isSelected?: boolean;
+  isPowered?: boolean;
+  onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
+  hoveredPin?: string | null;
+  onHoverPin?: (pinName: string | null) => void;
+}) {
+  const materials = useMemo(() => {
+    return {
+      pcbCarrier: new THREE.MeshStandardMaterial({
+        color: isSelected ? '#38BDF8' : '#0284C7', // Deep blue breakout PCB
+        roughness: 0.35,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
+      }),
+      daughterBoard: new THREE.MeshStandardMaterial({
+        color: '#0369A1',
+        roughness: 0.4,
+      }),
+      rfShield: new THREE.MeshStandardMaterial({
+        color: '#CBD5E1',
+        metalness: 0.95,
+        roughness: 0.15,
+      }),
+      ledBlue: new THREE.MeshStandardMaterial({
+        color: isPowered ? '#38BDF8' : '#64748B',
+        emissive: isPowered ? new THREE.Color('#38BDF8') : new THREE.Color('#000000'),
+        emissiveIntensity: isPowered ? 1.5 : 0,
+      }),
+      headerBlack: new THREE.MeshStandardMaterial({
+        color: '#18181B',
+        roughness: 0.8,
+      }),
+      pinGold: new THREE.MeshStandardMaterial({
+        color: '#F59E0B',
+        metalness: 0.9,
+        roughness: 0.15,
+      }),
+      pinHover: new THREE.MeshBasicMaterial({
+        color: '#38BDF8',
+      }),
+    };
+  }, [isSelected, isPowered]);
+
+  // Silkscreen texture with "HC-05", pin labels "STATE RXD TXD GND VCC EN"
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 512, 1024);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.font = 'bold 32px monospace';
+    ctx.fillText('HC-05 BLUETOOTH', 256, 540);
+    ctx.font = '24px monospace';
+    ctx.fillText('V2.0+EDR SPP', 256, 580);
+
+    // 6 Pin Labels at bottom edge
+    const pinLabels = ['STATE', 'RXD', 'TXD', 'GND', 'VCC', 'EN'];
+    ctx.font = 'bold 26px monospace';
+    pinLabels.forEach((label, i) => {
+      const px = ((-6.35 + i * 2.54 + 8.0) / 16.0) * 512;
+      ctx.save();
+      ctx.translate(px, 940);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  const pins = [
+    { name: 'STATE', aliases: ['state', '1'], x: -6.35, label: 'STATE' },
+    { name: 'RXD', aliases: ['rxd', 'rx', '2'], x: -3.81, label: 'RXD' },
+    { name: 'TXD', aliases: ['txd', 'tx', '3'], x: -1.27, label: 'TXD' },
+    { name: 'GND', aliases: ['gnd', 'ground', '4', '-'], x: 1.27, label: 'GND' },
+    { name: 'VCC', aliases: ['vcc', 'power', '5v', '5', '+'], x: 3.81, label: 'VCC' },
+    { name: 'EN', aliases: ['en', 'key', '6'], x: 6.35, label: 'EN' },
+  ];
+
+  return (
+    <group position={position} rotation={rotation}>
+      {/* 1. Carrier Breakout Blue PCB (16mm x 36mm x 1.6mm) lying flat on XZ plane */}
+      <mesh position={[0, 0.8, 0]} material={materials.pcbCarrier} castShadow receiveShadow>
+        <boxGeometry args={[16.0, 1.6, 36.0]} />
+      </mesh>
+
+      {/* 2. Top Silkscreen Overlay */}
+      {silkscreenTexture && (
+        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[15.6, 35.6]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent />
+        </mesh>
+      )}
+
+      {/* 3. Surface-Mounted Bluetooth Daughterboard */}
+      <mesh position={[0, 2.0, -4.5]} material={materials.daughterBoard}>
+        <boxGeometry args={[13.5, 0.8, 25.0]} />
+      </mesh>
+
+      {/* 4. Golden Meander Trace Antenna at top edge */}
+      <group position={[0, 2.42, -13.5]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[11.0, 5.0]} />
+          <meshStandardMaterial color="#F59E0B" metalness={0.9} roughness={0.2} />
+        </mesh>
+      </group>
+
+      {/* 5. Metal RF Shielding Can with stamped markings */}
+      <mesh position={[0, 2.7, -3.5]} material={materials.rfShield} castShadow>
+        <boxGeometry args={[12.5, 1.4, 13.0]} />
+      </mesh>
+
+      {/* 6. Onboard Status LED (0805 SMD) */}
+      <mesh position={[-4.5, 2.5, 5.5]} material={materials.ledBlue}>
+        <boxGeometry args={[1.2, 0.6, 2.0]} />
+      </mesh>
+      {isPowered && (
+        <pointLight position={[-4.5, 3.5, 5.5]} color="#38BDF8" intensity={0.5} distance={15} />
+      )}
+
+      {/* 7. Key Pushbutton Switch */}
+      <mesh position={[4.5, 2.5, 5.5]} material={materials.headerBlack}>
+        <boxGeometry args={[2.5, 1.0, 2.5]} />
+      </mesh>
+
+      {/* 8. 6-Pin Header at Bottom Edge (z = 16.0) */}
+      <group position={[0, 2.05, 16.0]}>
+        <mesh material={materials.headerBlack}>
+          <boxGeometry args={[15.5, 2.5, 2.5]} />
+        </mesh>
+
+        {pins.map((p) => {
+          const isHovered =
+            hoveredPin === p.name ||
+            (hoveredPin && (hoveredPin.toUpperCase() === p.name || p.aliases.includes(hoveredPin.toLowerCase())));
+          return (
+            <group key={p.name} position={[p.x, 0, 0]}>
+              <mesh position={[0, -3.0, 0]} material={materials.pinGold}>
+                <boxGeometry args={[0.64, 7.0, 0.64]} />
+              </mesh>
+              <mesh
+                position={[0, 0.5, 0]}
+                material={isHovered ? materials.pinHover : materials.pinGold}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const worldPos = new THREE.Vector3();
+                  e.object.getWorldPosition(worldPos);
+                  onPinClick?.(p.name, worldPos);
+                }}
+                onPointerOver={(e) => {
+                  e.stopPropagation();
+                  onHoverPin?.(p.name);
+                }}
+                onPointerOut={() => onHoverPin?.(null)}
+              >
+                <sphereGeometry args={[isHovered ? 1.3 : 0.75, 12, 12]} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    </group>
+  );
+}
+
 interface Library3DItem {
   type: string;
   label: string;
@@ -232,6 +422,17 @@ const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
   },
 
   // Sensors & Actuators
+  {
+    type: 'MODULE_BLUETOOTH_HC05',
+    label: 'HC-05 Bluetooth Module',
+    category: 'sensors',
+    subCategory: 'communication',
+    is3DReady: true,
+    value: 'Bluetooth 2.0+EDR',
+    desc: 'Serial SPP Bluetooth transceiver breakout module with 6-pin header and PCB antenna',
+    defaultPos: [95, 0, 45] as [number, number, number],
+    params: { baudRate: 9600 },
+  },
   {
     type: 'HC_SR04',
     label: 'HC-SR04 Ultrasonic Sonar',
@@ -427,6 +628,12 @@ function getComponentFootprint(type: string): { halfW: number; halfD: number } {
       return { halfW: 40.0, halfD: 18.0 };
     case 'DISPLAY_OLED_SSD1306':
       return { halfW: 15.0, halfD: 14.0 };
+    case 'MODULE_BLUETOOTH_HC05':
+    case 'BLUETOOTH':
+    case 'HC05':
+    case 'HC06':
+    case 'RF_BLUETOOTH':
+      return { halfW: 9.0, halfD: 19.0 };
     case 'HC_SR04':
     case 'SENSOR_ULTRASONIC':
       return { halfW: 22.5, halfD: 10.0 };
@@ -1085,6 +1292,24 @@ export function Studio3DCanvas({
       else if (pinId === '2A' || pinId === '3') { lx = -2.54; lz = 2.54; }
       else { lx = 2.54; lz = 2.54; }
       ly = -4;
+    } else if (
+      comp.type === 'MODULE_BLUETOOTH_HC05' ||
+      comp.type === 'BLUETOOTH' ||
+      comp.type === 'HC05' ||
+      comp.type === 'HC06' ||
+      comp.type === 'RF_BLUETOOTH' ||
+      comp.type.includes('BLUETOOTH') ||
+      comp.parameters?.model3d === 'module_bluetooth_hc05'
+    ) {
+      const p = (pinId || '').toUpperCase();
+      if (p === 'STATE' || p === '1') lx = -6.35;
+      else if (p === 'RXD' || p === 'RX' || p === '2') lx = -3.81;
+      else if (p === 'TXD' || p === 'TX' || p === '3') lx = -1.27;
+      else if (p === 'GND' || p === '4') lx = 1.27;
+      else if (p === 'VCC' || p === '5V' || p === '5') lx = 3.81;
+      else if (p === 'EN' || p === 'KEY' || p === '6') lx = 6.35;
+      ly = 2.5;
+      lz = 16.0;
     } else if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
       const p = (pinId || '').toUpperCase();
       if (p === 'VCC' || p === '1') lx = -3.81;
@@ -2120,8 +2345,17 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED') {
-            const isPowered = Boolean(simState?.on || isSimulating);
+          // Bluetooth Breakout Module 3D
+          if (
+            comp.type === 'MODULE_BLUETOOTH_HC05' ||
+            comp.type === 'BLUETOOTH' ||
+            comp.type === 'HC05' ||
+            comp.type === 'HC06' ||
+            comp.type === 'RF_BLUETOOTH' ||
+            comp.type.includes('BLUETOOTH') ||
+            comp.parameters?.model3d === 'module_bluetooth_hc05'
+          ) {
+            const isPowered = isSimulating ? Boolean(simState?.on || (simState?.voltage && Math.abs(simState.voltage) > 2.0)) : true;
             return (
               <group
                 key={comp.id}
@@ -2132,11 +2366,107 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
+                <BluetoothHC05_3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  isPowered={isPowered}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED' || comp.parameters?.model3d === 'led_rgb_5mm') {
+            const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
+            
+            // 1. Compute independent 3-channel levels (rLevel, gLevel, bLevel in 0..1)
+            let rLevel = 0;
+            let gLevel = 0;
+            let bLevel = 0;
+
+            // Direct simulation telemetry
+            if (simState && typeof simState === 'object') {
+              const sAny = simState as Record<string, unknown>;
+              if (sAny.onRed) rLevel = 1.0;
+              if (sAny.onGreen) gLevel = 1.0;
+              if (sAny.onBlue) bLevel = 1.0;
+              if (typeof sAny.rLevel === 'number') rLevel = sAny.rLevel;
+              if (typeof sAny.gLevel === 'number') gLevel = sAny.gLevel;
+              if (typeof sAny.bLevel === 'number') bLevel = sAny.bLevel;
+              if (sAny.channels && typeof sAny.channels === 'object') {
+                const ch = sAny.channels as Record<string, number>;
+                if (typeof ch.r === 'number') rLevel = ch.r;
+                if (typeof ch.g === 'number') gLevel = ch.g;
+                if (typeof ch.b === 'number') bLevel = ch.b;
+              }
+            }
+
+            // Wire connection conduction tracing
+            wires3d.forEach((w) => {
+              let pin = '';
+              let otherCompId = '';
+              if (w.fromPin.compId === comp.id) {
+                pin = w.fromPin.pinId;
+                otherCompId = w.toPin.compId;
+              } else if (w.toPin.compId === comp.id) {
+                pin = w.toPin.pinId;
+                otherCompId = w.fromPin.compId;
+              }
+              if (!pin) return;
+
+              const pUpper = pin.toUpperCase();
+              const currentA = wireCurrents?.[w.id] ?? 0;
+              const otherSim = simulationStates[otherCompId];
+              const hasPower = Math.abs(currentA) > 0.0005 || (otherSim?.voltage && otherSim.voltage > 1.8);
+
+              if (pUpper === 'R' || pUpper === '1') {
+                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) rLevel = 1.0;
+              } else if (pUpper === 'G' || pUpper === '3') {
+                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) gLevel = 1.0;
+              } else if (pUpper === 'B' || pUpper === '4') {
+                if (hasPower || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on))) bLevel = 1.0;
+              }
+            });
+
+            // Inspector explicit parameters override
+            if (comp.parameters?.r !== undefined) rLevel = Number(comp.parameters.r);
+            if (comp.parameters?.g !== undefined) gLevel = Number(comp.parameters.g);
+            if (comp.parameters?.b !== undefined) bLevel = Number(comp.parameters.b);
+
+            // Fallback for static hex color
+            if (rLevel === 0 && gLevel === 0 && bLevel === 0 && comp.parameters?.color) {
+              const c = new THREE.Color(String(comp.parameters.color));
+              rLevel = c.r;
+              gLevel = c.g;
+              bLevel = c.b;
+            }
+
+            const isPowered = !isBurned && (isSimulating ? (rLevel > 0.01 || gLevel > 0.01 || bLevel > 0.01 || Boolean(simState?.on)) : true);
+
+            return (
+              <group
+                key={comp.id}
+                onPointerDown={handleCompPointerDown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                {isBurned && <BurnSmokeFX position={[0, 4, 0]} heightOffset={1} />}
                 <RgbLed3D
                   position={pos}
                   rotation={rot}
                   isSelected={isSelected}
                   isPowered={isPowered}
+                  rLevel={rLevel}
+                  gLevel={gLevel}
+                  bLevel={bLevel}
                   color={String(comp.parameters?.color || '#EC4899')}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
@@ -2148,9 +2478,10 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'BUZZER_ACTIVE' || comp.type === 'ACTUATOR_BUZZER_ACTIVE' || comp.type === 'BUZZER') {
+          if (comp.type === 'BUZZER_ACTIVE' || comp.type === 'ACTUATOR_BUZZER_ACTIVE' || comp.type === 'BUZZER' || comp.parameters?.model3d === 'buzzer_active_piezo') {
             const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
-            const isSounding = !isBurned && Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
+            const isSounding = isSimulating && !isBurned && Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001) || (simState?.voltage && Math.abs(simState.voltage) > 1.5));
+            const frequency = Number(comp.parameters?.frequencyHz || comp.parameters?.frequency || 2300);
             return (
               <group
                 key={comp.id}
@@ -2167,6 +2498,7 @@ export function Studio3DCanvas({
                   rotation={rot}
                   isSelected={isSelected}
                   isSounding={isSounding}
+                  frequency={frequency}
                   hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
                   onHoverPin={(pinName) =>
                     setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
@@ -2947,6 +3279,24 @@ export function Studio3DCanvas({
             'A5': 'Pin A5 · Analog In 5 / I2C SCL',
           };
           pinLabel = pinRoles[pin] || `Pin ${pin}`;
+        } else if (comp?.type === 'MODULE_BLUETOOTH_HC05' || comp?.type === 'BLUETOOTH' || comp?.type.includes('BLUETOOTH')) {
+          const btRoles: Record<string, string> = {
+            'STATE': 'STATE · Connection Status Output (High when paired)',
+            'RXD': 'RXD · Serial UART Data Input (3.3V logic)',
+            'TXD': 'TXD · Serial UART Data Output (3.3V logic)',
+            'GND': 'GND · Power Ground Reference (0V)',
+            'VCC': 'VCC · Power Supply Input (+3.6V to 6.0V DC)',
+            'EN': 'EN / KEY · AT Command Mode Switch (High for AT commands)',
+          };
+          pinLabel = btRoles[pin.toUpperCase()] || `Pin ${pin}`;
+        } else if (comp?.type === 'HC_SR04' || comp?.type === 'SENSOR_ULTRASONIC') {
+          const sonarRoles: Record<string, string> = {
+            'VCC': 'VCC · Ultrasonic Sensor Supply (+5V DC)',
+            'TRIG': 'TRIG · 10µs TTL Ultrasonic Trigger Input',
+            'ECHO': 'ECHO · Distance Proportional Pulse Width Output',
+            'GND': 'GND · Power Ground Reference (0V)',
+          };
+          pinLabel = sonarRoles[pin.toUpperCase()] || `Pin ${pin}`;
         } else if (comp?.type === 'LED') {
           pinLabel = pLower.includes('a') || pLower === '1' || pLower === '+'
             ? 'Anode (+) · Positive Forward Bias Lead'

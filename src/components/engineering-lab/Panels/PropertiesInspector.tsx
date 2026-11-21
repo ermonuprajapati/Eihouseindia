@@ -41,136 +41,238 @@ interface PropertiesInspectorProps {
   onWidthChange?: (width: number) => void;
 }
 
-const FOOTPRINT_OPTIONS = [
-  { value: 'Resistor_SMD:R_0805_2012Metric', label: 'Resistor SMD 0805 (2012 Metric)' },
-  { value: 'Resistor_SMD:R_1206_3216Metric', label: 'Resistor SMD 1206 (3216 Metric)' },
-  { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial Resistor (1/4W, 7.62mm)' },
-  { value: 'Inductor_THT:L_Axial_L7.0mm_D3.3mm_P10.16mm_Horizontal', label: 'Through-Hole Axial Inductor (10.16mm)' },
-  { value: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', label: 'Through-Hole Diode DO-35 (1N4148)' },
-  { value: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', label: 'Through-Hole Diode DO-41 (1N4007)' },
-  { value: 'Potentiometer_THT:Potentiometer_Bourns_3386P_Vertical', label: 'Bourns 3386P 3-Pin Trimmer' },
-  { value: 'Capacitor_SMD:C_0805_2012Metric', label: 'Capacitor SMD 0805' },
-  { value: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', label: 'Capacitor Radial Electrolytic (6.3mm)' },
-  { value: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', label: 'Capacitor Disc Ceramic (5.0mm)' },
-  { value: 'Package_DIP:DIP-8_W7.62mm', label: 'DIP-8 (Through-Hole, 7.62mm pitch)' },
-  { value: 'Package_TO_SOT_THT:TO-92_Inline', label: 'TO-92 Transistor Package' },
-  { value: 'Package_TO_SOT_THT:TO-220-3_Vertical', label: 'TO-220 Power Package (7805/MOSFET)' },
-  { value: 'LED_THT:LED_D5.0mm', label: 'LED 5mm Through-Hole' },
-  { value: 'LED_THT:LED_D5.0mm-4', label: 'RGB LED 4-Pin Through-Hole' },
-  { value: 'Package_DIP:DIP-14_W7.62mm', label: 'DIP-14 Logic IC (74HC/CD4000)' },
-  { value: 'Package_DIP:DIP-16_W7.62mm', label: 'DIP-16 Driver/Logic IC' },
-  { value: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', label: 'SOIC-8 SMD Package' },
-  { value: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', label: 'Tactile Pushbutton 6mm' },
-  { value: 'Switch_THT:SW_Slide_1P2T_SS12D00', label: 'Slide Switch SPDT' },
-  { value: 'Relay_THT:Relay_SPDT_Songle_SRD-Series', label: 'Songle SRD SPDT Relay' },
-  { value: 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical', label: 'Pin Header 1x02 (2.54mm)' },
-  { value: 'TerminalBlock:TerminalBlock_bornier-2_P5.08mm', label: 'Terminal Block 2-Pin 5.08mm' },
-  { value: 'BatteryHolder_Keystone_2460_1xAA', label: 'Battery Clip / Holder 9V' },
-  { value: 'TestPoint_Pad_D1.0mm', label: 'GND Test Point Pad (1.0mm)' },
-  { value: 'Module:Arduino_Uno_R3', label: 'Arduino Uno R3 Dev Board' },
-  { value: 'Module:Arduino_Mega_2560', label: 'Arduino Mega 2560 R3 Board' },
-  { value: 'Module:Arduino_Nano', label: 'Arduino Nano V3 DIP-30' },
-  { value: 'Module:ESP32-WROOM-32', label: 'ESP32-WROOM-32 DevKit' },
-  { value: 'Module:ESP32-S3-DevKitC-1', label: 'ESP32-S3 DevKitC-1' },
-  { value: 'Module:ESP32-C3-DevKitM-1', label: 'ESP32-C3 DevKitM-1' },
-  { value: 'Module:STM32_BluePill', label: 'STM32 Blue Pill Board' },
-  { value: 'Module:STM32_Nucleo_64', label: 'STM32 Nucleo-64' },
-  { value: 'Module:RP2040_Pico', label: 'Raspberry Pi Pico (RP2040)' },
-  { value: 'Module:RP2350_Pico2', label: 'Raspberry Pi Pico 2 (RP2350)' },
-];
+export interface FootprintOption {
+  value: string;
+  label: string;
+  categories: string[];
+}
 
-const MODEL_3D_OPTIONS = [
-  { value: 'resistor_axial_horiz', label: 'Resistor Axial 1/4W' },
-  { value: 'resistor_smd_0805', label: 'Resistor SMD 0805' },
-  { value: 'capacitor_disc_ceramic', label: 'Capacitor Disc Ceramic' },
-  { value: 'capacitor_radial_can', label: 'Capacitor Radial Can' },
-  { value: 'dip8_integrated_circuit', label: 'DIP-8 IC Package' },
-  { value: 'dip14_logic_ic', label: 'DIP-14 Logic Package' },
-  { value: 'dip16_logic_ic', label: 'DIP-16 Integrated Circuit' },
-  { value: 'soic8_smd_ic', label: 'SOIC-8 Surface Mount IC' },
-  { value: 'to92_transistor', label: 'TO-92 Small Signal BJT' },
-  { value: 'to220_mosfet', label: 'TO-220 Power FET' },
-  { value: 'led_5mm_diffused', label: 'LED 5mm Diffused' },
-  { value: 'pushbutton_tactile_6mm', label: 'Tactile Pushbutton 6mm' },
-  { value: 'relay_songle_srd', label: 'Songle SRD Relay 5V' },
-  { value: 'battery_9v_block', label: 'Battery 9V Alkaline Block' },
-  { value: 'header_2pin_2.54mm', label: 'Header 2-Pin Terminal' },
-  { value: 'arduino_uno_r3', label: 'Arduino Uno R3 (3D Board)' },
-  { value: 'arduino_mega_2560', label: 'Arduino Mega 2560 (3D Board)' },
-  { value: 'arduino_nano_v3', label: 'Arduino Nano V3 (3D Module)' },
-  { value: 'esp32_wroom_32', label: 'ESP32-WROOM-32 (3D Module)' },
-  { value: 'esp32_s3_devkit', label: 'ESP32-S3 DevKit (3D Module)' },
-  { value: 'esp32_c3_devkit', label: 'ESP32-C3 DevKit (3D Module)' },
-  { value: 'stm32_bluepill', label: 'STM32 Blue Pill (3D Board)' },
-  { value: 'stm32_nucleo', label: 'STM32 Nucleo-64 (3D Board)' },
-  { value: 'raspberry_pi_pico', label: 'Raspberry Pi Pico (3D Board)' },
-];
+export interface Model3DOption {
+  value: string;
+  label: string;
+  categories: string[];
+}
 
 export interface PhysicalPackagePreset {
   id: string;
   label: string;
-  category: 'resistor' | 'capacitor' | 'led' | 'diode' | 'ic' | 'transistor' | 'switch' | 'mcu' | 'battery' | 'general';
+  category: string;
+  packageType: 'THT' | 'SMD' | 'Module' | 'Chassis';
   footprint: string;
   model3d: string;
 }
 
-const PHYSICAL_PACKAGES: PhysicalPackagePreset[] = [
-  // LEDs
-  { id: 'led_tht_5mm', label: '5mm THT LED Round (Diffused)', category: 'led', footprint: 'LED_THT:LED_D5.0mm', model3d: 'led_5mm_diffused' },
-  { id: 'led_tht_3mm', label: '3mm THT LED Round Compact', category: 'led', footprint: 'LED_THT:LED_D3.0mm', model3d: 'led_5mm_diffused' },
-  { id: 'led_smd_0805', label: 'SMD 0805 Chip LED (2012 Metric)', category: 'led', footprint: 'LED_SMD:LED_0805_2012Metric', model3d: 'led_5mm_diffused' },
-  { id: 'led_rgb_5mm', label: '5mm RGB LED (4-Pin Common Cathode)', category: 'led', footprint: 'LED_THT:LED_D5.0mm-4_RGB', model3d: 'led_rgb_5mm' },
-
+const FOOTPRINT_OPTIONS: FootprintOption[] = [
   // Resistors
-  { id: 'res_tht_axial', label: 'Through-Hole Axial (1/4W 7.62mm)', category: 'resistor', footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', model3d: 'resistor_axial_horiz' },
-  { id: 'res_smd_0805', label: 'Surface Mount SMD 0805 (2012 Metric)', category: 'resistor', footprint: 'Resistor_SMD:R_0805_2012Metric', model3d: 'resistor_smd_0805' },
-  { id: 'res_smd_1206', label: 'Surface Mount SMD 1206 (3216 Metric)', category: 'resistor', footprint: 'Resistor_SMD:R_1206_3216Metric', model3d: 'resistor_smd_0805' },
+  { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial Resistor (1/4W, 7.62mm)', categories: ['resistor'] },
+  { value: 'Resistor_SMD:R_0805_2012Metric', label: 'Resistor SMD 0805 (2012 Metric)', categories: ['resistor'] },
+  { value: 'Resistor_SMD:R_1206_3216Metric', label: 'Resistor SMD 1206 (3216 Metric)', categories: ['resistor'] },
+  { value: 'Potentiometer_THT:Potentiometer_Bourns_3386P_Vertical', label: 'Bourns 3386P 3-Pin Trimmer', categories: ['resistor'] },
+  { value: 'Inductor_THT:L_Axial_L7.0mm_D3.3mm_P10.16mm_Horizontal', label: 'Through-Hole Axial Inductor (10.16mm)', categories: ['resistor', 'inductor'] },
 
   // Capacitors
-  { id: 'cap_tht_disc', label: 'Through-Hole Ceramic Disc (5.0mm)', category: 'capacitor', footprint: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', model3d: 'capacitor_disc_ceramic' },
-  { id: 'cap_tht_radial', label: 'Through-Hole Radial Can (Electrolytic)', category: 'capacitor', footprint: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', model3d: 'capacitor_radial_can' },
-  { id: 'cap_smd_0805', label: 'Surface Mount SMD 0805 Capacitor', category: 'capacitor', footprint: 'Capacitor_SMD:C_0805_2012Metric', model3d: 'capacitor_disc_ceramic' },
+  { value: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', label: 'Capacitor Disc Ceramic (5.0mm)', categories: ['capacitor'] },
+  { value: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', label: 'Capacitor Radial Can Electrolytic (6.3mm)', categories: ['capacitor'] },
+  { value: 'Capacitor_SMD:C_0805_2012Metric', label: 'Capacitor SMD 0805 (2012 Metric)', categories: ['capacitor'] },
 
   // Diodes
-  { id: 'diode_do41', label: 'DO-41 Through-Hole Axial (1N4007)', category: 'diode', footprint: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', model3d: 'diode_axial_do41' },
-  { id: 'diode_do35', label: 'DO-35 Glass Axial (1N4148)', category: 'diode', footprint: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', model3d: 'diode_axial_do41' },
+  { value: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', label: 'Through-Hole Diode DO-41 (1N4007)', categories: ['diode'] },
+  { value: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', label: 'Through-Hole Diode DO-35 (1N4148)', categories: ['diode'] },
+  { value: 'Diode_SMD:D_SOD-123', label: 'Surface Mount Diode SOD-123', categories: ['diode'] },
 
-  // ICs / Timers
-  { id: 'ic_dip8', label: 'Through-Hole DIP-8 (7.62mm pitch)', category: 'ic', footprint: 'Package_DIP:DIP-8_W7.62mm', model3d: 'dip8_integrated_circuit' },
-  { id: 'ic_soic8', label: 'Surface Mount SOIC-8 (1.27mm pitch)', category: 'ic', footprint: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', model3d: 'soic8_smd_ic' },
-  { id: 'ic_dip14', label: 'Through-Hole DIP-14 Logic (7.62mm)', category: 'ic', footprint: 'Package_DIP:DIP-14_W7.62mm', model3d: 'dip14_logic_ic' },
-  { id: 'ic_dip16', label: 'Through-Hole DIP-16 Driver (7.62mm)', category: 'ic', footprint: 'Package_DIP:DIP-16_W7.62mm', model3d: 'dip16_logic_ic' },
+  // LEDs
+  { value: 'LED_THT:LED_D5.0mm', label: 'LED 5mm Through-Hole (Round Diffused)', categories: ['led'] },
+  { value: 'LED_THT:LED_D3.0mm', label: 'LED 3mm Through-Hole (Compact)', categories: ['led'] },
+  { value: 'LED_THT:LED_D5.0mm-4', label: 'RGB LED 4-Pin Common Cathode (5mm)', categories: ['led'] },
+  { value: 'LED_SMD:LED_0805_2012Metric', label: 'SMD 0805 Chip LED (2012 Metric)', categories: ['led'] },
 
   // Transistors
-  { id: 'to92_inline', label: 'Through-Hole TO-92 Transistor Inline', category: 'transistor', footprint: 'Package_TO_SOT_THT:TO-92_Inline', model3d: 'to92_transistor' },
-  { id: 'to220_power', label: 'Through-Hole TO-220 Power Package', category: 'transistor', footprint: 'Package_TO_SOT_THT:TO-220-3_Vertical', model3d: 'to220_mosfet' },
+  { value: 'Package_TO_SOT_THT:TO-92_Inline', label: 'TO-92 Transistor Package (BJT/Small Signal)', categories: ['transistor'] },
+  { value: 'Package_TO_SOT_THT:TO-220-3_Vertical', label: 'TO-220 Power Package (MOSFET/7805)', categories: ['transistor'] },
+  { value: 'Package_TO_SOT_SMD:SOT-23', label: 'SOT-23 Surface Mount Transistor', categories: ['transistor'] },
 
-  // Switches
-  { id: 'sw_push_6mm', label: 'Tactile Pushbutton 6mm', category: 'switch', footprint: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', model3d: 'pushbutton_tactile_6mm' },
-  { id: 'sw_slide_spdt', label: 'Mini Slide Switch SPDT (2.54mm)', category: 'switch', footprint: 'Button_Switch_THT:SW_Slide_1P2T_Straight', model3d: 'switch_slide_spdt' },
+  // ICs / Logic / DIP
+  { value: 'Package_DIP:DIP-8_W7.62mm', label: 'DIP-8 (Through-Hole, 7.62mm pitch)', categories: ['ic'] },
+  { value: 'Package_DIP:DIP-14_W7.62mm', label: 'DIP-14 Logic IC (74HC/CD4000)', categories: ['ic'] },
+  { value: 'Package_DIP:DIP-16_W7.62mm', label: 'DIP-16 Driver/Logic IC', categories: ['ic'] },
+  { value: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', label: 'SOIC-8 SMD Package (1.27mm pitch)', categories: ['ic'] },
+
+  // Switches & Buttons
+  { value: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', label: 'Tactile Pushbutton 6mm', categories: ['switch'] },
+  { value: 'Button_Switch_THT:SW_Slide_1P2T_Straight', label: 'Mini Slide Switch SPDT (2.54mm)', categories: ['switch'] },
+
+  // Audio / Sound
+  { value: 'Buzzer_Beeper:Buzzer_12x9.5RM7.6', label: 'Active Piezo Buzzer 12mm THT', categories: ['buzzer'] },
+  { value: 'Buzzer_Beeper:Buzzer_CUI_CPE-122', label: 'Compact Radial Piezo Beeper', categories: ['buzzer'] },
+
+  // Sensors
+  { value: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical', label: 'Pin Header 1x04 (2.54mm, HC-SR04/Sensors)', categories: ['sensor'] },
+  { value: 'Sensor_Optical:LDR_5mm_Radial', label: 'LDR Photoresistor 5mm Radial', categories: ['sensor'] },
+
+  // Displays
+  { value: 'Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical', label: 'Pin Header 1x16 (2.54mm, LCD 16x2)', categories: ['display'] },
+  { value: 'Display:OLED_0.96_I2C_4Pin', label: 'OLED 0.96" 4-Pin I2C Header', categories: ['display'] },
+
+  // RF & Wireless / Bluetooth
+  { value: 'Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical', label: 'Pin Header 1x06 (2.54mm, HC-05 Bluetooth)', categories: ['bluetooth'] },
+  { value: 'Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical', label: 'Pin Header 2x04 (2.54mm, nRF24L01 Module)', categories: ['bluetooth'] },
 
   // Power / Batteries
-  { id: 'battery_9v', label: '9V Alkaline Block Battery Clip', category: 'battery', footprint: 'BatteryHolder_Keystone_2460_1xAA', model3d: 'battery_9v_block' },
+  { value: 'BatteryHolder_Keystone_2460_1xAA', label: 'Battery Clip / Holder 9V Block', categories: ['battery'] },
 
-  // MCUs
-  { id: 'mcu_uno', label: 'Arduino Uno R3 Dev Board', category: 'mcu', footprint: 'Module:Arduino_Uno_R3', model3d: 'arduino_uno_r3' },
-  { id: 'mcu_nano', label: 'Arduino Nano V3 Compact DIP-30', category: 'mcu', footprint: 'Module:Arduino_Nano', model3d: 'arduino_nano_v3' },
-  { id: 'mcu_mega', label: 'Arduino Mega 2560 R3 Board', category: 'mcu', footprint: 'Module:Arduino_Mega_2560', model3d: 'arduino_mega_2560' },
-  { id: 'mcu_esp32', label: 'ESP32-WROOM-32 DevKit Board', category: 'mcu', footprint: 'Module:ESP32-WROOM-32', model3d: 'esp32_wroom_32' },
-  { id: 'mcu_pico', label: 'Raspberry Pi Pico RP2040 Board', category: 'mcu', footprint: 'Module:RP2040_Pico', model3d: 'raspberry_pi_pico' },
+  // Microcontrollers
+  { value: 'Module:Arduino_Uno_R3', label: 'Arduino Uno R3 Dev Board', categories: ['mcu'] },
+  { value: 'Module:Arduino_Mega_2560', label: 'Arduino Mega 2560 R3 Board', categories: ['mcu'] },
+  { value: 'Module:Arduino_Nano', label: 'Arduino Nano V3 DIP-30', categories: ['mcu'] },
+  { value: 'Module:ESP32-WROOM-32', label: 'ESP32-WROOM-32 DevKit', categories: ['mcu'] },
+  { value: 'Module:RP2040_Pico', label: 'Raspberry Pi Pico (RP2040)', categories: ['mcu'] },
+
+  // Connectors & Relay
+  { value: 'TerminalBlock:TerminalBlock_bornier-2_P5.08mm', label: 'Screw Terminal Block 2-Pin 5.08mm', categories: ['connector'] },
+  { value: 'Relay_THT:Relay_SPDT_Songle_SRD-Series', label: 'Songle SRD SPDT Relay 5V', categories: ['relay'] },
 ];
 
-function getCategoryForComponent(type: string): PhysicalPackagePreset['category'] {
-  const t = type.toUpperCase();
-  if (t.includes('LED')) return 'led';
-  if (t.includes('RESISTOR') || t.includes('POTENTIOMETER')) return 'resistor';
-  if (t.includes('CAPACITOR')) return 'capacitor';
-  if (t.includes('DIODE')) return 'diode';
-  if (t.includes('555') || t.includes('TIMER') || t.includes('DIP') || t.includes('IC_') || t.includes('LOGIC')) return 'ic';
-  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('TO92') || t.includes('TO220')) return 'transistor';
+const MODEL_3D_OPTIONS: Model3DOption[] = [
+  // Resistors
+  { value: 'resistor_axial_horiz', label: 'Resistor Axial 1/4W (Horizontal)', categories: ['resistor'] },
+  { value: 'resistor_smd_0805', label: 'Resistor SMD 0805 (Surface Mount)', categories: ['resistor'] },
+  { value: 'inductor_axial_0912', label: 'Inductor Axial 0912 Coiled', categories: ['resistor', 'inductor'] },
+
+  // Capacitors
+  { value: 'capacitor_disc_ceramic', label: 'Capacitor Ceramic Disc 5.0mm', categories: ['capacitor'] },
+  { value: 'capacitor_radial_can', label: 'Capacitor Radial Aluminum Can', categories: ['capacitor'] },
+
+  // Diodes
+  { value: 'diode_axial_do41', label: 'Diode DO-41 Axial Rectifier', categories: ['diode'] },
+
+  // LEDs
+  { value: 'led_5mm_diffused', label: 'LED 5mm Diffused Round Dome', categories: ['led'] },
+  { value: 'led_rgb_5mm', label: 'LED 5mm RGB (4-Pin Common Cathode)', categories: ['led'] },
+
+  // Transistors
+  { value: 'to92_transistor', label: 'TO-92 Small Signal Transistor', categories: ['transistor'] },
+  { value: 'to220_mosfet', label: 'TO-220 Power Package (Metal Tab)', categories: ['transistor'] },
+
+  // ICs
+  { value: 'dip8_integrated_circuit', label: 'DIP-8 Integrated Circuit (NE555/Op-Amp)', categories: ['ic'] },
+  { value: 'dip14_logic_ic', label: 'DIP-14 Logic IC Package', categories: ['ic'] },
+  { value: 'dip16_logic_ic', label: 'DIP-16 Integrated Circuit Package', categories: ['ic'] },
+  { value: 'soic8_smd_ic', label: 'SOIC-8 Surface Mount IC', categories: ['ic'] },
+
+  // Switches
+  { value: 'pushbutton_tactile_6mm', label: 'Tactile Pushbutton 6mm', categories: ['switch'] },
+  { value: 'switch_slide_spdt', label: 'Mini Slide Switch SPDT', categories: ['switch'] },
+
+  // Audio / Buzzers
+  { value: 'buzzer_active_piezo', label: 'Active Piezo Buzzer 5V Housing', categories: ['buzzer'] },
+
+  // Sensors
+  { value: 'hcsr04_ultrasonic', label: 'HC-SR04 Dual Transducer Sonar Module', categories: ['sensor'] },
+  { value: 'sensor_ldr_5mm', label: 'LDR Photoresistor 5mm Face', categories: ['sensor'] },
+
+  // Displays
+  { value: 'lcd1602_hd44780', label: 'LCD 16x2 Flat Face-Up Character Display', categories: ['display'] },
+  { value: 'oled_ssd1306', label: 'OLED 0.96" Graphic Screen (SSD1306)', categories: ['display'] },
+
+  // Bluetooth / RF
+  { value: 'module_bluetooth_hc05', label: 'HC-05 Bluetooth SPP Breakout PCB with Antenna', categories: ['bluetooth'] },
+
+  // MCUs
+  { value: 'arduino_uno_r3', label: 'Arduino Uno R3 (3D Board)', categories: ['mcu'] },
+  { value: 'arduino_mega_2560', label: 'Arduino Mega 2560 (3D Board)', categories: ['mcu'] },
+  { value: 'arduino_nano_v3', label: 'Arduino Nano V3 (3D Module)', categories: ['mcu'] },
+  { value: 'esp32_wroom_32', label: 'ESP32-WROOM-32 (3D Module)', categories: ['mcu'] },
+  { value: 'raspberry_pi_pico', label: 'Raspberry Pi Pico (3D Board)', categories: ['mcu'] },
+
+  // Power
+  { value: 'battery_9v_block', label: 'Battery 9V Alkaline Block', categories: ['battery'] },
+
+  // Relays & Connectors
+  { value: 'relay_songle_srd', label: 'Songle SRD Relay 5V Module', categories: ['relay'] },
+  { value: 'header_2pin_2.54mm', label: 'Screw Terminal / Pin Header Strip', categories: ['connector'] },
+];
+
+const PHYSICAL_PACKAGES: PhysicalPackagePreset[] = [
+  // Bluetooth / RF
+  { id: 'bt_hc05_module', label: 'HC-05 Bluetooth 6-Pin Breakout PCB (Antenna)', category: 'bluetooth', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical', model3d: 'module_bluetooth_hc05' },
+  { id: 'rf_nrf24_module', label: 'nRF24L01+ 2.4GHz RF Transceiver 8-Pin', category: 'bluetooth', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical', model3d: 'module_bluetooth_hc05' },
+
+  // Sensors
+  { id: 'sen_hcsr04', label: 'HC-SR04 Ultrasonic Sonar Module (4-Pin)', category: 'sensor', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical', model3d: 'hcsr04_ultrasonic' },
+  { id: 'sen_ldr', label: 'LDR Photoresistor 5mm (Radial Leads)', category: 'sensor', packageType: 'THT', footprint: 'Sensor_Optical:LDR_5mm_Radial', model3d: 'sensor_ldr_5mm' },
+
+  // Displays
+  { id: 'disp_lcd1602', label: 'LCD 1602 HD44780 16-Pin Flat Face-Up', category: 'display', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x16_P2.54mm_Vertical', model3d: 'lcd1602_hd44780' },
+  { id: 'disp_oled_i2c', label: 'OLED 0.96" 128x64 I2C Display (4-Pin)', category: 'display', packageType: 'Module', footprint: 'Display:OLED_0.96_I2C_4Pin', model3d: 'oled_ssd1306' },
+
+  // Audio / Sound
+  { id: 'buzzer_active_5v', label: 'Active Piezo Buzzer 5V Through-Hole', category: 'buzzer', packageType: 'THT', footprint: 'Buzzer_Beeper:Buzzer_12x9.5RM7.6', model3d: 'buzzer_active_piezo' },
+
+  // LEDs
+  { id: 'led_tht_5mm', label: '5mm THT LED Round (Diffused)', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D5.0mm', model3d: 'led_5mm_diffused' },
+  { id: 'led_tht_3mm', label: '3mm THT LED Round Compact', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D3.0mm', model3d: 'led_5mm_diffused' },
+  { id: 'led_rgb_5mm', label: '5mm RGB LED (4-Pin Common Cathode)', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D5.0mm-4', model3d: 'led_rgb_5mm' },
+  { id: 'led_smd_0805', label: 'SMD 0805 Chip LED (2012 Metric)', category: 'led', packageType: 'SMD', footprint: 'LED_SMD:LED_0805_2012Metric', model3d: 'led_5mm_diffused' },
+
+  // Resistors
+  { id: 'res_tht_axial', label: 'Through-Hole Axial (1/4W 7.62mm)', category: 'resistor', packageType: 'THT', footprint: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', model3d: 'resistor_axial_horiz' },
+  { id: 'res_smd_0805', label: 'Surface Mount SMD 0805 (2012 Metric)', category: 'resistor', packageType: 'SMD', footprint: 'Resistor_SMD:R_0805_2012Metric', model3d: 'resistor_smd_0805' },
+  { id: 'res_smd_1206', label: 'Surface Mount SMD 1206 (3216 Metric)', category: 'resistor', packageType: 'SMD', footprint: 'Resistor_SMD:R_1206_3216Metric', model3d: 'resistor_smd_0805' },
+
+  // Capacitors
+  { id: 'cap_tht_disc', label: 'Through-Hole Ceramic Disc (5.0mm)', category: 'capacitor', packageType: 'THT', footprint: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm', model3d: 'capacitor_disc_ceramic' },
+  { id: 'cap_tht_radial', label: 'Through-Hole Radial Can (Electrolytic)', category: 'capacitor', packageType: 'THT', footprint: 'Capacitor_THT:CP_Radial_D6.3mm_P2.50mm', model3d: 'capacitor_radial_can' },
+  { id: 'cap_smd_0805', label: 'Surface Mount SMD 0805 Capacitor', category: 'capacitor', packageType: 'SMD', footprint: 'Capacitor_SMD:C_0805_2012Metric', model3d: 'capacitor_disc_ceramic' },
+
+  // Diodes
+  { id: 'diode_do41', label: 'DO-41 Through-Hole Axial (1N4007)', category: 'diode', packageType: 'THT', footprint: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', model3d: 'diode_axial_do41' },
+  { id: 'diode_do35', label: 'DO-35 Glass Axial (1N4148)', category: 'diode', packageType: 'THT', footprint: 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal', model3d: 'diode_axial_do41' },
+
+  // ICs / Timers
+  { id: 'ic_dip8', label: 'Through-Hole DIP-8 (7.62mm pitch)', category: 'ic', packageType: 'THT', footprint: 'Package_DIP:DIP-8_W7.62mm', model3d: 'dip8_integrated_circuit' },
+  { id: 'ic_soic8', label: 'Surface Mount SOIC-8 (1.27mm pitch)', category: 'ic', packageType: 'SMD', footprint: 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm', model3d: 'soic8_smd_ic' },
+  { id: 'ic_dip14', label: 'Through-Hole DIP-14 Logic (7.62mm)', category: 'ic', packageType: 'THT', footprint: 'Package_DIP:DIP-14_W7.62mm', model3d: 'dip14_logic_ic' },
+  { id: 'ic_dip16', label: 'Through-Hole DIP-16 Driver (7.62mm)', category: 'ic', packageType: 'THT', footprint: 'Package_DIP:DIP-16_W7.62mm', model3d: 'dip16_logic_ic' },
+
+  // Transistors
+  { id: 'to92_inline', label: 'Through-Hole TO-92 Transistor Inline', category: 'transistor', packageType: 'THT', footprint: 'Package_TO_SOT_THT:TO-92_Inline', model3d: 'to92_transistor' },
+  { id: 'to220_power', label: 'Through-Hole TO-220 Power Package', category: 'transistor', packageType: 'THT', footprint: 'Package_TO_SOT_THT:TO-220-3_Vertical', model3d: 'to220_mosfet' },
+
+  // Switches
+  { id: 'sw_push_6mm', label: 'Tactile Pushbutton 6mm', category: 'switch', packageType: 'THT', footprint: 'Button_Switch_THT:SW_PUSH_6mm_H5mm', model3d: 'pushbutton_tactile_6mm' },
+  { id: 'sw_slide_spdt', label: 'Mini Slide Switch SPDT (2.54mm)', category: 'switch', packageType: 'THT', footprint: 'Button_Switch_THT:SW_Slide_1P2T_Straight', model3d: 'switch_slide_spdt' },
+
+  // Power / Batteries
+  { id: 'battery_9v', label: '9V Alkaline Block Battery Clip', category: 'battery', packageType: 'Chassis', footprint: 'BatteryHolder_Keystone_2460_1xAA', model3d: 'battery_9v_block' },
+
+  // MCUs
+  { id: 'mcu_uno', label: 'Arduino Uno R3 Dev Board', category: 'mcu', packageType: 'Module', footprint: 'Module:Arduino_Uno_R3', model3d: 'arduino_uno_r3' },
+  { id: 'mcu_nano', label: 'Arduino Nano V3 Compact DIP-30', category: 'mcu', packageType: 'Module', footprint: 'Module:Arduino_Nano', model3d: 'arduino_nano_v3' },
+  { id: 'mcu_mega', label: 'Arduino Mega 2560 R3 Board', category: 'mcu', packageType: 'Module', footprint: 'Module:Arduino_Mega_2560', model3d: 'arduino_mega_2560' },
+  { id: 'mcu_esp32', label: 'ESP32-WROOM-32 DevKit Board', category: 'mcu', packageType: 'Module', footprint: 'Module:ESP32-WROOM-32', model3d: 'esp32_wroom_32' },
+  { id: 'mcu_pico', label: 'Raspberry Pi Pico RP2040 Board', category: 'mcu', packageType: 'Module', footprint: 'Module:RP2040_Pico', model3d: 'raspberry_pi_pico' },
+];
+
+function getCategoryForComponent(type: string, category?: string, subCategory?: string): string {
+  const t = (type || '').toUpperCase();
+  const cat = (category || '').toLowerCase();
+  const sub = (subCategory || '').toLowerCase();
+
+  if (t.includes('BLUETOOTH') || t.includes('HC05') || t.includes('HC06') || t.includes('NRF24') || t.includes('WIRELESS') || t.includes('LORA') || sub.includes('wireless') || sub.includes('rf')) return 'bluetooth';
+  if (t.includes('ULTRASONIC') || t.includes('SR04') || t.includes('DHT11') || t.includes('LDR') || cat.includes('sensor')) return 'sensor';
+  if (t.includes('LCD') || t.includes('OLED') || t.includes('DISPLAY') || sub.includes('display')) return 'display';
+  if (t.includes('BUZZER') || sub.includes('sound') || sub.includes('audio')) return 'buzzer';
+  if (t.includes('LED') || sub.includes('led')) return 'led';
+  if (t.includes('RESISTOR') || t.includes('POTENTIOMETER') || sub.includes('resistor')) return 'resistor';
+  if (t.includes('CAPACITOR') || sub.includes('capacitor')) return 'capacitor';
+  if (t.includes('DIODE') || sub.includes('diode')) return 'diode';
+  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('TO92') || t.includes('TO220') || sub.includes('transistor')) return 'transistor';
+  if (t.includes('RELAY') || sub.includes('relay')) return 'relay';
+  if (t.includes('CONNECTOR') || t.includes('TERMINAL') || t.includes('HEADER') || cat.includes('connector')) return 'connector';
+  if (t.includes('555') || t.includes('TIMER') || t.includes('DIP') || t.includes('IC_') || t.includes('LOGIC') || cat.includes('integrated_circuits')) return 'ic';
+  if (t.includes('ARDUINO') || t.includes('ESP32') || t.includes('PICO') || t.includes('STM32') || t.includes('MCU') || cat.includes('microcontroller')) return 'mcu';
+  if (t.includes('BATTERY') || t.includes('DC_VOLTAGE') || t.includes('SOURCE') || cat.includes('power')) return 'battery';
   if (t.includes('BUTTON') || t.includes('SWITCH')) return 'switch';
-  if (t.includes('BATTERY') || t.includes('DC_VOLTAGE') || t.includes('SOURCE')) return 'battery';
-  if (t.includes('ARDUINO') || t.includes('ESP32') || t.includes('PICO') || t.includes('STM32') || t.includes('MCU')) return 'mcu';
   return 'general';
 }
 
@@ -1742,107 +1844,178 @@ export function PropertiesInspector({
         <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 space-y-3">
           <div className="text-[10px] uppercase font-mono text-purple-400 font-bold tracking-wider flex items-center justify-between">
             <span>Physical Representation</span>
-            <span className="text-slate-500 font-normal">IPC-7351</span>
+            <span className="text-slate-500 font-normal">IPC-7351 Standard</span>
           </div>
 
-          {/* Unified Physical Representation Package Selector */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-mono text-slate-300 font-semibold flex items-center justify-between">
-              <span>Physical Package Preset</span>
-              <span className="text-purple-400 font-bold">Auto 2D &amp; 3D Sync</span>
-            </label>
-            {(() => {
-              const compCategory = getCategoryForComponent(component.type);
-              const availablePackages = PHYSICAL_PACKAGES.filter((p) => p.category === compCategory);
-              const currentId = availablePackages.find((p) => p.footprint === component.footprint && p.model3d === component.model3d)?.id
-                || PHYSICAL_PACKAGES.find((p) => p.footprint === component.footprint && p.model3d === component.model3d)?.id
-                || 'custom';
+          {(() => {
+            const compCategory = getCategoryForComponent(component.type, component.category, component.subCategory);
+            const availablePackages = PHYSICAL_PACKAGES.filter((p) => p.category === compCategory);
+            const currentPresetId = availablePackages.find(
+              (p) => p.footprint === component.footprint && p.model3d === component.model3d
+            )?.id || 'custom';
 
-              return (
-                <select
-                  value={currentId}
-                  onChange={(e) => {
-                    const pkg = availablePackages.find((p) => p.id === e.target.value) || PHYSICAL_PACKAGES.find((p) => p.id === e.target.value);
-                    if (pkg) {
+            const filteredFootprints = FOOTPRINT_OPTIONS.filter(
+              (f) => f.categories.includes(compCategory) || f.categories.includes('all')
+            );
+            const hasCurrentFp = filteredFootprints.some((f) => f.value === component.footprint);
+
+            const filteredModels = MODEL_3D_OPTIONS.filter(
+              (m) => m.categories.includes(compCategory) || m.categories.includes('all')
+            );
+            const hasCurrentModel = filteredModels.some((m) => m.value === (component.model3d || ''));
+
+            return (
+              <div className="space-y-3">
+                {/* 1. Package Preset (Context Filtered) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-mono text-slate-300 font-semibold flex items-center justify-between">
+                    <span>Physical Package Preset</span>
+                    <span className="text-purple-400 font-bold">Auto 2D &amp; 3D Sync</span>
+                  </label>
+                  <select
+                    value={currentPresetId}
+                    onChange={(e) => {
+                      const pkg = availablePackages.find((p) => p.id === e.target.value);
+                      if (pkg) {
+                        let mappedType = component.type;
+                        if (pkg.id === 'mcu_mega') mappedType = 'ARDUINO_MEGA';
+                        else if (pkg.id === 'mcu_uno') mappedType = 'ARDUINO_UNO';
+                        else if (pkg.id === 'mcu_nano') mappedType = 'ARDUINO_NANO';
+                        else if (pkg.id === 'mcu_esp32') mappedType = 'ESP32_DEVKIT';
+                        else if (pkg.id === 'mcu_pico') mappedType = 'RASPBERRY_PI_PICO';
+
+                        onUpdateComponent({
+                          ...component,
+                          type: mappedType,
+                          packageType: pkg.packageType,
+                          footprint: pkg.footprint,
+                          model3d: pkg.model3d,
+                          parameters: {
+                            ...component.parameters,
+                            packageType: pkg.packageType,
+                            footprint: pkg.footprint,
+                            model3d: pkg.model3d,
+                          },
+                        });
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-purple-200 font-mono text-[11px] font-semibold focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="custom">-- Custom / Manual Configuration --</option>
+                    {availablePackages.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Package Mounting Technology (THT / SMD / Module / Chassis) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
+                    <span>Package Mounting Type</span>
+                    <span className="text-slate-500">Assembly</span>
+                  </label>
+                  <select
+                    value={component.packageType || 'THT'}
+                    onChange={(e) => {
+                      const newPkgType = e.target.value as 'THT' | 'SMD' | 'Module' | 'Chassis';
+                      onUpdateComponent({
+                        ...component,
+                        packageType: newPkgType,
+                        parameters: {
+                          ...component.parameters,
+                          packageType: newPkgType,
+                        },
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="THT">Through-Hole Technology (THT / DIP)</option>
+                    <option value="SMD">Surface Mount Device (SMD / SMT)</option>
+                    <option value="Module">Breakout PCB Module (Header Pins)</option>
+                    <option value="Chassis">Chassis / Enclosure Mount</option>
+                  </select>
+                </div>
+
+                {/* 3. PCB Footprint Selection (Strictly Context-Filtered) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
+                    <span>PCB Footprint Package</span>
+                    <span className="text-slate-500">2D Layout</span>
+                  </label>
+                  <select
+                    value={component.footprint}
+                    onChange={(e) => {
+                      const newFp = e.target.value;
+                      onUpdateComponent({
+                        ...component,
+                        footprint: newFp,
+                        parameters: {
+                          ...component.parameters,
+                          footprint: newFp,
+                        },
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    {!hasCurrentFp && component.footprint && (
+                      <option value={component.footprint}>
+                        Current: {component.footprint}
+                      </option>
+                    )}
+                    {filteredFootprints.map((fp) => (
+                      <option key={fp.value} value={fp.value}>
+                        {fp.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. 3D CAD Model Mapping (Strictly Context-Filtered) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
+                    <span>3D CAD Model Mapping</span>
+                    <span className="text-slate-500">WebGL 3D Live</span>
+                  </label>
+                  <select
+                    value={component.model3d || ''}
+                    onChange={(e) => {
+                      const m3dVal = e.target.value;
                       let mappedType = component.type;
-                      if (pkg.id === 'mcu_mega') mappedType = 'ARDUINO_MEGA';
-                      else if (pkg.id === 'mcu_uno') mappedType = 'ARDUINO_UNO';
-                      else if (pkg.id === 'mcu_nano') mappedType = 'ARDUINO_NANO';
-                      else if (pkg.id === 'mcu_esp32') mappedType = 'ESP32_DEVKIT';
-                      else if (pkg.id === 'mcu_pico') mappedType = 'RASPBERRY_PI_PICO';
+                      if (m3dVal === 'arduino_mega_2560') mappedType = 'ARDUINO_MEGA';
+                      else if (m3dVal === 'arduino_uno_r3') mappedType = 'ARDUINO_UNO';
+                      else if (m3dVal === 'arduino_nano_v3') mappedType = 'ARDUINO_NANO';
+                      else if (m3dVal.startsWith('esp32')) mappedType = 'ESP32_DEVKIT';
+                      else if (m3dVal === 'raspberry_pi_pico') mappedType = 'RASPBERRY_PI_PICO';
 
                       onUpdateComponent({
                         ...component,
                         type: mappedType,
-                        footprint: pkg.footprint,
-                        model3d: pkg.model3d,
+                        model3d: m3dVal,
+                        parameters: {
+                          ...component.parameters,
+                          model3d: m3dVal,
+                        },
                       });
-                    }
-                  }}
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-purple-200 font-mono text-[11px] font-semibold focus:outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  <option value="custom">-- Custom / Manual Configuration --</option>
-                  {(availablePackages.length > 0 ? availablePackages : PHYSICAL_PACKAGES).map((pkg) => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.label}
-                    </option>
-                  ))}
-                </select>
-              );
-            })()}
-          </div>
-
-          {/* PCB Footprint Selection */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
-              <span>PCB Footprint Package</span>
-              <span className="text-slate-500">2D Layout</span>
-            </label>
-            <select
-              value={component.footprint}
-              onChange={(e) => onUpdateComponent({ ...component, footprint: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500"
-            >
-              {FOOTPRINT_OPTIONS.map((fp) => (
-                <option key={fp.value} value={fp.value}>
-                  {fp.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 3D CAD Model Mapping */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase font-mono text-slate-400 font-semibold flex items-center justify-between">
-              <span>3D CAD Model Mapping</span>
-              <span className="text-slate-500">WebGL 3D</span>
-            </label>
-            <select
-              value={component.model3d || 'resistor_axial_horiz'}
-              onChange={(e) => {
-                const m3dVal = e.target.value;
-                let mappedType = component.type;
-                if (m3dVal === 'arduino_mega_2560') mappedType = 'ARDUINO_MEGA';
-                else if (m3dVal === 'arduino_uno_r3') mappedType = 'ARDUINO_UNO';
-                else if (m3dVal === 'arduino_nano_v3') mappedType = 'ARDUINO_NANO';
-                else if (m3dVal.startsWith('esp32')) mappedType = 'ESP32_DEVKIT';
-                else if (m3dVal === 'raspberry_pi_pico') mappedType = 'RASPBERRY_PI_PICO';
-
-                onUpdateComponent({
-                  ...component,
-                  type: mappedType,
-                  model3d: m3dVal,
-                });
-              }}
-              className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500"
-            >
-              {MODEL_3D_OPTIONS.map((m3d) => (
-                <option key={m3d.value} value={m3d.value}>
-                  {m3d.label}
-                </option>
-              ))}
-            </select>
-          </div>
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-mono text-[11px] focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    {!hasCurrentModel && component.model3d && (
+                      <option value={component.model3d}>
+                        Current: {component.model3d}
+                      </option>
+                    )}
+                    {filteredModels.map((m3d) => (
+                      <option key={m3d.value} value={m3d.value}>
+                        {m3d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* SECTION 5: ELECTRICAL PIN CONNECTIONS & NETLIST MAP */}
