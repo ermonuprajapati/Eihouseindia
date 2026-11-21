@@ -23,6 +23,11 @@ export interface ComponentTemplate {
 
 export const COMPONENT_CATALOG: ComponentTemplate[] = [
   // ==========================================================================
+  // UNIFIED COMPONENT LIBRARY PILOT (STAGE 1): 10 CORE PILOT FAMILIES
+  // Resistor, Capacitor, Inductor, Diode, LED, Potentiometer, BJT, MOSFET, Switch, Battery
+  // Standardized with explicit subCategory, simulationStatus ('full_mna'),
+  // packageType, and dynamic editable parameter properties.
+  // ==========================================================================
   // A. PASSIVE COMPONENTS
   // ==========================================================================
   // Resistors

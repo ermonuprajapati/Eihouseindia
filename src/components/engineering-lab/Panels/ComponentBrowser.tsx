@@ -153,6 +153,7 @@ export function ComponentBrowser({
 }: ComponentBrowserProps) {
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
   const [customCatalog, setCustomCatalog] = useState<ComponentTemplate[]>([]);
   const isResizingRef = useRef(false);
 
@@ -189,9 +190,8 @@ export function ComponentBrowser({
     return [...COMPONENT_CATALOG, ...customCatalog];
   }, [customCatalog]);
 
-  // Clean deduped electrical types for the component browser
-  const displayTemplates = useMemo(() => {
-    // Filter by single category dropdown
+  // Intermediate category + search filtered templates for dynamic subcategory derivation
+  const categoryFilteredTemplates = useMemo(() => {
     let list = allTemplates.filter((item) => {
       if (selectedGroup === 'all') return true;
       if (selectedGroup === 'passives') {
@@ -221,7 +221,6 @@ export function ComponentBrowser({
       return true;
     });
 
-    // Filter by search query
     const q = search.toLowerCase().trim();
     if (q) {
       list = list.filter(
@@ -233,7 +232,27 @@ export function ComponentBrowser({
           (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q))
       );
     }
+    return list;
+  }, [allTemplates, selectedGroup, search]);
 
+  // Derived available subcategories dynamically from active filtered library
+  const availableSubCategories = useMemo(() => {
+    const subs = new Set<string>();
+    categoryFilteredTemplates.forEach((item) => {
+      if (item.subCategory) subs.add(item.subCategory);
+    });
+    return Array.from(subs).sort();
+  }, [categoryFilteredTemplates]);
+
+  // Clean deduped electrical types for the component browser
+  const displayTemplates = useMemo(() => {
+    let list = categoryFilteredTemplates;
+
+    if (selectedSubCategory !== 'all') {
+      list = list.filter((item) => item.subCategory === selectedSubCategory);
+    }
+
+    const q = search.toLowerCase().trim();
     // Deduplicate duplicate fixed resistors & duplicate capacitors to prevent visual clutter
     const seenTypes = new Set<string>();
     const deduped: ComponentTemplate[] = [];
@@ -258,7 +277,7 @@ export function ComponentBrowser({
     });
 
     return deduped;
-  }, [allTemplates, selectedGroup, search]);
+  }, [categoryFilteredTemplates, selectedSubCategory, search]);
 
   const handleAdd = (template: ComponentTemplate) => {
     const randomOffset = () => Math.floor(Math.random() * 60) - 30;
@@ -317,22 +336,51 @@ export function ComponentBrowser({
           )}
         </div>
 
-        {/* Single Clean Category Dropdown */}
-        <div className="relative">
-          <select
-            value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
-            className="w-full appearance-none bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-md px-2.5 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer pr-7"
-          >
-            <option value="all">⚡ All Categories</option>
-            <option value="passives">📐 Passives (Resistors, Caps, Inductors)</option>
-            <option value="semiconductors">🔬 Active &amp; Semiconductors (Diodes, BJTs, FETs)</option>
-            <option value="mcus">💻 Microcontrollers &amp; Boards (Mega 2560, Uno, ESP32)</option>
-            <option value="logic">🔲 Digital Logic &amp; Analog ICs (Gates, 555, OpAmps)</option>
-            <option value="sensors">📡 Sensors &amp; Displays (LDR, Ultrasonic, LCD)</option>
-            <option value="power">⚡ Power &amp; Connectors (Batt, VCC, Regulators, Relays)</option>
-          </select>
-          <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        {/* Category & SubCategory Row (Side-by-Side: No Extra Vertical Height) */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="relative">
+            <select
+              value={selectedGroup}
+              onChange={(e) => {
+                setSelectedGroup(e.target.value);
+                setSelectedSubCategory('all');
+              }}
+              className="w-full appearance-none bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-md px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer pr-5 truncate"
+              title="Filter by main category"
+            >
+              <option value="all">⚡ All Categories</option>
+              <option value="passives">📐 Passives</option>
+              <option value="semiconductors">🔬 Semiconductors</option>
+              <option value="mcus">💻 Microcontrollers</option>
+              <option value="logic">🔲 Logic &amp; ICs</option>
+              <option value="sensors">📡 Sensors</option>
+              <option value="power">⚡ Power</option>
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+
+          <div className="relative">
+            <select
+              value={selectedSubCategory}
+              onChange={(e) => setSelectedSubCategory(e.target.value)}
+              disabled={availableSubCategories.length <= 1}
+              className="w-full appearance-none bg-slate-950 border border-slate-800 hover:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer pr-5 truncate"
+              title="Filter by subcategory"
+            >
+              <option value="all">🏷️ All Subtypes</option>
+              {availableSubCategories.map((sub) => {
+                const label = sub
+                  .replace(/_/g, ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase());
+                return (
+                  <option key={sub} value={sub}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
         </div>
       </div>
 
@@ -345,6 +393,7 @@ export function ComponentBrowser({
               onClick={() => {
                 setSearch('');
                 setSelectedGroup('all');
+                setSelectedSubCategory('all');
               }}
               className="text-emerald-400 hover:underline text-[11px]"
             >
@@ -379,10 +428,24 @@ export function ComponentBrowser({
                       {shortName}
                     </h4>
                     <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 mt-0.5">
-                      <span className="text-emerald-400 font-semibold truncate max-w-[65px]">
+                      <span className="text-emerald-400 font-semibold truncate max-w-[60px]">
                         {item.defaultValue}
                       </span>
-                      <span className="text-slate-500 uppercase">{item.packageType || 'THT'}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {item.simulationStatus && item.simulationStatus !== 'full_mna' && (
+                          <span
+                            className="text-[8px] font-mono px-1 py-0 rounded bg-amber-950/90 text-amber-300 border border-amber-700/60 uppercase"
+                            title={`Simulation support: ${item.simulationStatus}`}
+                          >
+                            {item.simulationStatus === 'behavioral'
+                              ? 'Behavioral'
+                              : item.simulationStatus === 'transpiled_mcu'
+                              ? 'MCU Sim'
+                              : 'Catalog'}
+                          </span>
+                        )}
+                        <span className="text-slate-500 uppercase">{item.packageType || 'THT'}</span>
+                      </div>
                     </div>
                   </div>
 
