@@ -38,6 +38,12 @@ export function DigitalMultimeter65({
   const [audioEnabled, setAudioEnabled] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
+  // Rolling sample ring buffer (max 64 samples) for True AC-Coupled RMS calculation
+  const acSampleRingRef = useRef<number[]>([]);
+  const lastAcModeRef = useRef<string>(dmm.mode);
+  const lastProbeRedRef = useRef<string>('');
+  const lastProbeBlackRef = useRef<string>('');
+
   // Probe selector options
   const probeOptions = useMemo(() => {
     const list: { id: string; label: string; group: string }[] = [];
@@ -64,11 +70,31 @@ export function DigitalMultimeter65({
   // Compute live reading based on actual circuit state and probe attachment
   const liveReading = useMemo(() => {
     // 1. Check if probing across a single component
-    const probedComp = components.find((c) => c.id === probeRed);
+    const probedComp = components.find((c) => c.id === probeRed || c.id === probeRed.split(':')[0]);
     const compState = probedComp ? simStates[probedComp.id] : undefined;
+
+    // Clear AC buffer on mode or probe target change
+    if (
+      lastAcModeRef.current !== dmm.mode ||
+      lastProbeRedRef.current !== probeRed ||
+      lastProbeBlackRef.current !== probeBlack
+    ) {
+      acSampleRingRef.current = [];
+      lastAcModeRef.current = dmm.mode;
+      lastProbeRedRef.current = probeRed;
+      lastProbeBlackRef.current = probeBlack;
+    }
 
     // Mode-specific calculations
     if (dmm.mode === 'RESISTANCE') {
+      const isBurned =
+        (compState as { burned?: boolean })?.burned ||
+        (compState as { status?: string })?.status === 'BURNED' ||
+        (compState as { faultState?: string })?.faultState === 'BURNED' ||
+        (probedComp as { status?: string })?.status === 'BURNED';
+      if (isBurned) {
+        return { val: 0, unit: 'MΩ', isOverload: true };
+      }
       if (probedComp && (probedComp.type === 'RESISTOR' || probedComp.type.includes('RESISTOR'))) {
         const rVal = parseFloat(String(probedComp.parameters?.resistance ?? probedComp.value ?? 1000));
         return { val: rVal, unit: rVal >= 1e6 ? 'MΩ' : rVal >= 1000 ? 'kΩ' : 'Ω', isOverload: false };
@@ -91,9 +117,54 @@ export function DigitalMultimeter65({
     }
 
     if (dmm.mode === 'DIODE') {
-      if (probedComp && (probedComp.type === 'DIODE' || probedComp.type.includes('LED'))) {
-        const vf = compState?.voltage || 0.68;
-        return { val: Math.abs(vf), unit: 'V', isOverload: false };
+      const isBurned =
+        (compState as { burned?: boolean })?.burned ||
+        (compState as { status?: string })?.status === 'BURNED' ||
+        (compState as { faultState?: string })?.faultState === 'BURNED' ||
+        (probedComp as { status?: string })?.status === 'BURNED';
+      if (isBurned) {
+        return { val: 0, unit: 'V', isOverload: true };
+      }
+
+      if (probedComp && (probedComp.type === 'DIODE' || probedComp.type.includes('DIODE') || probedComp.type.includes('LED'))) {
+        // Respect probe polarity if pin info is available (Red on cathode / Black on anode -> OL)
+        const pRedLower = probeRed.toLowerCase();
+        const pBlackLower = probeBlack.toLowerCase();
+        const isRedCathode = pRedLower.endsWith(':2') || pRedLower.endsWith(':c') || pRedLower.endsWith(':k') || pRedLower.includes('cathode');
+        const isBlackAnode = pBlackLower.endsWith(':1') || pBlackLower.endsWith(':a') || pBlackLower.includes('anode');
+
+        if (isRedCathode && isBlackAnode) {
+          return { val: 0, unit: 'V', isOverload: true };
+        }
+
+        const isLed = probedComp.type.includes('LED');
+        if (isLed) {
+          const color = String(probedComp.parameters?.color || probedComp.value || 'red').toLowerCase();
+          let vfNominal = 1.9; // Red 1.9V
+          if (color.includes('yellow') || color.includes('amber') || color.includes('orange')) {
+            vfNominal = 2.1;
+          } else if (color.includes('green')) {
+            vfNominal = 2.3;
+          } else if (color.includes('cyan')) {
+            vfNominal = 3.0;
+          } else if (color.includes('blue') || color.includes('white')) {
+            vfNominal = 3.1;
+          } else if (color.includes('purple') || color.includes('violet')) {
+            vfNominal = 3.2;
+          }
+
+          // Use live Math.max(0, compState.voltage) when energized, or nominal forward voltage
+          const liveV = compState?.voltage !== undefined && compState.voltage > 0.05
+            ? Math.max(0, compState.voltage)
+            : vfNominal;
+          return { val: Math.round(liveV * 1000) / 1000, unit: 'V', isOverload: false };
+        } else {
+          // Standard silicon diode: 0.700V (or live forward drop if energized)
+          const liveV = compState?.voltage !== undefined && compState.voltage > 0.05
+            ? Math.max(0, compState.voltage)
+            : 0.700;
+          return { val: Math.round(liveV * 1000) / 1000, unit: 'V', isOverload: false };
+        }
       }
       return { val: 0, unit: 'V', isOverload: true };
     }
@@ -112,10 +183,22 @@ export function DigitalMultimeter65({
     }
 
     if (dmm.mode === 'AC_V') {
-      const vVal = compState?.voltage || 0;
-      // AC True RMS approximation
-      const vRms = Math.abs(vVal) / Math.SQRT2;
-      return { val: vRms, unit: 'V~', isOverload: false };
+      const liveV = compState ? compState.voltage : probeRed === 'VCC' ? 5.0 : 0.0;
+      acSampleRingRef.current.push(liveV);
+      if (acSampleRingRef.current.length > 64) {
+        acSampleRingRef.current.shift();
+      }
+
+      // Compute true AC-coupled RMS: standard deviation around the rolling mean
+      const ring = acSampleRingRef.current;
+      const n = ring.length;
+      let acRms = 0;
+      if (n > 1) {
+        const mean = ring.reduce((sum, x) => sum + x, 0) / n;
+        const variance = ring.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n;
+        acRms = Math.sqrt(variance);
+      }
+      return { val: Math.round(acRms * 10000) / 10000, unit: 'V~', isOverload: false };
     }
 
     if (dmm.mode === 'FREQUENCY') {

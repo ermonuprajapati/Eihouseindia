@@ -54,6 +54,28 @@ export function Oscilloscope4CH({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scopeState = instruments.oscilloscope;
   const frozenWaveformRef = useRef<Record<string, SimulationWaveformPoint[]> | null>(null);
+  const lastTriggeredSamplesRef = useRef<Record<string, SimulationWaveformPoint[]> | null>(null);
+  const lastTriggerTimeRef = useRef<number | null>(null);
+  const singleTriggeredRef = useRef<boolean>(false);
+  const prevTriggerModeRef = useRef<string>(scopeState.triggerMode || 'auto');
+  const prevTriggerSourceRef = useRef<string>(scopeState.triggerSource || 'CH1');
+  const prevTriggerEdgeRef = useRef<string>(scopeState.triggerEdge || 'rising');
+
+  // Reset trigger state when trigger mode, source, or edge changes
+  useEffect(() => {
+    if (
+      prevTriggerModeRef.current !== (scopeState.triggerMode || 'auto') ||
+      prevTriggerSourceRef.current !== (scopeState.triggerSource || 'CH1') ||
+      prevTriggerEdgeRef.current !== (scopeState.triggerEdge || 'rising')
+    ) {
+      prevTriggerModeRef.current = scopeState.triggerMode || 'auto';
+      prevTriggerSourceRef.current = scopeState.triggerSource || 'CH1';
+      prevTriggerEdgeRef.current = scopeState.triggerEdge || 'rising';
+      singleTriggeredRef.current = false;
+      lastTriggeredSamplesRef.current = null;
+      lastTriggerTimeRef.current = null;
+    }
+  }, [scopeState.triggerMode, scopeState.triggerSource, scopeState.triggerEdge]);
 
   // When paused/stopped in DSO, freeze the snapshot so live simulation doesn't overwrite it
   if (scopeState.running === false && !frozenWaveformRef.current && Object.keys(waveformData).length > 0) {
@@ -211,23 +233,40 @@ export function Oscilloscope4CH({
     const vrms = Math.sqrt(vals.reduce((sum, v) => sum + v * v, 0) / vals.length);
 
     const mid = (vmax + vmin) / 2;
+    // 5% hysteresis band to eliminate noise/jitter false crossings
+    const midHigh = mid + vpp * 0.05;
+    const midLow = mid - vpp * 0.05;
+
     const crossings: number[] = [];
     let highCount = 0;
+    let wasLow = activeMeasurePoints[0].value < midLow;
+
     for (let i = 0; i < activeMeasurePoints.length; i++) {
-      if (activeMeasurePoints[i].value >= mid) highCount++;
-      if (i > 0 && (activeMeasurePoints[i - 1].value - mid) * (activeMeasurePoints[i].value - mid) < 0) {
-        crossings.push(activeMeasurePoints[i].time);
+      const pt = activeMeasurePoints[i];
+      if (pt.value >= mid) highCount++;
+
+      if (i > 0) {
+        const prev = activeMeasurePoints[i - 1];
+        if (wasLow && pt.value > midHigh) {
+          // Linearly interpolate exact crossing timestamp between times[i - 1] and times[i]
+          const frac = pt.value !== prev.value ? (mid - prev.value) / (pt.value - prev.value) : 0.5;
+          const clampedFrac = Math.max(0, Math.min(1, frac));
+          const tCross = prev.time + clampedFrac * (pt.time - prev.time);
+          crossings.push(tCross);
+          wasLow = false;
+        } else if (!wasLow && pt.value < midLow) {
+          wasLow = true;
+        }
       }
     }
 
     let periodMs = 0;
     let freq = 0;
     if (crossings.length >= 2) {
-      const avgHalfPeriod = (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
-      const periodSec = avgHalfPeriod * 2;
-      if (periodSec > 0.000001) {
-        periodMs = periodSec * 1000;
-        freq = 1.0 / periodSec;
+      const avgPeriod = (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
+      if (avgPeriod > 1e-9) {
+        periodMs = avgPeriod * 1000;
+        freq = 1.0 / avgPeriod;
       }
     }
 
@@ -389,8 +428,124 @@ export function Oscilloscope4CH({
       const timebaseMs = scopeState.timebaseMs || 50;
       const totalSpanSec = (numDivX * timebaseMs) / 1000; // 10 horizontal divisions
 
+      // Trigger resolution
+      const trigMode = (scopeState.triggerMode || 'auto').toLowerCase();
+      const trigSrc = scopeState.triggerSource || 'CH1';
+      const trigLevel = scopeState.triggerLevel ?? 0;
+      const trigEdge = scopeState.triggerEdge || 'rising';
+
+      const trigChObj = channels.find((c) => c.id === trigSrc) || channels[0];
+      const trigPts = trigChObj?.pts || [];
+
+      let triggerTime: number | null = null;
+      let hasValidCrossing = false;
+
+      if (trigPts && trigPts.length >= 2) {
+        for (let i = 1; i < trigPts.length; i++) {
+          const vPrev = trigPts[i - 1].value;
+          const vCurr = trigPts[i].value;
+          const isRising = vPrev < trigLevel && vCurr >= trigLevel;
+          const isFalling = vPrev > trigLevel && vCurr <= trigLevel;
+
+          if ((trigEdge === 'rising' && isRising) || (trigEdge === 'falling' && isFalling)) {
+            const frac = vCurr !== vPrev ? (trigLevel - vPrev) / (vCurr - vPrev) : 0.5;
+            triggerTime = trigPts[i - 1].time + Math.max(0, Math.min(1, frac)) * (trigPts[i].time - trigPts[i - 1].time);
+            hasValidCrossing = true;
+          }
+        }
+      }
+
+      let trigStatus = 'AUTO';
+      let activeTStart = 0;
+      let shouldUseHeldSamples = false;
+
+      if (trigMode === 'single') {
+        if (singleTriggeredRef.current && lastTriggeredSamplesRef.current) {
+          trigStatus = 'STOP';
+          shouldUseHeldSamples = true;
+          activeTStart = (lastTriggerTimeRef.current ?? 0) - totalSpanSec / 2;
+        } else if (hasValidCrossing && triggerTime !== null) {
+          singleTriggeredRef.current = true;
+          lastTriggeredSamplesRef.current = {
+            CH1: [...(channels[0].pts || [])],
+            CH2: [...(channels[1].pts || [])],
+            CH3: [...(channels[2].pts || [])],
+            CH4: [...(channels[3].pts || [])],
+          };
+          lastTriggerTimeRef.current = triggerTime;
+          trigStatus = 'STOP';
+          shouldUseHeldSamples = true;
+          activeTStart = triggerTime - totalSpanSec / 2;
+        } else {
+          trigStatus = 'WAIT TRIG';
+        }
+      } else if (trigMode === 'normal') {
+        if (hasValidCrossing && triggerTime !== null) {
+          lastTriggeredSamplesRef.current = {
+            CH1: [...(channels[0].pts || [])],
+            CH2: [...(channels[1].pts || [])],
+            CH3: [...(channels[2].pts || [])],
+            CH4: [...(channels[3].pts || [])],
+          };
+          lastTriggerTimeRef.current = triggerTime;
+          trigStatus = 'TRIG\'D';
+          activeTStart = triggerTime - totalSpanSec / 2;
+        } else if (lastTriggeredSamplesRef.current) {
+          trigStatus = 'WAIT TRIG';
+          shouldUseHeldSamples = true;
+          activeTStart = (lastTriggerTimeRef.current ?? 0) - totalSpanSec / 2;
+        } else {
+          trigStatus = 'WAIT TRIG';
+        }
+      } else {
+        // Auto mode
+        if (hasValidCrossing && triggerTime !== null) {
+          trigStatus = 'TRIG\'D';
+          activeTStart = triggerTime - totalSpanSec / 2;
+        } else {
+          trigStatus = 'AUTO';
+          const maxT = Math.max(
+            ...channels.map((c) => (c.pts && c.pts.length > 0 ? c.pts[c.pts.length - 1].time : 0)),
+            0
+          );
+          activeTStart = maxT - totalSpanSec;
+        }
+      }
+
+      // Check if any signal is present
+      const anyActiveSignal = channels.some((c) => c.enabled && c.pts && c.pts.length >= 2);
+
+      // Render channels
       channels.forEach((ch) => {
-        if (!ch.enabled || !ch.pts || ch.pts.length < 2) return;
+        if (!ch.enabled) return;
+
+        const ptsToUse = shouldUseHeldSamples && lastTriggeredSamplesRef.current
+          ? lastTriggeredSamplesRef.current[ch.id] || []
+          : ch.pts;
+
+        // In normal or single waiting state with no prior capture, draw flat 0V baseline
+        if ((trigMode === 'normal' || trigMode === 'single') && !hasValidCrossing && !shouldUseHeldSamples) {
+          ctx.strokeStyle = ch.color;
+          ctx.lineWidth = 1.5;
+          const y = midY - ((0 + ch.offsetV) / ch.scaleV) * divH;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+          return;
+        }
+
+        if (!ptsToUse || ptsToUse.length < 2) {
+          // Flat 0V baseline for inactive or disconnected channel
+          ctx.strokeStyle = ch.color;
+          ctx.lineWidth = 1.5;
+          const y = midY - ((0 + ch.offsetV) / ch.scaleV) * divH;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+          return;
+        }
 
         ctx.strokeStyle = ch.color;
         ctx.lineWidth = 2.2;
@@ -398,15 +553,14 @@ export function Oscilloscope4CH({
         ctx.shadowBlur = 6;
         ctx.beginPath();
 
-        const meanV = ch.pts.reduce((s, p) => s + p.value, 0) / ch.pts.length;
-        const tLatest = ch.pts[ch.pts.length - 1].time;
-        const tStart = tLatest - totalSpanSec;
+        const meanV = ptsToUse.reduce((s, p) => s + p.value, 0) / ptsToUse.length;
+        const tStart = activeTStart;
 
         let hasDrawnFirst = false;
 
-        for (let i = 0; i < ch.pts.length; i++) {
-          const pt = ch.pts[i];
-          if (pt.time < tStart && i + 1 < ch.pts.length && ch.pts[i + 1].time < tStart) {
+        for (let i = 0; i < ptsToUse.length; i++) {
+          const pt = ptsToUse[i];
+          if (pt.time < tStart && i + 1 < ptsToUse.length && ptsToUse[i + 1].time < tStart) {
             continue;
           }
 
@@ -432,6 +586,28 @@ export function Oscilloscope4CH({
         ctx.shadowBlur = 0; // reset
       });
 
+      // No Signal / Standby Screen HUD Notice
+      if (!anyActiveSignal) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('NO SIGNAL / STANDBY', width / 2, height / 2 - 16);
+      }
+
+      // Trigger Status Overlay Badge
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'right';
+      if (trigStatus === 'TRIG\'D') {
+        ctx.fillStyle = '#10B981';
+      } else if (trigStatus === 'AUTO') {
+        ctx.fillStyle = '#38BDF8';
+      } else if (trigStatus === 'WAIT TRIG') {
+        ctx.fillStyle = '#F59E0B';
+      } else {
+        ctx.fillStyle = '#EF4444';
+      }
+      ctx.fillText(`[${trigStatus}]`, width - 16, 20);
+
       // 4. Math Channel Rendering (All 4 Channels: Source A [+ - × ÷] Source B)
       const isMathActive = scopeState.mathEnabled ?? (scopeState.mathMode && scopeState.mathMode !== 'off');
       if (isMathActive) {
@@ -440,20 +616,23 @@ export function Oscilloscope4CH({
         const op = scopeState.mathOp || (scopeState.mathMode?.includes('-') ? '-' : scopeState.mathMode?.includes('*') ? '×' : '+');
 
         const chIdxMap: Record<string, number> = { CH1: 0, CH2: 1, CH3: 2, CH4: 3 };
-        const ptsA = channels[chIdxMap[sourceA] ?? 0]?.pts;
-        const ptsB = channels[chIdxMap[sourceB] ?? 1]?.pts;
+        const ptsA = shouldUseHeldSamples && lastTriggeredSamplesRef.current
+          ? lastTriggeredSamplesRef.current[sourceA]
+          : channels[chIdxMap[sourceA] ?? 0]?.pts;
+        const ptsB = shouldUseHeldSamples && lastTriggeredSamplesRef.current
+          ? lastTriggeredSamplesRef.current[sourceB]
+          : channels[chIdxMap[sourceB] ?? 1]?.pts;
 
-        if (ptsA && ptsB && ptsA.length > 2 && ptsB.length > 2) {
-          const len = Math.min(ptsA.length, ptsB.length);
-          ctx.strokeStyle = '#F97316'; // High-contrast orange Math Trace
-          ctx.lineWidth = 2.4;
-          ctx.shadowColor = '#F97316';
-          ctx.shadowBlur = 6;
-          ctx.beginPath();
+          if (ptsA && ptsB && ptsA.length > 2 && ptsB.length > 2) {
+            const len = Math.min(ptsA.length, ptsB.length);
+            ctx.strokeStyle = '#F97316'; // High-contrast orange Math Trace
+            ctx.lineWidth = 2.4;
+            ctx.shadowColor = '#F97316';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
 
-          const tLatest = Math.max(ptsA[ptsA.length - 1].time, ptsB[ptsB.length - 1].time);
-          const tStart = tLatest - totalSpanSec;
-          let hasDrawnFirst = false;
+            const tStart = activeTStart;
+            let hasDrawnFirst = false;
 
           for (let i = 0; i < len; i++) {
             const pt1 = ptsA[i];
@@ -577,6 +756,9 @@ export function Oscilloscope4CH({
                   frozenWaveformRef.current = JSON.parse(JSON.stringify(waveformData));
                 } else {
                   frozenWaveformRef.current = null;
+                  singleTriggeredRef.current = false;
+                  lastTriggeredSamplesRef.current = null;
+                  lastTriggerTimeRef.current = null;
                 }
                 onUpdateInstruments({
                   ...instruments,
