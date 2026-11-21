@@ -289,16 +289,16 @@ export function Led3D({
       <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[-2.54, -1.6, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 7.2, 12]} />
+      <mesh position={[-2.54, -3.1, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 10.2, 12]} />
       </mesh>
 
-      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -4.5mm */}
+      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down into breadboard */}
       <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[2.54, -1.2, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 6.4, 12]} />
+      <mesh position={[2.54, -2.7, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 9.4, 12]} />
       </mesh>
 
       {/* Anode Terminal Pin Anchor (x = -2.54, y = 0 Breadboard Surface) */}

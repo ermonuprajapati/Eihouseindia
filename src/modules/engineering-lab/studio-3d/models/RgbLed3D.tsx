@@ -183,9 +183,9 @@ export function RgbLed3D({
               <cylinderGeometry args={[0.3, 0.3, stemHypot, 8]} />
             </mesh>
 
-            {/* 2. Lower Vertical Leg: From [p.x, 0.6, 0] down to [p.x, -4.0, 0] */}
-            <mesh position={[p.x, -1.7, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 4.6, 8]} />
+            {/* 2. Lower Vertical Leg: From [p.x, 0.6, 0] down into breadboard holes (y = -7.0) */}
+            <mesh position={[p.x, -3.2, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.3, 0.3, 7.6, 8]} />
             </mesh>
 
             {/* 3. Interactive Target at Breadboard Surface (y = 0) */}

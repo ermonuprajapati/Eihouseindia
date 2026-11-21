@@ -105,8 +105,8 @@ export function Diode3D({
               <cylinderGeometry args={[0.3, 0.3, Math.abs(p.x), 8]} />
             </mesh>
             {/* Vertical lead leg extending down through breadboard hole */}
-            <mesh position={[p.x, -0.5, 0]} material={materials.lead}>
-              <cylinderGeometry args={[0.3, 0.3, 9.0, 8]} />
+            <mesh position={[p.x, -2.0, 0]} material={materials.lead}>
+              <cylinderGeometry args={[0.3, 0.3, 12.0, 8]} />
             </mesh>
             {/* Click target at breadboard surface */}
             <mesh

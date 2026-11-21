@@ -69,8 +69,8 @@ export function Ldr3D({
         const isHovered = hoveredPin === p.name;
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            <mesh position={[0, 0, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 10.0, 8]} />
+            <mesh position={[0, -1.5, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.3, 0.3, 13.0, 8]} />
             </mesh>
             <mesh
               position={[0, 0, 0]}

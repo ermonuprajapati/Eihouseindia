@@ -72,6 +72,14 @@ export function Buzzer3D({
         audioCtx.resume();
       }
 
+      const unlockAudio = () => {
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+      };
+      window.addEventListener('pointerdown', unlockAudio, { once: true });
+      window.addEventListener('click', unlockAudio, { once: true });
+
       osc = audioCtx.createOscillator();
       gain = audioCtx.createGain();
 
@@ -155,9 +163,9 @@ export function Buzzer3D({
           hoveredPin === p.name || (hoveredPin && p.aliases.includes(hoveredPin.toLowerCase()));
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            {/* Lead entering housing and penetrating into breadboard (y = -4.0) */}
-            <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.35, 0.35, 6.0, 12]} />
+            {/* Lead entering housing and penetrating into breadboard (y = -8.5) */}
+            <mesh position={[0, -4.0, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
             </mesh>
 
             {/* Click target at breadboard surface (y = 0) */}

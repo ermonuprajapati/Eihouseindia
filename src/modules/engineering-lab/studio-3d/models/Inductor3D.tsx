@@ -99,8 +99,8 @@ export function Inductor3D({
         <cylinderGeometry args={[0.38, 0.38, 1.5, 12]} />
       </mesh>
       {/* Left bent leg extending into breadboard hole */}
-      <mesh position={[-5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 10.0, 12]} />
+      <mesh position={[-5.08, -2.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 13.0, 12]} />
       </mesh>
 
       {/* Right horizontal stem */}
@@ -108,8 +108,8 @@ export function Inductor3D({
         <cylinderGeometry args={[0.38, 0.38, 1.5, 12]} />
       </mesh>
       {/* Right bent leg extending into breadboard hole */}
-      <mesh position={[5.08, -0.5, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 10.0, 12]} />
+      <mesh position={[5.08, -2.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 13.0, 12]} />
       </mesh>
 
       {/* 3. Interactive Click/Hover Terminals at Breadboard Surface (y = 0) */}
