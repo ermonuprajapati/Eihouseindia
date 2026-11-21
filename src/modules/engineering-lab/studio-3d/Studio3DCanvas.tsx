@@ -371,11 +371,19 @@ function DragFrameController({
 function WebGlResourceDisposer() {
   const { gl, scene } = useThree();
   useEffect(() => {
+    const disposeMaterial = (m: THREE.Material) => {
+      const std = m as unknown as Record<string, { dispose?: () => void } | undefined>;
+      ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'alphaMap'].forEach((k) => {
+        try { std[k]?.dispose?.(); } catch {}
+      });
+      try { m.dispose(); } catch {}
+    };
+
     return () => {
       scene.traverse((obj) => {
         const mesh = obj as unknown as {
           geometry?: { dispose: () => void };
-          material?: { dispose: () => void } | { dispose: () => void }[];
+          material?: THREE.Material | THREE.Material[];
         };
         if (mesh.geometry) {
           try {
@@ -385,9 +393,9 @@ function WebGlResourceDisposer() {
         if (mesh.material) {
           try {
             if (Array.isArray(mesh.material)) {
-              mesh.material.forEach((m) => m.dispose());
+              mesh.material.forEach((m) => disposeMaterial(m));
             } else {
-              mesh.material.dispose();
+              disposeMaterial(mesh.material);
             }
           } catch {}
         }

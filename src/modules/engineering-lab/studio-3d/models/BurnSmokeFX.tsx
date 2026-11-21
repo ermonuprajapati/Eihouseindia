@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 
@@ -47,6 +47,13 @@ export function BurnSmokeFX({ position = [0, 0, 0], heightOffset = 4 }: BurnSmok
       depthWrite: false,
     });
   }, []);
+
+  useEffect(() => {
+    return () => {
+      geo.dispose();
+      mat.dispose();
+    };
+  }, [geo, mat]);
 
   useFrame((state, delta) => {
     if (!pointsRef.current) return;
