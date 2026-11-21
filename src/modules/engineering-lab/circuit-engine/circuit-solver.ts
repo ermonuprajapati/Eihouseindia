@@ -429,6 +429,8 @@ export class CircuitSolver {
     fixedNodes.add(this.gndNetId);
 
     // 1. Process Independent Fixed DC & AC Voltage Sources & MCU Output Pins
+    const dcSources: Array<{ comp: CircuitComponent; pNet: string; nNet: string; vVal: number }> = [];
+
     for (const comp of components) {
       if (comp.type === 'DC_VOLTAGE' || comp.type.includes('BATTERY')) {
         const pNet =
@@ -441,7 +443,11 @@ export class CircuitSolver {
           this.netMap.get(`${comp.id}:n`) ||
           this.netMap.get(`${comp.id}:2`) ||
           this.netMap.get(`${comp.id}:neg`);
-        const vVal = Number(comp.parameters?.voltage ?? parseFloat(comp.value) ?? 9.0);
+        const parsedVal =
+          comp.parameters?.voltage !== undefined
+            ? Number(comp.parameters.voltage)
+            : parseFloat(String(comp.value ?? ''));
+        const vVal = Number.isFinite(parsedVal) ? parsedVal : 9.0;
 
         if (pNet && nNet) {
           if (pNet === nNet) {
@@ -455,15 +461,8 @@ export class CircuitSolver {
                 timestamp: Date.now(),
               });
             }
-          } else if (nNet === this.gndNetId) {
-            nodeVoltages[pNet] = vVal;
-            fixedNodes.add(pNet);
-          } else if (pNet === this.gndNetId) {
-            nodeVoltages[nNet] = -vVal;
-            fixedNodes.add(nNet);
           } else {
-            nodeVoltages[pNet] = (nodeVoltages[nNet] || 0) + vVal;
-            fixedNodes.add(pNet);
+            dcSources.push({ comp, pNet, nNet, vVal });
           }
         }
       } else if (comp.type === 'FUNCTION_GENERATOR') {
@@ -602,6 +601,30 @@ export class CircuitSolver {
       }
     }
 
+    // Anchor grounded DC sources and propagate across series batteries connected to already-fixed nodes
+    let newlyFixed = true;
+    let fixPasses = 0;
+    while (newlyFixed && fixPasses < 10) {
+      newlyFixed = false;
+      fixPasses++;
+      for (const src of dcSources) {
+        const { pNet, nNet, vVal } = src;
+        if (nNet === this.gndNetId || fixedNodes.has(nNet)) {
+          if (!fixedNodes.has(pNet)) {
+            nodeVoltages[pNet] = (nodeVoltages[nNet] || 0) + vVal;
+            fixedNodes.add(pNet);
+            newlyFixed = true;
+          }
+        } else if (pNet === this.gndNetId || fixedNodes.has(pNet)) {
+          if (!fixedNodes.has(nNet)) {
+            nodeVoltages[nNet] = (nodeVoltages[pNet] || 0) - vVal;
+            fixedNodes.add(nNet);
+            newlyFixed = true;
+          }
+        }
+      }
+    }
+
     // Initialize dynamic capacitor node voltages from previous time step
     for (const comp of components) {
       if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
@@ -615,8 +638,9 @@ export class CircuitSolver {
     }
 
     // 2. Iterative Modified Nodal Analysis (MNA) with KCL Conductance Formulation
-    const iterations = 25;
+    const iterations = 120;
     for (let iter = 0; iter < iterations; iter++) {
+      let stateChanged = false;
       const sumGV: Record<string, number> = {};
       const sumG: Record<string, number> = {};
 
@@ -626,7 +650,42 @@ export class CircuitSolver {
       }
 
       for (const comp of components) {
-        if (comp.type === 'RESISTOR') {
+        if (comp.type === 'DC_VOLTAGE' || comp.type.includes('BATTERY')) {
+          const pNet =
+            this.netMap.get(`${comp.id}:+`) ||
+            this.netMap.get(`${comp.id}:p`) ||
+            this.netMap.get(`${comp.id}:1`) ||
+            this.netMap.get(`${comp.id}:pos`);
+          const nNet =
+            this.netMap.get(`${comp.id}:-`) ||
+            this.netMap.get(`${comp.id}:n`) ||
+            this.netMap.get(`${comp.id}:2`) ||
+            this.netMap.get(`${comp.id}:neg`);
+          if (pNet && nNet && pNet !== nNet) {
+            const pFixed = fixedNodes.has(pNet);
+            const nFixed = fixedNodes.has(nNet);
+            if (!pFixed || !nFixed) {
+              const parsedVal =
+                comp.parameters?.voltage !== undefined
+                  ? Number(comp.parameters.voltage)
+                  : parseFloat(String(comp.value ?? ''));
+              const vVal = Number.isFinite(parsedVal) ? parsedVal : 9.0;
+              const gSrc = 10.0; // 0.1 ohm realistic internal resistance
+
+              const vp = nodeVoltages[pNet] || 0;
+              const vn = nodeVoltages[nNet] || 0;
+
+              if (!pFixed) {
+                sumGV[pNet] += gSrc * (vn + vVal);
+                sumG[pNet] += gSrc;
+              }
+              if (!nFixed) {
+                sumGV[nNet] += gSrc * (vp - vVal);
+                sumG[nNet] += gSrc;
+              }
+            }
+          }
+        } else if (comp.type === 'RESISTOR') {
           const pin1 = this.netMap.get(`${comp.id}:1`);
           const pin2 = this.netMap.get(`${comp.id}:2`);
           if (pin1 && pin2 && pin1 !== pin2) {
@@ -894,8 +953,8 @@ export class CircuitSolver {
             const ib = isConducting ? Math.max(0, (vbe - 0.65) * gbe) : 0;
 
             const icTarget = beta * ib;
-            const gce = isConducting && vce > 0.2 ? Math.min(10.0, Math.max(0.001, icTarget / Math.max(vce - 0.2, 0.1))) : 1e-6;
-            const ic = isConducting && vce > 0.2 ? gce * (vce - 0.2) : 0;
+            const gce = isConducting && vce >= 0 ? Math.min(10.0, Math.max(0.001, icTarget / Math.max(vce - 0.2, 0.1))) : 1e-6;
+            const ic = isConducting && vce >= 0 ? gce * (vce - 0.2) : 0;
 
             this.bjtCurrents.set(comp.id, { ib, ic });
 
@@ -910,6 +969,46 @@ export class CircuitSolver {
             sumG[cPin] += gce;
             sumGV[ePin] += gce * (vc - 0.2);
             sumG[ePin] += gce;
+          }
+        } else if (comp.type === 'BJT_PNP') {
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:1`);
+          const cPin = this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`);
+          const ePin = this.netMap.get(`${comp.id}:e`) || this.netMap.get(`${comp.id}:E`) || this.netMap.get(`${comp.id}:3`);
+          if (bPin && cPin && ePin) {
+            if (this.burnedComponents.has(comp.id)) {
+              sumG[bPin] += 1e-12;
+              sumG[cPin] += 1e-12;
+              sumG[ePin] += 1e-12;
+              continue;
+            }
+            const vb = nodeVoltages[bPin] || 0;
+            const vc = nodeVoltages[cPin] || 0;
+            const ve = nodeVoltages[ePin] || 0;
+            const veb = ve - vb;
+            const vec = ve - vc;
+            const beta = Math.max(Number(comp.parameters?.beta ?? 100), 1);
+
+            const isConducting = veb > 0.65;
+            const gbe = isConducting ? 0.04 : 1e-6;
+            const ib = isConducting ? Math.max(0, (veb - 0.65) * gbe) : 0;
+
+            const icTarget = beta * ib;
+            const gce = isConducting && vec >= 0 ? Math.min(10.0, Math.max(0.001, icTarget / Math.max(vec - 0.2, 0.1))) : 1e-6;
+            const ic = isConducting && vec >= 0 ? gce * (vec - 0.2) : 0;
+
+            this.bjtCurrents.set(comp.id, { ib, ic });
+
+            // Emitter-Base Diode Formulation
+            sumGV[ePin] += gbe * (vb + 0.65);
+            sumG[ePin] += gbe;
+            sumGV[bPin] += gbe * (ve - 0.65);
+            sumG[bPin] += gbe;
+
+            // Emitter-Collector Controlled Channel Formulation
+            sumGV[ePin] += gce * (vc + 0.2);
+            sumG[ePin] += gce;
+            sumGV[cPin] += gce * (ve - 0.2);
+            sumG[cPin] += gce;
           }
         } else if (comp.type === 'MOSFET_N') {
           const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:1`);
@@ -1043,11 +1142,12 @@ export class CircuitSolver {
               // 15 ohm forward dynamic resistance
               const rd = 15;
               const gDiode = isConducting ? (1.0 / rd) : 1e-6;
+              const vOffset = isConducting ? vf : 0;
 
-              sumGV[aPin] += gDiode * (vk + vf);
+              sumGV[aPin] += gDiode * (vk + vOffset);
               sumG[aPin] += gDiode;
 
-              sumGV[kPin] += gDiode * (va - vf);
+              sumGV[kPin] += gDiode * (va - vOffset);
               sumG[kPin] += gDiode;
             }
           }
@@ -1072,16 +1172,17 @@ export class CircuitSolver {
                 const vDrop = isCommonAnode ? (vCom - vCh) : (vCh - vCom);
                 const isConducting = vDrop > ch.vf;
                 const gCh = isConducting ? 0.05 : 1e-6;
+                const vOffset = isConducting ? ch.vf : 0;
 
                 if (isCommonAnode) {
-                  sumGV[comPin] += gCh * (vCh + ch.vf);
+                  sumGV[comPin] += gCh * (vCh + vOffset);
                   sumG[comPin] += gCh;
-                  sumGV[ch.pin] += gCh * (vCom - ch.vf);
+                  sumGV[ch.pin] += gCh * (vCom - vOffset);
                   sumG[ch.pin] += gCh;
                 } else {
-                  sumGV[ch.pin] += gCh * (vCom + ch.vf);
+                  sumGV[ch.pin] += gCh * (vCom + vOffset);
                   sumG[ch.pin] += gCh;
-                  sumGV[comPin] += gCh * (vCh - ch.vf);
+                  sumGV[comPin] += gCh * (vCh - vOffset);
                   sumG[comPin] += gCh;
                 }
               }
@@ -1157,11 +1258,12 @@ export class CircuitSolver {
           const gndPin = this.netMap.get(`${comp.id}:1`);
           const trigPin = this.netMap.get(`${comp.id}:2`);
           const outPin = this.netMap.get(`${comp.id}:3`);
+          const resetPin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:reset`) || this.netMap.get(`${comp.id}:rst`);
           const threshPin = this.netMap.get(`${comp.id}:6`);
           const dischPin = this.netMap.get(`${comp.id}:7`);
 
-          const vcc = vccPin ? (nodeVoltages[vccPin] || 9.0) : 9.0;
-          const gnd = gndPin ? (nodeVoltages[gndPin] || 0.0) : 0.0;
+          const vcc = vccPin ? (nodeVoltages[vccPin] ?? 0.0) : 0.0;
+          const gnd = gndPin ? (nodeVoltages[gndPin] ?? 0.0) : 0.0;
           const vSpan = vcc - gnd;
           if (this.burnedComponents.has(comp.id)) {
             // Burned out IC: non-functional
@@ -1191,8 +1293,8 @@ export class CircuitSolver {
           const upperThresh = gnd + (2 / 3) * vSpan;
           const lowerThresh = gnd + (1 / 3) * vSpan;
 
-          const vTrig = trigPin ? (nodeVoltages[trigPin] || 0) : vcc;
-          const vThresh = threshPin ? (nodeVoltages[threshPin] || 0) : 0;
+          const vTrig = trigPin ? (nodeVoltages[trigPin] ?? 0) : vcc;
+          const vThresh = threshPin ? (nodeVoltages[threshPin] ?? 0) : 0;
 
           let state = this.timer555State.get(comp.id);
           if (!state) {
@@ -1201,10 +1303,16 @@ export class CircuitSolver {
           }
 
           if (iter > 5) {
-            if (vTrig <= lowerThresh) {
+            const oldFlipFlop = state.flipFlop;
+            if (resetPin && (nodeVoltages[resetPin] ?? vcc) < gnd + 0.7) {
+              state.flipFlop = false;
+            } else if (vTrig <= lowerThresh) {
               state.flipFlop = true;
             } else if (vThresh >= upperThresh) {
               state.flipFlop = false;
+            }
+            if (state.flipFlop !== oldFlipFlop) {
+              stateChanged = true;
             }
           }
 
@@ -1212,22 +1320,30 @@ export class CircuitSolver {
           state.outV = state.flipFlop ? (vcc - 1.4) : (gnd + 0.1);
 
           if (outPin && !fixedNodes.has(outPin)) {
-            nodeVoltages[outPin] = state.outV;
-            fixedNodes.add(outPin);
+            sumGV[outPin] += 0.1 * state.outV;
+            sumG[outPin] += 0.1;
           }
           if (dischPin && !state.flipFlop && !fixedNodes.has(dischPin)) {
-            nodeVoltages[dischPin] = gnd + 0.05;
-            fixedNodes.add(dischPin);
+            sumGV[dischPin] += 0.1 * (gnd + 0.05);
+            sumG[dischPin] += 0.1;
           }
         }
       }
 
       // KCL relaxation
+      let maxDelta = 0;
       for (const net of this.nets) {
         if (!fixedNodes.has(net) && sumG[net] > 0) {
           const calculatedV = sumGV[net] / sumG[net];
-          nodeVoltages[net] = nodeVoltages[net] * 0.3 + calculatedV * 0.7;
+          const oldV = nodeVoltages[net] || 0;
+          const newV = oldV * 0.3 + calculatedV * 0.7;
+          maxDelta = Math.max(maxDelta, Math.abs(newV - oldV));
+          nodeVoltages[net] = newV;
         }
+      }
+
+      if (iter >= 12 && maxDelta < 1e-6 && !stateChanged) {
+        break;
       }
     }
 
@@ -1711,8 +1827,8 @@ export class CircuitSolver {
             const vccPin = this.netMap.get(`${comp.id}:8`);
             const gndPin = this.netMap.get(`${comp.id}:1`);
             const outPin = this.netMap.get(`${comp.id}:3`);
-            const vcc = vccPin ? (nodeVoltages[vccPin] || 9.0) : 9.0;
-            const gnd = gndPin ? (nodeVoltages[gndPin] || 0.0) : 0.0;
+            const vcc = vccPin ? (nodeVoltages[vccPin] ?? 0.0) : 0.0;
+            const gnd = gndPin ? (nodeVoltages[gndPin] ?? 0.0) : 0.0;
             const vSpan = vcc - gnd;
             vDiff = outPin ? (nodeVoltages[outPin] || 0) : 0;
 
