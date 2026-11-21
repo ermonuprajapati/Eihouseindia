@@ -30,14 +30,24 @@ export function SlideSwitch3D({
         color: isSelected ? '#38BDF8' : '#D1D5DB', // Silver metal switch bracket
         metalness: 0.8,
         roughness: 0.3,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       sliderPlastic: new THREE.MeshStandardMaterial({
         color: '#18181B', // Black molded slider knob
         roughness: 0.4,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinSilver: new THREE.MeshStandardMaterial({
         color: '#CBD5E1',
         metalness: 0.9,
+        roughness: 0.2,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

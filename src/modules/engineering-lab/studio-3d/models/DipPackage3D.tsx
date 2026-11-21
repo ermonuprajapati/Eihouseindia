@@ -115,11 +115,17 @@ export function DipPackage3D({
         color: isBurned ? '#0F0E0E' : isSelected ? '#38BDF8' : '#18181B',
         roughness: isBurned ? 0.95 : 0.6,
         metalness: isBurned ? 0.05 : 0.1,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       leadSilver: new THREE.MeshStandardMaterial({
         color: isBurned ? '#71717A' : '#E2E8F0',
         metalness: isBurned ? 0.4 : 0.95,
         roughness: isBurned ? 0.6 : 0.2,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

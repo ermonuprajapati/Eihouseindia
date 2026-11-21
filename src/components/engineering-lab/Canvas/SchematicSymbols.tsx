@@ -198,6 +198,7 @@ export function SchematicSymbol({
         );
 
       case 'DIODE':
+      case 'DIODE_1N4007':
         return (
           <g>
             {/* Anode lead */}
@@ -214,6 +215,9 @@ export function SchematicSymbol({
             <line x1="10" y1="-10" x2="10" y2="10" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
             {/* Cathode lead */}
             <line x1="10" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            {/* Terminal Silkscreen Labels */}
+            <text x="-20" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">A</text>
+            <text x="16" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">K</text>
           </g>
         );
 
@@ -286,6 +290,7 @@ export function SchematicSymbol({
       }
 
       case 'BJT_NPN':
+      case 'TRANSISTOR_NPN':
         return (
           <g>
             {/* Transistor Circle */}
@@ -301,6 +306,34 @@ export function SchematicSymbol({
             <line x1="12" y1="16" x2="12" y2="25" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
             {/* Outgoing Arrow on Emitter for NPN */}
             <polygon points="12,16 6,12 8,17" fill={strokeColor} />
+            {/* Pin Labels */}
+            <text x="-21" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">B</text>
+            <text x="15" y="-17" fill="#94A3B8" fontSize="6.5" fontWeight="bold">C</text>
+            <text x="15" y="21" fill="#94A3B8" fontSize="6.5" fontWeight="bold">E</text>
+          </g>
+        );
+
+      case 'BJT_PNP':
+      case 'TRANSISTOR_PNP':
+        return (
+          <g>
+            {/* Transistor Circle */}
+            <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
+            {/* Base Lead & Vertical Bar */}
+            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="-8" y1="-12" x2="-8" y2="12" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
+            {/* Collector Branch (Up) */}
+            <line x1="-8" y1="-6" x2="12" y2="-16" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="12" y1="-16" x2="12" y2="-25" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            {/* Emitter Branch (Down) */}
+            <line x1="-8" y1="6" x2="12" y2="16" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="12" y1="16" x2="12" y2="25" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            {/* Inward Arrow on Emitter pointing toward Base for PNP */}
+            <polygon points="-5,7 1,12 2,6" fill={strokeColor} />
+            {/* Pin Labels */}
+            <text x="-21" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">B</text>
+            <text x="15" y="-17" fill="#94A3B8" fontSize="6.5" fontWeight="bold">C</text>
+            <text x="15" y="21" fill="#94A3B8" fontSize="6.5" fontWeight="bold">E</text>
           </g>
         );
 
@@ -308,9 +341,9 @@ export function SchematicSymbol({
         return (
           <g>
             <circle cx="0" cy="0" r="20" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
-            {/* Gate */}
-            <line x1="-25" y1="10" x2="-8" y2="10" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
-            <line x1="-8" y1="-8" x2="-8" y2="12" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            {/* Gate at y=0 matching catalog pin */}
+            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="-8" y1="-12" x2="-8" y2="12" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
             {/* Dielectric Gap & Channel */}
             <line x1="-3" y1="-12" x2="-3" y2="-6" stroke={strokeColor} strokeWidth="2" />
             <line x1="-3" y1="-3" x2="-3" y2="3" stroke={strokeColor} strokeWidth="2" />
@@ -321,6 +354,34 @@ export function SchematicSymbol({
             <path d="M -3,0 L 6,0 L 6,10" stroke={strokeColor} strokeWidth="1.5" fill="none" />
             {/* Inward Arrow for N-Channel */}
             <polygon points="-3,0 4,-3 4,3" fill={strokeColor} />
+            {/* Pin Labels */}
+            <text x="-21" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">G</text>
+            <text x="15" y="-17" fill="#94A3B8" fontSize="6.5" fontWeight="bold">D</text>
+            <text x="15" y="21" fill="#94A3B8" fontSize="6.5" fontWeight="bold">S</text>
+          </g>
+        );
+
+      case 'MOSFET_P':
+        return (
+          <g>
+            <circle cx="0" cy="0" r="20" stroke={strokeColor} strokeWidth="1.5" fill={fillColor} />
+            {/* Gate at y=0 matching catalog pin */}
+            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
+            <line x1="-8" y1="-12" x2="-8" y2="12" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
+            {/* Dielectric Gap & Channel */}
+            <line x1="-3" y1="-12" x2="-3" y2="-6" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-3" y1="-3" x2="-3" y2="3" stroke={strokeColor} strokeWidth="2" />
+            <line x1="-3" y1="6" x2="-3" y2="12" stroke={strokeColor} strokeWidth="2" />
+            {/* Drain & Source */}
+            <path d="M -3,-10 L 12,-10 L 12,-25" stroke={strokeColor} strokeWidth="2" fill="none" />
+            <path d="M -3,10 L 12,10 L 12,25" stroke={strokeColor} strokeWidth="2" fill="none" />
+            <path d="M -3,0 L 6,0 L 6,10" stroke={strokeColor} strokeWidth="1.5" fill="none" />
+            {/* Outward Arrow for P-Channel */}
+            <polygon points="4,0 -3,-3 -3,3" fill={strokeColor} />
+            {/* Pin Labels */}
+            <text x="-21" y="-4" fill="#94A3B8" fontSize="6.5" fontWeight="bold">G</text>
+            <text x="15" y="-17" fill="#94A3B8" fontSize="6.5" fontWeight="bold">D</text>
+            <text x="15" y="21" fill="#94A3B8" fontSize="6.5" fontWeight="bold">S</text>
           </g>
         );
 
@@ -570,6 +631,7 @@ export function SchematicSymbol({
       }
 
       case 'SENSOR_ULTRASONIC':
+      case 'HC_SR04':
         return (
           <g>
             {/* Sensor PCB Body */}
@@ -577,12 +639,21 @@ export function SchematicSymbol({
             {/* Left Transducer (TX) */}
             <circle cx="-16" cy="0" r="12" stroke="#94A3B8" strokeWidth="2" fill="#020617" />
             <circle cx="-16" cy="0" r="6" stroke="#38BDF8" strokeWidth="1" fill="#0369A1" />
+            <text x="-16" y="2" fill="#38BDF8" fontSize="6" fontWeight="bold" fontFamily="monospace" textAnchor="middle">T</text>
             {/* Right Transducer (RX) */}
             <circle cx="16" cy="0" r="12" stroke="#94A3B8" strokeWidth="2" fill="#020617" />
             <circle cx="16" cy="0" r="6" stroke="#38BDF8" strokeWidth="1" fill="#0369A1" />
+            <text x="16" y="2" fill="#38BDF8" fontSize="6" fontWeight="bold" fontFamily="monospace" textAnchor="middle">R</text>
             <text x="0" y="-16" fill="#F8FAFC" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
               HC-SR04
             </text>
+            {/* Pin markings */}
+            <g fontSize="6" fontFamily="monospace" fill="#38BDF8" fontWeight="bold" textAnchor="middle">
+              <text x="-30" y="-17">VCC</text>
+              <text x="-10" y="23">TRIG</text>
+              <text x="10" y="23">ECHO</text>
+              <text x="30" y="-17">GND</text>
+            </g>
           </g>
         );
 
@@ -684,6 +755,7 @@ export function SchematicSymbol({
         );
 
       case 'DISPLAY_LCD1602':
+      case 'LCD_1602':
         return (
           <g>
             <rect x="-45" y="-25" width="90" height="50" rx="3" stroke="#047857" strokeWidth="2" fill="#064E3B" />
@@ -694,6 +766,20 @@ export function SchematicSymbol({
             <text x="0" y="7" fill="#6EE7B7" fontSize="7" fontFamily="monospace" textAnchor="middle">
               LCD 16x2 I2C
             </text>
+            {/* Left pins: VSS, VDD, RS, EN */}
+            <g fontSize="6" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold">
+              <text x="-42" y="-18">VSS</text>
+              <text x="-42" y="-8">VDD</text>
+              <text x="-42" y="2">RS</text>
+              <text x="-42" y="12">EN</text>
+            </g>
+            {/* Right pins: D4, D5, D6, D7 */}
+            <g fontSize="6" fontFamily="monospace" fill="#A7F3D0" fontWeight="bold" textAnchor="end">
+              <text x="42" y="-18">D4</text>
+              <text x="42" y="-8">D5</text>
+              <text x="42" y="2">D6</text>
+              <text x="42" y="12">D7</text>
+            </g>
           </g>
         );
 
@@ -709,14 +795,22 @@ export function SchematicSymbol({
         );
 
       case 'ACTUATOR_SERVO_SG90':
+      case 'SERVO_SG90':
+      case 'SERVO':
         return (
           <g>
             <rect x="-30" y="-22" width="60" height="44" rx="4" stroke="#0284C7" strokeWidth="2" fill="#0284C7" />
-            <circle cx="12" cy="0" r="10" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1.5" />
-            <line x1="12" y1="-14" x2="12" y2="14" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
-            <text x="-12" y="3" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace">
+            <circle cx="12" cy="-4" r="10" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1.5" />
+            <line x1="12" y1="-18" x2="12" y2="10" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
+            <text x="-12" y="-2" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace">
               SG90
             </text>
+            {/* Pin markings along bottom (y=20): GND, 5V, SIG */}
+            <g fontSize="6" fontFamily="monospace" fill="#F8FAFC" fontWeight="bold" textAnchor="middle">
+              <text x="-20" y="17">GND</text>
+              <text x="0" y="17">5V</text>
+              <text x="20" y="17">SIG</text>
+            </g>
           </g>
         );
 
@@ -745,6 +839,8 @@ export function SchematicSymbol({
         );
 
       case 'ACTUATOR_BUZZER_ACTIVE':
+      case 'BUZZER_ACTIVE':
+      case 'BUZZER':
         return (
           <g>
             <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="2" fill="#0F172A" />
@@ -752,10 +848,16 @@ export function SchematicSymbol({
             <text x="0" y="-8" fill="#F59E0B" fontSize="6.5" fontFamily="monospace" textAnchor="middle">
               BUZZER
             </text>
+            {/* Terminals at -25 and +25 */}
+            <line x1="-25" y1="0" x2="-18" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <line x1="18" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth="2" />
+            <text x="-21" y="-4" fill="#EF4444" fontSize="7" fontWeight="bold">+</text>
+            <text x="18" y="-4" fill="#38BDF8" fontSize="7" fontWeight="bold">-</text>
           </g>
         );
 
-      case 'ACTUATOR_RGB_LED': {
+      case 'ACTUATOR_RGB_LED':
+      case 'LED_RGB': {
         const onR = Boolean(simState?.onRed);
         const onG = Boolean(simState?.onGreen);
         const onB = Boolean(simState?.onBlue);

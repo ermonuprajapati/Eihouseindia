@@ -25,21 +25,49 @@ export function Diode3D({
       body: new THREE.MeshStandardMaterial({
         color: isSelected ? '#38BDF8' : '#18181B', // Black molded DO-41 body
         roughness: 0.4,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       cathodeBand: new THREE.MeshStandardMaterial({
         color: '#E2E8F0', // Silver cathode band
         roughness: 0.3,
         metalness: 0.8,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       lead: new THREE.MeshStandardMaterial({
         color: '#CBD5E1',
         metalness: 0.9,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
       }),
     };
   }, [isSelected]);
+
+  // Silkscreen "1N4007" part marking on DO-41 body
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, 256, 128);
+    ctx.fillStyle = '#CBD5E1';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('1N4007', 128, 64);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
 
   // Anode at -5.08, Cathode at 5.08
   const pins = [
@@ -58,6 +86,14 @@ export function Diode3D({
       <mesh position={[1.6, 4.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.cathodeBand}>
         <cylinderGeometry args={[1.32, 1.32, 1.0, 24]} />
       </mesh>
+
+      {/* Laser-etched Part Marking "1N4007" */}
+      {silkscreenTexture && (
+        <mesh position={[-0.4, 4.0, 1.32]}>
+          <planeGeometry args={[2.8, 1.4]} />
+          <meshBasicMaterial map={silkscreenTexture} transparent />
+        </mesh>
+      )}
 
       {/* Bent Wire Leads */}
       {pins.map((p) => {

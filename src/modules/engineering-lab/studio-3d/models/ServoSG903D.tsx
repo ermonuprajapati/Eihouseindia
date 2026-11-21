@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 
 export interface ServoSG903DProps {
@@ -26,8 +26,9 @@ export function ServoSG903D({
     return {
       blueCase: new THREE.MeshStandardMaterial({
         color: isSelected ? '#38BDF8' : '#2563EB',
-        transparent: true,
-        opacity: 0.88,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
         roughness: 0.3,
       }),
       hornWhite: new THREE.MeshStandardMaterial({
@@ -47,6 +48,39 @@ export function ServoSG903D({
     };
   }, [isSelected]);
 
+  const labelTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#0F172A';
+    ctx.fillRect(0, 0, 256, 128);
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, 248, 120);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tower Pro', 128, 40);
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('SG90  9g', 128, 78);
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '16px monospace';
+    ctx.fillText('Micro Servo', 128, 106);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      labelTexture?.dispose();
+    };
+  }, [labelTexture]);
+
   // Convert angle (0..180) to radians
   const hornRotY = ((angle - 90) * Math.PI) / 180;
 
@@ -56,6 +90,14 @@ export function ServoSG903D({
       <mesh position={[0, 14.25, 0]} material={materials.blueCase} castShadow>
         <boxGeometry args={[22.8, 22.8, 12.2]} />
       </mesh>
+
+      {/* Hardware-Grade Brand & Rating Silkscreen Sticker */}
+      {labelTexture && (
+        <mesh position={[0, 14.25, 6.15]}>
+          <planeGeometry args={[18, 9]} />
+          <meshBasicMaterial map={labelTexture} />
+        </mesh>
+      )}
 
       {/* Top Gear Tower */}
       <mesh position={[5.5, 27.5, 0]} material={materials.blueCase}>

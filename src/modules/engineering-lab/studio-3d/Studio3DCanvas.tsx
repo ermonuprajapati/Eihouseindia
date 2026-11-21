@@ -51,6 +51,10 @@ import { Ldr3D } from './models/Ldr3D';
 import { SlideSwitch3D } from './models/SlideSwitch3D';
 import { DipPackage3D } from './models/DipPackage3D';
 import { BurnSmokeFX } from './models/BurnSmokeFX';
+import { TransistorTO92_3D } from './models/TransistorTO92_3D';
+import { TransistorTO220_3D } from './models/TransistorTO220_3D';
+import { Inductor3D } from './models/Inductor3D';
+import { HcSr04_3D } from './models/HcSr04_3D';
 import { Wire3DTube } from './Wire3DTube';
 
 interface Library3DItem {
@@ -323,15 +327,22 @@ function getComponentFootprint(type: string): { halfW: number; halfD: number } {
     case 'ARDUINO_NANO':
       return { halfW: 21.5, halfD: 9.0 };
     case 'ESP32_DEVKIT':
+    case 'ESP32_S3':
+    case 'ESP32_C3':
       return { halfW: 27.5, halfD: 14.0 };
     case 'RASPBERRY_PI_PICO':
+    case 'RASPBERRY_PI_PICO2':
       return { halfW: 25.5, halfD: 10.5 };
     case 'LCD_1602':
     case 'DISPLAY_LCD1602':
       return { halfW: 40.0, halfD: 18.0 };
+    case 'DISPLAY_OLED_SSD1306':
+      return { halfW: 15.0, halfD: 14.0 };
     case 'HC_SR04':
+    case 'SENSOR_ULTRASONIC':
       return { halfW: 22.5, halfD: 10.0 };
     case 'SERVO_SG90':
+    case 'ACTUATOR_SERVO_SG90':
       return { halfW: 16.0, halfD: 12.0 };
     case 'BATTERY_9V':
     case 'BATTERY':
@@ -340,19 +351,47 @@ function getComponentFootprint(type: string): { halfW: number; halfD: number } {
     case 'POTENTIOMETER':
       return { halfW: 5.0, halfD: 5.0 };
     case 'PUSHBUTTON':
+    case 'PUSHBUTTON_NO':
+    case 'PUSHBUTTON_NC':
+    case 'EMERGENCY_STOP':
       return { halfW: 4.0, halfD: 4.0 };
+    case 'SLIDE_SWITCH':
+    case 'SWITCH_SPST':
+      return { halfW: 4.5, halfD: 2.5 };
     case 'BUZZER_ACTIVE':
+    case 'ACTUATOR_BUZZER_ACTIVE':
       return { halfW: 6.0, halfD: 6.0 };
     case 'TIMER_555':
     case 'DIP_IC':
     case 'ATMEGA328P':
+    case 'OPAMP_LM358':
+    case 'OPAMP_LM741':
+    case 'COMPARATOR_LM393':
       return { halfW: 5.5, halfD: 4.0 };
     case 'LED_RGB':
     case 'ACTUATOR_RGB_LED':
-    case 'LED':
       return { halfW: 3.0, halfD: 3.0 };
+    case 'LED':
+      return { halfW: 2.8, halfD: 2.8 };
     case 'RESISTOR':
-      return { halfW: 6.0, halfD: 2.5 };
+      return { halfW: 6.0, halfD: 2.0 };
+    case 'INDUCTOR':
+      return { halfW: 6.0, halfD: 2.2 };
+    case 'DIODE':
+    case 'DIODE_1N4007':
+      return { halfW: 5.5, halfD: 2.0 };
+    case 'BJT_NPN':
+    case 'BJT_PNP':
+    case 'TRANSISTOR_NPN':
+    case 'TRANSISTOR_PNP':
+      return { halfW: 3.5, halfD: 2.5 };
+    case 'MOSFET_N':
+    case 'MOSFET_P':
+    case 'REGULATOR_7805':
+    case 'REGULATOR_LM317':
+      return { halfW: 5.5, halfD: 3.0 };
+    case 'SENSOR_LDR':
+      return { halfW: 3.0, halfD: 3.0 };
     case 'CAPACITOR':
     case 'CAPACITOR_ELECTROLYTIC':
       return { halfW: 3.5, halfD: 3.5 };
@@ -835,13 +874,15 @@ export function Studio3DCanvas({
       else lx = 3.81; // 'b', '4', 'blue'
       ly = 0;
       lz = 0;
-    } else if (comp.type === 'BUZZER_ACTIVE') {
-      if (pinId === '+' || pinId === '1') lx = -2.54;
+    } else if (comp.type === 'BUZZER_ACTIVE' || comp.type === 'ACTUATOR_BUZZER_ACTIVE' || comp.type === 'BUZZER') {
+      const p = (pinId || '').toLowerCase();
+      if (p === '+' || p === '1' || p === 'pos' || p === 'p') lx = -2.54;
       else lx = 2.54;
       ly = 0;
       lz = 0;
     } else if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
-      if (pinId === '1' || pinId === 'anode') lx = -5.08;
+      const p = (pinId || '').toLowerCase();
+      if (p === '1' || p === 'anode' || p === 'a') lx = -5.08;
       else lx = 5.08;
       ly = 0;
       lz = 0;
@@ -861,6 +902,25 @@ export function Studio3DCanvas({
       else lx = 5.08;
       ly = 0;
       lz = 0;
+    } else if (comp.type === 'INDUCTOR') {
+      if (pinId === '1') lx = -5.08;
+      else lx = 5.08;
+      ly = 0;
+      lz = 0;
+    } else if (comp.type === 'BJT_NPN' || comp.type === 'BJT_PNP' || comp.type === 'TRANSISTOR_NPN' || comp.type === 'TRANSISTOR_PNP') {
+      const p = (pinId || '').toLowerCase();
+      if (p === 'e' || p === 'emitter' || p === '1') lx = -2.54;
+      else if (p === 'b' || p === 'base' || p === '2') lx = 0;
+      else lx = 2.54; // 'c', 'collector', '3'
+      ly = 0;
+      lz = 0;
+    } else if (comp.type === 'MOSFET_N' || comp.type === 'MOSFET_P' || comp.type === 'REGULATOR_7805' || comp.type === 'REGULATOR_LM317') {
+      const p = (pinId || '').toLowerCase();
+      if (p === 'g' || p === 'gate' || p === 'in' || p === '1') lx = -2.54;
+      else if (p === 'd' || p === 'drain' || p === 'gnd' || p === 'ground' || p === '2') lx = 0;
+      else lx = 2.54; // 's', 'source', 'out', '3'
+      ly = 0;
+      lz = 0.6;
     } else if (comp.type === 'POTENTIOMETER') {
       if (pinId === '1') { lx = -2.54; lz = 0; }
       else if (pinId === '2' || pinId === 'wiper') { lx = 0; lz = 2.54; }
@@ -871,8 +931,21 @@ export function Studio3DCanvas({
       else lx = 2.54;
       ly = 0;
       lz = 0;
-    } else if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
-      const pNum = parseInt(pinId) || 1;
+    } else if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type === 'OPAMP_LM358' || comp.type === 'OPAMP_LM741') {
+      let pNum = parseInt(pinId);
+      if (isNaN(pNum)) {
+        const nameMap: Record<string, number> = {
+          gnd: 1, vss: 1, out1: 1, ofst1: 1,
+          trig: 2, trigger: 2, in1_minus: 2, in_minus: 2,
+          out: 3, output: 3, in1_plus: 3, in_plus: 3,
+          reset: 4, rst: 4, 'v-': 4,
+          ctrl: 5, control: 5, cv: 5, in2_plus: 5, ofst2: 5,
+          thres: 6, thresh: 6, threshold: 6, in2_minus: 6,
+          disch: 7, discharge: 7, dis: 7, out2: 7, 'v+': 7,
+          vcc: 8, vdd: 8, '+v': 8, nc: 8,
+        };
+        pNum = nameMap[pinId.toLowerCase()] || 1;
+      }
       if (pNum >= 1 && pNum <= 4) {
         lx = -3.81 + (pNum - 1) * 2.54;
         lz = -3.34; // Row E for pins 1..4
@@ -892,18 +965,19 @@ export function Studio3DCanvas({
       else if (pinId === '2A' || pinId === '3') { lx = -2.54; lz = 2.54; }
       else { lx = 2.54; lz = 2.54; }
       ly = -4;
-    } else if (comp.type === 'HC_SR04') {
-      if (pinId === 'VCC') lx = -3.81;
-      else if (pinId === 'TRIG') lx = -1.27;
-      else if (pinId === 'ECHO') lx = 1.27;
-      else lx = 3.81;
-      ly = -8;
-    } else if (comp.type === 'SERVO_SG90') {
-      if (pinId === 'GND') lx = -16.0;
-      else if (pinId === 'VCC') lx = -16.0;
-      else lx = -16.0;
+    } else if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
+      const p = (pinId || '').toUpperCase();
+      if (p === 'VCC' || p === '1') lx = -3.81;
+      else if (p === 'TRIG' || p === '2') lx = -1.27;
+      else if (p === 'ECHO' || p === '3') lx = 1.27;
+      else lx = 3.81; // 'GND', '4'
+      ly = 0;
+      lz = 0;
+    } else if (comp.type === 'SERVO_SG90' || comp.type === 'ACTUATOR_SERVO_SG90' || comp.type === 'SERVO') {
+      const p = (pinId || '').toUpperCase();
+      lx = -16.0;
       ly = 5;
-      lz = pinId === 'GND' ? -2.54 : pinId === 'VCC' ? 0 : 2.54;
+      lz = (p === 'GND' || p === '1') ? -2.54 : (p === 'VCC' || p === '5V' || p === '2') ? 0 : 2.54;
     } else if (comp.type === 'LCD_1602' || comp.type === 'DISPLAY_LCD1602') {
       const LCD_PIN_NAMES = [
         'VSS', 'VDD', 'V0', 'RS', 'RW', 'E',
@@ -1046,6 +1120,27 @@ export function Studio3DCanvas({
   const selectedWire = wires3d.find((w) => w.id === selectedWireId);
   const selectedComp = components3d.find((c) => c.id === selectedCompId);
 
+  // Silkscreen "104" stamp for ceramic disc capacitors
+  const ceramic104Texture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 140;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, 256, 140);
+    ctx.fillStyle = '#78350F';
+    ctx.font = 'bold 54px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('104', 128, 55);
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText('50V Z5U', 128, 105);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
   return (
     <div
       className="relative w-full h-full bg-[#050B14] select-none overflow-hidden touch-none"
@@ -1058,7 +1153,12 @@ export function Studio3DCanvas({
       <Canvas
         id="virtual-3d-webgl-canvas"
         shadows
-        gl={{ preserveDrawingBuffer: true, logarithmicDepthBuffer: true }}
+        gl={{
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.15,
+          preserveDrawingBuffer: true,
+          logarithmicDepthBuffer: true,
+        }}
         camera={{ position: [0, 130, 150], fov: 45, near: 0.5, far: 500 }}
         className="w-full h-full cursor-grab active:cursor-grabbing touch-none"
         onContextMenu={(e) => {
@@ -1542,6 +1642,14 @@ export function Studio3DCanvas({
                   <meshStandardMaterial color={isBurned ? '#18181B' : (isSelected ? '#38BDF8' : '#D97706')} roughness={isBurned ? 0.95 : 0.6} />
                 </mesh>
 
+                {/* Laser-etched "104" stamp on front face */}
+                {ceramic104Texture && (
+                  <mesh position={[0, 5.0, 0.72]}>
+                    <planeGeometry args={[3.6, 2.0]} />
+                    <meshBasicMaterial map={ceramic104Texture} transparent />
+                  </mesh>
+                )}
+
                 {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Disc Body (radius 0.38mm) */}
                 {/* Pin 1 at x = -2.54: Upper angled stem emerging from inside disc [x = -1.27, y = 3.2] down to [x = -2.54, y = 1.6] */}
                 <mesh position={[-1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(-1.27, 1.6)]}>
@@ -1593,7 +1701,13 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC') {
+          if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type === 'OPAMP_LM358' || comp.type === 'OPAMP_LM741') {
+            const part = comp.type === 'OPAMP_LM358' ? 'LM358' : comp.type === 'OPAMP_LM741' ? 'LM741' : String(comp.parameters?.ic || comp.value || 'NE555P');
+            const opampPins: Record<number, string> | undefined = comp.type === 'OPAMP_LM358'
+              ? { 1: 'OUT1', 2: 'IN1-', 3: 'IN1+', 4: 'GND', 5: 'IN2+', 6: 'IN2-', 7: 'OUT2', 8: 'VCC' }
+              : comp.type === 'OPAMP_LM741'
+              ? { 1: 'OFST1', 2: 'IN-', 3: 'IN+', 4: 'V-', 5: 'OFST2', 6: 'OUT', 7: 'V+', 8: 'NC' }
+              : undefined;
             return (
               <group
                 key={comp.id}
@@ -1608,7 +1722,8 @@ export function Studio3DCanvas({
                   position={pos}
                   rotation={rot}
                   pinCount={8}
-                  partName={String(comp.parameters?.ic || comp.value || 'NE555P')}
+                  partName={part}
+                  pinNames={opampPins}
                   isBurned={Boolean(simState?.status === 'BURNED' || simState?.burned)}
                   isSelected={isSelected}
                   onPinClick={(pinId, wPos) => handlePinClick(comp.id, pinId, wPos)}
@@ -1621,12 +1736,10 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'HC_SR04') {
+          if (comp.type === 'INDUCTOR') {
             return (
               <group
                 key={comp.id}
-                position={pos}
-                rotation={rot}
                 onPointerDown={handleCompPointerDown}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1634,35 +1747,99 @@ export function Studio3DCanvas({
                   onSelectWire(null);
                 }}
               >
-                {/* Blue PCB */}
-                <mesh position={[0, 8.0, 0]}>
-                  <boxGeometry args={[45.0, 20.0, 1.6]} />
-                  <meshStandardMaterial color={isSelected ? '#38BDF8' : '#0284C7'} roughness={0.4} />
-                </mesh>
-                {/* Ultrasonic Transducers T and R */}
-                <mesh position={[-12.0, 10.0, 6.0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[7.5, 7.5, 12.0, 24]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
-                </mesh>
-                <mesh position={[12.0, 10.0, 6.0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[7.5, 7.5, 12.0, 24]} />
-                  <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
-                </mesh>
-                {/* 4 Header Pins: VCC, TRIG, ECHO, GND */}
-                {['VCC', 'TRIG', 'ECHO', 'GND'].map((pinName, i) => (
-                  <mesh
-                    key={pinName}
-                    position={[-3.81 + i * 2.54, -1.0, 0]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const pPos = getPinWorld3D(comp.id, pinName);
-                      handlePinClick(comp.id, pinName, pPos);
-                    }}
-                  >
-                    <cylinderGeometry args={[0.35, 0.35, 3.5, 8]} />
-                    <meshStandardMaterial color="#EAB308" metalness={0.9} />
-                  </mesh>
-                ))}
+                <Inductor3D
+                  position={pos}
+                  rotation={rot}
+                  value={comp.value || '10mH'}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'BJT_NPN' || comp.type === 'BJT_PNP' || comp.type === 'TRANSISTOR_NPN' || comp.type === 'TRANSISTOR_PNP') {
+            const isNpn = comp.type.includes('NPN');
+            return (
+              <group
+                key={comp.id}
+                onPointerDown={handleCompPointerDown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <TransistorTO92_3D
+                  position={pos}
+                  rotation={rot}
+                  partName={String(comp.parameters?.transistor || comp.value || (isNpn ? '2N2222' : '2N2907'))}
+                  isNpn={isNpn}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'MOSFET_N' || comp.type === 'MOSFET_P' || comp.type === 'REGULATOR_7805' || comp.type === 'REGULATOR_LM317') {
+            const isRegulator = comp.type.startsWith('REGULATOR');
+            const pinLabels: [string, string, string] = isRegulator ? ['IN', 'GND', 'OUT'] : ['G', 'D', 'S'];
+            return (
+              <group
+                key={comp.id}
+                onPointerDown={handleCompPointerDown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <TransistorTO220_3D
+                  position={pos}
+                  rotation={rot}
+                  partName={String(comp.parameters?.part || comp.value || (isRegulator ? 'LM7805' : comp.type.includes('N') ? 'IRF540N' : 'IRF9540N'))}
+                  pinLabels={pinLabels}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
+              </group>
+            );
+          }
+
+          if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
+            return (
+              <group
+                key={comp.id}
+                onPointerDown={handleCompPointerDown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectComponent(comp.id);
+                  onSelectWire(null);
+                }}
+              >
+                <HcSr04_3D
+                  position={pos}
+                  rotation={rot}
+                  isSelected={isSelected}
+                  hoveredPin={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+                  onHoverPin={(pinName) =>
+                    setHoveredPinInfo(pinName ? { compId: comp.id, pinName } : null)
+                  }
+                  onPinClick={(pinName, wPos) => handlePinClick(comp.id, pinName, wPos)}
+                />
               </group>
             );
           }
@@ -1757,7 +1934,7 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'SERVO_SG90') {
+          if (comp.type === 'SERVO_SG90' || comp.type === 'ACTUATOR_SERVO_SG90' || comp.type === 'SERVO') {
             return (
               <group
                 key={comp.id}
@@ -1838,7 +2015,7 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'BUZZER_ACTIVE') {
+          if (comp.type === 'BUZZER_ACTIVE' || comp.type === 'ACTUATOR_BUZZER_ACTIVE' || comp.type === 'BUZZER') {
             const isBurned = Boolean(simState?.status === 'BURNED' || simState?.burned);
             const isSounding = !isBurned && Boolean(simState?.on || (simState?.current && Math.abs(simState.current) > 0.001));
             return (
