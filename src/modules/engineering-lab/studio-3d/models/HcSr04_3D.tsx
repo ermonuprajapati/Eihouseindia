@@ -30,6 +30,9 @@ export function HcSr04_3D({
       pcbBlue: new THREE.MeshStandardMaterial({
         color: isSelected ? '#38BDF8' : '#0284C7', // Industrial blue PCB
         roughness: 0.35,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
       }),
       aluminumCan: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
@@ -83,12 +86,12 @@ export function HcSr04_3D({
     ctx.fillText('T', 240, 220);
     ctx.fillText('R', 784, 220);
 
-    // 4 Pin labels at bottom
-    ctx.font = 'bold 28px monospace';
-    ctx.fillText('VCC', 426, 400);
-    ctx.fillText('TRIG', 484, 400);
-    ctx.fillText('ECHO', 542, 400);
-    ctx.fillText('GND', 600, 400);
+    // 4 Pin labels directly above header pins (aligned with x = -3.81, -1.27, +1.27, +3.81 mm)
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText('VCC', 425, 400);
+    ctx.fillText('TRIG', 483, 400);
+    ctx.fillText('ECHO', 541, 400);
+    ctx.fillText('GND', 599, 400);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -96,10 +99,10 @@ export function HcSr04_3D({
   }, []);
 
   const pins = [
-    { name: 'VCC', x: -3.81 },
-    { name: 'TRIG', x: -1.27 },
-    { name: 'ECHO', x: 1.27 },
-    { name: 'GND', x: 3.81 },
+    { name: 'VCC', aliases: ['vcc', '1', '5v', 'power'], x: -3.81, label: 'VCC (+5V Power Supply)' },
+    { name: 'TRIG', aliases: ['trig', '2', 'trigger'], x: -1.27, label: 'TRIG (10µs Trigger Pulse)' },
+    { name: 'ECHO', aliases: ['echo', '3'], x: 1.27, label: 'ECHO (Distance Pulse Width Output)' },
+    { name: 'GND', aliases: ['gnd', '4', 'ground', '-'], x: 3.81, label: 'GND (Ground Return 0V)' },
   ];
 
   return (
@@ -154,7 +157,9 @@ export function HcSr04_3D({
         </mesh>
 
         {pins.map((p) => {
-          const isHovered = hoveredPin === p.name || (hoveredPin && hoveredPin.toUpperCase() === p.name);
+          const isHovered =
+            hoveredPin === p.name ||
+            (hoveredPin && (hoveredPin.toUpperCase() === p.name || p.aliases.includes(hoveredPin.toLowerCase())));
           return (
             <group key={p.name} position={[p.x, 0, 0]}>
               {/* Square gold pin extending through insulator into breadboard (y = -4.0) */}
@@ -178,7 +183,7 @@ export function HcSr04_3D({
                 }}
                 onPointerOut={() => onHoverPin?.(null)}
               >
-                <sphereGeometry args={[isHovered ? 1.2 : 0.65, 8, 8]} />
+                <sphereGeometry args={[isHovered ? 1.3 : 0.75, 12, 12]} />
               </mesh>
             </group>
           );
