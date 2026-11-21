@@ -94,7 +94,25 @@ function WebGlResourceDisposer() {
       scene.traverse((obj) => {
         const mesh = obj as unknown as {
           geometry?: { dispose: () => void };
-          material?: { dispose: () => void } | { dispose: () => void }[];
+          material?:
+            | {
+                dispose: () => void;
+                map?: { dispose: () => void };
+                normalMap?: { dispose: () => void };
+                roughnessMap?: { dispose: () => void };
+                metalnessMap?: { dispose: () => void };
+                emissiveMap?: { dispose: () => void };
+                alphaMap?: { dispose: () => void };
+              }
+            | {
+                dispose: () => void;
+                map?: { dispose: () => void };
+                normalMap?: { dispose: () => void };
+                roughnessMap?: { dispose: () => void };
+                metalnessMap?: { dispose: () => void };
+                emissiveMap?: { dispose: () => void };
+                alphaMap?: { dispose: () => void };
+              }[];
         };
         if (mesh.geometry) {
           try {
@@ -103,11 +121,16 @@ function WebGlResourceDisposer() {
         }
         if (mesh.material) {
           try {
-            if (Array.isArray(mesh.material)) {
-              mesh.material.forEach((m) => m.dispose());
-            } else {
-              mesh.material.dispose();
-            }
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((mat) => {
+              mat.map?.dispose?.();
+              mat.normalMap?.dispose?.();
+              mat.roughnessMap?.dispose?.();
+              mat.metalnessMap?.dispose?.();
+              mat.emissiveMap?.dispose?.();
+              mat.alphaMap?.dispose?.();
+              mat.dispose();
+            });
           } catch {}
         }
       });
@@ -194,6 +217,36 @@ export function Pcb3dViewer({
 
   // Populated vs Bare PCB State
   const [showComponents, setShowComponents] = useState<boolean>(show3dComponents);
+  const ledMaterialsRef = useRef<Map<string, THREE.MeshPhysicalMaterial>>(new Map());
+
+  useEffect(() => {
+    const map = ledMaterialsRef.current;
+    return () => {
+      map.forEach((mat) => {
+        try {
+          mat.dispose();
+        } catch {}
+      });
+      map.clear();
+    };
+  }, []);
+
+  const getLedMaterial = (color: string) => {
+    let mat = ledMaterialsRef.current.get(color);
+    if (!mat) {
+      mat = new THREE.MeshPhysicalMaterial({
+        color,
+        transmission: 0.55,
+        opacity: 0.88,
+        transparent: true,
+        roughness: 0.15,
+        emissive: color,
+        emissiveIntensity: 0.25,
+      });
+      ledMaterialsRef.current.set(color, mat);
+    }
+    return mat;
+  };
   const [hoveredItem, setHoveredItem] = useState<{
     designator: string;
     pin: string;
@@ -384,6 +437,12 @@ export function Pcb3dViewer({
     texture.needsUpdate = true;
     return texture;
   }, [pcb, theme]);
+
+  useEffect(() => {
+    return () => {
+      silkscreenTexture?.dispose();
+    };
+  }, [silkscreenTexture]);
 
   const materials = useMemo(() => {
     return {
@@ -653,6 +712,13 @@ export function Pcb3dViewer({
           const rotY = ((pComp.rotation || 0) * Math.PI) / 180;
           const upperType = pComp.type.toUpperCase();
           const upperFootprint = (pComp.footprint || '').toUpperCase();
+          const isBottom =
+            (pComp as { layer?: string; side?: string }).layer === 'bottom' ||
+            (pComp as { layer?: string; side?: string }).side === 'bottom' ||
+            pComp.parameters?.layer === 'bottom' ||
+            pComp.parameters?.side === 'bottom';
+          const compY = isBottom ? -thickness / 2 : thickness / 2;
+          const compRot: [number, number, number] = isBottom ? [Math.PI, -rotY, 0] : [0, -rotY, 0];
 
           // 1. LED (5mm Translucent Domed Lens with Flange, Leads & Solder Fillets)
           if (upperType.includes('LED') || upperFootprint.includes('LED')) {
@@ -670,18 +736,10 @@ export function Pcb3dViewer({
                 ? '#F8FAFC'
                 : '#EF4444';
 
-            const ledMaterial = new THREE.MeshPhysicalMaterial({
-              color: ledColor,
-              transmission: 0.55,
-              opacity: 0.88,
-              transparent: true,
-              roughness: 0.15,
-              emissive: ledColor,
-              emissiveIntensity: 0.25,
-            });
+            const ledMaterial = getLedMaterial(ledColor);
 
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Silver Anode / Cathode leads entering pads */}
                 <mesh position={[-1.27, 1.2, 0]} material={materials.leadMetal}>
                   <cylinderGeometry args={[0.25, 0.25, 2.8, 8]} />
@@ -715,7 +773,7 @@ export function Pcb3dViewer({
           // 2. Axial Through-Hole Resistor with Color Bands, Bent Leads & Solder Fillets
           if (upperType.includes('RESISTOR') || upperFootprint.includes('AXIAL')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Vertical leads penetrating PCB pads down to -0.4mm */}
                 <mesh position={[-3.81, 0.8, 0]} material={materials.leadMetal}>
                   <cylinderGeometry args={[0.3, 0.3, 2.4, 8]} />
@@ -758,7 +816,7 @@ export function Pcb3dViewer({
           // 3. Diode (1N4007 / 1N4148 DO-41 Package with Silver Polarity Band)
           if (upperType.includes('DIODE')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 <mesh position={[-3.81, 0.8, 0]} material={materials.leadMetal}>
                   <cylinderGeometry args={[0.3, 0.3, 2.4, 8]} />
                 </mesh>
@@ -792,7 +850,7 @@ export function Pcb3dViewer({
             (upperType.includes('CAPACITOR') && (upperFootprint.includes('RADIAL') || upperFootprint.includes('CP_')))
           ) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Two leads penetrating into pads */}
                 <mesh position={[-1.25, 0.8, 0]} material={materials.leadMetal}>
                   <cylinderGeometry args={[0.3, 0.3, 2.2, 8]} />
@@ -826,7 +884,7 @@ export function Pcb3dViewer({
           // 5. Ceramic Disc Capacitor
           if (upperType.includes('CAPACITOR')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 <mesh position={[-1.25, 1.0, 0]} material={materials.leadMetal}>
                   <cylinderGeometry args={[0.25, 0.25, 2.4, 8]} />
                 </mesh>
@@ -849,7 +907,7 @@ export function Pcb3dViewer({
           // 6. Transistor (TO-92 Package with 3 Splayed Leads & Laser Text)
           if (upperType.includes('TRANSISTOR') || upperType.includes('BJT') || upperFootprint.includes('TO-92')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* 3 metallic leads */}
                 {[-1.27, 0, 1.27].map((lx, idx) => (
                   <group key={idx}>
@@ -882,7 +940,7 @@ export function Pcb3dViewer({
             const laserTexture = typeof document !== 'undefined' ? getIcLaserTexture(partName, isDip14Or16) : null;
 
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Black Epoxy Plastic Package Body (Elevated 0.6mm above board on standoffs) */}
                 <mesh position={[0, 2.2, 0]} material={materials.icPlastic}>
                   <boxGeometry args={[bodyLen, 3.2, 6.2]} />
@@ -951,7 +1009,7 @@ export function Pcb3dViewer({
           // 8. Terminal Block / Battery Connector with Screw Terminals & Solder Fillets
           if (upperType.includes('BATTERY') || upperType.includes('VOLTAGE') || upperFootprint.includes('TERMINALBLOCK')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Solder Fillets at bottom pin entry */}
                 <mesh position={[-2.54, 0.15, 0]} material={materials.solderFillet}>
                   <cylinderGeometry args={[0.65, 0.95, 0.3, 12]} />
@@ -977,7 +1035,7 @@ export function Pcb3dViewer({
           // 9. Microcontroller Dev Board (Arduino Uno / Nano / ESP32)
           if (upperType.includes('MCU') || upperFootprint.includes('ARDUINO') || upperFootprint.includes('ESP32')) {
             return (
-              <group key={pComp.componentId} position={[cx, thickness / 2, cz]} rotation={[0, -rotY, 0]}>
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
                 {/* Dev board blue substrate */}
                 <mesh position={[0, 1.0, 0]} material={materials.mcuBoardBlue}>
                   <boxGeometry args={[26.0, 1.6, 18.0]} />
@@ -996,7 +1054,7 @@ export function Pcb3dViewer({
 
           // Default SMD/Through-hole component body
           return (
-            <group key={pComp.componentId} position={[cx, thickness / 2 + 1.2, cz]} rotation={[0, -rotY, 0]}>
+            <group key={pComp.componentId} position={[cx, compY + (isBottom ? -1.2 : 1.2), cz]} rotation={compRot}>
               <mesh material={materials.icPlastic}>
                 <boxGeometry args={[5.0, 2.2, 5.0]} />
               </mesh>

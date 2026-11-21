@@ -7,118 +7,275 @@ import { PcbLayout, CircuitComponent } from '../types';
 import { DrillExporter } from './drill-export';
 import { ZipBuilder } from './zip-builder';
 
+class ApertureTable {
+  private nextCode = 10;
+  private defs: string[] = [];
+  private map = new Map<string, string>();
+
+  constructor() {
+    // D10 is always registered first: 0.250000mm circle (standard signal track)
+    this.register('C,0.250000');
+  }
+
+  public register(spec: string): string {
+    if (this.map.has(spec)) {
+      return this.map.get(spec)!;
+    }
+    const code = `D${this.nextCode++}`;
+    this.map.set(spec, code);
+    this.defs.push(`%AD${code}${spec}*%`);
+    return code;
+  }
+
+  public getCode(spec: string): string {
+    return this.map.get(spec) || this.register(spec);
+  }
+
+  public getDefinitions(): string {
+    return this.defs.join('\n') + (this.defs.length > 0 ? '\n' : '');
+  }
+}
+
 export class GerberExporter {
   /**
-   * Generates Top Copper (.gtl / F_Cu.GTL)
+   * Generates Top Copper (.gtl / F_Cu.GTL) with dynamic track/pad/via apertures
    */
   public static exportTopCopper(pcb: PcbLayout): string {
+    const apertures = new ApertureTable();
+    const tracks = pcb.tracks.filter((t) => t.layer === 'top_copper');
+    const pads = pcb.pads.filter((p) => p.layer === 'all' || p.layer === 'top');
+
+    // Register track apertures
+    tracks.forEach((t) => {
+      const width = t.widthMm || 0.25;
+      apertures.register(`C,${width.toFixed(6)}`);
+    });
+
+    // Register pad apertures
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = p.diameterMm || 1.8;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      apertures.register(spec);
+    });
+
+    // Register extra via apertures
+    const extraVias = ((pcb as { vias?: { x: number; y: number; diameterMm?: number }[] }).vias || []).filter(
+      (v) => !pcb.pads.some((p) => Math.hypot(p.x - v.x, p.y - v.y) < 0.01)
+    );
+    extraVias.forEach((v) => {
+      const dia = v.diameterMm || 0.8;
+      apertures.register(`C,${dia.toFixed(6)}`);
+    });
+
     let out = `%TF.GenerationSoftware,EI-House-Universal-Engineering-Lab,2.0*%\n`;
     out += `%TF.FileFunction,Copper,L1,Top*%\n`;
     out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
-    out += `%ADD10C,0.250000*%\n`; // 0.25mm standard track aperture
-    out += `%ADD11C,1.800000*%\n`; // 1.8mm pad aperture
+    out += apertures.getDefinitions();
     out += `G04 Layer: Top Copper (F.Cu)*\n`;
     out += `D10*\n`;
 
-    pcb.tracks
-      .filter((t) => t.layer === 'top_copper')
-      .forEach((t) => {
-        const x1 = Math.round(t.from.x * 100000);
-        const y1 = Math.round(t.from.y * 100000);
-        const x2 = Math.round(t.to.x * 100000);
-        const y2 = Math.round(t.to.y * 100000);
-        out += `X${x1}Y${y1}D02*\n`;
-        out += `X${x2}Y${y2}D01*\n`;
-      });
+    let currentAp = 'D10';
 
-    out += `D11*\n`;
-    pcb.pads
-      .filter((p) => p.layer === 'all' || p.layer === 'top')
-      .forEach((p) => {
-        const px = Math.round(p.x * 100000);
-        const py = Math.round(p.y * 100000);
-        out += `X${px}Y${py}D03*\n`;
-      });
+    tracks.forEach((t) => {
+      const width = t.widthMm || 0.25;
+      const ap = apertures.getCode(`C,${width.toFixed(6)}`);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const x1 = Math.round(t.from.x * 100000);
+      const y1 = Math.round(t.from.y * 100000);
+      const x2 = Math.round(t.to.x * 100000);
+      const y2 = Math.round(t.to.y * 100000);
+      out += `X${x1}Y${y1}D02*\n`;
+      out += `X${x2}Y${y2}D01*\n`;
+    });
+
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = p.diameterMm || 1.8;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      const ap = apertures.getCode(spec);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(p.x * 100000);
+      const py = Math.round(p.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
+
+    extraVias.forEach((v) => {
+      const dia = v.diameterMm || 0.8;
+      const ap = apertures.getCode(`C,${dia.toFixed(6)}`);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(v.x * 100000);
+      const py = Math.round(v.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
 
     out += `M02*\n`;
     return out;
   }
 
   /**
-   * Generates Bottom Copper (.gbl / B_Cu.GBL)
+   * Generates Bottom Copper (.gbl / B_Cu.GBL) with dynamic track/pad/via apertures
    */
   public static exportBottomCopper(pcb: PcbLayout): string {
+    const apertures = new ApertureTable();
+    const tracks = pcb.tracks.filter((t) => t.layer === 'bottom_copper');
+    const pads = pcb.pads.filter((p) => p.layer === 'all' || p.layer === 'bottom');
+
+    tracks.forEach((t) => {
+      const width = t.widthMm || 0.25;
+      apertures.register(`C,${width.toFixed(6)}`);
+    });
+
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = p.diameterMm || 1.8;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      apertures.register(spec);
+    });
+
+    const extraVias = ((pcb as { vias?: { x: number; y: number; diameterMm?: number }[] }).vias || []).filter(
+      (v) => !pcb.pads.some((p) => Math.hypot(p.x - v.x, p.y - v.y) < 0.01)
+    );
+    extraVias.forEach((v) => {
+      const dia = v.diameterMm || 0.8;
+      apertures.register(`C,${dia.toFixed(6)}`);
+    });
+
     let out = `%TF.GenerationSoftware,EI-House-Universal-Engineering-Lab,2.0*%\n`;
     out += `%TF.FileFunction,Copper,L2,Bot*%\n`;
     out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
-    out += `%ADD10C,0.250000*%\n`;
-    out += `%ADD11C,1.800000*%\n`;
+    out += apertures.getDefinitions();
     out += `G04 Layer: Bottom Copper (B.Cu)*\n`;
     out += `D10*\n`;
 
-    pcb.tracks
-      .filter((t) => t.layer === 'bottom_copper')
-      .forEach((t) => {
-        const x1 = Math.round(t.from.x * 100000);
-        const y1 = Math.round(t.from.y * 100000);
-        const x2 = Math.round(t.to.x * 100000);
-        const y2 = Math.round(t.to.y * 100000);
-        out += `X${x1}Y${y1}D02*\n`;
-        out += `X${x2}Y${y2}D01*\n`;
-      });
+    let currentAp = 'D10';
 
-    out += `D11*\n`;
-    pcb.pads
-      .filter((p) => p.layer === 'all' || p.layer === 'bottom')
-      .forEach((p) => {
-        const px = Math.round(p.x * 100000);
-        const py = Math.round(p.y * 100000);
-        out += `X${px}Y${py}D03*\n`;
-      });
+    tracks.forEach((t) => {
+      const width = t.widthMm || 0.25;
+      const ap = apertures.getCode(`C,${width.toFixed(6)}`);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const x1 = Math.round(t.from.x * 100000);
+      const y1 = Math.round(t.from.y * 100000);
+      const x2 = Math.round(t.to.x * 100000);
+      const y2 = Math.round(t.to.y * 100000);
+      out += `X${x1}Y${y1}D02*\n`;
+      out += `X${x2}Y${y2}D01*\n`;
+    });
+
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = p.diameterMm || 1.8;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      const ap = apertures.getCode(spec);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(p.x * 100000);
+      const py = Math.round(p.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
+
+    extraVias.forEach((v) => {
+      const dia = v.diameterMm || 0.8;
+      const ap = apertures.getCode(`C,${dia.toFixed(6)}`);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(v.x * 100000);
+      const py = Math.round(v.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
 
     out += `M02*\n`;
     return out;
   }
 
   /**
-   * Generates Top Solder Mask (.gts / F_Mask.GTS)
+   * Generates Top Solder Mask (.gts / F_Mask.GTS) with +0.10mm pad mask expansion
    */
   public static exportTopSolderMask(pcb: PcbLayout): string {
+    const apertures = new ApertureTable();
+    const pads = pcb.pads.filter((p) => p.layer === 'all' || p.layer === 'top');
+
+    // Register expanded mask apertures (+0.10mm, i.e. 0.05mm per side)
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = (p.diameterMm || 1.8) + 0.10;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      apertures.register(spec);
+    });
+
     let out = `%TF.FileFunction,Soldermask,Top*%\n`;
     out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
-    out += `%ADD12C,2.000000*%\n`;
+    out += apertures.getDefinitions();
     out += `G04 Layer: Top Solder Mask (F.Mask)*\n`;
-    out += `D12*\n`;
 
-    pcb.pads
-      .filter((p) => p.layer === 'all' || p.layer === 'top')
-      .forEach((p) => {
-        const px = Math.round(p.x * 100000);
-        const py = Math.round(p.y * 100000);
-        out += `X${px}Y${py}D03*\n`;
-      });
+    let currentAp = '';
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = (p.diameterMm || 1.8) + 0.10;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      const ap = apertures.getCode(spec);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(p.x * 100000);
+      const py = Math.round(p.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
 
     out += `M02*\n`;
     return out;
   }
 
   /**
-   * Generates Bottom Solder Mask (.gbs / B_Mask.GBS)
+   * Generates Bottom Solder Mask (.gbs / B_Mask.GBS) with +0.10mm pad mask expansion
    */
   public static exportBottomSolderMask(pcb: PcbLayout): string {
+    const apertures = new ApertureTable();
+    const pads = pcb.pads.filter((p) => p.layer === 'all' || p.layer === 'bottom');
+
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = (p.diameterMm || 1.8) + 0.10;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      apertures.register(spec);
+    });
+
     let out = `%TF.FileFunction,Soldermask,Bot*%\n`;
     out += `%FSLAX35Y35*%\n%MOMM*%\n%LPD*%\n`;
-    out += `%ADD12C,2.000000*%\n`;
+    out += apertures.getDefinitions();
     out += `G04 Layer: Bottom Solder Mask (B.Mask)*\n`;
-    out += `D12*\n`;
 
-    pcb.pads
-      .filter((p) => p.layer === 'all' || p.layer === 'bottom')
-      .forEach((p) => {
-        const px = Math.round(p.x * 100000);
-        const py = Math.round(p.y * 100000);
-        out += `X${px}Y${py}D03*\n`;
-      });
+    let currentAp = '';
+    pads.forEach((p) => {
+      const isRect = p.shape === 'rect';
+      const dia = (p.diameterMm || 1.8) + 0.10;
+      const spec = isRect ? `R,${dia.toFixed(6)}X${dia.toFixed(6)}` : `C,${dia.toFixed(6)}`;
+      const ap = apertures.getCode(spec);
+      if (ap !== currentAp) {
+        out += `${ap}*\n`;
+        currentAp = ap;
+      }
+      const px = Math.round(p.x * 100000);
+      const py = Math.round(p.y * 100000);
+      out += `X${px}Y${py}D03*\n`;
+    });
 
     out += `M02*\n`;
     return out;
