@@ -885,11 +885,11 @@ export function Pcb3dViewer({
           if (upperType.includes('CAPACITOR')) {
             return (
               <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
-                <mesh position={[-1.27, 1.45, 0]} material={materials.leadMetal}>
-                  <cylinderGeometry args={[0.22, 0.22, 3.3, 10]} />
+                <mesh position={[-1.27, 1.15, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.22, 0.22, 2.5, 10]} />
                 </mesh>
-                <mesh position={[1.27, 1.45, 0]} material={materials.leadMetal}>
-                  <cylinderGeometry args={[0.22, 0.22, 3.3, 10]} />
+                <mesh position={[1.27, 1.15, 0]} material={materials.leadMetal}>
+                  <cylinderGeometry args={[0.22, 0.22, 2.5, 10]} />
                 </mesh>
                 <mesh position={[-1.27, 0.15, 0]} material={materials.solderFillet}>
                   <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
@@ -897,8 +897,8 @@ export function Pcb3dViewer({
                 <mesh position={[1.27, 0.15, 0]} material={materials.solderFillet}>
                   <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
                 </mesh>
-                <mesh position={[0, 2.55, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.capCeramicTan}>
-                  <cylinderGeometry args={[2.1, 2.1, 1.1, 24]} />
+                <mesh position={[0, 3.25, 0]} rotation={[Math.PI / 2, 0, 0]} material={materials.capCeramicTan}>
+                  <cylinderGeometry args={[1.85, 1.85, 1.1, 28]} />
                 </mesh>
               </group>
             );
