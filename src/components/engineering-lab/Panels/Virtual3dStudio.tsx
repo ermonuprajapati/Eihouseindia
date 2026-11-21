@@ -60,6 +60,42 @@ interface Studio3DHistoryState {
   wires: Wire3D[];
 }
 
+/**
+ * Consolidated canonical 3D type mapping helper reused across 3D generation and 2-way sync
+ */
+export function mapCircuitCompTo3DType(comp: CircuitComponent): string {
+  const type = comp.type || '';
+  const model3d = comp.model3d || '';
+
+  if (type.includes('MEGA') || model3d.includes('mega')) return 'ARDUINO_MEGA';
+  if (type.includes('ARDUINO_NANO') || model3d.includes('nano')) return 'ARDUINO_NANO';
+  if (type.includes('ARDUINO') || type === 'MCU_ARDUINO_UNO' || model3d.includes('uno')) return 'ARDUINO_UNO';
+  if (type.includes('ESP32') || model3d.includes('esp32')) return 'ESP32_DEVKIT';
+  if (type.includes('PICO') || model3d.includes('pico')) return 'RASPBERRY_PI_PICO';
+  if (type.includes('BATTERY') || type === 'DC_VOLTAGE') return 'BATTERY_9V';
+  if (type.includes('LED_RGB') || type.includes('RGB')) return 'LED_RGB';
+  if (type.includes('LED')) return 'LED';
+  if (type.includes('RESISTOR')) return 'RESISTOR';
+  if (type.includes('BUTTON') || type.includes('SWITCH')) {
+    return type.includes('SLIDE') ? 'SLIDE_SWITCH' : 'PUSHBUTTON';
+  }
+  if (type.includes('POTENTIOMETER')) return 'POTENTIOMETER';
+  if (type.includes('TIMER') || type.includes('555')) return 'TIMER_555';
+  if (type.includes('CAPACITOR')) {
+    return type.includes('ELECTROLYTIC') || model3d.includes('can') || model3d.includes('radial') || Boolean(comp.parameters?.polarized)
+      ? 'CAPACITOR_ELECTROLYTIC'
+      : 'CAPACITOR';
+  }
+  if (type.includes('ULTRASONIC') || type.includes('SR04')) return 'HC_SR04';
+  if (type.includes('SERVO')) return 'SERVO_SG90';
+  if (type.includes('LCD') || type.includes('1602')) return 'LCD_1602';
+  if (type.includes('BUZZER')) return 'BUZZER_ACTIVE';
+  if (type.includes('DIODE')) return 'DIODE';
+  if (type.includes('LDR')) return 'SENSOR_LDR';
+
+  return type;
+}
+
 export function Virtual3dStudio({
   components,
   wires,
@@ -115,13 +151,7 @@ export function Virtual3dStudio({
         const matching = components.find((c) => c.id === c3d.id);
         if (!matching) return c3d;
 
-        let mappedType = matching.type;
-        if (matching.type.includes('MEGA') || matching.model3d?.includes('mega')) mappedType = 'ARDUINO_MEGA';
-        else if (matching.type.includes('ARDUINO_NANO') || matching.model3d?.includes('nano')) mappedType = 'ARDUINO_NANO';
-        else if (matching.type.includes('ARDUINO') || matching.type === 'MCU_ARDUINO_UNO' || matching.model3d?.includes('uno')) mappedType = 'ARDUINO_UNO';
-        else if (matching.type.includes('ESP32') || matching.model3d?.includes('esp32')) mappedType = 'ESP32_DEVKIT';
-        else if (matching.type.includes('PICO') || matching.model3d?.includes('pico')) mappedType = 'RASPBERRY_PI_PICO';
-        else if (matching.type.includes('BATTERY') || matching.type === 'DC_VOLTAGE') mappedType = 'BATTERY_9V';
+        const mappedType = mapCircuitCompTo3DType(matching);
 
         const paramsChanged = JSON.stringify(c3d.parameters || {}) !== JSON.stringify(matching.parameters || {});
         if (c3d.type !== mappedType || c3d.value !== matching.value || c3d.label !== matching.label || paramsChanged) {
@@ -142,10 +172,7 @@ export function Virtual3dStudio({
       const newlyAdded = components
         .filter((c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd') && !existingIds.has(c.id))
         .map((comp) => {
-          let mapped = comp.type;
-          if (comp.type.includes('BATTERY') || comp.type === 'DC_VOLTAGE') mapped = 'BATTERY_9V';
-          else if (comp.type.includes('ARDUINO')) mapped = 'ARDUINO_UNO';
-          else if (comp.type.includes('ESP32')) mapped = 'ESP32_DEVKIT';
+          const mapped = mapCircuitCompTo3DType(comp);
           return {
             id: comp.id,
             type: mapped,
@@ -179,48 +206,7 @@ export function Virtual3dStudio({
     );
 
     return physicalComponents.map((comp) => {
-      let mappedType = comp.type;
-      if (comp.type.includes('MEGA') || comp.model3d?.includes('mega')) {
-        mappedType = 'ARDUINO_MEGA';
-      } else if (comp.type.includes('ARDUINO_NANO') || comp.model3d?.includes('nano')) {
-        mappedType = 'ARDUINO_NANO';
-      } else if (comp.type.includes('ARDUINO') || comp.type === 'MCU_ARDUINO_UNO' || comp.model3d?.includes('uno')) {
-        mappedType = 'ARDUINO_UNO';
-      } else if (comp.type.includes('ESP32') || comp.model3d?.includes('esp32')) {
-        mappedType = 'ESP32_DEVKIT';
-      } else if (comp.type.includes('PICO') || comp.model3d?.includes('pico')) {
-        mappedType = 'RASPBERRY_PI_PICO';
-      } else if (comp.type.includes('LED_RGB') || comp.type.includes('RGB')) {
-        mappedType = 'LED_RGB';
-      } else if (comp.type.includes('LED')) {
-        mappedType = 'LED';
-      } else if (comp.type.includes('RESISTOR')) {
-        mappedType = 'RESISTOR';
-      } else if (comp.type.includes('BATTERY') || comp.type === 'DC_VOLTAGE') {
-        mappedType = 'BATTERY_9V';
-      } else if (comp.type.includes('BUTTON') || comp.type.includes('SWITCH')) {
-        mappedType = comp.type.includes('SLIDE') ? 'SLIDE_SWITCH' : 'PUSHBUTTON';
-      } else if (comp.type.includes('POTENTIOMETER')) {
-        mappedType = 'POTENTIOMETER';
-      } else if (comp.type.includes('TIMER') || comp.type.includes('555')) {
-        mappedType = 'TIMER_555';
-      } else if (comp.type.includes('CAPACITOR')) {
-        mappedType = comp.type.includes('ELECTROLYTIC') || comp.model3d?.includes('can') || comp.model3d?.includes('radial') || Boolean(comp.parameters?.polarized)
-          ? 'CAPACITOR_ELECTROLYTIC'
-          : 'CAPACITOR';
-      } else if (comp.type.includes('ULTRASONIC') || comp.type.includes('SR04')) {
-        mappedType = 'HC_SR04';
-      } else if (comp.type.includes('SERVO')) {
-        mappedType = 'SERVO_SG90';
-      } else if (comp.type.includes('LCD') || comp.type.includes('1602')) {
-        mappedType = 'LCD_1602';
-      } else if (comp.type.includes('BUZZER')) {
-        mappedType = 'BUZZER_ACTIVE';
-      } else if (comp.type.includes('DIODE')) {
-        mappedType = 'DIODE';
-      } else if (comp.type.includes('LDR')) {
-        mappedType = 'SENSOR_LDR';
-      }
+      const mappedType = mapCircuitCompTo3DType(comp);
 
       // Preserve previously saved 3D coordinates if valid (unless forceAutoLayout is true)
       if (!forceAutoLayout && comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
@@ -858,7 +844,7 @@ export function Virtual3dStudio({
     else if (c3d.type === 'ARDUINO_UNO') catalogType = 'ARDUINO_UNO';
     else if (c3d.type === 'ARDUINO_NANO') catalogType = 'ARDUINO_NANO';
     else if (c3d.type === 'ESP32_DEVKIT') catalogType = 'ESP32_DEVKIT';
-    else if (c3d.type === 'RASPBERRY_PI_PICO') catalogType = 'ARDUINO_UNO';
+    else if (c3d.type === 'RASPBERRY_PI_PICO') catalogType = 'RASPBERRY_PI_PICO';
     else if (c3d.type === 'LED') catalogType = 'LED';
     else if (c3d.type === 'LED_RGB') catalogType = 'ACTUATOR_RGB_LED';
     else if (c3d.type === 'RESISTOR') catalogType = 'RESISTOR';
@@ -878,6 +864,7 @@ export function Virtual3dStudio({
 
     const tmpl =
       COMPONENT_CATALOG.find((t) => t.type === catalogType) ||
+      (catalogType === 'RASPBERRY_PI_PICO' ? COMPONENT_CATALOG.find((t) => t.type === 'ARDUINO_UNO') : undefined) ||
       COMPONENT_CATALOG.find((t) => t.type === 'RESISTOR') ||
       COMPONENT_CATALOG[0];
 
@@ -905,7 +892,7 @@ export function Virtual3dStudio({
   const handleUpdateComponent3D = useCallback((c3d: Component3D) => {
     setIndependentComponents((prev) => {
       const current = prev !== null ? prev : activeComponents3d;
-      return current.map((c) => (c.id === c3d.id ? c3d : c));
+      return current.map((c) => (c.id === c3d.id ? { ...c, ...c3d } : c));
     });
 
     if (onUpdateComponent3DPosition) {
