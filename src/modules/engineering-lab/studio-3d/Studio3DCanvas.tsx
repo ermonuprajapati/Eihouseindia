@@ -876,7 +876,6 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
 
 export function ComponentPinLabelsOverlay({
   comp,
-  isSelected = false,
   hoveredPinName,
   showAll,
 }: {
@@ -887,11 +886,12 @@ export function ComponentPinLabelsOverlay({
 }) {
   const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
 
-  // When "Show All Pin Labels" toggle is ON or a component is selected, render full pin set with fan-out
-  const shouldRenderMulti = showAll || isSelected;
-  if (!shouldRenderMulti && !hoveredPinName) return null;
+  // Bug 3 Fix: Default to professional silkscreen on component bodies + instant, single clean tooltip badge on whichever pin is hovered.
+  // NEVER spam all permanent HTML badges when a component is selected.
+  // ONLY render multiple badges when the user explicitly enabled the "Show All Pin Labels" [L] toolbar toggle.
+  if (!showAll && !hoveredPinName) return null;
 
-  const pinsToRender = shouldRenderMulti
+  const pinsToRender = showAll
     ? pinLabels
     : pinLabels.filter(
         (p) =>
@@ -902,44 +902,35 @@ export function ComponentPinLabelsOverlay({
 
   if (pinsToRender.length === 0) return null;
 
+  const rotEuler = new THREE.Euler(
+    THREE.MathUtils.degToRad(comp.rotX || 0),
+    THREE.MathUtils.degToRad(comp.rotY || 0),
+    THREE.MathUtils.degToRad(comp.rotZ || 0)
+  );
+
   return (
-    <group position={[comp.x3d, comp.y3d, comp.z3d]}>
+    <group position={[comp.x3d, comp.y3d, comp.z3d]} rotation={rotEuler}>
       {pinsToRender.map((p, idx) => {
         const isHovered =
           hoveredPinName === p.id ||
           hoveredPinName?.toLowerCase() === p.id.toLowerCase();
 
-        // Stagger labels across 3 distinct vertical tiers:
-        // Tier 0: 4.2mm, Tier 1: 7.6mm, Tier 2: 11.0mm
-        const tier = idx % 3;
-        const elevationY = isHovered ? 5.2 : 4.2 + tier * 3.4;
-
-        // Outward radial leader offsets:
-        // Push outward radially from component center in XZ plane with minimum clearance
-        const lx = p.localPos[0];
-        const lz = p.localPos[2];
-        const dist = Math.hypot(lx, lz);
-        const radX = dist > 0.1 ? lx / dist : (idx % 2 === 0 ? 1 : -1);
-        const radZ = dist > 0.1 ? lz / dist : (idx % 2 === 0 ? -1 : 1);
-
-        // Stagger outward radial push per tier so adjacent pins on standard 2.54mm pitch never collide:
-        const pushDistance = (idx % 2 === 0 ? 3.6 : 6.0) + tier * 1.2;
-        const offsetX = radX * pushDistance;
-        const offsetZ = radZ * pushDistance;
+        // When showAll is active, gently alternate Y elevation by 1.8mm to prevent overlap on tight 2.54mm pitch
+        const elevationY = isHovered ? 2.8 : 2.2 + (idx % 2) * 1.8;
 
         return (
           <Html
             key={p.id}
-            position={[lx + offsetX, p.localPos[1] + elevationY, lz + offsetZ]}
+            position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2]]}
             center
-            distanceFactor={160}
+            distanceFactor={90}
             style={{ pointerEvents: 'none', userSelect: 'none' }}
           >
             <div
-              className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] whitespace-nowrap shadow-xl tracking-tight transition-transform ${
+              className={`px-1.5 py-0.5 rounded font-mono font-bold text-[9px] tracking-tight whitespace-nowrap shadow-md border ${
                 isHovered
-                  ? 'bg-amber-400 text-slate-950 scale-125 ring-2 ring-white border border-amber-300 shadow-amber-500/60 z-50'
-                  : 'bg-slate-950/95 text-cyan-200 border border-cyan-500/70 shadow-black/90'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 ring-1 ring-white shadow-amber-500/50 scale-110 z-50'
+                  : 'bg-slate-900/90 text-cyan-300 border-cyan-500/60 shadow-black/80'
               }`}
             >
               {p.label}
@@ -2477,8 +2468,12 @@ export function Studio3DCanvas({
 
                 {/* Ceramic Disc Lead Stems and Legs Firmly Seated Into Disc Body (radius 0.38mm) */}
                 {/* Pin 1 at x = -2.54: Upper angled stem emerging from inside disc [x = -1.27, y = 3.2] down to [x = -2.54, y = 1.6] */}
-                <mesh position={[-1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(-1.27, 1.6)]}>
+                <mesh position={[-1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(1.27, 1.6)]}>
                   <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
+                </mesh>
+                <mesh position={[-2.54, 1.6, 0]}>
+                  <sphereGeometry args={[0.38, 10, 10]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 {/* Pin 1 vertical leg extending into breadboard down to y = -7.5mm */}
@@ -2488,8 +2483,12 @@ export function Studio3DCanvas({
                 </mesh>
 
                 {/* Pin 2 at x = 2.54: Upper angled stem emerging from inside disc [x = 1.27, y = 3.2] down to [x = 2.54, y = 1.6] */}
-                <mesh position={[1.905, 2.4, 0]} rotation={[0, 0, -Math.atan2(1.27, 1.6)]}>
+                <mesh position={[1.905, 2.4, 0]} rotation={[0, 0, Math.atan2(1.27, 1.6)]}>
                   <cylinderGeometry args={[0.38, 0.38, 2.04, 12]} />
+                  <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
+                </mesh>
+                <mesh position={[2.54, 1.6, 0]}>
+                  <sphereGeometry args={[0.38, 10, 10]} />
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
                 {/* Pin 2 vertical leg extending into breadboard down to y = -7.5mm */}

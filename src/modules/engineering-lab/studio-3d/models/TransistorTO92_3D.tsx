@@ -122,7 +122,7 @@ export function TransistorTO92_3D({
       {pins.map((p) => {
         const isHovered = hoveredPin === p.name || hoveredPin === p.alias || (hoveredPin && hoveredPin.toLowerCase() === p.name);
         const stemHypot = Math.hypot(p.x - p.innerX, 1.6);
-        const stemAngle = -Math.atan2(p.x - p.innerX, 1.6);
+        const stemAngle = -Math.atan2(p.innerX - p.x, 1.6);
 
         return (
           <group key={p.name}>
@@ -133,6 +133,14 @@ export function TransistorTO92_3D({
               material={materials.silverLead}
             >
               <cylinderGeometry args={[0.3, 0.3, stemHypot, 8]} />
+            </mesh>
+
+            {/* Seamless elbow spheres */}
+            <mesh position={[p.innerX, 3.2, 0]} material={materials.silverLead}>
+              <sphereGeometry args={[0.3, 8, 8]} />
+            </mesh>
+            <mesh position={[p.x, 1.6, 0]} material={materials.silverLead}>
+              <sphereGeometry args={[0.3, 8, 8]} />
             </mesh>
 
             {/* Vertical shank extending from y = 1.6 down into breadboard holes (y = -7.0) */}

@@ -104,6 +104,10 @@ export function Diode3D({
             <mesh position={[p.x / 2, 4.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.lead}>
               <cylinderGeometry args={[0.3, 0.3, Math.abs(p.x), 8]} />
             </mesh>
+            {/* Seamless elbow sphere */}
+            <mesh position={[p.x, 4.0, 0]} material={materials.lead}>
+              <sphereGeometry args={[0.3, 10, 10]} />
+            </mesh>
             {/* Vertical lead leg extending down through breadboard hole to y = -8.0 */}
             <mesh position={[p.x, -2.0, 0]} material={materials.lead}>
               <cylinderGeometry args={[0.3, 0.3, 12.0, 8]} />

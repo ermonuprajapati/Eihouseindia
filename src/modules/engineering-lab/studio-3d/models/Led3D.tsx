@@ -285,25 +285,35 @@ export function Led3D({
       />
 
       {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm, 12mm length) */}
-      {/* Internal anode stem penetrating 2.5mm inside epoxy body from anvil at y = 4.5 down to collar at y = 2.0 */}
-      <mesh position={[-0.7, 3.25, 0]} rotation={[0, 0, Math.atan2(0.6, 2.5)]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 2.57, 12]} />
+      {/* 1. Longer Anode Lead (Left, +): Emerges from inside lens at y = 4.0, bends at y = 2.0 to x = -2.54, extends down to y = -8.0 */}
+      <mesh position={[-1.0, 3.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.0, 12]} />
       </mesh>
-      {/* 1. Longer Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -8.0mm */}
       <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
+      </mesh>
+      <mesh position={[-1.0, 2.0, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 10, 10]} />
+      </mesh>
+      <mesh position={[-2.54, 2.0, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 10, 10]} />
       </mesh>
       <mesh position={[-2.54, -3.0, 0]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 10.0, 12]} />
       </mesh>
 
-      {/* Internal cathode stem penetrating 2.5mm inside epoxy body from cup at y = 4.5 down to collar at y = 2.0 */}
-      <mesh position={[0.7, 3.25, 0]} rotation={[0, 0, -Math.atan2(0.6, 2.5)]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 2.57, 12]} />
+      {/* 2. Shorter Cathode Lead (Right, -): Emerges from inside lens at y = 4.0, bends at y = 2.0 to x = 2.54, extends down to y = -7.5 */}
+      <mesh position={[1.0, 3.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.0, 12]} />
       </mesh>
-      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -7.5mm */}
       <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
+      </mesh>
+      <mesh position={[1.0, 2.0, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 10, 10]} />
+      </mesh>
+      <mesh position={[2.54, 2.0, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 10, 10]} />
       </mesh>
       <mesh position={[2.54, -2.75, 0]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 9.5, 12]} />

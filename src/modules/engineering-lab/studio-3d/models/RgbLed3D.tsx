@@ -170,7 +170,7 @@ export function RgbLed3D({
       {pins.map((p) => {
         const isHovered = hoveredPin === p.name || (hoveredPin && p.aliases.includes(hoveredPin.toLowerCase()));
         const stemHypot = Math.hypot(p.x - p.innerX, 1.4);
-        const stemAngle = -Math.atan2(p.x - p.innerX, 1.4);
+        const stemAngle = -Math.atan2(p.innerX - p.x, 1.4);
 
         return (
           <group key={p.name}>
@@ -181,6 +181,14 @@ export function RgbLed3D({
               material={materials.pinSilver}
             >
               <cylinderGeometry args={[0.3, 0.3, stemHypot, 8]} />
+            </mesh>
+
+            {/* Seamless elbow spheres */}
+            <mesh position={[p.innerX, 2.0, 0]} material={materials.pinSilver}>
+              <sphereGeometry args={[0.3, 8, 8]} />
+            </mesh>
+            <mesh position={[p.x, 0.6, 0]} material={materials.pinSilver}>
+              <sphereGeometry args={[0.3, 8, 8]} />
             </mesh>
 
             {/* 2. Lower Vertical Leg: From [p.x, 0.6, 0] down into breadboard holes (y = -8.0) */}

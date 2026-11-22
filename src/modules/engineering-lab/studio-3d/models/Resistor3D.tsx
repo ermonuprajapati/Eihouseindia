@@ -86,18 +86,26 @@ export function Resistor3D({
       })}
 
       {/* Realistic Thin Silver/Tinned-Copper Cylindrical Wire Leads (radius 0.38mm, 12.5mm length) */}
-      {/* Left horizontal stem */}
-      <mesh position={[-4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
+      {/* Left horizontal stem penetrating body at x = -3.5 out to x = -5.08 */}
+      <mesh position={[-4.29, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 1.58, 12]} />
+      </mesh>
+      {/* Left seamless elbow sphere */}
+      <mesh position={[-5.08, 4.5, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 12, 12]} />
       </mesh>
       {/* Left bent leg entering straight into exact center of breadboard hole down to y = -8.0 */}
       <mesh position={[-5.08, -1.75, 0]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 12.5, 12]} />
       </mesh>
 
-      {/* Right horizontal stem */}
-      <mesh position={[4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
+      {/* Right horizontal stem penetrating body at x = 3.5 out to x = 5.08 */}
+      <mesh position={[4.29, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 1.58, 12]} />
+      </mesh>
+      {/* Right seamless elbow sphere */}
+      <mesh position={[5.08, 4.5, 0]} material={materials.silverLead}>
+        <sphereGeometry args={[0.38, 12, 12]} />
       </mesh>
       {/* Right bent leg entering straight into exact center of breadboard hole down to y = -8.0 */}
       <mesh position={[5.08, -1.75, 0]} material={materials.silverLead}>
