@@ -12,7 +12,7 @@ import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/p
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
-import { isVirtualSchematicSymbol } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import {
   Layers,
   Download,
@@ -30,7 +30,6 @@ import {
   Disc,
   Grid,
   Shield,
-  Eye,
   Settings,
   ChevronDown,
   FileSpreadsheet,
@@ -90,6 +89,7 @@ export function Pcb2dEditor({
 
   // Active routing / editing layer
   const [activeLayer, setActiveLayer] = useState<'top_copper' | 'bottom_copper'>('top_copper');
+  const [gndPourLayer, setGndPourLayer] = useState<'bottom_copper' | 'top_copper' | 'off'>(DEFAULT_GND_POUR_LAYER);
 
   // Tool Modes
   const [toolMode, setToolMode] = useState<'select' | 'route' | 'via'>('select');
@@ -224,6 +224,60 @@ export function Pcb2dEditor({
     toast.success(`Rotated ${targetComp.designator} to ${newRot}°`);
   }, [selectedCompId, pcb, onUpdatePcb]);
 
+  // Plated Via insertion for layer transition [Shortcut: V]
+  const handleInsertPlatedVia = useCallback(() => {
+    const nextLayer = activeLayer === 'top_copper' ? 'bottom_copper' : 'top_copper';
+    const viaX = mouseCoord ? snapCoord(mouseCoord.mmX) : Math.round(pcb.widthMm / 2);
+    const viaY = mouseCoord ? snapCoord(mouseCoord.mmY) : Math.round(pcb.heightMm / 2);
+
+    const viaPad: PcbPad = {
+      id: `via_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      componentId: 'VIA',
+      pinId: 'VIA',
+      x: viaX,
+      y: viaY,
+      diameterMm: 0.8,
+      holeMm: 0.4,
+      shape: 'round',
+      layer: 'all',
+      netId: routingStartPad ? (pcb.pads.find((p) => p.id === routingStartPad.id)?.netId || undefined) : undefined,
+    };
+
+    if (routingStartPad && onUpdatePcb) {
+      const pts = compute45RoutePoints(routingStartPad, { x: viaX, y: viaY });
+      const newTracks: PcbTrack[] = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        newTracks.push({
+          id: `trk_via_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+          layer: activeLayer,
+          from: pts[i],
+          to: pts[i + 1],
+          widthMm: traceWidth,
+          netId: viaPad.netId,
+        });
+      }
+
+      setActiveLayer(nextLayer);
+      onUpdatePcb({
+        ...pcb,
+        pads: [...pcb.pads, viaPad],
+        tracks: [...pcb.tracks, ...newTracks],
+      });
+
+      setRoutingStartPad({ id: viaPad.id, x: viaX, y: viaY });
+      toast.info(`Placed Via at (${viaX.toFixed(1)}, ${viaY.toFixed(1)}) mm & switched to ${nextLayer === 'top_copper' ? 'F.Cu' : 'B.Cu'}`);
+    } else if (onUpdatePcb) {
+      onUpdatePcb({
+        ...pcb,
+        pads: [...pcb.pads, viaPad],
+      });
+      setActiveLayer(nextLayer);
+      toast.info(`Placed Plated Via at (${viaX.toFixed(1)}, ${viaY.toFixed(1)}) mm & active layer is now ${nextLayer === 'top_copper' ? 'F.Cu' : 'B.Cu'}`);
+    } else {
+      setActiveLayer(nextLayer);
+    }
+  }, [activeLayer, mouseCoord, snapCoord, pcb, routingStartPad, onUpdatePcb, traceWidth]);
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -255,55 +309,13 @@ export function Pcb2dEditor({
         }
       } else if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
-        const nextLayer = activeLayer === 'top_copper' ? 'bottom_copper' : 'top_copper';
-
-        if (routingStartPad && mouseCoord && onUpdatePcb) {
-          const viaX = snapCoord(mouseCoord.mmX);
-          const viaY = snapCoord(mouseCoord.mmY);
-          const viaPad: PcbPad = {
-            id: `via_${Date.now()}`,
-            componentId: 'VIA',
-            pinId: 'VIA',
-            x: viaX,
-            y: viaY,
-            diameterMm: 0.8,
-            holeMm: 0.4,
-            shape: 'round',
-            layer: 'all',
-          };
-
-          // Route trace on current active layer up to the via
-          const pts = compute45RoutePoints(routingStartPad, { x: viaX, y: viaY });
-          const newTracks: PcbTrack[] = [];
-          for (let i = 0; i < pts.length - 1; i++) {
-            newTracks.push({
-              id: `trk_via_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
-              layer: activeLayer,
-              from: pts[i],
-              to: pts[i + 1],
-              widthMm: traceWidth,
-            });
-          }
-
-          setActiveLayer(nextLayer);
-          onUpdatePcb({
-            ...pcb,
-            pads: [...pcb.pads, viaPad],
-            tracks: [...pcb.tracks, ...newTracks],
-          });
-
-          // Continue routing seamlessly from this via on nextLayer
-          setRoutingStartPad({ id: viaPad.id, x: viaX, y: viaY });
-          toast.info(`Placed Via at (${viaX.toFixed(1)}, ${viaY.toFixed(1)}) mm & switched to ${nextLayer === 'top_copper' ? 'F.Cu' : 'B.Cu'}`);
-        } else {
-          setActiveLayer(nextLayer);
-        }
+        handleInsertPlatedVia();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent, traceWidth]);
+  }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent, traceWidth, handleInsertPlatedVia]);
 
   // Run full Auto-Router with Manhattan 45-chamfered tracks
   const handleAutoRoute = () => {
@@ -424,8 +436,8 @@ export function Pcb2dEditor({
       }
     }
 
-    // 1. Draw FR4 Board Substrate (Green Soldermask)
-    ctx.fillStyle = '#064E3B';
+    // 1. Draw FR4 Board Substrate (Dark EDA Substrate)
+    ctx.fillStyle = '#0B1117';
     ctx.strokeStyle = '#047857';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -433,19 +445,59 @@ export function Pcb2dEditor({
     ctx.fill();
     ctx.stroke();
 
-    // 1.1 Copper Pour / GND Plane (KiCad / Altium Professional Style)
-    if (visibleLayers.copperPour) {
-      const margin = 2 * scale;
-      ctx.fillStyle = 'rgba(217, 119, 6, 0.22)';
+    // 1.1 Ground Pour / GND Plane (KiCad / Altium Professional 2-Layer Standard)
+    // Strictly beneath signal tracks, with isolation clearance around non-GND pads/vias and traces.
+    if (visibleLayers.copperPour && gndPourLayer !== 'off') {
+      const margin = 1.8 * scale;
+      const isBottomGnd = gndPourLayer === 'bottom_copper';
+
+      // Subtle translucent ground pour plane (B.Cu blue or F.Cu red)
+      ctx.fillStyle = isBottomGnd ? 'rgba(37, 99, 235, 0.22)' : 'rgba(239, 68, 68, 0.18)';
       ctx.fillRect(offsetX + margin, offsetY + margin, pcb.widthMm * scale - margin * 2, pcb.heightMm * scale - margin * 2);
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+      ctx.strokeStyle = isBottomGnd ? 'rgba(59, 130, 246, 0.5)' : 'rgba(239, 68, 68, 0.5)';
       ctx.lineWidth = 1;
       ctx.strokeRect(offsetX + margin, offsetY + margin, pcb.widthMm * scale - margin * 2, pcb.heightMm * scale - margin * 2);
 
+      // Isolation clearance gaps around non-GND through-hole pads & vias
+      pcb.pads.forEach((pad) => {
+        const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
+        if (!isGnd) {
+          const px = offsetX + pad.x * scale;
+          const py = offsetY + pad.y * scale;
+          const clearR = (pad.diameterMm * scale) / 2 + 0.6 * scale;
+          ctx.fillStyle = '#0B1117';
+          ctx.beginPath();
+          if (pad.shape === 'rect') {
+            ctx.fillRect(px - clearR, py - clearR, clearR * 2, clearR * 2);
+          } else {
+            ctx.arc(px, py, clearR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      });
+
+      // Isolation clearance gaps around non-GND traces on this pour layer
+      const pourTrackLayer = isBottomGnd ? 'bottom_copper' : 'top_copper';
+      ctx.strokeStyle = '#0B1117';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.lineCap = 'round';
+      pcb.tracks
+        .filter((t) => t.layer === pourTrackLayer && t.netId !== 'GND')
+        .forEach((t) => {
+          ctx.beginPath();
+          ctx.moveTo(offsetX + t.from.x * scale, offsetY + t.from.y * scale);
+          ctx.lineTo(offsetX + t.to.x * scale, offsetY + t.to.y * scale);
+          ctx.stroke();
+        });
+
       // Silkscreen / Copper zone indicator in top-left corner
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.75)';
+      ctx.fillStyle = isBottomGnd ? 'rgba(59, 130, 246, 0.85)' : 'rgba(239, 68, 68, 0.85)';
       ctx.font = 'bold 8px monospace';
-      ctx.fillText('GND ZONE (COPPER POUR)', offsetX + margin + 6, offsetY + margin + 12);
+      ctx.fillText(
+        isBottomGnd ? 'B.Cu GND ZONE (COPPER POUR)' : 'F.Cu GND ZONE (COPPER POUR)',
+        offsetX + margin + 6,
+        offsetY + margin + 12
+      );
     }
 
     // 2. Corner M3 Mounting Holes
@@ -813,16 +865,17 @@ export function Pcb2dEditor({
       const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
 
       // Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour
-      if (isGnd && visibleLayers.copperPour) {
-        // Clearance isolation circular trough
-        ctx.strokeStyle = '#064E3B';
+      if (isGnd && visibleLayers.copperPour && gndPourLayer !== 'off') {
+        const spokeColor = gndPourLayer === 'bottom_copper' ? '#3B82F6' : '#EF4444';
+        // Clearance isolation circular trough in substrate color
+        ctx.strokeStyle = '#0B1117';
         ctx.lineWidth = 1.8 * scale;
         ctx.beginPath();
         ctx.arc(px, py, radius + 1.2 * scale, 0, Math.PI * 2);
         ctx.stroke();
 
         // 4 orthogonal copper spokes connecting to ground pour (+ shape)
-        ctx.strokeStyle = '#F59E0B';
+        ctx.strokeStyle = spokeColor;
         ctx.lineWidth = Math.max(1.5, 0.6 * scale);
         ctx.beginPath();
         ctx.moveTo(px - radius - 2.0 * scale, py);
@@ -955,6 +1008,7 @@ export function Pcb2dEditor({
     highlightLocation,
     gridSpacingMm,
     drcViolations,
+    gndPourLayer,
   ]);
 
   // ----------------------------------------------------
@@ -1304,11 +1358,11 @@ export function Pcb2dEditor({
             </button>
           </div>
 
-          {/* Layer Selector */}
+          {/* Layer Selector & Via Transition */}
           <div className="flex items-center gap-1 pl-1 border-l border-slate-800">
             <button
               onClick={() => setActiveLayer('top_copper')}
-              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all ${
+              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
                 activeLayer === 'top_copper'
                   ? 'bg-red-950 border border-red-600 text-red-300'
                   : 'text-slate-400 hover:text-white'
@@ -1319,7 +1373,7 @@ export function Pcb2dEditor({
             </button>
             <button
               onClick={() => setActiveLayer('bottom_copper')}
-              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all ${
+              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
                 activeLayer === 'bottom_copper'
                   ? 'bg-blue-950 border border-blue-600 text-blue-300'
                   : 'text-slate-400 hover:text-white'
@@ -1327,6 +1381,14 @@ export function Pcb2dEditor({
               title="Bottom Copper Layer (B.Cu - Blue)"
             >
               B.Cu (Bot)
+            </button>
+            <button
+              onClick={handleInsertPlatedVia}
+              className="px-2 py-1 rounded font-mono text-[11px] font-bold bg-amber-950/80 hover:bg-amber-900 border border-amber-600 text-amber-300 transition-all flex items-center gap-1 cursor-pointer"
+              title="Insert Plated Via and switch layer [Shortcut: V]"
+            >
+              <Disc className="w-3 h-3 text-amber-400" />
+              <span>+Via [V]</span>
             </button>
           </div>
 
@@ -1563,66 +1625,158 @@ export function Pcb2dEditor({
             </span>
           </div>
 
-          {/* Layer Visibility Pills Overlay */}
-          <div className="absolute top-4 right-4 z-20 hidden sm:flex items-center gap-1.5 bg-slate-950/85 backdrop-blur border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono">
-            <span className="text-slate-500 mr-1 flex items-center gap-1">
-              <Eye className="w-3 h-3 text-cyan-400" />
-              Layers:
-            </span>
-            <label className="flex items-center gap-1 text-red-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.topCopper}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, topCopper: e.target.checked })}
-                className="rounded accent-red-500"
-              />
-              F.Cu
-            </label>
-            <label className="flex items-center gap-1 text-blue-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.bottomCopper}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, bottomCopper: e.target.checked })}
-                className="rounded accent-blue-500"
-              />
-              B.Cu
-            </label>
-            <label className="flex items-center gap-1 text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.silkscreen}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, silkscreen: e.target.checked })}
-                className="rounded accent-emerald-500"
-              />
-              Silk
-            </label>
-            <label className="flex items-center gap-1 text-amber-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.drillHoles}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, drillHoles: e.target.checked })}
-                className="rounded accent-amber-500"
-              />
-              Drill
-            </label>
-            <label className="flex items-center gap-1 text-yellow-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.ratsnest}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, ratsnest: e.target.checked })}
-                className="rounded accent-yellow-500"
-              />
-              Airwires
-            </label>
-            <label className="flex items-center gap-1 text-emerald-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleLayers.copperPour}
-                onChange={(e) => setVisibleLayers({ ...visibleLayers, copperPour: e.target.checked })}
-                className="rounded accent-emerald-500"
-              />
-              GND Pour
-            </label>
+          {/* PCB Layers Control Floating Panel */}
+          <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-2xl text-[11px] font-mono text-slate-300 max-w-[260px]">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
+              <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-[11px]">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>PCB Layers</span>
+              </div>
+              <span className="text-[10px] text-slate-500">{activeLayer === 'top_copper' ? 'Active: F.Cu' : 'Active: B.Cu'}</span>
+            </div>
+
+            {/* Active Routing Layer Toggle & +Via button */}
+            <div className="flex items-center gap-1 py-0.5">
+              <button
+                onClick={() => setActiveLayer('top_copper')}
+                className={`flex-1 py-1 px-1.5 rounded text-center font-bold text-[10px] transition-all cursor-pointer ${
+                  activeLayer === 'top_copper'
+                    ? 'bg-red-950 border border-red-500 text-red-200'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+                title="Activate F.Cu Top Layer (Red)"
+              >
+                F.Cu (Red)
+              </button>
+              <button
+                onClick={() => setActiveLayer('bottom_copper')}
+                className={`flex-1 py-1 px-1.5 rounded text-center font-bold text-[10px] transition-all cursor-pointer ${
+                  activeLayer === 'bottom_copper'
+                    ? 'bg-blue-950 border border-blue-500 text-blue-200'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+                title="Activate B.Cu Bottom Layer (Blue)"
+              >
+                B.Cu (Blue)
+              </button>
+              <button
+                onClick={handleInsertPlatedVia}
+                className="px-2 py-1 rounded bg-amber-950/90 hover:bg-amber-800 border border-amber-600 text-amber-300 font-bold text-[10px] transition-all flex items-center gap-0.5 cursor-pointer"
+                title="Insert Plated Via [V]"
+              >
+                <Disc className="w-2.5 h-2.5" />
+                <span>+Via</span>
+              </button>
+            </div>
+
+            {/* Ground Pour Layer Selector */}
+            <div className="flex items-center justify-between gap-1 py-0.5 text-[10px]">
+              <span className="text-slate-400 flex items-center gap-1">
+                <Shield className="w-3 h-3 text-emerald-400" />
+                GND Pour:
+              </span>
+              <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5">
+                <button
+                  onClick={() => {
+                    setGndPourLayer('bottom_copper');
+                    setVisibleLayers((l) => ({ ...l, copperPour: true }));
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    gndPourLayer === 'bottom_copper' ? 'bg-blue-900 text-blue-200 border border-blue-600' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Place GND plane on B.Cu (Recommended 2-Layer Standard)"
+                >
+                  B.Cu
+                </button>
+                <button
+                  onClick={() => {
+                    setGndPourLayer('top_copper');
+                    setVisibleLayers((l) => ({ ...l, copperPour: true }));
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    gndPourLayer === 'top_copper' ? 'bg-red-900 text-red-200 border border-red-600' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Place GND plane on F.Cu"
+                >
+                  F.Cu
+                </button>
+                <button
+                  onClick={() => {
+                    setGndPourLayer('off');
+                    setVisibleLayers((l) => ({ ...l, copperPour: false }));
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                    gndPourLayer === 'off' ? 'bg-slate-800 text-slate-200' : 'text-slate-500 hover:text-white'
+                  }`}
+                  title="Turn off GND pour"
+                >
+                  Off
+                </button>
+              </div>
+            </div>
+
+            {/* Visibility Eye Toggles */}
+            <div className="pt-1 border-t border-slate-800/80 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+              <label className="flex items-center gap-1.5 text-red-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.topCopper}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, topCopper: e.target.checked })}
+                  className="rounded accent-red-500 w-3 h-3"
+                />
+                <span>F.Cu (Top)</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-blue-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.bottomCopper}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, bottomCopper: e.target.checked })}
+                  className="rounded accent-blue-500 w-3 h-3"
+                />
+                <span>B.Cu (Bot)</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.silkscreen}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, silkscreen: e.target.checked })}
+                  className="rounded accent-slate-400 w-3 h-3"
+                />
+                <span>F.SilkS</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-amber-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.drillHoles}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, drillHoles: e.target.checked })}
+                  className="rounded accent-amber-500 w-3 h-3"
+                />
+                <span>Pads / Vias</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-yellow-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.ratsnest}
+                  onChange={(e) => setVisibleLayers({ ...visibleLayers, ratsnest: e.target.checked })}
+                  className="rounded accent-yellow-500 w-3 h-3"
+                />
+                <span>Airwires</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-emerald-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={visibleLayers.copperPour}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setVisibleLayers({ ...visibleLayers, copperPour: next });
+                    if (!next) setGndPourLayer('off');
+                    else if (gndPourLayer === 'off') setGndPourLayer('bottom_copper');
+                  }}
+                  className="rounded accent-emerald-500 w-3 h-3"
+                />
+                <span>GND Pour</span>
+              </label>
+            </div>
           </div>
 
           {/* Routing Guide Banner */}

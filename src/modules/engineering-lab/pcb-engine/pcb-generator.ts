@@ -22,6 +22,13 @@ export function isVirtualSchematicSymbol(type?: string): boolean {
   );
 }
 
+/**
+ * Real-world 2-Layer EDA PCB Standards:
+ * Primary signal traces route on F.Cu (Top Copper),
+ * while continuous ground return plane / ground pour defaults to B.Cu (Bottom Copper).
+ */
+export const DEFAULT_GND_POUR_LAYER: 'bottom_copper' | 'top_copper' | 'off' = 'bottom_copper';
+
 export class PcbGenerator {
   /**
    * Generates a default 2D PCB layout from schematic components and wires.
@@ -33,7 +40,7 @@ export class PcbGenerator {
     wires: CircuitWire[],
     boardWidthMm: number = 80,
     boardHeightMm: number = 60
-  ): PcbLayout {
+  ): PcbLayout & { gndPourLayer?: 'bottom_copper' | 'top_copper' | 'off' } {
     const pads: PcbPad[] = [];
     const placedComponents: PcbComponentPlacement[] = [];
 
@@ -141,6 +148,26 @@ export class PcbGenerator {
       pads.push(...vias);
     }
 
+    // Connect GND net through-hole pads to B.Cu ground plane, and add a GND stitching via
+    const gndPads = pads.filter((p) => p.netId === 'GND');
+    if (gndPads.length > 0 && !pads.some((p) => p.componentId === 'VIA' && p.netId === 'GND')) {
+      const gPad = gndPads[0];
+      const vx = Math.min(boardWidthMm - 4, Math.max(4, gPad.x + 2.54));
+      const vy = Math.min(boardHeightMm - 4, Math.max(4, gPad.y + 2.54));
+      pads.push({
+        id: `via_gnd_stitch_${Date.now()}`,
+        componentId: 'VIA',
+        pinId: 'GND',
+        netId: 'GND',
+        x: Math.round(vx * 100) / 100,
+        y: Math.round(vy * 100) / 100,
+        shape: 'round',
+        diameterMm: 0.8,
+        holeMm: 0.4,
+        layer: 'all',
+      });
+    }
+
     // Run Design Rule Checks
     const drcErrors = this.runDrc(pads, routedTracks, boardWidthMm, boardHeightMm);
 
@@ -153,7 +180,8 @@ export class PcbGenerator {
       tracks: routedTracks,
       components: placedComponents,
       drcErrors,
-    };
+      gndPourLayer: DEFAULT_GND_POUR_LAYER,
+    } as PcbLayout & { gndPourLayer: 'bottom_copper' | 'top_copper' | 'off' };
   }
 
   /**

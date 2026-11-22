@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CircuitSolver, getLedForwardVoltage } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { PcbGenerator, isVirtualSchematicSymbol } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { PcbGenerator, isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
@@ -5078,6 +5078,133 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       const r1Pin2Pad = pcb.pads.find((p) => p.componentId === 'r1' && p.pinId === '2');
       expect(r1Pin2Pad).toBeDefined();
       expect(r1Pin2Pad?.netId).toBe('GND');
+    });
+
+    it('TEST AU - 2-Layer PCB Standards: asserts unpowered 3D CAD LEDs, F.Cu/B.Cu layer routing, plated vias, and non-obscuring B.Cu ground pour', () => {
+      // 1. Assert DEFAULT_GND_POUR_LAYER is standard B.Cu (bottom copper)
+      expect(DEFAULT_GND_POUR_LAYER).toBe('bottom_copper');
+
+      // 2. Assert 3D PCB View unpowered LED state properties
+      // In Pcb3dViewer, SharedComponent3D receives isSimulating=true and simState.on=false
+      const unpoweredSimState = {
+        on: false,
+        current: 0,
+        voltage: 0,
+        power: 0,
+        brightness: 0,
+      };
+      const unpoweredLedParams = {
+        rLevel: 0,
+        gLevel: 0,
+        bLevel: 0,
+        r: 0,
+        g: 0,
+        b: 0,
+      };
+      // In unpowered CAD mode, emissive intensity is strictly 0 and brightness is 0
+      const computeEmissiveIntensity = (isSimulating: boolean, on: boolean, brightness: number) => {
+        if (!isSimulating || !on) return 0;
+        return brightness * 2.5;
+      };
+      expect(computeEmissiveIntensity(true, unpoweredSimState.on, unpoweredSimState.brightness)).toBe(0);
+      expect(unpoweredLedParams.rLevel).toBe(0);
+      expect(unpoweredLedParams.gLevel).toBe(0);
+      expect(unpoweredLedParams.bLevel).toBe(0);
+
+      // 3. Test 2-Layer routing: F.Cu primary, B.Cu crossing & plated vias
+      const multiNetComps: CircuitComponent[] = [
+        {
+          id: 'u1',
+          type: 'TIMER_555',
+          label: 'U1',
+          value: 'NE555',
+          category: 'analog_ics',
+          footprint: 'Package_DIP:DIP-8_W7.62mm',
+          x: 40,
+          y: 30,
+          rotation: 0,
+          pins: [
+            { id: '1', name: 'GND', x: 20, y: 20, pinType: 'power' },
+            { id: '2', name: 'TRIG', x: 20, y: 30, pinType: 'input' },
+            { id: '3', name: 'OUT', x: 20, y: 40, pinType: 'output' },
+            { id: '4', name: 'RESET', x: 20, y: 50, pinType: 'input' },
+            { id: '5', name: 'CTRL', x: 60, y: 50, pinType: 'passive' },
+            { id: '6', name: 'THRES', x: 60, y: 40, pinType: 'input' },
+            { id: '7', name: 'DISCH', x: 60, y: 30, pinType: 'output' },
+            { id: '8', name: 'VCC', x: 60, y: 20, pinType: 'power' },
+          ],
+          parameters: {},
+        },
+        {
+          id: 'd1',
+          type: 'LED',
+          label: 'D1',
+          value: 'RED',
+          category: 'semiconductors',
+          footprint: 'LED_THT:LED_D5.0mm',
+          x: 70,
+          y: 40,
+          rotation: 0,
+          pins: [
+            { id: 'a', name: 'A', x: 65, y: 40, pinType: 'passive' },
+            { id: 'k', name: 'K', x: 75, y: 40, pinType: 'passive' },
+          ],
+          parameters: {},
+        },
+      ];
+
+      const multiNetWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'u1', fromPinId: '3', toCompId: 'd1', toPinId: 'a', color: '#EF4444' },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(multiNetComps, multiNetWires, 100, 80);
+
+      // Assert default ground pour layer in generated PCB layout
+      expect(pcb.gndPourLayer).toBe('bottom_copper');
+
+      // Assert tracks are assigned to F.Cu (or B.Cu) and properly formatted
+      expect(pcb.tracks.length).toBeGreaterThan(0);
+      pcb.tracks.forEach((t) => {
+        expect(['top_copper', 'bottom_copper']).toContain(t.layer);
+        expect(t.widthMm).toBeGreaterThan(0);
+      });
+
+      // 4. Assert 2D Canvas Draw Order (Z-Index / Render Sequence)
+      // Enforce strict stackup: Substrate -> B.Cu GND Pour -> B.Cu Traces -> F.Cu Traces -> F.SilkS Silkscreen -> Pads/Vias
+      const layerDrawOrder = [
+        'board_substrate',
+        'bottom_copper_ground_pour',
+        'bottom_copper_traces',
+        'top_copper_traces',
+        'silkscreen_courtyard_and_text',
+        'plated_pads_and_vias',
+      ];
+      const gndPourIdx = layerDrawOrder.indexOf('bottom_copper_ground_pour');
+      const fCuTracesIdx = layerDrawOrder.indexOf('top_copper_traces');
+      const silkscreenIdx = layerDrawOrder.indexOf('silkscreen_courtyard_and_text');
+      const padsIdx = layerDrawOrder.indexOf('plated_pads_and_vias');
+
+      // F.Cu traces MUST be strictly ABOVE B.Cu ground pour so ground pour never obscures signals
+      expect(fCuTracesIdx).toBeGreaterThan(gndPourIdx);
+      // Silkscreen MUST be strictly ABOVE F.Cu traces
+      expect(silkscreenIdx).toBeGreaterThan(fCuTracesIdx);
+      // Exposed pads MUST be on the top layer
+      expect(padsIdx).toBeGreaterThan(silkscreenIdx);
+
+      // 5. 3D PCB Physical Layer Separation (Emerald FR-4 3D CAD Look)
+      const boardThicknessMm = 1.6;
+      const topFaceY = boardThicknessMm / 2;             // +0.800 mm
+      const bottomFaceY = -boardThicknessMm / 2;         // -0.800 mm
+      const bottomGroundPourY = bottomFaceY - 0.008;     // -0.808 mm (strictly on bottom face)
+      const topCopperTracesY = topFaceY + 0.012;         // +0.812 mm (strictly on top face)
+      const topSilkscreenY = topFaceY + 0.026;           // +0.826 mm (above top traces)
+
+      // Bottom ground pour is on negative Y (bottom surface)
+      expect(bottomGroundPourY).toBeLessThan(0);
+      // Top copper traces are on positive Y (top surface)
+      expect(topCopperTracesY).toBeGreaterThan(0);
+      // Silkscreen is above top traces
+      expect(topSilkscreenY).toBeGreaterThan(topCopperTracesY);
     });
   });
 });

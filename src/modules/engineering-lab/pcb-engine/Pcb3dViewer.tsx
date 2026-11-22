@@ -70,15 +70,15 @@ export function getSolderMaskTheme(solderMaskColor: string): SolderMaskTheme {
       roughness: 0.35,
     };
   }
-  // Default: Official FR-4 Green
+  // Default: Official Emerald-Green FR-4 Solder Mask
   return {
     name: 'FR-4 Green',
-    board: '#0B4F28',
-    trackTop: '#1A7A42',
-    trackBottom: '#146335',
-    silkscreen: '#FFFFFF',
-    metalness: 0.35,
-    roughness: 0.35,
+    board: '#115E32', // Deep emerald PCB green (#115e32 / #146c3a)
+    trackTop: '#1F8A4C', // authentic slightly raised lighter emerald-green copper-under-mask relief
+    trackBottom: '#176B3C',
+    silkscreen: '#F8FAFC',
+    metalness: 0.08,
+    roughness: 0.36,
   };
 }
 
@@ -172,8 +172,8 @@ export function Pcb3dViewer({
   solderMaskColor = '#0B4F28',
   cameraPreset,
   show3dComponents = true,
-  isSimulating = false,
-  simulationStates = {},
+  isSimulating: _isSimulating = false,
+  simulationStates: _simulationStates = {},
 }: Pcb3dViewerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const thickness = pcb.boardThicknessMm || 1.6;
@@ -432,30 +432,51 @@ export function Pcb3dViewer({
     return {
       fr4Core: new THREE.MeshPhysicalMaterial({
         color: theme.board,
-        roughness: 0.28,
+        roughness: 0.36,
         metalness: 0.08,
-        clearcoat: 0.35,
-        clearcoatRoughness: 0.25,
+        clearcoat: 0.25,
+        clearcoatRoughness: 0.3,
+      }),
+      solderMaskTop: new THREE.MeshPhysicalMaterial({
+        color: theme.board,
+        roughness: 0.36,
+        metalness: 0.08,
+        clearcoat: 0.25,
+        clearcoatRoughness: 0.3,
+      }),
+      solderMaskBottom: new THREE.MeshPhysicalMaterial({
+        color: theme.board,
+        roughness: 0.36,
+        metalness: 0.08,
+        clearcoat: 0.25,
+        clearcoatRoughness: 0.3,
+      }),
+      fr4Edge: new THREE.MeshStandardMaterial({
+        color: '#9E9368', // realistic tan FR-4 fiberglass core board edge thickness
+        roughness: 0.75,
+        metalness: 0.05,
       }),
       copperTop: new THREE.MeshPhysicalMaterial({
-        color: theme.trackTop,
-        metalness: theme.metalness,
-        roughness: theme.roughness,
-        clearcoat: 0.3,
+        color: theme.trackTop, // #1F8A4C slightly raised lighter emerald-green copper-under-mask relief
+        metalness: 0.15,
+        roughness: 0.32,
+        clearcoat: 0.35,
       }),
       copperBottom: new THREE.MeshPhysicalMaterial({
-        color: theme.trackBottom,
-        metalness: theme.metalness,
-        roughness: theme.roughness,
-        clearcoat: 0.3,
+        color: theme.trackBottom, // #176B3C
+        metalness: 0.15,
+        roughness: 0.32,
+        clearcoat: 0.35,
+      }),
+      bottomGroundPour: new THREE.MeshStandardMaterial({
+        color: '#135831', // bottom copper-under-green-mask relief
+        metalness: 0.2,
+        roughness: 0.34,
       }),
       copperPour: new THREE.MeshStandardMaterial({
-        color: '#B45309',
-        metalness: 0.85,
-        roughness: 0.28,
-        polygonOffset: true,
-        polygonOffsetFactor: 2,
-        polygonOffsetUnits: 2,
+        color: '#135831',
+        metalness: 0.2,
+        roughness: 0.34,
       }),
       goldPad: new THREE.MeshStandardMaterial({
         color: '#D4AF37', // Official ENIG Gold (Electroless Nickel Immersion Gold)
@@ -597,17 +618,29 @@ export function Pcb3dViewer({
           maxDistance={500}
         />
 
-        {/* 1. FR-4 Substrate Core Slab */}
-        <mesh position={[0, 0, 0]} material={materials.fr4Core} castShadow receiveShadow>
+        {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Emerald Green Faces */}
+        <mesh
+          position={[0, 0, 0]}
+          material={[
+            materials.fr4Edge,
+            materials.fr4Edge,
+            materials.solderMaskTop,
+            materials.solderMaskBottom,
+            materials.fr4Edge,
+            materials.fr4Edge,
+          ]}
+          castShadow
+          receiveShadow
+        >
           <boxGeometry args={[pcb.widthMm, thickness, pcb.heightMm]} />
         </mesh>
 
-        {/* 2. Professional Top Copper Ground Pour / Ground Plane */}
-        <mesh position={[0, thickness / 2 + 0.008, 0]} material={materials.copperPour} receiveShadow>
+        {/* 2. Bottom Face (B.Cu) Ground Pour & Ground Plane (Top Face stays clean emerald-green FR-4) */}
+        <mesh position={[0, -thickness / 2 - 0.008, 0]} material={materials.bottomGroundPour} receiveShadow>
           <boxGeometry args={[pcb.widthMm - 3, 0.008, pcb.heightMm - 3]} />
         </mesh>
 
-        {/* 3. Top & Bottom Copper Traces with Rounded Joint Caps */}
+        {/* 3. Top (F.Cu) & Bottom (B.Cu) Copper Traces with Rounded Joint Caps */}
         {pcb.tracks.map((track) => {
           const x1 = track.from.x - halfW;
           const z1 = track.from.y - halfH;
@@ -621,7 +654,8 @@ export function Pcb3dViewer({
           const midX = (x1 + x2) / 2;
           const midZ = (z1 + z2) / 2;
           const isTop = track.layer === 'top_copper';
-          const yPos = isTop ? thickness / 2 + 0.014 : -thickness / 2 - 0.014;
+          // Top traces are slightly raised lighter emerald-green copper-under-mask relief (#1F8A4C)
+          const yPos = isTop ? thickness / 2 + 0.012 : -thickness / 2 - 0.014;
           const trackWidth = track.widthMm || 0.35;
           const trackRadius = trackWidth / 2;
           const trackMat = isTop ? materials.copperTop : materials.copperBottom;
@@ -647,9 +681,9 @@ export function Pcb3dViewer({
           );
         })}
 
-        {/* 4. Crisp Visible Silkscreen Layer Overlay Decal strictly ABOVE copper tracks & pour */}
+        {/* 4. Crisp White Silkscreen Layer (F.SilkS) strictly ABOVE top copper tracks & solder mask */}
         {silkscreenTexture && (
-          <mesh position={[0, thickness / 2 + 0.032, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
+          <mesh position={[0, thickness / 2 + 0.030, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
             <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
             <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.98} depthWrite={false} polygonOffset polygonOffsetFactor={-1} />
           </mesh>
@@ -691,22 +725,22 @@ export function Pcb3dViewer({
               }}
               onPointerOut={() => setHoveredItem(null)}
             >
-              {/* Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour */}
+              {/* Bottom Thermal Relief 4-Spoke Cross for GND Pads connecting to B.Cu Ground Pour */}
               {isGnd && (
-                <group position={[0, thickness / 2 + 0.018, 0]}>
+                <group position={[0, -thickness / 2 - 0.016, 0]}>
                   {/* Horizontal spoke */}
-                  <mesh material={materials.copperTop}>
+                  <mesh material={materials.copperBottom}>
                     <boxGeometry args={[pad.diameterMm + 1.8, 0.016, 0.45]} />
                   </mesh>
                   {/* Vertical spoke */}
-                  <mesh material={materials.copperTop}>
+                  <mesh material={materials.copperBottom}>
                     <boxGeometry args={[0.45, 0.016, pad.diameterMm + 1.8]} />
                   </mesh>
                 </group>
               )}
 
               {/* Top Pad / Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.036, 0]} material={materials.goldPad} renderOrder={10}>
+              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
                 {isRect ? (
                   <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
                 ) : (
@@ -714,7 +748,7 @@ export function Pcb3dViewer({
                 )}
               </mesh>
               {/* Silver Solder Fillet Ring around through-hole pin */}
-              <mesh position={[0, thickness / 2 + 0.046, 0]} material={materials.solderFillet} renderOrder={11}>
+              <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
                 <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
               </mesh>
               {/* Bottom Pad / Annular Ring */}
@@ -752,7 +786,6 @@ export function Pcb3dViewer({
 
           // Lookup matching circuit component for telemetry and values if available
           const circuitComp = components?.find((c) => c.id === pComp.componentId);
-          const effectiveSim = simulationStates?.[pComp.componentId] || simulationStates?.[circuitComp?.id || ''];
 
           return (
             <SharedComponent3D
@@ -764,11 +797,36 @@ export function Pcb3dViewer({
               rotation={compRot}
               value={circuitComp?.value || pComp.value}
               label={circuitComp?.label || pComp.label || pComp.designator}
-              parameters={{ ...circuitComp?.parameters, ...pComp.parameters }}
+              parameters={{
+                ...circuitComp?.parameters,
+                ...pComp.parameters,
+                rLevel: 0,
+                gLevel: 0,
+                bLevel: 0,
+                r: 0,
+                g: 0,
+                b: 0,
+              }}
               renderContext="3d-view"
               isSelected={false}
-              isSimulating={isSimulating}
-              simState={effectiveSim}
+              isSimulating={true}
+              simState={{
+                on: false,
+                brightness: 0,
+                current: 0,
+                voltage: 0,
+                onRed: false,
+                onGreen: false,
+                onBlue: false,
+                redBrightness: 0,
+                greenBrightness: 0,
+                blueBrightness: 0,
+                rLevel: 0,
+                gLevel: 0,
+                bLevel: 0,
+                status: 'NORMAL',
+                burned: false,
+              }}
             />
           );
         })}
