@@ -5,7 +5,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
-import { Box, Layers } from 'lucide-react';
+import { Box, Layers, Hand } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
@@ -182,6 +182,7 @@ export function Pcb3dViewer({
 
   // Populated vs Bare PCB State
   const [showComponents, setShowComponents] = useState<boolean>(show3dComponents);
+  const [isPanMode, setIsPanMode] = useState<boolean>(false);
   const [hoveredItem, setHoveredItem] = useState<{
     designator: string;
     pin: string;
@@ -202,6 +203,20 @@ export function Pcb3dViewer({
 
   // Solder mask theme
   const theme = useMemo(() => getSolderMaskTheme(solderMaskColor), [solderMaskColor]);
+
+  // Keyboard shortcut listener for Pan Tool (H / Escape)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'h' || e.key === 'H') {
+        setIsPanMode((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsPanMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Camera preset handler triggered from toolbar
   useEffect(() => {
@@ -567,7 +582,7 @@ export function Pcb3dViewer({
   }, [theme]);
 
   return (
-    <div className="relative w-full h-full bg-[#070D18] select-none overflow-hidden touch-none">
+    <div className={`relative w-full h-full bg-[#070D18] select-none overflow-hidden touch-none ${isPanMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       {/* Three.js Canvas */}
       <Canvas
         id="pcb-3d-webgl-canvas"
@@ -616,6 +631,22 @@ export function Pcb3dViewer({
           dampingFactor={0.05}
           minDistance={10}
           maxDistance={500}
+          enableRotate={!isPanMode}
+          enablePan={true}
+          screenSpacePanning={true}
+          mouseButtons={
+            isPanMode
+              ? {
+                  LEFT: THREE.MOUSE.PAN,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.ROTATE,
+                }
+              : {
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.PAN,
+                }
+          }
         />
 
         {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Emerald Green Faces */}
@@ -891,6 +922,22 @@ export function Pcb3dViewer({
         >
           <Layers className="w-3.5 h-3.5" />
           <span>Bare PCB (Tracks &amp; Pads Only)</span>
+        </button>
+
+        <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+        {/* Pan Tool Toggle Button */}
+        <button
+          type="button"
+          onClick={() => setIsPanMode((prev) => !prev)}
+          className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+            isPanMode
+              ? 'bg-amber-600 text-white font-bold shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title={isPanMode ? "Pan Tool Active (H) — Left-drag to pan 3D PCB" : "Pan Tool (H) — Left-drag to pan 3D PCB"}
+        >
+          <Hand className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

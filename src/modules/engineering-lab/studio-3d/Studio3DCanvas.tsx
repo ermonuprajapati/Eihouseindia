@@ -28,6 +28,7 @@ import {
   Focus,
   Maximize2,
   Minimize2,
+  Hand,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Component3D, Wire3D, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
@@ -1219,6 +1220,7 @@ export function Studio3DCanvas({
   const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
   const [libSubCategory, setLibSubCategory] = useState<string>('all');
   const [toolMode3D, setToolMode3D] = useState<'inspect' | 'wire'>('inspect');
+  const [isPanMode, setIsPanMode] = useState<boolean>(false);
   const [editingWireEndpoint, setEditingWireEndpoint] = useState<{ wireId: string; end: 'from' | 'to' } | null>(null);
   const [activeWireStart, setActiveWireStart] = useState<{
     compId: string;
@@ -1406,7 +1408,11 @@ export function Studio3DCanvas({
         e.preventDefault();
         setShowPinLabels((v) => !v);
         toast.info(!showPinLabels ? 'Pin Labels Shown [L]' : 'Pin Labels Hidden [L]');
+      } else if (e.key === 'h' || e.key === 'H') {
+        e.preventDefault();
+        setIsPanMode((v) => !v);
       } else if (e.key === 'Escape') {
+        setIsPanMode(false);
         setActiveWireStart(null);
         setEditingWireEndpoint(null);
         setToolMode3D('inspect');
@@ -1818,6 +1824,7 @@ export function Studio3DCanvas({
 
   // Terminal Pin Click Handler (Respects tool mode & wire endpoint editing)
   const handlePinClick = (compId: string, pinId: string, worldPos: THREE.Vector3) => {
+    if (isPanMode) return;
     // If currently editing an existing wire endpoint:
     if (editingWireEndpoint) {
       const targetWire = wires3d.find((w) => w.id === editingWireEndpoint.wireId);
@@ -1905,6 +1912,8 @@ export function Studio3DCanvas({
     <div
       ref={containerRef}
       className={`relative w-full h-full bg-[#050B14] select-none overflow-hidden touch-none ${
+        isPanMode ? 'cursor-grab active:cursor-grabbing' : ''
+      } ${
         isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
       }`}
       onContextMenu={(e) => {
@@ -2017,7 +2026,20 @@ export function Studio3DCanvas({
           enablePan={true}
           screenSpacePanning={true}
           enableZoom={true}
-          enableRotate={true}
+          enableRotate={!isPanMode}
+          mouseButtons={
+            isPanMode
+              ? {
+                  LEFT: THREE.MOUSE.PAN,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.ROTATE,
+                }
+              : {
+                  LEFT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.PAN,
+                }
+          }
           maxPolarAngle={Math.PI / 2 - 0.04}
           minDistance={15}
           maxDistance={350}
@@ -2059,7 +2081,7 @@ export function Studio3DCanvas({
           const simState = simulationStates[comp.id];
 
           const handleCompPointerDown = (e: ThreeEvent<PointerEvent>) => {
-            if (e.button !== 0) return;
+            if (e.button !== 0 || isPanMode) return;
             e.stopPropagation();
             onSelectComponent(comp.id);
             onSelectWire(null);
@@ -3431,6 +3453,20 @@ export function Studio3DCanvas({
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
             <span className="hidden md:inline">Reset View</span>
+          </button>
+
+          {/* Pan Tool Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsPanMode((prev) => !prev)}
+            className={`w-7 h-7 flex items-center justify-center rounded cursor-pointer transition-colors ${
+              isPanMode
+                ? 'bg-amber-600 text-white font-bold shadow'
+                : 'hover:bg-slate-800 text-slate-300 hover:text-cyan-300'
+            }`}
+            title={isPanMode ? "Pan Tool Active (H) — Left-drag to pan 3D viewport" : "Pan Tool (H) — Left-drag to pan 3D viewport"}
+          >
+            <Hand className="w-3.5 h-3.5" />
           </button>
 
           <div className="h-3.5 w-px bg-slate-800 mx-0.5" />

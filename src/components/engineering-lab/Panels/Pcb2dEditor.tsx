@@ -31,6 +31,8 @@ import {
   Grid,
   Shield,
   Settings,
+  Hand,
+  MousePointer,
   ChevronDown,
   FileSpreadsheet,
   FileCode,
@@ -92,7 +94,7 @@ export function Pcb2dEditor({
   const [gndPourLayer, setGndPourLayer] = useState<'bottom_copper' | 'top_copper' | 'off'>(DEFAULT_GND_POUR_LAYER);
 
   // Tool Modes
-  const [toolMode, setToolMode] = useState<'select' | 'route' | 'via'>('select');
+  const [toolMode, setToolMode] = useState<'select' | 'route' | 'via' | 'pan'>('select');
 
   // Selected parameters
   const [traceWidth, setTraceWidth] = useState<number>(0.35);
@@ -135,6 +137,8 @@ export function Pcb2dEditor({
     ratsnest: true,
     copperPour: true,
   });
+
+  const [showLayerPanel, setShowLayerPanel] = useState<boolean>(false);
 
   // Sidebar / Inspector Active Tab
   const [sidebarTab, setSidebarTab] = useState<'drc' | 'stackup' | 'inspector'>('drc');
@@ -307,6 +311,18 @@ export function Pcb2dEditor({
           setToolMode((m) => (m === 'route' ? 'select' : 'route'));
           setRoutingStartPad(null);
         }
+      } else if (e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        setToolMode('route');
+        setRoutingStartPad(null);
+      } else if (e.key === 'h' || e.key === 'H') {
+        e.preventDefault();
+        setToolMode((m) => (m === 'pan' ? 'select' : 'pan'));
+        setRoutingStartPad(null);
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        setToolMode('select');
+        setRoutingStartPad(null);
       } else if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         handleInsertPlatedVia();
@@ -861,7 +877,8 @@ export function Pcb2dEditor({
       const isHovered = pad.id === hoveredPadId;
       const isStart = routingStartPad?.id === pad.id;
       const isSelected = pad.id === selectedPadId;
-      const isRect = pad.shape === 'rect';
+      const isPin1 = pad.pinId === '1' || pad.shape === 'rect';
+      const isRect = isPin1;
       const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
 
       // Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour
@@ -912,9 +929,9 @@ export function Pcb2dEditor({
         }
       }
 
-      // ENIG Gold Plated Annular Pad
-      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#FBBF24' : '#F59E0B';
-      ctx.strokeStyle = '#B45309';
+      // ENIG Gold Plated Annular Pad (Pin 1 is distinct square/chamfered)
+      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#FBBF24' : isPin1 ? '#F59E0B' : '#D97706';
+      ctx.strokeStyle = '#92400E';
       ctx.lineWidth = 1;
 
       ctx.beginPath();
@@ -930,27 +947,27 @@ export function Pcb2dEditor({
       if (visibleLayers.drillHoles) {
         const drillRadius = (pad.holeMm * scale) / 2;
         // Inner plated barrel rim
-        ctx.strokeStyle = '#D97706';
+        ctx.strokeStyle = '#B45309';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(px, py, drillRadius + 0.6, 0, Math.PI * 2);
         ctx.stroke();
 
         // Dark hollow drill hole
-        ctx.fillStyle = '#020617';
+        ctx.fillStyle = '#050D1A';
         ctx.beginPath();
         ctx.arc(px, py, drillRadius, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Small legible Pin Number / GND indicator beside Pad (Top-View EDA Standard)
-      if (pad.pinId && scale >= 2.5) {
-        ctx.fillStyle = isGnd ? '#10B981' : pad.shape === 'rect' ? '#F59E0B' : '#CBD5E1';
+      // Crisp miniature centered / beside net text (GND, 5V, VCC, Pin) readable when zoomed in
+      if (scale >= 1.6) {
+        const netLabel = pad.netId ? pad.netId : isGnd ? 'GND' : pad.pinId;
+        ctx.fillStyle = isGnd ? '#10B981' : isPin1 ? '#F59E0B' : '#CBD5E1';
         ctx.font = 'bold 7px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const labelText = isGnd ? 'GND' : pad.pinId;
-        ctx.fillText(labelText, px, py - (radius + 2.4));
+        ctx.fillText(netLabel, px, py - (radius + 2.5));
       }
     });
 
@@ -1101,7 +1118,7 @@ export function Pcb2dEditor({
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button === 1) {
+    if (e.button === 1 || (e.button === 0 && toolMode === 'pan')) {
       e.preventDefault();
       setIsPanning(true);
       const coords = getCanvasCoords(e);
@@ -1148,7 +1165,7 @@ export function Pcb2dEditor({
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || toolMode === 'pan') return;
     const coords = getCanvasCoords(e);
     if (!coords) return;
     const { mmX, mmY } = coords;
@@ -1315,86 +1332,124 @@ export function Pcb2dEditor({
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#070D18] text-slate-200 select-none overflow-hidden h-full">
       {/* ---------------------------------------------------- */}
-      {/* Top Context-Aware PCB Toolbar */}
+      {/* Top KiCad / Altium-Style Professional Engineering Console */}
       {/* ---------------------------------------------------- */}
-      <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 gap-2 text-xs shrink-0 overflow-x-auto no-scrollbar">
-        {/* Left Section: Modes & Tools */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 font-mono text-slate-300 pr-2 border-r border-slate-800">
+      <div className="h-10 bg-[#0B1528] border-b border-slate-800 flex items-center justify-between px-2.5 gap-2 text-xs shrink-0 select-none font-mono">
+        {/* Left Section: Tools Group + Active Layer + Track Width + GND Mode + Layer Visibility */}
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
+          {/* Brand/Label */}
+          <div className="flex items-center gap-1 text-slate-300 pr-1.5 border-r border-slate-800 shrink-0">
             <Layers className="w-4 h-4 text-cyan-400" />
-            <span className="font-bold hidden sm:inline">PCB 2D</span>
+            <span className="font-bold text-[11px] hidden md:inline text-cyan-200">PCB 2D</span>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="flex items-center bg-slate-950 p-0.5 rounded border border-slate-800">
+          {/* Tools Group: Select, Pan (H), Route Track (X), Place Via (V), Auto-Route */}
+          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
+              type="button"
               onClick={() => {
                 setToolMode('select');
                 setRoutingStartPad(null);
               }}
-              className={`px-2.5 py-1 rounded font-mono text-[11px] font-semibold transition-all ${
+              className={`h-7 px-2 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
                 toolMode === 'select'
                   ? 'bg-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
-              title="Select & Move Objects [Shortcut: S]"
+              title="Select & Move Objects [Shortcut: S / Esc]"
             >
-              Select (S)
+              <MousePointer className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Select</span>
             </button>
+
             <button
+              type="button"
+              onClick={() => {
+                setToolMode((m) => (m === 'pan' ? 'select' : 'pan'));
+                setRoutingStartPad(null);
+              }}
+              className={`h-7 px-2 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                toolMode === 'pan'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+              title="Pan Tool [Shortcut: H] — Left-drag to pan canvas smoothly"
+            >
+              <Hand className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Pan (H)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setToolMode('route');
                 setRoutingStartPad(null);
               }}
-              className={`px-2.5 py-1 rounded font-mono text-[11px] font-semibold flex items-center gap-1 transition-all ${
+              className={`h-7 px-2 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
                 toolMode === 'route' || routingStartPad
                   ? 'bg-emerald-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
-              title="Interactive 45° Manual Copper Routing [Shortcut: R]"
+              title="Interactive 45° Manual Copper Routing [Shortcut: X / R]"
             >
               <Route className="w-3.5 h-3.5" />
-              <span>{routingStartPad ? 'Routing...' : 'Route [R]'}</span>
+              <span>{routingStartPad ? 'Routing...' : 'Route (X)'}</span>
             </button>
-          </div>
 
-          {/* Layer Selector & Via Transition */}
-          <div className="flex items-center gap-1 pl-1 border-l border-slate-800">
             <button
-              onClick={() => setActiveLayer('top_copper')}
-              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
-                activeLayer === 'top_copper'
-                  ? 'bg-red-950 border border-red-600 text-red-300'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Top Copper Layer (F.Cu - Red)"
-            >
-              F.Cu (Top)
-            </button>
-            <button
-              onClick={() => setActiveLayer('bottom_copper')}
-              className={`px-2 py-1 rounded font-mono text-[11px] font-bold transition-all cursor-pointer ${
-                activeLayer === 'bottom_copper'
-                  ? 'bg-blue-950 border border-blue-600 text-blue-300'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Bottom Copper Layer (B.Cu - Blue)"
-            >
-              B.Cu (Bot)
-            </button>
-            <button
+              type="button"
               onClick={handleInsertPlatedVia}
-              className="px-2 py-1 rounded font-mono text-[11px] font-bold bg-amber-950/80 hover:bg-amber-900 border border-amber-600 text-amber-300 transition-all flex items-center gap-1 cursor-pointer"
-              title="Insert Plated Via and switch layer [Shortcut: V]"
+              className="h-7 px-2 rounded font-semibold text-[11px] text-amber-300 hover:text-amber-200 hover:bg-amber-950/60 transition-all cursor-pointer flex items-center gap-1"
+              title="Place Plated Through-Hole Via [Shortcut: V]"
             >
               <Disc className="w-3 h-3 text-amber-400" />
-              <span>+Via [V]</span>
+              <span className="hidden md:inline">+Via (V)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAutoRoute}
+              className="h-7 px-2 rounded font-semibold text-[11px] text-cyan-300 hover:text-white hover:bg-cyan-950/60 transition-all cursor-pointer flex items-center gap-1"
+              title="Auto-Route all unrouted nets with 45° mitered tracks"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden xl:inline">Auto-Route</span>
             </button>
           </div>
 
-          {/* Trace Width Selector */}
-          <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
-            <span className="text-slate-500 font-mono text-[10px] hidden md:inline">Width:</span>
+          {/* Active Layer Pill: [● F.Cu] and [● B.Cu] */}
+          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveLayer('top_copper')}
+              className={`h-7 px-2 rounded font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeLayer === 'top_copper'
+                  ? 'bg-red-950 border border-red-500 text-red-200'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Top Copper Routing Layer (F.Cu - KiCad Red)"
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500 shadow-sm shadow-red-500/50" />
+              <span>F.Cu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveLayer('bottom_copper')}
+              className={`h-7 px-2 rounded font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeLayer === 'bottom_copper'
+                  ? 'bg-blue-950 border border-blue-500 text-blue-200'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Bottom Copper Routing Layer (B.Cu - KiCad Blue)"
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
+              <span>B.Cu</span>
+            </button>
+          </div>
+
+          {/* Track Width Selector */}
+          <div className="hidden sm:flex items-center gap-1 pl-1 border-l border-slate-800 shrink-0">
+            <span className="text-slate-500 text-[10px] hidden md:inline">Track:</span>
             <select
               value={traceWidth}
               onChange={(e) => {
@@ -1403,105 +1458,140 @@ export function Pcb2dEditor({
                 if (selectedTrackId) handleUpdateSelectedTrackWidth(w);
               }}
               className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-emerald-400 font-mono text-[11px] cursor-pointer"
-              title="Active trace routing width (updates newly routed & selected traces)"
+              title="Active trace routing width"
             >
-              {TRACE_WIDTH_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
+              <option value={0.25}>0.25mm (Signal)</option>
+              <option value={0.35}>0.35mm (Standard)</option>
+              <option value={0.55}>0.55mm (Power/GND)</option>
+              <option value={0.80}>0.80mm (Heavy)</option>
+              <option value={1.00}>1.00mm (Power Bus)</option>
             </select>
           </div>
 
-          {/* Drill Size Selector */}
-          <div className="flex items-center gap-1 pl-1">
-            <span className="text-slate-500 font-mono text-[10px] hidden md:inline">Drill:</span>
+          {/* GND Plane Mode Selector */}
+          <div className="hidden md:flex items-center gap-1 pl-1 border-l border-slate-800 shrink-0">
+            <span className="text-slate-500 text-[10px] hidden lg:inline">GND:</span>
             <select
-              value={drillSize}
+              value={gndPourLayer}
               onChange={(e) => {
-                const d = parseFloat(e.target.value);
-                setDrillSize(d);
-                if (selectedPadId) handleUpdateSelectedPadHole(d);
+                const val = e.target.value as 'bottom_copper' | 'top_copper' | 'off';
+                setGndPourLayer(val);
+                setVisibleLayers((l) => ({ ...l, copperPour: val !== 'off' }));
               }}
-              className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-cyan-400 font-mono text-[11px] cursor-pointer"
-              title="Pad / Via drill hole diameter"
+              className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-blue-400 font-mono text-[11px] cursor-pointer"
+              title="Ground Plane Mode (B.Cu Pour standard, F.Cu Pour, or Tracks Only with pour hidden)"
             >
-              {DRILL_SIZE_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
+              <option value="bottom_copper">B.Cu Pour</option>
+              <option value="top_copper">F.Cu Pour</option>
+              <option value="off">Tracks Only</option>
             </select>
           </div>
 
-          {/* Grid Snap & Unit Toggle */}
-          <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
-            <button
-              onClick={() => setIsSnapToGrid((s) => !s)}
-              className={`p-1 rounded transition-colors ${
-                isSnapToGrid ? 'bg-cyan-950 text-cyan-300 border border-cyan-700' : 'text-slate-500 hover:text-white'
-              }`}
-              title="Toggle Snap to Grid"
-            >
-              <Grid className="w-3.5 h-3.5" />
-            </button>
-            <select
-              value={gridSpacingMm}
-              onChange={(e) => setGridSpacingMm(parseFloat(e.target.value))}
-              className="bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-300 font-mono text-[10px]"
-              title="Grid spacing"
-            >
-              {GRID_SPACING_PRESETS.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                const nextUnit = units === 'mm' ? 'mil' : 'mm';
-                setUnits(nextUnit);
-                if (onUpdatePcb) onUpdatePcb({ ...pcb, units: nextUnit });
-              }}
-              className="px-1.5 py-1 rounded bg-slate-950 text-cyan-400 font-mono text-[10px] font-bold border border-slate-800"
-              title="Toggle units (mm / mil)"
-            >
-              {units.toUpperCase()}
-            </button>
+          {/* Layer Visibility Compact Strip */}
+          <div className="hidden xl:flex items-center gap-1.5 pl-1.5 border-l border-slate-800 text-[10px] text-slate-400 shrink-0">
+            <label className="flex items-center gap-1 cursor-pointer select-none text-red-400">
+              <input
+                type="checkbox"
+                checked={visibleLayers.topCopper}
+                onChange={(e) => setVisibleLayers({ ...visibleLayers, topCopper: e.target.checked })}
+                className="w-3 h-3 accent-red-500"
+              />
+              <span>F.Cu</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer select-none text-blue-400">
+              <input
+                type="checkbox"
+                checked={visibleLayers.bottomCopper}
+                onChange={(e) => setVisibleLayers({ ...visibleLayers, bottomCopper: e.target.checked })}
+                className="w-3 h-3 accent-blue-500"
+              />
+              <span>B.Cu</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer select-none text-emerald-400">
+              <input
+                type="checkbox"
+                checked={visibleLayers.copperPour}
+                onChange={(e) => {
+                  const c = e.target.checked;
+                  setVisibleLayers({ ...visibleLayers, copperPour: c });
+                  if (!c) setGndPourLayer('off');
+                  else if (gndPourLayer === 'off') setGndPourLayer('bottom_copper');
+                }}
+                className="w-3 h-3 accent-emerald-500"
+              />
+              <span>GND</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer select-none text-slate-300">
+              <input
+                type="checkbox"
+                checked={visibleLayers.silkscreen}
+                onChange={(e) => setVisibleLayers({ ...visibleLayers, silkscreen: e.target.checked })}
+                className="w-3 h-3 accent-slate-300"
+              />
+              <span>Silk</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer select-none text-amber-400">
+              <input
+                type="checkbox"
+                checked={visibleLayers.drillHoles}
+                onChange={(e) => setVisibleLayers({ ...visibleLayers, drillHoles: e.target.checked })}
+                className="w-3 h-3 accent-amber-500"
+              />
+              <span>Pads</span>
+            </label>
           </div>
         </div>
 
-        {/* Right Section: Auto-Route, Draggable Stackup Toggle & Export Menu */}
-        <div className="flex items-center gap-2">
-          {/* Draggable Stackup Toggle */}
-          <button
-            onClick={() => setIsStackupModalOpen((prev) => !prev)}
-            className={`px-2.5 py-1 rounded font-mono text-[11px] font-bold flex items-center gap-1 transition-all ${
-              isStackupModalOpen
-                ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-            }`}
-            title="Open Draggable Stackup & Layer Manager"
-          >
-            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Stackup</span>
-          </button>
+        {/* Right Section: Viewport, Stackup & Manufacturing */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Zoom & View Reset */}
+          <div className="flex items-center bg-slate-950/80 rounded border border-slate-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.15))}
+              className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(3.0, z + 0.15))}
+              className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoomLevel(1.0);
+                setPanOffset({ x: 0, y: 0 });
+              }}
+              className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded"
+              title="Reset View / Fit"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           {/* Rotate Selected Footprint */}
           {selectedCompId && (
             <button
+              type="button"
               onClick={handleRotateSelectedComponent}
-              className="px-2.5 py-1 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-600 rounded flex items-center gap-1 font-mono text-[11px] transition-colors"
+              className="px-2 py-1 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-600 rounded flex items-center gap-1 font-mono text-[11px] transition-colors"
               title="Rotate Selected Component 90° [Shortcut: R]"
             >
               <RotateCw className="w-3.5 h-3.5" />
-              <span>Rotate</span>
+              <span className="hidden sm:inline">Rotate</span>
             </button>
           )}
 
           {/* Delete Track */}
           {selectedTrackId && (
             <button
+              type="button"
               onClick={() => {
                 if (onUpdatePcb) {
                   onUpdatePcb({ ...pcb, tracks: pcb.tracks.filter((t) => t.id !== selectedTrackId) });
@@ -1509,26 +1599,32 @@ export function Pcb2dEditor({
                   toast.success('Deleted track');
                 }
               }}
-              className="px-2.5 py-1 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700 rounded flex items-center gap-1 font-mono text-[11px]"
+              className="px-2 py-1 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700 rounded flex items-center gap-1 font-mono text-[11px]"
               title="Delete Selected Track [Shortcut: Delete]"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
+              <span className="hidden sm:inline">Delete</span>
             </button>
           )}
 
-          {/* Pro Auto-Router Button */}
+          {/* Draggable Stackup Toggle */}
           <button
-            onClick={handleAutoRoute}
-            className="px-3 py-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded font-semibold flex items-center gap-1.5 shadow"
-            title="Auto-Route all unrouted schematic nets with 45° Manhattan routes"
+            type="button"
+            onClick={() => setIsStackupModalOpen((prev) => !prev)}
+            className={`h-7 px-2 rounded font-bold text-[11px] flex items-center gap-1 transition-all ${
+              isStackupModalOpen
+                ? 'bg-cyan-950 border border-cyan-500 text-cyan-300'
+                : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800'
+            }`}
+            title="Layer Stackup & Impedance Manager"
           >
-            <Wand2 className="w-3.5 h-3.5" />
-            <span>Auto-Route</span>
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">Stackup</span>
           </button>
 
           {/* Clear Traces */}
           <button
+            type="button"
             onClick={handleClearAllTraces}
             className="p-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded border border-slate-800 transition-colors"
             title="Clear All Tracks to Route Fresh"
@@ -1539,18 +1635,20 @@ export function Pcb2dEditor({
           {/* Export Manufacturing Files ▾ Dropdown Menu */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => setIsExportMenuOpen((prev) => !prev)}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold flex items-center gap-1.5 shadow"
+              className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow"
               title="Export complete manufacturing files (Gerbers, Drill, BOM, CPL, SVG)"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Manufacturing Files</span>
+              <span>Export</span>
               <ChevronDown className="w-3 h-3 ml-0.5" />
             </button>
 
             {isExportMenuOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-64 bg-[#0B1528] border border-slate-700/80 rounded-xl shadow-2xl py-1.5 z-50 font-mono text-xs animate-in fade-in zoom-in-95 duration-100">
                 <button
+                  type="button"
                   onClick={handleDownloadGerberZip}
                   className="w-full px-3 py-2 text-left hover:bg-slate-800 flex items-center gap-2 text-emerald-400 font-bold transition-colors cursor-pointer"
                 >
@@ -1562,6 +1660,7 @@ export function Pcb2dEditor({
                 </button>
                 <div className="h-px bg-slate-800 my-1" />
                 <button
+                  type="button"
                   onClick={handleDownloadBomCsv}
                   className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
                 >
@@ -1569,6 +1668,7 @@ export function Pcb2dEditor({
                   <span>Bill of Materials (BOM .csv)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleDownloadPickAndPlaceCsv}
                   className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
                 >
@@ -1576,6 +1676,7 @@ export function Pcb2dEditor({
                   <span>Pick &amp; Place Centroid (CPL .csv)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleDownloadBlueprintSvg}
                   className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
                 >
@@ -1625,15 +1726,23 @@ export function Pcb2dEditor({
             </span>
           </div>
 
-          {/* PCB Layers Control Floating Panel */}
-          <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-2xl text-[11px] font-mono text-slate-300 max-w-[260px]">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
-              <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-[11px]">
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                <span>PCB Layers</span>
+          {/* PCB Layers Control Floating Panel (Toggleable so canvas is never obscured) */}
+          {showLayerPanel && (
+            <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-2xl text-[11px] font-mono text-slate-300 max-w-[260px]">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
+                <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-[11px]">
+                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>PCB Layers</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLayerPanel(false)}
+                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white cursor-pointer"
+                  title="Close Floating Panel"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <span className="text-[10px] text-slate-500">{activeLayer === 'top_copper' ? 'Active: F.Cu' : 'Active: B.Cu'}</span>
-            </div>
 
             {/* Active Routing Layer Toggle & +Via button */}
             <div className="flex items-center gap-1 py-0.5">
@@ -1778,6 +1887,7 @@ export function Pcb2dEditor({
               </label>
             </div>
           </div>
+        )}
 
           {/* Routing Guide Banner */}
           {routingStartPad && (
@@ -1985,6 +2095,8 @@ export function Pcb2dEditor({
               cursor:
                 isPanning
                   ? 'grabbing'
+                  : toolMode === 'pan'
+                  ? 'grab'
                   : toolMode === 'route' || routingStartPad
                   ? 'crosshair'
                   : isDraggingComp

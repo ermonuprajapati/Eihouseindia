@@ -1,5 +1,5 @@
 import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
-import { PcbAutoRouter } from './autorouter';
+import { PcbAutoRouter, compute45RoutePoints } from './autorouter';
 
 /**
  * Returns true if the component represents a virtual schematic symbol
@@ -22,11 +22,238 @@ export function isVirtualSchematicSymbol(type?: string): boolean {
   );
 }
 
-/**
- * Real-world 2-Layer EDA PCB Standards:
- * Primary signal traces route on F.Cu (Top Copper),
- * while continuous ground return plane / ground pour defaults to B.Cu (Bottom Copper).
- */
+function computeInverted45RoutePoints(
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): { x: number; y: number }[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return [from];
+  if (Math.abs(dx) < 0.01 || Math.abs(dy) < 0.01) return [from, to];
+
+  const signX = Math.sign(dx) || 1;
+  const signY = Math.sign(dy) || 1;
+  const chamfer = Math.min(Math.abs(dx), Math.abs(dy));
+
+  let midX = from.x;
+  let midY = from.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    midX = from.x;
+    midY = from.y + (Math.abs(dy) - chamfer) * signY;
+  } else {
+    midX = from.x + (Math.abs(dx) - chamfer) * signX;
+    midY = from.y;
+  }
+
+  const mid2X = midX + chamfer * signX;
+  const mid2Y = midY + chamfer * signY;
+
+  const pts: { x: number; y: number }[] = [from];
+  if (Math.hypot(midX - from.x, midY - from.y) > 0.05) pts.push({ x: midX, y: midY });
+  if (Math.hypot(mid2X - midX, mid2Y - midY) > 0.05) pts.push({ x: mid2X, y: mid2Y });
+  if (Math.hypot(to.x - mid2X, to.y - mid2Y) > 0.05) pts.push(to);
+  return pts;
+}
+
+function segmentsIntersect(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number },
+  p4: { x: number; y: number }
+): boolean {
+  const denom = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
+  if (Math.abs(denom) < 1e-6) return false;
+  const ua = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / denom;
+  const ub = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / denom;
+  return ua > 0.05 && ua < 0.95 && ub > 0.05 && ub < 0.95;
+}
+
+function pointToSegmentDistance(
+  p: { x: number; y: number },
+  s1: { x: number; y: number },
+  s2: { x: number; y: number }
+): number {
+  const dx = s2.x - s1.x;
+  const dy = s2.y - s1.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(p.x - s1.x, p.y - s1.y);
+  const t = Math.max(0, Math.min(1, ((p.x - s1.x) * dx + (p.y - s1.y) * dy) / lenSq));
+  const projX = s1.x + t * dx;
+  const projY = s1.y + t * dy;
+  return Math.hypot(p.x - projX, p.y - projY);
+}
+
+function segmentToSegmentDistance(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number }
+): number {
+  if (segmentsIntersect(a1, a2, b1, b2)) return 0;
+  return Math.min(
+    pointToSegmentDistance(a1, b1, b2),
+    pointToSegmentDistance(a2, b1, b2),
+    pointToSegmentDistance(b1, a1, a2),
+    pointToSegmentDistance(b2, a1, a2)
+  );
+}
+
+function isRouteClear(
+  pts: { x: number; y: number }[],
+  layer: 'top_copper' | 'bottom_copper',
+  trackWidth: number,
+  existingTracks: PcbTrack[],
+  allPads: PcbPad[]
+): boolean {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const pA = pts[i];
+    const pB = pts[i + 1];
+    const segLen = Math.hypot(pB.x - pA.x, pB.y - pA.y);
+    if (segLen < 0.05) continue;
+
+    // Check angle: must be 45° or 90° (0°, 45°, 90°, 135°, 180°)
+    const angleDeg = Math.round(Math.abs((Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180) / Math.PI));
+    const mod45 = angleDeg % 45;
+    if (!(mod45 === 0 || mod45 === 45 || Math.abs(mod45 - 45) <= 1 || mod45 <= 1)) {
+      return false;
+    }
+
+    // Check crossings and clearance against existing tracks of different nets
+    for (const t of existingTracks) {
+      if (t.layer !== layer) continue;
+      if (t.netId && t.netId === 'GND') continue;
+
+      // Interior intersection
+      if (segmentsIntersect(pA, pB, t.from, t.to)) {
+        return false;
+      }
+
+      // Minimum clearance (DRC 0.2mm + safety margin)
+      const dist = segmentToSegmentDistance(pA, pB, t.from, t.to);
+      const minRequired = (trackWidth + t.widthMm) / 2 + 0.22;
+      if (dist < minRequired) {
+        return false;
+      }
+    }
+
+    // Check clearance against pads of other nets
+    for (const pad of allPads) {
+      if (pad.netId === 'GND' || pad.pinId === 'GND') continue;
+      const padRadius = pad.diameterMm / 2;
+      const distToPad = pointToSegmentDistance({ x: pad.x, y: pad.y }, pA, pB);
+      if (distToPad < padRadius + trackWidth / 2 + 0.22) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+interface SafeGndRoute {
+  waypoints: { x: number; y: number }[];
+  layer: 'top_copper' | 'bottom_copper';
+  needsVia: boolean;
+  score: number;
+}
+
+function findBestSafeGndRoute(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  gndLayer: 'top_copper' | 'bottom_copper',
+  trackWidth: number,
+  existingTracks: PcbTrack[],
+  allPads: PcbPad[],
+  boardWidth: number,
+  boardHeight: number
+): SafeGndRoute | null {
+  const otherLayer: 'top_copper' | 'bottom_copper' = gndLayer === 'bottom_copper' ? 'top_copper' : 'bottom_copper';
+  const candidates: { waypoints: { x: number; y: number }[]; layer: 'top_copper' | 'bottom_copper'; needsVia: boolean; baseCost: number }[] = [];
+
+  const direct45 = compute45RoutePoints(p1, p2);
+  const inv45 = computeInverted45RoutePoints(p1, p2);
+
+  // 1. Direct on GND layer
+  candidates.push({ waypoints: direct45, layer: gndLayer, needsVia: false, baseCost: 0 });
+  candidates.push({ waypoints: inv45, layer: gndLayer, needsVia: false, baseCost: 0 });
+
+  // 2. Direct on other layer (needs via)
+  candidates.push({ waypoints: direct45, layer: otherLayer, needsVia: true, baseCost: 15 });
+  candidates.push({ waypoints: inv45, layer: otherLayer, needsVia: true, baseCost: 15 });
+
+  // 3. X-detours on GND layer and other layer
+  const xOffsets = [-5, 5, -8, 8, -12, 12, -18, 18, -25, 25, -35, 35];
+  for (const off of xOffsets) {
+    const midX = Math.round((Math.min(p1.x, p2.x) + off) * 100) / 100;
+    if (midX >= 3 && midX <= boardWidth - 3) {
+      const waypoints = [
+        { x: p1.x, y: p1.y },
+        { x: midX, y: p1.y },
+        { x: midX, y: p2.y },
+        { x: p2.x, y: p2.y },
+      ];
+      candidates.push({ waypoints, layer: gndLayer, needsVia: false, baseCost: Math.abs(off) * 0.5 });
+      candidates.push({ waypoints, layer: otherLayer, needsVia: true, baseCost: 15 + Math.abs(off) * 0.5 });
+    }
+  }
+
+  // 4. Y-detours on GND layer and other layer
+  const yOffsets = [-5, 5, -8, 8, -12, 12, -18, 18, -25, 25];
+  for (const off of yOffsets) {
+    const midY = Math.round((Math.min(p1.y, p2.y) + off) * 100) / 100;
+    if (midY >= 3 && midY <= boardHeight - 3) {
+      const waypoints = [
+        { x: p1.x, y: p1.y },
+        { x: p1.x, y: midY },
+        { x: p2.x, y: midY },
+        { x: p2.x, y: p2.y },
+      ];
+      candidates.push({ waypoints, layer: gndLayer, needsVia: false, baseCost: Math.abs(off) * 0.5 });
+      candidates.push({ waypoints, layer: otherLayer, needsVia: true, baseCost: 15 + Math.abs(off) * 0.5 });
+    }
+  }
+
+  // 5. Perimeter edge margin fallback (margin 3.5mm from board edges)
+  const margin = 3.5;
+  const leftPerimeter = [
+    { x: p1.x, y: p1.y },
+    { x: margin, y: p1.y },
+    { x: margin, y: p2.y },
+    { x: p2.x, y: p2.y },
+  ];
+  candidates.push({ waypoints: leftPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+  const rightPerimeter = [
+    { x: p1.x, y: p1.y },
+    { x: boardWidth - margin, y: p1.y },
+    { x: boardWidth - margin, y: p2.y },
+    { x: p2.x, y: p2.y },
+  ];
+  candidates.push({ waypoints: rightPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+
+  let bestCandidate: SafeGndRoute | null = null;
+  let lowestScore = Infinity;
+
+  for (const cand of candidates) {
+    if (isRouteClear(cand.waypoints, cand.layer, trackWidth, existingTracks, allPads)) {
+      let length = 0;
+      for (let i = 0; i < cand.waypoints.length - 1; i++) {
+        length += Math.hypot(cand.waypoints[i + 1].x - cand.waypoints[i].x, cand.waypoints[i + 1].y - cand.waypoints[i].y);
+      }
+      const score = length + cand.baseCost;
+      if (score < lowestScore) {
+        lowestScore = score;
+        bestCandidate = {
+          waypoints: cand.waypoints,
+          layer: cand.layer,
+          needsVia: cand.needsVia,
+          score,
+        };
+      }
+    }
+  }
+
+  return bestCandidate;
+}
 export const DEFAULT_GND_POUR_LAYER: 'bottom_copper' | 'top_copper' | 'off' = 'bottom_copper';
 
 export class PcbGenerator {
@@ -148,13 +375,18 @@ export class PcbGenerator {
       pads.push(...vias);
     }
 
-    // Connect GND net through-hole pads to B.Cu ground plane, and add a GND stitching via
+    // Connect GND net through-hole pads with visible copper tracks on DEFAULT_GND_POUR_LAYER
     const gndPads = pads.filter((p) => p.netId === 'GND');
+    const gndLayer: 'top_copper' | 'bottom_copper' = DEFAULT_GND_POUR_LAYER === 'top_copper' ? 'top_copper' : 'bottom_copper';
+    const gndTrackWidth = 0.55; // 0.55mm professional power/GND track width
+
+    // Add a GND stitching via if needed
+    let gndStitchVia: PcbPad | null = null;
     if (gndPads.length > 0 && !pads.some((p) => p.componentId === 'VIA' && p.netId === 'GND')) {
       const gPad = gndPads[0];
       const vx = Math.min(boardWidthMm - 4, Math.max(4, gPad.x + 2.54));
       const vy = Math.min(boardHeightMm - 4, Math.max(4, gPad.y + 2.54));
-      pads.push({
+      gndStitchVia = {
         id: `via_gnd_stitch_${Date.now()}`,
         componentId: 'VIA',
         pinId: 'GND',
@@ -165,7 +397,123 @@ export class PcbGenerator {
         diameterMm: 0.8,
         holeMm: 0.4,
         layer: 'all',
-      });
+      };
+      pads.push(gndStitchVia);
+    }
+
+    // Connect all GND pads together into a continuous routed ground network using an MST
+    const allGndNodes: { x: number; y: number; id: string }[] = gndPads.map((p) => ({ x: p.x, y: p.y, id: p.id }));
+    if (gndStitchVia) {
+      allGndNodes.push({ x: gndStitchVia.x, y: gndStitchVia.y, id: gndStitchVia.id });
+    }
+
+    if (allGndNodes.length >= 2) {
+      const inMst = new Set<number>([0]);
+      while (inMst.size < allGndNodes.length) {
+        let bestFrom = -1;
+        let bestTo = -1;
+        let bestRoute: SafeGndRoute | null = null;
+        let bestScore = Infinity;
+
+        // Find candidate edge (u, v) with the cleanest, lowest-score crossing-free route
+        for (const u of inMst) {
+          for (let v = 0; v < allGndNodes.length; v++) {
+            if (!inMst.has(v)) {
+              const p1 = allGndNodes[u];
+              const p2 = allGndNodes[v];
+              const route = findBestSafeGndRoute(
+                p1,
+                p2,
+                gndLayer,
+                gndTrackWidth,
+                routedTracks,
+                pads,
+                boardWidthMm,
+                boardHeightMm
+              );
+              if (route && route.score < bestScore) {
+                bestScore = route.score;
+                bestFrom = u;
+                bestTo = v;
+                bestRoute = route;
+              }
+            }
+          }
+        }
+
+        // Fallback: if all candidate routes had conflicts, pick closest pair with direct connection
+        if (bestTo === -1) {
+          let minEuclid = Infinity;
+          for (const u of inMst) {
+            for (let v = 0; v < allGndNodes.length; v++) {
+              if (!inMst.has(v)) {
+                const d = Math.hypot(allGndNodes[u].x - allGndNodes[v].x, allGndNodes[u].y - allGndNodes[v].y);
+                if (d < minEuclid) {
+                  minEuclid = d;
+                  bestFrom = u;
+                  bestTo = v;
+                }
+              }
+            }
+          }
+          if (bestTo !== -1) {
+            const p1 = allGndNodes[bestFrom];
+            const p2 = allGndNodes[bestTo];
+            bestRoute = {
+              waypoints: compute45RoutePoints(p1, p2),
+              layer: gndLayer,
+              needsVia: false,
+              score: minEuclid,
+            };
+          }
+        }
+
+        if (bestTo !== -1 && bestRoute) {
+          inMst.add(bestTo);
+          const p1 = allGndNodes[bestFrom];
+
+          if (bestRoute.needsVia) {
+            const p1Pad = pads.find((p) => Math.hypot(p.x - p1.x, p.y - p1.y) < 0.1);
+            if (!p1Pad || (p1Pad.layer !== 'all' && p1Pad.componentId !== 'VIA')) {
+              pads.push({
+                id: `via_gnd_hop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                componentId: 'VIA',
+                pinId: 'GND',
+                netId: 'GND',
+                x: p1.x,
+                y: p1.y,
+                shape: 'round',
+                diameterMm: 0.8,
+                holeMm: 0.4,
+                layer: 'all',
+              });
+            }
+          }
+
+          for (let i = 0; i < bestRoute.waypoints.length - 1; i++) {
+            const ptFrom = {
+              x: Math.round(bestRoute.waypoints[i].x * 100) / 100,
+              y: Math.round(bestRoute.waypoints[i].y * 100) / 100,
+            };
+            const ptTo = {
+              x: Math.round(bestRoute.waypoints[i + 1].x * 100) / 100,
+              y: Math.round(bestRoute.waypoints[i + 1].y * 100) / 100,
+            };
+            if (Math.hypot(ptTo.x - ptFrom.x, ptTo.y - ptFrom.y) >= 0.05) {
+              routedTracks.push({
+                id: `trk_gnd_${bestFrom}_${bestTo}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+                layer: bestRoute.layer,
+                from: ptFrom,
+                to: ptTo,
+                widthMm: gndTrackWidth,
+                netId: 'GND',
+              });
+            }
+          }
+        } else {
+          break;
+        }
+      }
     }
 
     // Run Design Rule Checks

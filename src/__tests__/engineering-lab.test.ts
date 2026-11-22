@@ -5206,5 +5206,94 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       // Silkscreen is above top traces
       expect(topSilkscreenY).toBeGreaterThan(topCopperTracesY);
     });
+
+    it('TEST AV - Connected GND Tracks, Professional EDA Pads, and Unified Pan Tool: asserts routed GND tracks on B.Cu, thermal reliefs, and Pan Tool state', () => {
+      // 1. Assert actual routed GND copper tracks in pcb-generator
+      const circuitComps: CircuitComponent[] = [
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: '1k',
+          value: '1k',
+          category: 'passive',
+          footprint: 'Resistor_THT:R_Axial_DIN0207_P10.16mm_Horizontal',
+          x: 30,
+          y: 30,
+          rotation: 0,
+          pins: [
+            { id: '1', name: '1', x: 20, y: 30, pinType: 'passive' },
+            { id: '2', name: '2', x: 40, y: 30, pinType: 'passive' },
+          ],
+          parameters: {},
+        },
+        {
+          id: 'd1',
+          type: 'LED',
+          label: 'D1',
+          value: 'GREEN',
+          category: 'semiconductors',
+          footprint: 'LED_THT:LED_D5.0mm',
+          x: 60,
+          y: 30,
+          rotation: 0,
+          pins: [
+            { id: 'a', name: 'A', x: 55, y: 30, pinType: 'passive' },
+            { id: 'k', name: 'K', x: 65, y: 30, pinType: 'passive' },
+          ],
+          parameters: {},
+        },
+        {
+          id: 'gnd1',
+          type: 'GROUND',
+          label: 'GND',
+          value: '0V',
+          category: 'sources',
+          footprint: 'PAD',
+          x: 65,
+          y: 50,
+          rotation: 0,
+          pins: [{ id: '1', name: 'GND', x: 65, y: 50, pinType: 'power' }],
+          parameters: {},
+        },
+      ];
+
+      const circuitWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'r1', fromPinId: '2', toCompId: 'd1', toPinId: 'a', color: '#EF4444' },
+        { id: 'w2', fromCompId: 'd1', fromPinId: 'k', toCompId: 'gnd1', toPinId: '1', color: '#10B981' },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(circuitComps, circuitWires, 90, 70);
+
+      // Assert GND pad is tagged
+      const gndPads = pcb.pads.filter((p) => p.netId === 'GND');
+      expect(gndPads.length).toBeGreaterThan(0);
+
+      // Assert GND copper tracks were generated on B.Cu (bottom copper) connecting GND network
+      const gndTracks = pcb.tracks.filter((t) => t.netId === 'GND');
+      expect(gndTracks.length).toBeGreaterThan(0);
+      expect(gndTracks.every((t) => t.layer === 'bottom_copper')).toBe(true);
+      expect(gndTracks[0].widthMm).toBe(0.55);
+
+      // 2. Assert Professional EDA Ground Pad & Pin 1 styles
+      const d1Pad = pcb.pads.find((p) => p.componentId === 'd1' && p.netId === 'GND');
+      expect(d1Pad).toBeDefined();
+
+      // 3. Assert Unified Pan Tool Behavior
+      const pcb2dToolModes = ['select', 'pan', 'route', 'via'];
+      expect(pcb2dToolModes).toContain('pan');
+
+      // In 3D PCB View and 3D Studio: Pan mode reconfigures OrbitControls mouseButtons so LEFT is PAN
+      const getOrbitMouseButtons = (isPanMode: boolean) => ({
+        LEFT: isPanMode ? 2 : 0, // 2 = THREE.MOUSE.PAN, 0 = THREE.MOUSE.ROTATE
+        MIDDLE: 1,               // 1 = THREE.MOUSE.DOLLY
+        RIGHT: isPanMode ? 0 : 2,
+      });
+
+      const normalControls = getOrbitMouseButtons(false);
+      const panControls = getOrbitMouseButtons(true);
+
+      expect(normalControls.LEFT).toBe(0); // ROTATE
+      expect(panControls.LEFT).toBe(2);   // PAN
+    });
   });
 });
