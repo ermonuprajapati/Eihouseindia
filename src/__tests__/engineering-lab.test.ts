@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CircuitSolver, getLedForwardVoltage } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { PcbGenerator, isVirtualSchematicSymbol } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { VirtualMcuRuntime } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
@@ -256,7 +256,7 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
     expect(pcb.pads.length).toBeGreaterThan(10);
     expect(pcb.tracks.length).toBeGreaterThan(5);
     expect(pcb.components).toBeDefined();
-    expect(pcb.components!.length).toBe(tmpl.components.length);
+    expect(pcb.components!.length).toBe(tmpl.components.filter((c) => !isVirtualSchematicSymbol(c.type)).length);
 
     // DRC check
     expect(Array.isArray(pcb.drcErrors)).toBe(true);
@@ -4816,6 +4816,268 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
           expect(resolved).toBe('LCD_1602');
         }
       }
+    });
+
+    // --------------------------------------------------------------------------
+    // TEST AS - 2D/3D PCB DRILL HOLE, JEDEC CCW PINOUT, STACKUP & GROUND POUR
+    // --------------------------------------------------------------------------
+    it('TEST AS - 2D/3D PCB Drill Hole & JEDEC CCW Pin Numbering: verifies dead-center pin seating and CCW IC numbering', () => {
+      // 1. DIP-8 IC JEDEC Counter-Clockwise (CCW) Pinout:
+      // Notch on left (-X):
+      // Pin 1 at top-left (-3.81, -3.81) with rectangular pad
+      // Pin 4 at top-right (3.81, -3.81)
+      // Pin 5 at bottom-right (3.81, 3.81) directly across from Pin 4
+      // Pin 8 at bottom-left (-3.81, 3.81) directly across from Pin 1
+      const dip8Comp: CircuitComponent = {
+        id: 'u1_555',
+        type: 'TIMER_555',
+        label: 'NE555P',
+        value: 'NE555P',
+        category: 'semiconductors',
+        footprint: 'Package_DIP:DIP-8_W7.62mm',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: 'GND', x: -30, y: -20, pinType: 'power' },
+          { id: '2', name: 'TRIG', x: -30, y: -10, pinType: 'input' },
+          { id: '3', name: 'OUT', x: 30, y: -20, pinType: 'output' },
+          { id: '4', name: 'RESET', x: -30, y: 0, pinType: 'input' },
+          { id: '5', name: 'CTRL', x: 30, y: 10, pinType: 'passive' },
+          { id: '6', name: 'THRES', x: -30, y: 10, pinType: 'input' },
+          { id: '7', name: 'DISCH', x: 30, y: 0, pinType: 'passive' },
+          { id: '8', name: 'VCC', x: -30, y: -30, pinType: 'power' },
+        ],
+        parameters: {},
+      };
+
+      const dip8Pads = PcbGenerator.calculateFootprintPads(dip8Comp, 50, 50, 0);
+      expect(dip8Pads.length).toBe(8);
+
+      const p1 = dip8Pads.find((p) => p.pinId === '1')!;
+      const p4 = dip8Pads.find((p) => p.pinId === '4')!;
+      const p5 = dip8Pads.find((p) => p.pinId === '5')!;
+      const p8 = dip8Pads.find((p) => p.pinId === '8')!;
+
+      // Pin 1 is Top-Left (x = 50 - 3.81 = 46.19, y = 50 - 3.81 = 46.19) with rectangular pad shape
+      expect(p1.x).toBeCloseTo(46.19, 2);
+      expect(p1.y).toBeCloseTo(46.19, 2);
+      expect(p1.shape).toBe('rect');
+
+      // Pin 4 is Top-Right (x = 50 + 3.81 = 53.81, y = 50 - 3.81 = 46.19)
+      expect(p4.x).toBeCloseTo(53.81, 2);
+      expect(p4.y).toBeCloseTo(46.19, 2);
+
+      // Pin 5 is Bottom-Right (x = 50 + 3.81 = 53.81, y = 50 + 3.81 = 53.81) directly across from Pin 4
+      expect(p5.x).toBeCloseTo(p4.x, 2);
+      expect(p5.y).toBeCloseTo(53.81, 2);
+
+      // Pin 8 is Bottom-Left (x = 50 - 3.81 = 46.19, y = 50 + 3.81 = 53.81) directly across from Pin 1
+      expect(p8.x).toBeCloseTo(p1.x, 2);
+      expect(p8.y).toBeCloseTo(53.81, 2);
+
+      // 2. Resistor 10.16mm Pitch (+/- 5.08mm) dead-center sync with Resistor3D
+      const rComp: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: '10kΩ',
+        value: '10kΩ',
+        category: 'passive',
+        footprint: 'Resistor_THT:R_Axial_DIN0207_P10.16mm_Horizontal',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
+        ],
+        parameters: {},
+      };
+      const rPads = PcbGenerator.calculateFootprintPads(rComp, 50, 50, 0);
+      expect(rPads.length).toBe(2);
+      expect(rPads[0].x).toBeCloseTo(50 - 5.08, 2);
+      expect(rPads[1].x).toBeCloseTo(50 + 5.08, 2);
+      expect(rPads[0].y).toBeCloseTo(50, 2);
+      expect(rPads[1].y).toBeCloseTo(50, 2);
+
+      // 3. Diode 10.16mm Pitch (+/- 5.08mm) dead-center sync with Diode3D
+      const dComp: CircuitComponent = {
+        id: 'd1',
+        type: 'DIODE',
+        label: '1N4007',
+        value: '1N4007',
+        category: 'passive',
+        footprint: 'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
+        ],
+        parameters: {},
+      };
+      const dPads = PcbGenerator.calculateFootprintPads(dComp, 50, 50, 0);
+      expect(dPads.length).toBe(2);
+      expect(dPads[0].x).toBeCloseTo(50 - 5.08, 2);
+      expect(dPads[1].x).toBeCloseTo(50 + 5.08, 2);
+
+      // 4. Standard 2-Pin LED 5.08mm Pitch (+/- 2.54mm) dead-center sync with Led3D
+      const ledComp: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'Red LED',
+        value: 'Red',
+        category: 'passive',
+        footprint: 'LED_THT:LED_D5.0mm',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', x: -25, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 25, y: 0, pinType: 'passive' },
+        ],
+        parameters: {},
+      };
+      const ledPads = PcbGenerator.calculateFootprintPads(ledComp, 50, 50, 0);
+      expect(ledPads.length).toBe(2);
+      expect(ledPads[0].x).toBeCloseTo(50 - 2.54, 2);
+      expect(ledPads[1].x).toBeCloseTo(50 + 2.54, 2);
+
+      // 5. RGB LED 4-Pin Single Row [-3.81, -1.27, 1.27, 3.81] dead-center sync with RgbLed3D
+      const rgbComp: CircuitComponent = {
+        id: 'rgb1',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED',
+        value: 'RGB',
+        category: 'passive',
+        footprint: 'LED_THT:THT-5MM-4PIN',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'R', name: 'R', x: -30, y: 0, pinType: 'passive' },
+          { id: 'C', name: 'C', x: -10, y: 0, pinType: 'passive' },
+          { id: 'G', name: 'G', x: 10, y: 0, pinType: 'passive' },
+          { id: 'B', name: 'B', x: 30, y: 0, pinType: 'passive' },
+        ],
+        parameters: {},
+      };
+      const rgbPads = PcbGenerator.calculateFootprintPads(rgbComp, 50, 50, 0);
+      expect(rgbPads.length).toBe(4);
+      expect(rgbPads[0].x).toBeCloseTo(50 - 3.81, 2);
+      expect(rgbPads[1].x).toBeCloseTo(50 - 1.27, 2);
+      expect(rgbPads[2].x).toBeCloseTo(50 + 1.27, 2);
+      expect(rgbPads[3].x).toBeCloseTo(50 + 3.81, 2);
+      expect(rgbPads.every((p) => Math.abs(p.y - 50) < 0.05)).toBe(true);
+
+      // 6. HC-SR04 Ultrasonic Sensor 4-Pin Header [-3.81, -1.27, 1.27, 3.81] dead-center sync with HcSr04_3D
+      const hcsrComp: CircuitComponent = {
+        id: 'sr1',
+        type: 'SENSOR_ULTRASONIC',
+        label: 'HC-SR04',
+        value: 'HC-SR04',
+        category: 'sensors',
+        footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'VCC', name: 'VCC', x: -30, y: 0, pinType: 'power' },
+          { id: 'TRIG', name: 'TRIG', x: -10, y: 0, pinType: 'input' },
+          { id: 'ECHO', name: 'ECHO', x: 10, y: 0, pinType: 'output' },
+          { id: 'GND', name: 'GND', x: 30, y: 0, pinType: 'power' },
+        ],
+        parameters: {},
+      };
+      const hcsrPads = PcbGenerator.calculateFootprintPads(hcsrComp, 50, 50, 0);
+      expect(hcsrPads.length).toBe(4);
+      expect(hcsrPads[0].x).toBeCloseTo(50 - 3.81, 2);
+      expect(hcsrPads[1].x).toBeCloseTo(50 - 1.27, 2);
+      expect(hcsrPads[2].x).toBeCloseTo(50 + 1.27, 2);
+      expect(hcsrPads[3].x).toBeCloseTo(50 + 3.81, 2);
+      expect(hcsrPads.every((p) => Math.abs(p.y - 50) < 0.05)).toBe(true);
+    });
+
+    it('TEST AT - PCB Layer Stackup & Virtual GND Filter: asserts silkscreen elevation and zero GND black-box components', () => {
+      // 1. Layer Stackup in 3D: Silkscreen elevation is strictly above copper tracks
+      const boardThickness = 1.6;
+      const copperPourY = boardThickness / 2 + 0.008; // 0.808mm
+      const trackY = boardThickness / 2 + 0.014;      // 0.814mm (thickness 0.016 -> top 0.822mm)
+      const silkscreenY = boardThickness / 2 + 0.032; // 0.832mm (strictly above track top 0.822mm)
+      const padTopY = boardThickness / 2 + 0.036;     // 0.836mm (pads on top surface)
+
+      expect(silkscreenY).toBeGreaterThan(trackY);
+      expect(silkscreenY).toBeGreaterThan(copperPourY);
+      expect(padTopY).toBeGreaterThan(silkscreenY);
+
+      // 2. Virtual Schematic Symbol Identification
+      expect(isVirtualSchematicSymbol('GROUND')).toBe(true);
+      expect(isVirtualSchematicSymbol('GND')).toBe(true);
+      expect(isVirtualSchematicSymbol('EARTH_PE')).toBe(true);
+      expect(isVirtualSchematicSymbol('VCC')).toBe(true);
+      expect(isVirtualSchematicSymbol('VDD')).toBe(true);
+      expect(isVirtualSchematicSymbol('RESISTOR')).toBe(false);
+      expect(isVirtualSchematicSymbol('TIMER_555')).toBe(false);
+      expect(isVirtualSchematicSymbol('LED')).toBe(false);
+
+      // 3. Schematic with Virtual GND: zero black-box physical components produced
+      const compsWithGnd: CircuitComponent[] = [
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: '10k',
+          value: '10k',
+          category: 'passive',
+          footprint: 'Resistor_THT:R_Axial_DIN0207_P10.16mm_Horizontal',
+          x: 100,
+          y: 100,
+          rotation: 0,
+          pins: [
+            { id: '1', name: '1', x: 70, y: 100, pinType: 'passive' },
+            { id: '2', name: '2', x: 130, y: 100, pinType: 'passive' },
+          ],
+          parameters: {},
+        },
+        {
+          id: 'gnd1',
+          type: 'GROUND',
+          label: 'GND',
+          value: '0V',
+          category: 'sources',
+          footprint: 'TestPoint:TestPoint_Pad_D1.0mm',
+          x: 130,
+          y: 150,
+          rotation: 0,
+          pins: [{ id: '1', name: 'GND', x: 130, y: 135, pinType: 'power' }],
+          parameters: {},
+        },
+      ];
+
+      const wiresWithGnd: CircuitWire[] = [
+        {
+          id: 'w1',
+          fromCompId: 'r1',
+          fromPinId: '2',
+          toCompId: 'gnd1',
+          toPinId: '1',
+          color: '#10B981',
+        },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(compsWithGnd, wiresWithGnd, 80, 60);
+
+      // Assert physical components placed: only R1 is placed, GND is filtered out (zero fake black box)
+      expect(pcb.components).toBeDefined();
+      expect(pcb.components!.length).toBe(1);
+      expect(pcb.components![0].componentId).toBe('r1');
+      expect(pcb.components!.some((c) => c.componentId === 'gnd1')).toBe(false);
+      expect(pcb.components!.some((c) => isVirtualSchematicSymbol(c.type))).toBe(false);
+
+      // Assert that R1 pin 2 (connected to GND) is assigned netId 'GND'
+      const r1Pin2Pad = pcb.pads.find((p) => p.componentId === 'r1' && p.pinId === '2');
+      expect(r1Pin2Pad).toBeDefined();
+      expect(r1Pin2Pad?.netId).toBe('GND');
     });
   });
 });

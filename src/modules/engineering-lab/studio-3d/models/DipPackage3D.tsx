@@ -77,9 +77,9 @@ export function DipPackage3D({
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    // Pin 1 Indicator Dot (crisp white indent next to Pin 1)
+    // Pin 1 Indicator Dot (crisp white indent next to Pin 1 at top-left)
     ctx.beginPath();
-    ctx.arc(60, 200, 14, 0, Math.PI * 2);
+    ctx.arc(60, 56, 14, 0, Math.PI * 2);
     ctx.fillStyle = '#F8FAFC';
     ctx.fill();
 
@@ -88,20 +88,23 @@ export function DipPackage3D({
     ctx.font = 'bold 38px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(partName.toUpperCase(), 270, 105);
+    ctx.fillText(partName.toUpperCase(), 270, 115);
 
     // Secondary line: Manufacturer / Datecode
     ctx.font = '22px monospace';
     ctx.fillStyle = '#94A3B8';
     ctx.fillText('TI  2412M  e3', 270, 165);
 
-    // Edge Pin Number Indicators on top surface silkscreen
+    // Edge Pin Number Indicators on top surface silkscreen:
+    // Top-View JEDEC counter-clockwise (CCW):
+    // Top row (-Z): Pin 1 at left (50, 32) -> Pin halfPins at right (460, 32)
+    // Bottom row (+Z): Pin (halfPins+1) at right (460, 228) -> Pin pinCount at left (50, 228)
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#38BDF8';
-    ctx.fillText('1', 50, 230);
-    ctx.fillText(String(halfPins), 460, 230);
-    ctx.fillText(String(halfPins + 1), 460, 30);
-    ctx.fillText(String(pinCount), 50, 30);
+    ctx.fillText('1', 50, 32);
+    ctx.fillText(String(halfPins), 460, 32);
+    ctx.fillText(String(halfPins + 1), 460, 228);
+    ctx.fillText(String(pinCount), 50, 228);
 
     // Bevel boundary lines
     ctx.strokeStyle = '#27272A';
@@ -155,8 +158,10 @@ export function DipPackage3D({
   const pins = useMemo(() => {
     const list: { id: string; num: number; name: string; pos: [number, number, number] }[] = [];
     const startX = -((halfPins - 1) * pitch) / 2;
+    // Standard JEDEC DIP row pitch in PCB 3D View is 7.62mm (+/- 3.81mm); in Studio breadboard it seats into rows E/F (+/- 3.34mm)
+    const rowZ = renderContext === '3d-view' ? 3.81 : 3.34;
 
-    // Bottom row (Pins 1..halfPins, along row E: Z = -3.34)
+    // Top row (Pins 1..halfPins, along row E / -rowZ: Z = -rowZ)
     for (let i = 0; i < halfPins; i++) {
       const pinNum = i + 1;
       const px = startX + i * pitch;
@@ -164,11 +169,11 @@ export function DipPackage3D({
         id: String(pinNum),
         num: pinNum,
         name: pinNames[pinNum] || `P${pinNum}`,
-        pos: [px, -0.6, -3.34],
+        pos: [px, -0.6, -rowZ],
       });
     }
 
-    // Top row (Pins pinCount..halfPins+1, along row F: Z = 3.34)
+    // Bottom row (Pins pinCount..halfPins+1, along row F / +rowZ: Z = +rowZ)
     for (let i = 0; i < halfPins; i++) {
       const pinNum = pinCount - i;
       const px = startX + i * pitch;
@@ -176,12 +181,12 @@ export function DipPackage3D({
         id: String(pinNum),
         num: pinNum,
         name: pinNames[pinNum] || `P${pinNum}`,
-        pos: [px, -0.6, 3.34],
+        pos: [px, -0.6, rowZ],
       });
     }
 
     return list;
-  }, [halfPins, pitch, pinCount, pinNames]);
+  }, [halfPins, pitch, pinCount, pinNames, renderContext]);
 
   return (
     <group ref={groupRef} position={position} rotation={rotation}>
@@ -235,13 +240,22 @@ export function DipPackage3D({
             onPointerOut={() => onHoverPin?.(null)}
           >
             {/* Horizontal shoulder lead protruding from body */}
-            <mesh position={[0, 1.2, pin.pos[2] < 0 ? 0.7 : -0.7]} material={materials.leadSilver}>
-              <boxGeometry args={[0.7, 0.3, 1.4]} />
+            <mesh
+              position={[
+                0,
+                1.2,
+                pin.pos[2] < 0
+                  ? (renderContext === '3d-view' ? 0.95 : 0.7)
+                  : (renderContext === '3d-view' ? -0.95 : -0.7),
+              ]}
+              material={materials.leadSilver}
+            >
+              <boxGeometry args={[0.7, 0.3, renderContext === '3d-view' ? 1.9 : 1.4]} />
             </mesh>
 
-            {/* Vertical pin shank dipping into breadboard spring clips (extended 6.2mm length) */}
+            {/* Vertical pin shank dipping into breadboard spring clips (6.2mm length) or PCB drill hole */}
             <mesh
-              position={[0, -1.9, 0]}
+              position={[0, renderContext === '3d-view' ? -0.8 : -1.9, 0]}
               material={
                 isHovered
                   ? materials.pinHover
@@ -250,7 +264,7 @@ export function DipPackage3D({
                   : materials.leadSilver
               }
             >
-              <boxGeometry args={[0.65, 6.2, 0.45]} />
+              <boxGeometry args={[0.65, renderContext === '3d-view' ? 4.0 : 6.2, 0.45]} />
             </mesh>
 
             {/* Solder Fillet cone on PCB pad (3D View mode) */}

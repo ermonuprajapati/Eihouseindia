@@ -61,7 +61,43 @@ export class FootprintRenderer {
       };
     }
 
-    // 2. Electrolytic Capacitors (Polarized: Aluminum Can)
+    // 2. HC-SR04 Ultrasonic Sensor Module
+    if (upperType.includes('SR04') || upperType.includes('ULTRASONIC')) {
+      return {
+        designatorText: designator,
+        valueText: value || 'HC-SR04',
+        designatorPos: { x: x - 22.0, y: y - 11.5 },
+        valuePos: { x: x - 22.0, y: y + 13.0 },
+        outlineType: 'box',
+        boxBounds: { x: x - 22.5, y: y - 10.0, width: 45.0, height: 20.0 },
+      };
+    }
+
+    // 3. Bluetooth HC-05 / HC-06 Module
+    if (upperType.includes('BLUETOOTH') || upperType.includes('HC05') || upperType.includes('HC06')) {
+      return {
+        designatorText: designator,
+        valueText: value || 'HC-05 BT',
+        designatorPos: { x: x - 13.0, y: y - 4.5 },
+        valuePos: { x: x - 13.0, y: y + 14.5 },
+        outlineType: 'header',
+        boxBounds: { x: x - 13.5, y: y - 3.0, width: 27.0, height: 13.0 },
+      };
+    }
+
+    // 4. RGB LED (4-Pin Through-Hole)
+    if (upperType.includes('RGB')) {
+      return {
+        designatorText: designator,
+        valueText: value || 'RGB LED',
+        designatorPos: { x: x - 5.5, y: y - 4.2 },
+        valuePos: { x: x - 5.5, y: y + 5.5 },
+        outlineType: 'header',
+        boxBounds: { x: x - 5.5, y: y - 2.8, width: 11.0, height: 5.6 },
+      };
+    }
+
+    // 5. Electrolytic Capacitors (Polarized: Aluminum Can)
     const isElectrolytic =
       upperType.includes('ELECTROLYTIC') ||
       upperType.includes('RADIAL') ||
@@ -79,7 +115,7 @@ export class FootprintRenderer {
       };
     }
 
-    // 3. Ceramic Capacitors (Non-polarized: Compact rounded pill)
+    // 6. Ceramic Capacitors (Non-polarized: Compact rounded pill)
     if (upperType.includes('CAPACITOR')) {
       return {
         designatorText: designator,
@@ -91,19 +127,25 @@ export class FootprintRenderer {
       };
     }
 
-    // 4. Axial Resistors, Potentiometers, LDRs
-    if (upperType.includes('RESISTOR') || upperType.includes('POTENTIOMETER') || upperType.includes('LDR')) {
+    // 7. Axial Resistors, Potentiometers, LDRs, Diodes, Inductors (10.16mm courtyard)
+    if (
+      upperType.includes('RESISTOR') ||
+      upperType.includes('DIODE') ||
+      upperType.includes('INDUCTOR') ||
+      upperType.includes('POTENTIOMETER') ||
+      upperType.includes('LDR')
+    ) {
       return {
         designatorText: designator,
-        valueText: value || '10kΩ',
+        valueText: value || (upperType.includes('DIODE') ? '1N4007' : '10kΩ'),
         designatorPos: { x: x - 5.5, y: y - 3.8 },
         valuePos: { x: x - 5.5, y: y + 5.2 },
         outlineType: 'axial_resistor',
-        boxBounds: { x: x - 5.0, y: y - 2.0, width: 10.0, height: 4.0 },
+        boxBounds: { x: x - 5.08, y: y - 2.0, width: 10.16, height: 4.0 },
       };
     }
 
-    // 5. LEDs (Circular with flat cathode edge)
+    // 8. LEDs (Circular with flat cathode edge)
     if (upperType.includes('LED')) {
       return {
         designatorText: designator,
@@ -113,18 +155,6 @@ export class FootprintRenderer {
         outlineType: 'led',
         radius: 4.0,
         boxBounds: { x: x - 4.0, y: y - 4.0, width: 8.0, height: 8.0 },
-      };
-    }
-
-    // 6. Diodes (Rectifier DO-41 with cathode band)
-    if (upperType.includes('DIODE')) {
-      return {
-        designatorText: designator,
-        valueText: value || '1N4007',
-        designatorPos: { x: x - 4.5, y: y - 4.2 },
-        valuePos: { x: x - 4.5, y: y + 5.5 },
-        outlineType: 'axial_resistor',
-        boxBounds: { x: x - 4.0, y: y - 1.8, width: 8.0, height: 3.6 },
       };
     }
 

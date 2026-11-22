@@ -12,6 +12,7 @@ import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/p
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
+import { isVirtualSchematicSymbol } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import {
   Layers,
   Download,
@@ -132,7 +133,7 @@ export function Pcb2dEditor({
     silkscreen: true,
     drillHoles: true,
     ratsnest: true,
-    copperPour: false,
+    copperPour: true,
   });
 
   // Sidebar / Inspector Active Tab
@@ -432,13 +433,19 @@ export function Pcb2dEditor({
     ctx.fill();
     ctx.stroke();
 
-    // 1.1 Copper Pour / GND Plane (if toggled on)
+    // 1.1 Copper Pour / GND Plane (KiCad / Altium Professional Style)
     if (visibleLayers.copperPour) {
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
-      ctx.fillRect(offsetX + 3 * scale, offsetY + 3 * scale, (pcb.widthMm - 6) * scale, (pcb.heightMm - 6) * scale);
-      ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+      const margin = 2 * scale;
+      ctx.fillStyle = 'rgba(217, 119, 6, 0.22)';
+      ctx.fillRect(offsetX + margin, offsetY + margin, pcb.widthMm * scale - margin * 2, pcb.heightMm * scale - margin * 2);
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(offsetX + 3 * scale, offsetY + 3 * scale, (pcb.widthMm - 6) * scale, (pcb.heightMm - 6) * scale);
+      ctx.strokeRect(offsetX + margin, offsetY + margin, pcb.widthMm * scale - margin * 2, pcb.heightMm * scale - margin * 2);
+
+      // Silkscreen / Copper zone indicator in top-left corner
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.75)';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText('GND ZONE (COPPER POUR)', offsetX + margin + 6, offsetY + margin + 12);
     }
 
     // 2. Corner M3 Mounting Holes
@@ -644,73 +651,7 @@ export function Pcb2dEditor({
       ctx.fillText(`${distMm.toFixed(1)} mm`, mouseCoord.canvasX + 11, mouseCoord.canvasY - 6);
     }
 
-    // 7. Copper Pads (Annular Rings, Solder Mask Clearance & Plated Drill Centers)
-    pcb.pads.forEach((pad) => {
-      const px = offsetX + pad.x * scale;
-      const py = offsetY + pad.y * scale;
-      const radius = (pad.diameterMm * scale) / 2;
-      const isHovered = pad.id === hoveredPadId;
-      const isStart = routingStartPad?.id === pad.id;
-      const isSelected = pad.id === selectedPadId;
-      const isRect = pad.shape === 'rect';
-
-      // Solder Mask Relief / Clearance Ring
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      if (isRect) {
-        ctx.strokeRect(px - radius - 1.5, py - radius - 1.5, (radius + 1.5) * 2, (radius + 1.5) * 2);
-      } else {
-        ctx.arc(px, py, radius + 1.5, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Selection / Hover Halo
-      if (isHovered || isStart || isSelected) {
-        ctx.strokeStyle = isStart ? '#10B981' : isSelected ? '#F59E0B' : '#38BDF8';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        if (isRect) {
-          ctx.strokeRect(px - radius - 3.5, py - radius - 3.5, (radius + 3.5) * 2, (radius + 3.5) * 2);
-        } else {
-          ctx.arc(px, py, radius + 3.5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-
-      // ENIG Gold Plated Annular Pad
-      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#FBBF24' : '#F59E0B';
-      ctx.strokeStyle = '#B45309';
-      ctx.lineWidth = 1;
-
-      ctx.beginPath();
-      if (isRect) {
-        ctx.rect(px - radius, py - radius, radius * 2, radius * 2);
-      } else {
-        ctx.arc(px, py, radius, 0, Math.PI * 2);
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      // Plated Through Hole Barrel & Drill Center
-      if (visibleLayers.drillHoles) {
-        const drillRadius = (pad.holeMm * scale) / 2;
-        // Inner plated barrel rim
-        ctx.strokeStyle = '#D97706';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(px, py, drillRadius + 0.6, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Dark hollow drill hole
-        ctx.fillStyle = '#020617';
-        ctx.beginPath();
-        ctx.arc(px, py, drillRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    // 8. Silkscreen Outlines and Tight, Legible Labels Right Beside Courtyards
+    // 7. Silkscreen Outlines and Tight, Legible Labels Right Beside Courtyards (Strictly ABOVE Copper Tracks)
     if (visibleLayers.silkscreen) {
       ctx.fillStyle = '#F8FAFC';
       ctx.strokeStyle = '#E2E8F0';
@@ -721,7 +662,7 @@ export function Pcb2dEditor({
       ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, offsetX + 8, offsetY + pcb.heightMm * scale - 8);
 
       if (pcb.components) {
-        pcb.components.forEach((comp) => {
+        pcb.components.filter((comp) => !isVirtualSchematicSymbol(comp.type)).forEach((comp) => {
           const cx = offsetX + comp.x * scale;
           const cy = offsetY + comp.y * scale;
           const isCompSelected = comp.componentId === selectedCompId;
@@ -825,6 +766,10 @@ export function Pcb2dEditor({
             ctx.beginPath();
             ctx.arc((bb.x + 1.8) * scale, (bb.y + 1.8) * scale, 1.0 * scale, 0, Math.PI * 2);
             ctx.fill();
+            // Pin 1 numeral '1' at top-left
+            ctx.font = 'bold 7px monospace';
+            ctx.fillText('1', (bb.x + 1.8) * scale, (bb.y + 3.4) * scale);
+            ctx.font = 'bold 8px monospace';
           } else if (layout.outlineType === 'transistor') {
             // TO-92 flat-face D-shape
             const r = 3.5 * scale;
@@ -855,6 +800,106 @@ export function Pcb2dEditor({
         });
       }
     }
+
+    // 8. Exposed Metallic Pads, Thermal Relief Spokes, Annular Rings & Drill Holes (Top Layer)
+    pcb.pads.forEach((pad) => {
+      const px = offsetX + pad.x * scale;
+      const py = offsetY + pad.y * scale;
+      const radius = (pad.diameterMm * scale) / 2;
+      const isHovered = pad.id === hoveredPadId;
+      const isStart = routingStartPad?.id === pad.id;
+      const isSelected = pad.id === selectedPadId;
+      const isRect = pad.shape === 'rect';
+      const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
+
+      // Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour
+      if (isGnd && visibleLayers.copperPour) {
+        // Clearance isolation circular trough
+        ctx.strokeStyle = '#064E3B';
+        ctx.lineWidth = 1.8 * scale;
+        ctx.beginPath();
+        ctx.arc(px, py, radius + 1.2 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 4 orthogonal copper spokes connecting to ground pour (+ shape)
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = Math.max(1.5, 0.6 * scale);
+        ctx.beginPath();
+        ctx.moveTo(px - radius - 2.0 * scale, py);
+        ctx.lineTo(px + radius + 2.0 * scale, py);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(px, py - radius - 2.0 * scale);
+        ctx.lineTo(px, py + radius + 2.0 * scale);
+        ctx.stroke();
+      }
+
+      // Solder Mask Relief / Clearance Ring
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (isRect) {
+        ctx.strokeRect(px - radius - 1.5, py - radius - 1.5, (radius + 1.5) * 2, (radius + 1.5) * 2);
+      } else {
+        ctx.arc(px, py, radius + 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Selection / Hover Halo
+      if (isHovered || isStart || isSelected) {
+        ctx.strokeStyle = isStart ? '#10B981' : isSelected ? '#F59E0B' : '#38BDF8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (isRect) {
+          ctx.strokeRect(px - radius - 3.5, py - radius - 3.5, (radius + 3.5) * 2, (radius + 3.5) * 2);
+        } else {
+          ctx.arc(px, py, radius + 3.5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // ENIG Gold Plated Annular Pad
+      ctx.fillStyle = isHovered ? '#FDE047' : isSelected ? '#FBBF24' : '#F59E0B';
+      ctx.strokeStyle = '#B45309';
+      ctx.lineWidth = 1;
+
+      ctx.beginPath();
+      if (isRect) {
+        ctx.rect(px - radius, py - radius, radius * 2, radius * 2);
+      } else {
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Plated Through Hole Barrel & Drill Center
+      if (visibleLayers.drillHoles) {
+        const drillRadius = (pad.holeMm * scale) / 2;
+        // Inner plated barrel rim
+        ctx.strokeStyle = '#D97706';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(px, py, drillRadius + 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Dark hollow drill hole
+        ctx.fillStyle = '#020617';
+        ctx.beginPath();
+        ctx.arc(px, py, drillRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Small legible Pin Number / GND indicator beside Pad (Top-View EDA Standard)
+      if (pad.pinId && scale >= 2.5) {
+        ctx.fillStyle = isGnd ? '#10B981' : pad.shape === 'rect' ? '#F59E0B' : '#CBD5E1';
+        ctx.font = 'bold 7px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const labelText = isGnd ? 'GND' : pad.pinId;
+        ctx.fillText(labelText, px, py - (radius + 2.4));
+      }
+    });
 
     // 9. Real Geometric DRC Violation Red Ring Markers on Board
     drcViolations.forEach((v) => {

@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { Box, Layers } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
+import { isVirtualSchematicSymbol } from './pcb-generator';
 
 export interface SolderMaskTheme {
   name: string;
@@ -365,9 +366,9 @@ export function Pcb3dViewer({
         }
         ctx.stroke();
         ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (upperType.includes('RESISTOR') || upperType.includes('POTENTIOMETER') || upperType.includes('LDR')) {
-        // Axial resistor body with lead lines
-        const bw = 9.0 * scale;
+      } else if (upperType.includes('RESISTOR') || upperType.includes('DIODE') || upperType.includes('INDUCTOR')) {
+        // Axial resistor/diode body with lead lines (10.16mm pitch)
+        const bw = 10.16 * scale;
         const bh = 3.8 * scale;
         ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
         ctx.beginPath();
@@ -391,6 +392,8 @@ export function Pcb3dViewer({
         ctx.beginPath();
         ctx.arc(-bLen / 2 + 1.8 * scale, -bWid / 2 + 1.6 * scale, 1.0 * scale, 0, Math.PI * 2);
         ctx.fill();
+        ctx.font = 'bold 8px monospace';
+        ctx.fillText('1', -bLen / 2 + 1.8 * scale, -bWid / 2 + 3.4 * scale);
         ctx.fillText(comp.designator, -10, 2);
       } else if (
         upperType.includes('HEADER') ||
@@ -445,6 +448,14 @@ export function Pcb3dViewer({
         metalness: theme.metalness,
         roughness: theme.roughness,
         clearcoat: 0.3,
+      }),
+      copperPour: new THREE.MeshStandardMaterial({
+        color: '#B45309',
+        metalness: 0.85,
+        roughness: 0.28,
+        polygonOffset: true,
+        polygonOffsetFactor: 2,
+        polygonOffsetUnits: 2,
       }),
       goldPad: new THREE.MeshStandardMaterial({
         color: '#D4AF37', // Official ENIG Gold (Electroless Nickel Immersion Gold)
@@ -586,26 +597,72 @@ export function Pcb3dViewer({
           maxDistance={500}
         />
 
-        {/* FR-4 Substrate Slab */}
+        {/* 1. FR-4 Substrate Core Slab */}
         <mesh position={[0, 0, 0]} material={materials.fr4Core} castShadow receiveShadow>
           <boxGeometry args={[pcb.widthMm, thickness, pcb.heightMm]} />
         </mesh>
 
-        {/* Crisp Visible Silkscreen Layer Overlay Decal */}
+        {/* 2. Professional Top Copper Ground Pour / Ground Plane */}
+        <mesh position={[0, thickness / 2 + 0.008, 0]} material={materials.copperPour} receiveShadow>
+          <boxGeometry args={[pcb.widthMm - 3, 0.008, pcb.heightMm - 3]} />
+        </mesh>
+
+        {/* 3. Top & Bottom Copper Traces with Rounded Joint Caps */}
+        {pcb.tracks.map((track) => {
+          const x1 = track.from.x - halfW;
+          const z1 = track.from.y - halfH;
+          const x2 = track.to.x - halfW;
+          const z2 = track.to.y - halfH;
+
+          const dx = x2 - x1;
+          const dz = z2 - z1;
+          const len = Math.hypot(dx, dz);
+          const angle = Math.atan2(dz, dx);
+          const midX = (x1 + x2) / 2;
+          const midZ = (z1 + z2) / 2;
+          const isTop = track.layer === 'top_copper';
+          const yPos = isTop ? thickness / 2 + 0.014 : -thickness / 2 - 0.014;
+          const trackWidth = track.widthMm || 0.35;
+          const trackRadius = trackWidth / 2;
+          const trackMat = isTop ? materials.copperTop : materials.copperBottom;
+
+          return (
+            <group key={track.id}>
+              {/* Main trace segment */}
+              <mesh
+                position={[midX, yPos, midZ]}
+                rotation={[0, -angle, 0]}
+                material={trackMat}
+              >
+                <boxGeometry args={[len, 0.016, trackWidth]} />
+              </mesh>
+              {/* Rounded vertex joint cylinders at endpoints to eliminate 45°/90° gaps */}
+              <mesh position={[x1, yPos, z1]} material={trackMat}>
+                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
+              </mesh>
+              <mesh position={[x2, yPos, z2]} material={trackMat}>
+                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
+              </mesh>
+            </group>
+          );
+        })}
+
+        {/* 4. Crisp Visible Silkscreen Layer Overlay Decal strictly ABOVE copper tracks & pour */}
         {silkscreenTexture && (
-          <mesh position={[0, thickness / 2 + 0.022, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, thickness / 2 + 0.032, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
             <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
-            <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.95} depthWrite={false} />
+            <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.98} depthWrite={false} polygonOffset polygonOffsetFactor={-1} />
           </mesh>
         )}
 
-        {/* Copper Pads & Plated Through Holes / Vias */}
+        {/* 5. Exposed Metallic Pads, Thermal Relief Spokes & Plated Through Holes / Vias */}
         {pcb.pads.map((pad) => {
           const px = pad.x - halfW;
           const pz = pad.y - halfH;
           const r = pad.diameterMm / 2;
           const isRect = pad.shape === 'rect';
           const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
+          const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
           const matchingComp = pcb.components?.find((c) => c.componentId === pad.componentId);
 
           return (
@@ -634,20 +691,38 @@ export function Pcb3dViewer({
               }}
               onPointerOut={() => setHoveredItem(null)}
             >
+              {/* Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour */}
+              {isGnd && (
+                <group position={[0, thickness / 2 + 0.018, 0]}>
+                  {/* Horizontal spoke */}
+                  <mesh material={materials.copperTop}>
+                    <boxGeometry args={[pad.diameterMm + 1.8, 0.016, 0.45]} />
+                  </mesh>
+                  {/* Vertical spoke */}
+                  <mesh material={materials.copperTop}>
+                    <boxGeometry args={[0.45, 0.016, pad.diameterMm + 1.8]} />
+                  </mesh>
+                </group>
+              )}
+
               {/* Top Pad / Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.02, 0]} material={materials.goldPad}>
+              <mesh position={[0, thickness / 2 + 0.036, 0]} material={materials.goldPad} renderOrder={10}>
                 {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.04, pad.diameterMm]} />
+                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
                 ) : (
-                  <cylinderGeometry args={[r, r, 0.04, 20]} />
+                  <cylinderGeometry args={[r, r, 0.028, 20]} />
                 )}
               </mesh>
+              {/* Silver Solder Fillet Ring around through-hole pin */}
+              <mesh position={[0, thickness / 2 + 0.046, 0]} material={materials.solderFillet} renderOrder={11}>
+                <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
+              </mesh>
               {/* Bottom Pad / Annular Ring */}
-              <mesh position={[0, -thickness / 2 - 0.02, 0]} material={materials.goldPad}>
+              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
                 {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.04, pad.diameterMm]} />
+                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
                 ) : (
-                  <cylinderGeometry args={[r, r, 0.04, 20]} />
+                  <cylinderGeometry args={[r, r, 0.028, 20]} />
                 )}
               </mesh>
               {/* Plated Through Hole Copper Inner Barrel */}
@@ -662,48 +737,8 @@ export function Pcb3dViewer({
           );
         })}
 
-        {/* Top & Bottom Copper Traces with Rounded Joint Caps */}
-        {pcb.tracks.map((track) => {
-          const x1 = track.from.x - halfW;
-          const z1 = track.from.y - halfH;
-          const x2 = track.to.x - halfW;
-          const z2 = track.to.y - halfH;
-
-          const dx = x2 - x1;
-          const dz = z2 - z1;
-          const len = Math.hypot(dx, dz);
-          const angle = Math.atan2(dz, dx);
-          const midX = (x1 + x2) / 2;
-          const midZ = (z1 + z2) / 2;
-          const isTop = track.layer === 'top_copper';
-          const yPos = isTop ? thickness / 2 + 0.015 : -thickness / 2 - 0.015;
-          const trackWidth = track.widthMm || 0.35;
-          const trackRadius = trackWidth / 2;
-          const trackMat = isTop ? materials.copperTop : materials.copperBottom;
-
-          return (
-            <group key={track.id}>
-              {/* Main trace segment */}
-              <mesh
-                position={[midX, yPos, midZ]}
-                rotation={[0, -angle, 0]}
-                material={trackMat}
-              >
-                <boxGeometry args={[len, 0.025, trackWidth]} />
-              </mesh>
-              {/* Rounded vertex joint cylinders at endpoints to eliminate 45°/90° gaps */}
-              <mesh position={[x1, yPos, z1]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.025, 12]} />
-              </mesh>
-              <mesh position={[x2, yPos, z2]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.025, 12]} />
-              </mesh>
-            </group>
-          );
-        })}
-
-        {/* Authentic 3D CAD Component Models Shared from Studio-3D */}
-        {showComponents && pcb.components?.map((pComp) => {
+        {/* Authentic 3D CAD Component Models Shared from Studio-3D (Virtual power/GND symbols filtered out) */}
+        {showComponents && pcb.components?.filter((c) => !isVirtualSchematicSymbol(c.type)).map((pComp) => {
           const cx = pComp.x - halfW;
           const cz = pComp.y - halfH;
           const rotY = ((pComp.rotation || 0) * Math.PI) / 180;
