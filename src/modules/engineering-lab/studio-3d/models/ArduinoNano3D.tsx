@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface ArduinoNano3DProps {
   position?: [number, number, number];
@@ -109,21 +110,34 @@ export function ArduinoNano3D({
     ctx.fillText('NANO V3', 520, 160);
     ctx.font = '16px monospace';
     ctx.fillText('ATmega328P', 520, 195);
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('PWR', 330, 160);
 
-    // Left row pin labels
-    ctx.font = 'bold 16px monospace';
-    const leftLabels = ['TX', 'RX', 'RST', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'];
-    leftLabels.forEach((lbl, i) => {
-      const x = 70 + i * 51;
-      ctx.fillText(lbl, x, 40);
+    const toCanvasX = (lx: number) => Math.round(((lx + 21.59) / 43.18) * 864);
+
+    ctx.font = 'bold 15px monospace';
+    NANO_PINS.forEach((pin) => {
+      const cx = toCanvasX(pin.localPos[0]);
+      let display = pin.name;
+      if (pin.name === 'D1') display = 'TX1';
+      else if (pin.name === 'D0') display = 'RX0';
+      else if (pin.name.startsWith('RESET')) display = 'RST';
+      else if (pin.name.startsWith('GND')) display = 'GND';
+
+      if (pin.localPos[2] < 0) {
+        // Top/Left row
+        ctx.fillText(display, cx, 52);
+      } else {
+        // Bottom/Right row
+        ctx.fillText(display, cx, 304);
+      }
     });
 
-    // Right row pin labels
-    const rightLabels = ['D13', '3V3', 'REF', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', '5V', 'RST', 'GND', 'VIN'];
-    rightLabels.forEach((lbl, i) => {
-      const x = 70 + i * 51;
-      ctx.fillText(lbl, x, 316);
-    });
+    // Silkscreen outline rectangles around header pins
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, 24, 784, 56);
+    ctx.strokeRect(40, 276, 784, 56);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -267,10 +281,22 @@ export function ArduinoNano3D({
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.6, 1.4, 24]} />
-                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-              </mesh>
+              <>
+                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.6, 1.4, 24]} />
+                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+                </mesh>
+                <Html
+                  position={[0, 6.0, 0]}
+                  center
+                  distanceFactor={75}
+                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
+                >
+                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
+                    {pin.name}
+                  </div>
+                </Html>
+              </>
             )}
             <mesh
               position={[0, 0.5, 0]}

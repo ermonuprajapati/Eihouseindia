@@ -749,10 +749,10 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
   if (t === 'ARDUINO_NANO') {
     return NANO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
   }
-  if (t === 'ESP32_DEVKIT') {
+  if (t === 'ESP32_DEVKIT' || t === 'ESP32_S3' || t === 'ESP32_C3' || t === 'ESP8266_NODEMCU') {
     return ESP32_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
   }
-  if (t === 'RASPBERRY_PI_PICO') {
+  if (t === 'RASPBERRY_PI_PICO' || t === 'RASPBERRY_PI_PICO2') {
     return PICO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
   }
   if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
@@ -897,7 +897,8 @@ export function ComponentPinLabelsOverlay({
         (p) =>
           p.id === hoveredPinName ||
           p.id.toLowerCase() === hoveredPinName?.toLowerCase() ||
-          p.label.toLowerCase() === hoveredPinName?.toLowerCase()
+          p.label.toLowerCase() === hoveredPinName?.toLowerCase() ||
+          (p as unknown as { name?: string }).name?.toLowerCase() === hoveredPinName?.toLowerCase()
       );
 
   if (pinsToRender.length === 0) return null;
@@ -913,10 +914,12 @@ export function ComponentPinLabelsOverlay({
       {pinsToRender.map((p, idx) => {
         const isHovered =
           hoveredPinName === p.id ||
-          hoveredPinName?.toLowerCase() === p.id.toLowerCase();
+          hoveredPinName?.toLowerCase() === p.id.toLowerCase() ||
+          hoveredPinName?.toLowerCase() === p.label.toLowerCase();
 
         // When showAll is active, gently alternate Y elevation by 1.8mm to prevent overlap on tight 2.54mm pitch
         const elevationY = isHovered ? 2.8 : 2.2 + (idx % 2) * 1.8;
+        const labelText = p.label || (p as unknown as { name?: string }).name || p.id;
 
         return (
           <Html
@@ -924,16 +927,16 @@ export function ComponentPinLabelsOverlay({
             position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2]]}
             center
             distanceFactor={90}
-            style={{ pointerEvents: 'none', userSelect: 'none' }}
+            style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
           >
             <div
-              className={`px-1.5 py-0.5 rounded font-mono font-bold text-[9px] tracking-tight whitespace-nowrap shadow-md border ${
+              className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] tracking-tight whitespace-nowrap shadow-xl border ${
                 isHovered
-                  ? 'bg-amber-400 text-slate-950 border-amber-300 ring-1 ring-white shadow-amber-500/50 scale-110 z-50'
-                  : 'bg-slate-900/90 text-cyan-300 border-cyan-500/60 shadow-black/80'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-white shadow-amber-500/60 scale-110 z-50'
+                  : 'bg-slate-900/95 text-cyan-300 border-cyan-500/70 shadow-black/90'
               }`}
             >
-              {p.label}
+              {labelText}
             </div>
           </Html>
         );
@@ -1208,7 +1211,6 @@ export function Studio3DCanvas({
   simulationStates = {},
   wireCurrents = {},
   circuitWires = [],
-  circuitComponents: _circuitComponents = [],
 }: Studio3DCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
@@ -1277,7 +1279,7 @@ export function Studio3DCanvas({
     const nextState = !isPlugged;
     const updated: Component3D = {
       ...comp,
-      parameters: { ...comp.parameters, usbPlugged: nextState },
+      parameters: { ...comp.parameters, usbPlugged: nextState, dcJackPlugged: false },
     };
     onUpdateComponent3D(updated);
     toast.success(
@@ -1681,12 +1683,12 @@ export function Studio3DCanvas({
       ly = 2.5;
       lz = 16.0;
     } else if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
-      const p = (pinId || '').toUpperCase();
-      if (p === 'VCC' || p === '1') lx = -3.81;
-      else if (p === 'TRIG' || p === '2') lx = -1.27;
+      const p = (pinId || '').trim().toUpperCase();
+      if (p === 'VCC' || p === '1' || p === '5V') lx = -3.81;
+      else if (p === 'TRIG' || p === '2' || p === 'TRIGGER') lx = -1.27;
       else if (p === 'ECHO' || p === '3') lx = 1.27;
-      else lx = 3.81; // 'GND', '4'
-      ly = 0;
+      else lx = 3.81; // 'GND', '4', 'GROUND', '-'
+      ly = 1.25;
       lz = 0;
     } else if (comp.type === 'SERVO_SG90' || comp.type === 'ACTUATOR_SERVO_SG90' || comp.type === 'SERVO') {
       const p = (pinId || '').toUpperCase();

@@ -666,6 +666,39 @@ export function Virtual3dStudio({
       });
     }
 
+    // Helper to determine if a component attaches wires directly to its pins rather than via breadboard spring clips
+    const isDirectWireComponent = (comp?: Component3D) => {
+      if (!comp) return false;
+      const t = (comp.type || '').toUpperCase();
+      return (
+        t === 'ARDUINO_UNO' ||
+        t === 'ARDUINO_MEGA' ||
+        t === 'BATTERY_9V' ||
+        t === 'BATTERY' ||
+        t === 'HC_SR04' ||
+        t === 'SENSOR_ULTRASONIC' ||
+        t === 'SERVO_SG90' ||
+        t === 'ACTUATOR_SERVO_SG90' ||
+        t === 'LCD_1602' ||
+        t === 'DISPLAY_LCD1602' ||
+        t === 'MODULE_BLUETOOTH_HC05' ||
+        t.includes('BLUETOOTH')
+      );
+    };
+
+    const normalizePinIdForComponent = (comp: Component3D, pin: string) => {
+      const t = (comp.type || '').toUpperCase();
+      if (t === 'HC_SR04' || t === 'SENSOR_ULTRASONIC') {
+        const p = (pin || '').trim().toUpperCase();
+        if (p === '1' || p === 'VCC' || p === '5V') return 'VCC';
+        if (p === '2' || p === 'TRIG' || p === 'TRIGGER') return 'TRIG';
+        if (p === '3' || p === 'ECHO') return 'ECHO';
+        if (p === '4' || p === 'GND' || p === 'GROUND' || p === '-') return 'GND';
+        return p;
+      }
+      return pin;
+    };
+
     // 3. Circuit Jumper Wires & Power Drops
     srcWires.forEach((w) => {
       const fromIsBat = battery && w.fromCompId === battery.id;
@@ -684,12 +717,27 @@ export function Virtual3dStudio({
       if (fromIsBat && (fPin === 'p' || fPin === '+')) {
         const toComp = comps3d.find((c) => c.id === w.toCompId);
         if (!toComp) return;
-        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
         const isTop = (toComp.z3d ?? -8) <= 0;
         const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+
+        if (isDirectWireComponent(toComp)) {
+          if (railHole) {
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+            outWires.push({
+              id: w.id,
+              fromPin: { compId: 'breadboard', pinId: railHole.id },
+              toPin: { compId: toComp.id, pinId: normalizePinIdForComponent(toComp, w.toPinId) },
+              color: '#EF4444',
+              current: w.current,
+            });
+          }
+          return;
+        }
+
+        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         if (freeHole && railHole) {
           occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
           occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
@@ -706,12 +754,27 @@ export function Virtual3dStudio({
       if (toIsBat && (tPin === 'p' || tPin === '+')) {
         const fromComp = comps3d.find((c) => c.id === w.fromCompId);
         if (!fromComp) return;
-        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
         const isTop = (fromComp.z3d ?? -8) <= 0;
         const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+
+        if (isDirectWireComponent(fromComp)) {
+          if (railHole) {
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+            outWires.push({
+              id: w.id,
+              fromPin: { compId: fromComp.id, pinId: normalizePinIdForComponent(fromComp, w.fromPinId) },
+              toPin: { compId: 'breadboard', pinId: railHole.id },
+              color: '#EF4444',
+              current: w.current,
+            });
+          }
+          return;
+        }
+
+        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         if (freeHole && railHole) {
           occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
           occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
@@ -730,12 +793,27 @@ export function Virtual3dStudio({
       if (fromIsGnd) {
         const toComp = comps3d.find((c) => c.id === w.toCompId);
         if (!toComp) return;
-        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
         const isTop = (toComp.z3d ?? -8) <= 0;
         const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+
+        if (isDirectWireComponent(toComp)) {
+          if (railHole) {
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+            outWires.push({
+              id: w.id,
+              fromPin: { compId: 'breadboard', pinId: railHole.id },
+              toPin: { compId: toComp.id, pinId: normalizePinIdForComponent(toComp, w.toPinId) },
+              color: '#1E293B',
+              current: w.current,
+            });
+          }
+          return;
+        }
+
+        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         if (freeHole && railHole) {
           occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
           occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
@@ -752,12 +830,27 @@ export function Virtual3dStudio({
       if (toIsGnd) {
         const fromComp = comps3d.find((c) => c.id === w.fromCompId);
         if (!fromComp) return;
-        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
         const isTop = (fromComp.z3d ?? -8) <= 0;
         const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+
+        if (isDirectWireComponent(fromComp)) {
+          if (railHole) {
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
+            outWires.push({
+              id: w.id,
+              fromPin: { compId: fromComp.id, pinId: normalizePinIdForComponent(fromComp, w.fromPinId) },
+              toPin: { compId: 'breadboard', pinId: railHole.id },
+              color: '#1E293B',
+              current: w.current,
+            });
+          }
+          return;
+        }
+
+        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
+        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
+        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
         if (freeHole && railHole) {
           occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
           occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
@@ -798,11 +891,17 @@ export function Virtual3dStudio({
       const compA = comps3d.find((c) => c.id === w.fromCompId);
       const compB = comps3d.find((c) => c.id === w.toCompId);
 
-      const isA_Breadboard = compA && !['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(compA.type);
-      const isB_Breadboard = compB && !['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(compB.type);
+      const isA_Breadboard = compA && !isDirectWireComponent(compA);
+      const isB_Breadboard = compB && !isDirectWireComponent(compB);
 
-      let fromEnd: { compId: string; pinId: string } = { compId: w.fromCompId, pinId: w.fromPinId };
-      let toEnd: { compId: string; pinId: string } = { compId: w.toCompId, pinId: w.toPinId };
+      let fromEnd: { compId: string; pinId: string } = {
+        compId: w.fromCompId,
+        pinId: compA ? normalizePinIdForComponent(compA, w.fromPinId) : w.fromPinId,
+      };
+      let toEnd: { compId: string; pinId: string } = {
+        compId: w.toCompId,
+        pinId: compB ? normalizePinIdForComponent(compB, w.toPinId) : w.toPinId,
+      };
 
       if (isA_Breadboard && compA) {
         const compHole = getBreadboardHoleForComponentPin(compA, w.fromPinId);
@@ -987,15 +1086,18 @@ export function Virtual3dStudio({
 
   // Toggle MCU USB Power Plug without resetting coordinates or component position
   const handleToggleMcuUsb = useCallback((compId: string) => {
-    let nextState = false;
+    // 1. Determine current state deterministically from activeComponents3d or components
+    const targetComp = activeComponents3d.find((c) => c.id === compId) || components.find((c) => c.id === compId);
+    const isCurrentlyPlugged = targetComp?.parameters?.usbPlugged !== false;
+    const nextState = !isCurrentlyPlugged;
+
     setIndependentComponents((prev) => {
       const current = prev !== null ? prev : activeComponents3d;
       return current.map((c) => {
         if (c.id === compId) {
-          nextState = !(c.parameters?.usbPlugged !== false);
           return {
             ...c,
-            parameters: { ...c.parameters, usbPlugged: nextState },
+            parameters: { ...c.parameters, usbPlugged: nextState, dcJackPlugged: false },
           };
         }
         return c;
@@ -1016,7 +1118,7 @@ export function Virtual3dStudio({
         y3d: active?.y3d ?? comp.y3d,
         z3d: active?.z3d ?? comp.z3d,
         rot3d: active?.rotY ?? comp.rot3d,
-        parameters: { ...comp.parameters, usbPlugged: nextState },
+        parameters: { ...comp.parameters, usbPlugged: nextState, dcJackPlugged: false },
       });
     }
   }, [activeComponents3d, components, onUpdateComponent]);

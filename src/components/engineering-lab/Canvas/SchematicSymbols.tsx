@@ -901,15 +901,63 @@ export function SchematicSymbol({
         );
 
       case 'ACTUATOR_RGB_LED':
-      case 'LED_RGB': {
-        const onR = Boolean(simState?.onRed);
-        const onG = Boolean(simState?.onGreen);
-        const onB = Boolean(simState?.onBlue);
-        const anyOn = onR || onG || onB;
+      case 'LED_RGB':
+      case 'RGB_LED': {
+        const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
+        
+        // 1. Resolve multi-channel levels (rLevel, gLevel, bLevel in 0..1)
+        let rLevel = 0;
+        let gLevel = 0;
+        let bLevel = 0;
 
-        const rBright = Math.max(0, Math.min(1, typeof simState?.redBrightness === 'number' ? simState.redBrightness : (onR ? 1.0 : 0)));
-        const gBright = Math.max(0, Math.min(1, typeof simState?.greenBrightness === 'number' ? simState.greenBrightness : (onG ? 1.0 : 0)));
-        const bBright = Math.max(0, Math.min(1, typeof simState?.blueBrightness === 'number' ? simState.blueBrightness : (onB ? 1.0 : 0)));
+        if (simState && typeof simState === 'object') {
+          const sAny = simState as Record<string, unknown>;
+          if (sAny.onRed) rLevel = Math.max(rLevel, typeof sAny.redBrightness === 'number' ? sAny.redBrightness : 1.0);
+          if (sAny.onGreen) gLevel = Math.max(gLevel, typeof sAny.greenBrightness === 'number' ? sAny.greenBrightness : 1.0);
+          if (sAny.onBlue) bLevel = Math.max(bLevel, typeof sAny.blueBrightness === 'number' ? sAny.blueBrightness : 1.0);
+          if (typeof sAny.rLevel === 'number') rLevel = Math.max(rLevel, sAny.rLevel);
+          if (typeof sAny.gLevel === 'number') gLevel = Math.max(gLevel, sAny.gLevel);
+          if (typeof sAny.bLevel === 'number') bLevel = Math.max(bLevel, sAny.bLevel);
+          if (typeof sAny.redBrightness === 'number' && sAny.redBrightness > 0) rLevel = Math.max(rLevel, sAny.redBrightness);
+          if (typeof sAny.greenBrightness === 'number' && sAny.greenBrightness > 0) gLevel = Math.max(gLevel, sAny.greenBrightness);
+          if (typeof sAny.blueBrightness === 'number' && sAny.blueBrightness > 0) bLevel = Math.max(bLevel, sAny.blueBrightness);
+          if (sAny.channels && typeof sAny.channels === 'object') {
+            const ch = sAny.channels as Record<string, number>;
+            if (typeof ch.r === 'number') rLevel = Math.max(rLevel, ch.r);
+            if (typeof ch.g === 'number') gLevel = Math.max(gLevel, ch.g);
+            if (typeof ch.b === 'number') bLevel = Math.max(bLevel, ch.b);
+          }
+          if (sAny.on && rLevel === 0 && gLevel === 0 && bLevel === 0) {
+            const b = typeof sAny.brightness === 'number' ? sAny.brightness : 1.0;
+            rLevel = b;
+            gLevel = b;
+            bLevel = b;
+          }
+        }
+
+        // 2. Explicit component parameter overrides from Inspector
+        if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
+        if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
+        if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+
+        // 3. Fallback for static hex color
+        if (rLevel === 0 && gLevel === 0 && bLevel === 0 && component.parameters?.color) {
+          const hex = String(component.parameters.color).replace('#', '');
+          if (hex.length === 6) {
+            rLevel = parseInt(hex.slice(0, 2), 16) / 255;
+            gLevel = parseInt(hex.slice(2, 4), 16) / 255;
+            bLevel = parseInt(hex.slice(4, 6), 16) / 255;
+          }
+        }
+
+        const rBright = isBurned ? 0 : Math.max(0, Math.min(1, rLevel));
+        const gBright = isBurned ? 0 : Math.max(0, Math.min(1, gLevel));
+        const bBright = isBurned ? 0 : Math.max(0, Math.min(1, bLevel));
+
+        const onR = rBright > 0.02;
+        const onG = gBright > 0.02;
+        const onB = bBright > 0.02;
+        const anyOn = onR || onG || onB;
 
         // Continuous additive optical color synthesis rgb(r, g, b)
         const rByte = Math.round(rBright * 255);
@@ -920,20 +968,26 @@ export function SchematicSymbol({
 
         return (
           <g>
-            {/* Active Blended Optical Additive Glow Halo */}
-            {isSimulating && anyOn && (
+            {isBurned && (
+              <text x="0" y="-28" fill="#EF4444" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                💥 BURNED
+              </text>
+            )}
+
+            {/* Active Blended Optical Additive Glow Halo (Red+Green=Yellow, Green+Blue=Cyan, Red+Blue=Magenta, R+G+B=White) */}
+            {anyOn && (
               <circle
                 cx="0"
                 cy="-2"
-                r="28"
+                r="30"
                 fill={glowColor}
-                opacity={Math.max(0.35, maxBright * 0.75)}
-                filter="blur(5px)"
+                opacity={Math.max(0.4, maxBright * 0.85)}
+                filter="blur(6px)"
               />
             )}
 
             {/* Diffused 5mm Epoxy Lens Boundary */}
-            <circle cx="0" cy="-2" r="22" stroke={strokeColor} strokeWidth="1.8" fill="#070E1B" />
+            <circle cx="0" cy="-2" r="22" stroke={isBurned ? '#EF4444' : strokeColor} strokeWidth="1.8" fill="#070E1B" />
 
             {/* Channel Leads */}
             <line x1="-30" y1="-20" x2="-14" y2="-10" stroke={strokeColor} strokeWidth="1.5" />
@@ -950,7 +1004,7 @@ export function SchematicSymbol({
               strokeWidth="1.2"
             />
             {onR && (
-              <circle cx="-14" cy="-5" r={5 + rBright * 3} fill="#EF4444" opacity={0.6 * rBright} />
+              <circle cx="-14" cy="-5" r={5 + rBright * 3} fill="#EF4444" opacity={0.7 * rBright} filter="blur(2px)" />
             )}
 
             {/* Green Channel Diode */}
@@ -962,7 +1016,7 @@ export function SchematicSymbol({
               strokeWidth="1.2"
             />
             {onG && (
-              <circle cx="0" cy="-5" r={5 + gBright * 3} fill="#10B981" opacity={0.6 * gBright} />
+              <circle cx="0" cy="-5" r={5 + gBright * 3} fill="#10B981" opacity={0.7 * gBright} filter="blur(2px)" />
             )}
 
             {/* Blue Channel Diode */}
@@ -974,7 +1028,7 @@ export function SchematicSymbol({
               strokeWidth="1.2"
             />
             {onB && (
-              <circle cx="14" cy="-5" r={5 + bBright * 3} fill="#3B82F6" opacity={0.6 * bBright} />
+              <circle cx="14" cy="-5" r={5 + bBright * 3} fill="#3B82F6" opacity={0.7 * bBright} filter="blur(2px)" />
             )}
 
             {/* Common Cathode/Anode Bus Bar */}

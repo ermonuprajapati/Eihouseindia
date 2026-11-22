@@ -332,7 +332,54 @@ export function Pcb3dViewer({
       const upperType = comp.type.toUpperCase();
       const upperVal = (comp.value || '').toUpperCase();
 
-      if (upperType.includes('LED')) {
+      if (
+        upperType.includes('RGB') ||
+        upperType === 'ACTUATOR_RGB_LED' ||
+        comp.footprint?.includes('THT-5MM-4PIN') ||
+        comp.footprint?.includes('LED_D5.0mm-4')
+      ) {
+        // RGB LED 4-pin outline with 4 pads & Pin 1 marker
+        const r = 4.0 * scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        // 4 in-line pin pads
+        const pins = [-3.81, -1.27, 1.27, 3.81];
+        const labels = ['R', 'C', 'G', 'B'];
+        pins.forEach((px, i) => {
+          const sx = (px / 2.54) * 2.5 * scale;
+          ctx.beginPath();
+          ctx.arc(sx, 0, 1.0 * scale, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText(labels[i], sx - 3, -2.5 * scale);
+        });
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(comp.designator, -12, 6 * scale);
+      } else if (
+        upperType.includes('SR04') ||
+        upperType.includes('ULTRASONIC') ||
+        comp.footprint?.includes('MODULE-HCSR04') ||
+        comp.footprint?.includes('HCSR04')
+      ) {
+        // HC-SR04 Ultrasonic Module outline (45mm x 20mm)
+        const mw = 26.0 * scale;
+        const mh = 14.0 * scale;
+        ctx.strokeRect(-mw / 2, -mh / 2, mw, mh);
+        // Transducers T and R
+        ctx.beginPath();
+        ctx.arc(-7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText('T', -7.0 * scale - 3, 3);
+        ctx.fillText('R', 7.0 * scale - 3, 3);
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText('HC-SR04', -18, -mh / 2 - 2);
+        ctx.fillText(comp.designator, -12, mh / 2 + 8 * scale);
+      } else if (upperType.includes('LED')) {
         // LED circular rim with cathode flat bar & 'K' marker
         const r = 4.0 * scale;
         ctx.beginPath();
@@ -720,6 +767,111 @@ export function Pcb3dViewer({
           const compY = isBottom ? -thickness / 2 : thickness / 2;
           const compRot: [number, number, number] = isBottom ? [Math.PI, -rotY, 0] : [0, -rotY, 0];
 
+          // 0. RGB LED (5mm 4-Pin Clear/Diffused Epoxy Dome with R, COM, G, B Leads, Solder Fillets & Multi-Channel Emission)
+          if (
+            upperType.includes('RGB') ||
+            upperType === 'ACTUATOR_RGB_LED' ||
+            upperFootprint.includes('THT-5MM-4PIN') ||
+            upperFootprint.includes('LED_D5.0MM-4') ||
+            (pComp as unknown as { model3d?: string }).model3d === 'led_rgb_5mm' ||
+            pComp.parameters?.model3d === 'led_rgb_5mm'
+          ) {
+            const rL = (pComp.parameters?.rLevel as number) ?? (pComp.parameters?.r as number) ?? 0.85;
+            const gL = (pComp.parameters?.gLevel as number) ?? (pComp.parameters?.g as number) ?? 0.25;
+            const bL = (pComp.parameters?.bLevel as number) ?? (pComp.parameters?.b as number) ?? 0.95;
+            const rgbColor = new THREE.Color(rL, gL, bL);
+            const rgbMaterial = new THREE.MeshPhysicalMaterial({
+              color: rgbColor,
+              emissive: rgbColor,
+              emissiveIntensity: 0.9,
+              transparent: true,
+              opacity: 0.88,
+              roughness: 0.15,
+            });
+
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {/* 4 Straight Leads at 2.54mm pitch (x = -3.81, -1.27, 1.27, 3.81) */}
+                {[-3.81, -1.27, 1.27, 3.81].map((lx, idx) => {
+                  const isCommon = idx === 1;
+                  const len = isCommon ? 3.4 : 2.8;
+                  return (
+                    <group key={idx}>
+                      <mesh position={[lx, 1.2, 0]} material={materials.leadMetal}>
+                        <cylinderGeometry args={[0.25, 0.25, len, 8]} />
+                      </mesh>
+                      <mesh position={[lx, 0.15, 0]} material={materials.solderFillet}>
+                        <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
+                      </mesh>
+                    </group>
+                  );
+                })}
+                {/* Base collar flange */}
+                <mesh position={[0, 2.8, 0]} material={rgbMaterial}>
+                  <cylinderGeometry args={[2.9, 2.9, 0.7, 24]} />
+                </mesh>
+                {/* Main cylinder body */}
+                <mesh position={[0, 5.0, 0]} material={rgbMaterial}>
+                  <cylinderGeometry args={[2.5, 2.5, 3.8, 24]} />
+                </mesh>
+                {/* Hemisphere dome top */}
+                <mesh position={[0, 6.9, 0]} material={rgbMaterial}>
+                  <sphereGeometry args={[2.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                </mesh>
+                <pointLight position={[0, 6.0, 0]} color={rgbColor} intensity={1.5} distance={25} />
+              </group>
+            );
+          }
+
+          // 0b. HC-SR04 Ultrasonic Sonar Module (Blue FR4 PCB, 2 Ultrasonic Canisters, Crystal, Header Pins)
+          if (
+            upperType.includes('SR04') ||
+            upperType.includes('ULTRASONIC') ||
+            upperFootprint.includes('MODULE-HCSR04') ||
+            upperFootprint.includes('HCSR04') ||
+            (pComp as unknown as { model3d?: string }).model3d === 'hcsr04_ultrasonic' ||
+            (pComp as unknown as { model3d?: string }).model3d === 'sensor_ultrasonic_hc_sr04' ||
+            pComp.parameters?.model3d === 'hcsr04_ultrasonic'
+          ) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {/* Blue FR4 Sensor PCB (45mm x 20mm x 1.6mm) elevated on header pins */}
+                <mesh position={[0, 8.0, 0]} material={materials.mcuBoardBlue}>
+                  <boxGeometry args={[45.0, 1.6, 20.0]} />
+                </mesh>
+                {/* 4 Header pins with solder fillets entering PCB pads */}
+                {[-3.81, -1.27, 1.27, 3.81].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 3.5, 8.5]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.32, 0.32, 7.0, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, 8.5]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Left Transmitter Canister (T) */}
+                <mesh position={[-12.0, 15.0, 0]} rotation={[0, 0, 0]} material={materials.usbMetal}>
+                  <cylinderGeometry args={[8.0, 8.0, 12.0, 24]} />
+                </mesh>
+                <mesh position={[-12.0, 21.02, 0]} material={materials.icPlastic}>
+                  <cylinderGeometry args={[6.8, 6.8, 0.1, 24]} />
+                </mesh>
+                {/* Right Receiver Canister (R) */}
+                <mesh position={[12.0, 15.0, 0]} rotation={[0, 0, 0]} material={materials.usbMetal}>
+                  <cylinderGeometry args={[8.0, 8.0, 12.0, 24]} />
+                </mesh>
+                <mesh position={[12.0, 21.02, 0]} material={materials.icPlastic}>
+                  <cylinderGeometry args={[6.8, 6.8, 0.1, 24]} />
+                </mesh>
+                {/* Quartz Crystal Canister (HC-49S) */}
+                <mesh position={[0, 9.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbMetal}>
+                  <boxGeometry args={[3.2, 9.5, 4.5]} />
+                </mesh>
+              </group>
+            );
+          }
+
           // 1. LED (5mm Translucent Domed Lens with Flange, Leads & Solder Fillets)
           if (upperType.includes('LED') || upperFootprint.includes('LED')) {
             const ledParamColor = (pComp.parameters?.color as string) || '';
@@ -1047,6 +1199,164 @@ export function Pcb3dViewer({
                 {/* Main MCU IC on board with laser markings */}
                 <mesh position={[2.0, 2.2, 0]} material={materials.icPlastic}>
                   <boxGeometry args={[7.0, 1.2, 7.0]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 10. Buzzer (Piezo Sounder Cylindrical Housing & Pins)
+          if (upperType.includes('BUZZER') || upperFootprint.includes('BUZZER')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-2.54, 2.54].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 1.2, 0]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.3, 0.3, 2.6, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, 0]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Black cylinder body */}
+                <mesh position={[0, 5.0, 0]} material={materials.icPlastic}>
+                  <cylinderGeometry args={[6.0, 6.0, 7.5, 24]} />
+                </mesh>
+                {/* Top sound aperture hole */}
+                <mesh position={[0, 8.8, 0]} material={materials.drillHole}>
+                  <cylinderGeometry args={[1.5, 1.5, 0.2, 16]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 11. Pushbutton (6x6mm Tactile Switch with 4 Corner Pins)
+          if (upperType.includes('PUSH') || upperType.includes('BUTTON') || upperFootprint.includes('SW_PUSH')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-2.54, 2.54].flatMap((lx) =>
+                  [-2.54, 2.54].map((lz) => (
+                    <group key={`${lx}_${lz}`}>
+                      <mesh position={[lx, 1.0, lz]} material={materials.leadMetal}>
+                        <cylinderGeometry args={[0.25, 0.25, 2.2, 8]} />
+                      </mesh>
+                      <mesh position={[lx, 0.15, lz]} material={materials.solderFillet}>
+                        <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
+                      </mesh>
+                    </group>
+                  ))
+                )}
+                {/* Switch plastic base body */}
+                <mesh position={[0, 2.5, 0]} material={materials.icPlastic}>
+                  <boxGeometry args={[6.0, 3.0, 6.0]} />
+                </mesh>
+                {/* Top metal retaining bracket */}
+                <mesh position={[0, 4.1, 0]} material={materials.leadMetal}>
+                  <boxGeometry args={[6.1, 0.3, 6.1]} />
+                </mesh>
+                {/* Round button plunger */}
+                <mesh position={[0, 5.0, 0]} material={materials.capRadialBlue}>
+                  <cylinderGeometry args={[1.6, 1.6, 1.8, 16]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 12. Slide Switch
+          if (upperType.includes('SWITCH') || upperFootprint.includes('SLIDE')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-2.54, 0, 2.54].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 1.0, 0]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.25, 0.25, 2.2, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, 0]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Metal housing */}
+                <mesh position={[0, 3.0, 0]} material={materials.leadMetal}>
+                  <boxGeometry args={[8.5, 4.0, 4.0]} />
+                </mesh>
+                {/* Black slide knob */}
+                <mesh position={[0, 5.8, 0]} material={materials.icPlastic}>
+                  <boxGeometry args={[2.0, 2.0, 2.0]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 13. LDR / Photoresistor
+          if (upperType.includes('LDR') || upperFootprint.includes('LDR')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-1.27, 1.27].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 1.2, 0]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.25, 0.25, 2.6, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, 0]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* 5mm round ceramic disk */}
+                <mesh position={[0, 3.2, 0]} material={materials.capCeramicTan}>
+                  <cylinderGeometry args={[2.5, 2.5, 1.5, 20]} />
+                </mesh>
+                {/* Red optical track face */}
+                <mesh position={[0, 4.0, 0]} material={materials.resistorBandRed}>
+                  <cylinderGeometry args={[2.2, 2.2, 0.1, 20]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 14. Inductor (Through-Hole Axial / Toroid)
+          if (upperType.includes('INDUCTOR') || upperFootprint.includes('INDUCTOR')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-3.81, 3.81].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 0.8, 0]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.3, 0.3, 2.2, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, 0]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Green molded inductor body */}
+                <mesh position={[0, 2.2, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.terminalGreen}>
+                  <cylinderGeometry args={[1.6, 1.6, 5.0, 16]} />
+                </mesh>
+              </group>
+            );
+          }
+
+          // 15. Potentiometer / Trimmer
+          if (upperType.includes('POTENTIOMETER') || upperFootprint.includes('POTENTIOMETER')) {
+            return (
+              <group key={pComp.componentId} position={[cx, compY, cz]} rotation={compRot}>
+                {[-2.54, 0, 2.54].map((lx, idx) => (
+                  <group key={idx}>
+                    <mesh position={[lx, 1.0, idx === 1 ? 2.54 : 0]} material={materials.leadMetal}>
+                      <cylinderGeometry args={[0.3, 0.3, 2.2, 8]} />
+                    </mesh>
+                    <mesh position={[lx, 0.15, idx === 1 ? 2.54 : 0]} material={materials.solderFillet}>
+                      <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Blue square trimmer body */}
+                <mesh position={[0, 4.5, 1.0]} material={materials.capRadialBlue}>
+                  <boxGeometry args={[9.5, 7.0, 4.5]} />
+                </mesh>
+                {/* Brass adjustment rotor on top */}
+                <mesh position={[0, 8.2, 1.0]} material={materials.screwBrass}>
+                  <cylinderGeometry args={[1.5, 1.5, 0.6, 16]} />
                 </mesh>
               </group>
             );

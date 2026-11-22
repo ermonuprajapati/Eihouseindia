@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface ArduinoUno3DProps {
   position?: [number, number, number];
@@ -164,53 +165,61 @@ export function ArduinoUno3D({
     ctx.font = 'bold 30px monospace';
     ctx.fillText('UNO R3', 512, 330);
 
-    // Top Header Labels (AREF..RX<0)
-    ctx.font = 'bold 22px monospace';
+    // Top Digital Header Labels aligned directly beside header sockets
+    ctx.font = 'bold 20px monospace';
     const topPins = [
-      { text: 'SCL', x: 235 },
-      { text: 'SDA', x: 275 },
-      { text: 'AREF', x: 315 },
-      { text: 'GND', x: 355 },
-      { text: '13', x: 395 },
-      { text: '12', x: 435 },
-      { text: '~11', x: 475 },
-      { text: '~10', x: 515 },
-      { text: '~9', x: 555 },
-      { text: '8', x: 595 },
-      { text: '7', x: 655 },
-      { text: '~6', x: 695 },
-      { text: '~5', x: 735 },
-      { text: '4', x: 775 },
-      { text: '~3', x: 815 },
-      { text: '2', x: 855 },
-      { text: 'TX>1', x: 895 },
-      { text: 'RX<0', x: 940 },
+      { text: 'RX0', x: 224 },
+      { text: 'TX1', x: 262 },
+      { text: 'D2', x: 301 },
+      { text: '~D3', x: 339 },
+      { text: 'D4', x: 377 },
+      { text: '~D5', x: 415 },
+      { text: '~D6', x: 454 },
+      { text: 'D7', x: 492 },
+      { text: 'D8', x: 561 },
+      { text: '~D9', x: 600 },
+      { text: '~D10', x: 638 },
+      { text: '~D11', x: 676 },
+      { text: 'D12', x: 714 },
+      { text: 'D13', x: 753 },
+      { text: 'GND', x: 791 },
+      { text: 'AREF', x: 829 },
+      { text: 'SDA', x: 868 },
+      { text: 'SCL', x: 906 },
     ];
-    topPins.forEach((p) => ctx.fillText(p.text, p.x, 85));
+    topPins.forEach((p) => ctx.fillText(p.text, p.x, 90));
 
-    // Bottom Header Labels (IOREF..A5)
+    // Bottom Power & Analog Header Labels
     const btmPins = [
-      { text: 'IOREF', x: 235 },
-      { text: 'RESET', x: 285 },
-      { text: '3.3V', x: 335 },
-      { text: '5V', x: 385 },
-      { text: 'GND', x: 435 },
-      { text: 'GND', x: 485 },
-      { text: 'VIN', x: 535 },
-      { text: 'A0', x: 645 },
-      { text: 'A1', x: 695 },
-      { text: 'A2', x: 745 },
-      { text: 'A3', x: 795 },
-      { text: 'A4', x: 845 },
-      { text: 'A5', x: 895 },
+      { text: 'IOREF', x: 224 },
+      { text: 'RESET', x: 262 },
+      { text: '3.3V', x: 301 },
+      { text: '5V', x: 339 },
+      { text: 'GND', x: 377 },
+      { text: 'GND', x: 415 },
+      { text: 'VIN', x: 454 },
+      { text: 'A0', x: 561 },
+      { text: 'A1', x: 600 },
+      { text: 'A2', x: 638 },
+      { text: 'A3', x: 676 },
+      { text: 'A4', x: 714 },
+      { text: 'A5', x: 753 },
     ];
-    btmPins.forEach((p) => ctx.fillText(p.text, p.x, 680));
+    btmPins.forEach((p) => ctx.fillText(p.text, p.x, 675));
+
+    // Section outline headers
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('DIGITAL (PWM~)', 600, 35);
+    ctx.fillText('POWER', 340, 725);
+    ctx.fillText('ANALOG IN', 655, 725);
+    ctx.fillText('ON', 255, 270);
 
     // Pin header box outlines
     ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(210, 45, 750, 75);
-    ctx.strokeRect(210, 645, 710, 75);
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(205, 55, 720, 60);
+    ctx.strokeRect(205, 645, 270, 55);
+    ctx.strokeRect(540, 645, 235, 55);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -459,12 +468,18 @@ export function ArduinoUno3D({
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
 
-            {/* Live Hover Tooltip Badge above pin */}
+            {/* Crisp readable pin hover flag badge */}
             {isHovered && (
-              <mesh position={[0, 9, 0]}>
-                <boxGeometry args={[Math.max(10, pin.name.length * 2.4 + 4), 3.2, 0.4]} />
-                <meshBasicMaterial color="#0284C7" />
-              </mesh>
+              <Html
+                position={[0, 7.5, 0]}
+                center
+                distanceFactor={75}
+                style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
+              >
+                <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
+                  {pin.name}
+                </div>
+              </Html>
             )}
           </group>
         );

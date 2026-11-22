@@ -91,9 +91,9 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     return {
       isThroughHole: true,
       pinLength: 6.0,
-      localMinY: -5.0,
+      localMinY: -5.7,
       localMinBodyY: 1.0,
-      packageHeight: 18.0,
+      packageHeight: 20.0,
     };
   }
 
@@ -121,7 +121,18 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     };
   }
 
-  // 6. Axial & Radial 2-Pin / 4-Pin Passives (Resistor, LED, RGB LED, Capacitor, Diode, Inductor, Buzzer, LDR)
+  // 6. RGB LED 5mm 4-Pin Through-Hole
+  if (t.includes('RGB') || t === 'ACTUATOR_RGB_LED') {
+    return {
+      isThroughHole: true,
+      pinLength: 11.0,
+      localMinY: -9.8,
+      localMinBodyY: 1.8,
+      packageHeight: 9.0,
+    };
+  }
+
+  // 7. Axial & Radial 2-Pin / 4-Pin Passives (Resistor, LED, Capacitor, Diode, Inductor, Buzzer, LDR)
   return {
     isThroughHole: true,
     pinLength: 11.0,
@@ -131,35 +142,152 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
   };
 }
 
+export function getComponentPinOffsets(type: string): Array<{ x: number; z: number }> {
+  const t = (type || '').toUpperCase();
+  if (t === 'RESISTOR' || t === 'DIODE' || t === 'DIODE_1N4007' || t === 'INDUCTOR') {
+    return [{ x: -5.08, z: 0 }, { x: 5.08, z: 0 }];
+  }
+  if (t === 'LED' || t === 'SENSOR_LDR' || t === 'CAPACITOR' || t === 'CAPACITOR_ELECTROLYTIC') {
+    return [{ x: -2.54, z: 0 }, { x: 2.54, z: 0 }];
+  }
+  if (t === 'BUZZER' || t === 'BUZZER_ACTIVE' || t === 'ACTUATOR_BUZZER_ACTIVE') {
+    return [{ x: -2.54, z: 0 }, { x: 2.54, z: 0 }];
+  }
+  if (t === 'SLIDE_SWITCH' || t === 'SWITCH_SLIDE_SPDT') {
+    return [{ x: -2.54, z: 0 }, { x: 0, z: 0 }, { x: 2.54, z: 0 }];
+  }
+  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('TO92') || t.includes('TO220') || t.includes('REGULATOR')) {
+    return [{ x: -2.54, z: 0 }, { x: 0, z: 0 }, { x: 2.54, z: 0 }];
+  }
+  if (t === 'PUSHBUTTON' || t === 'PUSHBUTTON_TACTILE') {
+    return [
+      { x: -2.54, z: -2.54 },
+      { x: 2.54, z: -2.54 },
+      { x: -2.54, z: 2.54 },
+      { x: 2.54, z: 2.54 },
+    ];
+  }
+  if (t === 'LED_RGB' || t === 'ACTUATOR_RGB_LED') {
+    return [
+      { x: -3.81, z: 0 },
+      { x: -1.27, z: 0 },
+      { x: 1.27, z: 0 },
+      { x: 3.81, z: 0 },
+    ];
+  }
+  if (t === 'HC_SR04' || t === 'SENSOR_ULTRASONIC') {
+    return [
+      { x: -3.81, z: 0 },
+      { x: -1.27, z: 0 },
+      { x: 1.27, z: 0 },
+      { x: 3.81, z: 0 },
+    ];
+  }
+  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
+    return [
+      { x: -3.81, z: -3.34 },
+      { x: -1.27, z: -3.34 },
+      { x: 1.27, z: -3.34 },
+      { x: 3.81, z: -3.34 },
+      { x: 3.81, z: 3.34 },
+      { x: 1.27, z: 3.34 },
+      { x: -1.27, z: 3.34 },
+      { x: -3.81, z: 3.34 },
+    ];
+  }
+  if (t === 'ARDUINO_NANO') {
+    const pins: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < 15; i++) {
+      pins.push({ x: -17.78 + i * 2.54, z: -7.62 });
+      pins.push({ x: 17.78 - i * 2.54, z: 7.62 });
+    }
+    return pins;
+  }
+  if (t === 'ESP32_DEVKIT') {
+    const pins: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < 15; i++) {
+      pins.push({ x: -17.78 + i * 2.54, z: -11.43 });
+      pins.push({ x: 17.78 - i * 2.54, z: 11.43 });
+    }
+    return pins;
+  }
+  if (t === 'RASPBERRY_PI_PICO') {
+    const pins: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < 20; i++) {
+      pins.push({ x: -8.89, z: -24.13 + i * 2.54 });
+      pins.push({ x: 8.89, z: -24.13 + i * 2.54 });
+    }
+    return pins;
+  }
+  return [];
+}
+
+export function areAllPinsInBreadboardHoles(
+  type: string,
+  targetX: number,
+  targetZ: number,
+  rotationYRad: number = 0
+): boolean {
+  const pinOffsets = getComponentPinOffsets(type);
+  if (!pinOffsets || pinOffsets.length === 0) return false;
+
+  const cos = Math.cos(rotationYRad);
+  const sin = Math.sin(rotationYRad);
+
+  for (const p of pinOffsets) {
+    const rx = p.x * cos - p.z * sin;
+    const rz = p.x * sin + p.z * cos;
+    const wx = targetX + rx;
+    const wz = targetZ + rz;
+
+    const hole = findNearestHole830(wx, wz, 1.44);
+    if (!hole) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Calculates exact zero-sinking elevation Y for any component based on its location:
  * - On Workbench (table surface): minY === WORKBENCH_TOP_Y (lowest pin tip rests on table sheet; never sinks).
- * - On Breadboard: lower 35-45% of pins inserted into holes; body ALWAYS sits cleanly ABOVE BREADBOARD_TOP_Y with visible pin clearance.
+ * - On Breadboard (Holes): lower 35-42% of pins inserted into holes; body sits cleanly ABOVE BREADBOARD_TOP_Y.
+ * - On Breadboard (Solid Plastic/Margin/Ravine): clamped flush to BREADBOARD_TOP_Y; never sinks into plastic!
  */
 export function computeComponentGroundElevation(
   type: string,
   targetX: number,
   targetZ: number,
-  hasBreadboard: boolean
+  hasBreadboard: boolean,
+  rotationYRad: number = 0
 ): number {
   const spec = getComponentElevationSpec(type);
 
-  const isOnBreadboard =
-    hasBreadboard &&
-    spec.isThroughHole &&
-    Math.abs(targetX) <= (BB830_WIDTH / 2 + 2.54) &&
-    Math.abs(targetZ) <= (BB830_DEPTH / 2 + 2.54);
+  if (!spec.isThroughHole || !hasBreadboard) {
+    const benchY = WORKBENCH_TOP_Y - spec.localMinY;
+    return Math.round(benchY * 100) / 100;
+  }
 
-  if (isOnBreadboard) {
+  const isOverBoard =
+    Math.abs(targetX) <= (BB830_WIDTH / 2) &&
+    Math.abs(targetZ) <= (BB830_DEPTH / 2);
+
+  const allPinsInHoles = areAllPinsInBreadboardHoles(type, targetX, targetZ, rotationYRad);
+
+  if (allPinsInHoles) {
     const insertionDepth = Math.min(BREADBOARD_INSERTION_DEPTH, spec.pinLength * 0.42);
     const elevatedY = BREADBOARD_TOP_Y - insertionDepth - spec.localMinY;
     return Math.round(elevatedY * 100) / 100;
   }
 
-  const benchY = WORKBENCH_TOP_Y - spec.localMinY;
-  return Math.round(benchY * 100) / 100;
+  // Off-hole placement: clamp lowest pin tip flush at surface top (BREADBOARD_TOP_Y if over board, else WORKBENCH_TOP_Y)
+  const surfaceTopY = isOverBoard ? BREADBOARD_TOP_Y : WORKBENCH_TOP_Y;
+  const clampedY = surfaceTopY - spec.localMinY;
+  return Math.round(clampedY * 100) / 100;
 }
 
+export const BREADBOARD_PITCH = 2.54;
 export const PITCH_X = 2.54;
 export const PITCH_Z = 2.54;
 
@@ -657,7 +785,8 @@ export function resetComponentOrientation(comp: Component3D): Component3D {
 export function snapComponentToSurface(comp: Component3D, hasBreadboard: boolean = true): Component3D {
   const snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
   const snappedZ = Math.round(comp.z3d / PITCH_Z) * PITCH_Z;
-  const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, hasBreadboard);
+  const rotYRad = ((comp.rotY || 0) * Math.PI) / 180;
+  const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, hasBreadboard, rotYRad);
   return {
     ...comp,
     x3d: Math.round(snappedX * 100) / 100,

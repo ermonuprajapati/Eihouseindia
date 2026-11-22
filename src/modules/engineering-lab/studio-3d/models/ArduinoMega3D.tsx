@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface ArduinoMega3DProps {
   position?: [number, number, number];
@@ -216,31 +217,67 @@ export function ArduinoMega3D({
   const silkscreenTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = 1200;
-    canvas.height = 600;
+    canvas.width = 1600;
+    canvas.height = 800;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.clearRect(0, 0, 1200, 600);
+    ctx.clearRect(0, 0, 1600, 800);
     ctx.fillStyle = '#FFFFFF';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     // Board branding
-    ctx.font = 'bold 36px sans-serif';
-    ctx.fillText('ARDUINO', 500, 260);
-    ctx.font = 'bold 28px monospace';
-    ctx.fillText('MEGA 2560 R3', 500, 310);
-    ctx.font = '16px monospace';
-    ctx.fillText('ATmega2560 - 16MHz', 500, 350);
-
-    // Section Labels
+    ctx.font = 'bold 42px sans-serif';
+    ctx.fillText('ARDUINO', 680, 360);
+    ctx.font = 'bold 32px monospace';
+    ctx.fillText('MEGA 2560 R3', 680, 415);
     ctx.font = 'bold 18px monospace';
-    ctx.fillText('DIGITAL (PWM ~)', 350, 40);
-    ctx.fillText('COMMUNICATION', 750, 40);
-    ctx.fillText('POWER', 280, 560);
-    ctx.fillText('ANALOG IN (A0-A15)', 620, 560);
-    ctx.fillText('DIGITAL 22-53', 1080, 100);
+    ctx.fillText('ATmega2560 - 16MHz', 680, 460);
+
+    const toCanvasX = (lx: number) => Math.round(((lx + 50.8) / 101.6) * 1600);
+    const toCanvasY = (lz: number) => Math.round(((lz + 26.7) / 53.4) * 800);
+
+    // Section Headers
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('DIGITAL (PWM~)', 450, 40);
+    ctx.fillText('COMMUNICATION', 1080, 40);
+    ctx.fillText('POWER', 410, 755);
+    ctx.fillText('ANALOG IN', 920, 755);
+    ctx.fillText('DIGITAL 22-53', 1470, 755);
+    ctx.fillText('ON', 340, 310);
+
+    // Individual Pin Labels beside headers
+    ctx.font = 'bold 15px monospace';
+
+    MEGA_PINS.forEach((pin) => {
+      const cx = toCanvasX(pin.localPos[0]);
+      if (pin.group === 'digital' || pin.group === 'comm') {
+        const display = pin.name.startsWith('D') ? pin.name.slice(1) : pin.name;
+        ctx.fillText(display, cx, 100);
+      } else if (pin.group === 'power') {
+        if (pin.localPos[0] < 40) {
+          const display = pin.name === '3V3' ? '3.3V' : pin.name === 'GND_2' ? 'GND' : pin.name;
+          ctx.fillText(display, cx, 700);
+        }
+      } else if (pin.group === 'analog') {
+        ctx.fillText(pin.name, cx, 700);
+      } else if (pin.group === 'extended') {
+        const cy = toCanvasY(pin.localPos[2]);
+        const isOuter = pin.localPos[0] > 45;
+        const display = pin.name.startsWith('D') ? pin.name.slice(1) : pin.name;
+        ctx.fillText(display, isOuter ? 1545 : 1395, cy);
+      }
+    });
+
+    // Pin header box outlines
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(210, 58, 620, 68);
+    ctx.strokeRect(845, 58, 410, 68);
+    ctx.strokeRect(270, 674, 300, 68);
+    ctx.strokeRect(585, 674, 670, 68);
+    ctx.strokeRect(1415, 140, 160, 580);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -505,12 +542,18 @@ export function ArduinoMega3D({
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
 
-            {/* Live Hover Tooltip Badge above pin */}
+            {/* Crisp readable pin hover flag badge */}
             {isHovered && (
-              <mesh position={[0, 9, 0]}>
-                <boxGeometry args={[Math.max(12, pin.name.length * 2.4 + 4), 3.2, 0.4]} />
-                <meshBasicMaterial color="#0284C7" />
-              </mesh>
+              <Html
+                position={[0, 7.5, 0]}
+                center
+                distanceFactor={75}
+                style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
+              >
+                <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
+                  {pin.name}
+                </div>
+              </Html>
             )}
           </group>
         );

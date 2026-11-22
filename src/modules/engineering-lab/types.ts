@@ -64,6 +64,7 @@ export interface PhysicalSpec {
   dimensionsMm: { width: number; height: number; depth?: number };
   pinPitchMm: number;
   mountingType?: 'Through-Hole' | 'Surface-Mount' | 'Socketed' | 'Chassis';
+  padFootprintSvg?: string;
 }
 
 export interface CircuitComponent {

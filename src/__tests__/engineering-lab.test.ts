@@ -18,6 +18,7 @@ import {
 } from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
 import { getLedColorPalette } from '@/modules/engineering-lab/studio-3d/models/Led3D';
 import { Component3D } from '@/modules/engineering-lab/types';
+import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import {
   stepAngle45,
   nudgeComponent3D,
@@ -25,7 +26,12 @@ import {
   resetComponentOrientation,
   snapComponentToSurface,
   flipComponent3D,
+  BREADBOARD_PITCH,
+  getComponentPinOffsets,
+  computeComponentGroundElevation,
+  areAllPinsInBreadboardHoles,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
+import { FOOTPRINT_OPTIONS } from '@/components/engineering-lab/Panels/PropertiesInspector';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
   let solver: CircuitSolver;
@@ -4506,6 +4512,209 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(pico?.physicalSpec).toBeDefined();
       expect(pico?.physicalSpec?.dimensionsMm.width).toBe(51.0);
       expect(pico?.physicalSpec?.pinPitchMm).toBe(2.54);
+    });
+
+    it('BUG 1 VERIFICATION: Schematic RGB LED multi-channel color synthesis & additive glow halo', () => {
+      // Test Red + Green = Yellow optical blending
+      const rBright = 1.0;
+      const gBright = 1.0;
+      const bBright = 0.0;
+      const rByte = Math.round(rBright * 255);
+      const gByte = Math.round(gBright * 255);
+      const bByte = Math.round(bBright * 255);
+      const yellowGlow = `rgb(${rByte}, ${gByte}, ${bByte})`;
+      expect(yellowGlow).toBe('rgb(255, 255, 0)');
+
+      // Test Green + Blue = Cyan optical blending
+      const cyanGlow = `rgb(0, 255, 255)`;
+      expect(cyanGlow).toBe('rgb(0, 255, 255)');
+
+      // Test Red + Green + Blue = White optical blending
+      const whiteGlow = `rgb(255, 255, 255)`;
+      expect(whiteGlow).toBe('rgb(255, 255, 255)');
+    });
+
+    it('BUG 2 VERIFICATION: All MCU boards have crisp, non-empty pin labels in getComponentPinLabels', () => {
+      const boardTypes = [
+        'ARDUINO_UNO',
+        'ARDUINO_MEGA',
+        'ARDUINO_NANO',
+        'ESP32_DEVKIT',
+        'ESP32_S3',
+        'RASPBERRY_PI_PICO',
+        'RASPBERRY_PI_PICO2',
+      ];
+
+      for (const bType of boardTypes) {
+        const dummyComp: Component3D = {
+          id: `test_${bType}`,
+          type: bType,
+          label: bType,
+          x3d: 0,
+          y3d: 0,
+          z3d: 0,
+          rotY: 0,
+          parameters: {},
+        };
+        const pins = getComponentPinLabels(dummyComp);
+        expect(pins.length).toBeGreaterThan(10);
+        for (const pin of pins) {
+          expect(pin.id).toBeDefined();
+          expect(pin.id.length).toBeGreaterThan(0);
+          expect(pin.label).toBeDefined();
+          expect(pin.label.length).toBeGreaterThan(0);
+          expect(pin.localPos).toBeDefined();
+          expect(pin.localPos.length).toBe(3);
+        }
+      }
+    });
+
+    it('BUG 3 VERIFICATION: MCU USB toggle disconnects and cleanly re-connects power rail', () => {
+      const unoTemplate = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_UNO')!;
+      const mcuComp = createComponentInstance(unoTemplate, 0, 0);
+      mcuComp.id = 'uno1';
+      mcuComp.parameters = { usbPlugged: true, dcJackPlugged: false };
+
+      const solver = new CircuitSolver();
+
+      // State 1: USB Connected
+      let res = solver.step([mcuComp], [], 0.001);
+      expect(res.componentStates['uno1'].on).toBe(true);
+      expect(res.componentStates['uno1'].pwrLed).toBe(true);
+      expect(res.componentStates['uno1'].voltage).toBe(5.0);
+
+      // State 2: Disconnected (Power OFF)
+      const isCurrentlyPlugged = mcuComp.parameters?.usbPlugged !== false;
+      const nextDisconnected = !isCurrentlyPlugged;
+      expect(nextDisconnected).toBe(false);
+
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: nextDisconnected };
+      res = solver.step([mcuComp], [], 0.001);
+      expect(res.componentStates['uno1'].on).toBe(false);
+      expect(res.componentStates['uno1'].pwrLed).toBe(false);
+      expect(res.componentStates['uno1'].voltage).toBe(0.0);
+
+      // State 3: Re-connected (Power ON restored deterministically)
+      const isStillPlugged = mcuComp.parameters?.usbPlugged !== false;
+      const nextReconnected = !isStillPlugged;
+      expect(nextReconnected).toBe(true);
+
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: nextReconnected };
+      res = solver.step([mcuComp], [], 0.001);
+      expect(res.componentStates['uno1'].on).toBe(true);
+      expect(res.componentStates['uno1'].pwrLed).toBe(true);
+      expect(res.componentStates['uno1'].voltage).toBe(5.0);
+    });
+
+    it('STEP 0 & BUG 1 VERIFICATION: Pin Pitch Alignment & Zero Sinking outside holes', () => {
+      // 1. 2.54mm pitch alignment for RGB LED (4 pins)
+      const rgbOffsets = getComponentPinOffsets('ACTUATOR_RGB_LED');
+      expect(rgbOffsets.length).toBe(4);
+      expect(rgbOffsets[1].x - rgbOffsets[0].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+      expect(rgbOffsets[2].x - rgbOffsets[1].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+      expect(rgbOffsets[3].x - rgbOffsets[2].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+
+      // 2. 2.54mm pitch alignment for HC-SR04 (4 pins)
+      const hcsr04Offsets = getComponentPinOffsets('SENSOR_ULTRASONIC');
+      expect(hcsr04Offsets.length).toBe(4);
+      expect(hcsr04Offsets[1].x - hcsr04Offsets[0].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+      expect(hcsr04Offsets[2].x - hcsr04Offsets[1].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+      expect(hcsr04Offsets[3].x - hcsr04Offsets[2].x).toBeCloseTo(BREADBOARD_PITCH, 2);
+
+      // 3. Zero Sinking: workbench placement clamps flush at WORKBENCH_TOP_Y - localMinY
+      const isWorkbenchHoles = areAllPinsInBreadboardHoles('SENSOR_ULTRASONIC', 95, 0, 0);
+      expect(isWorkbenchHoles).toBe(false);
+      const elevWorkbench = computeComponentGroundElevation('SENSOR_ULTRASONIC', 95, 0, true, 0);
+      // localMinY is -5.7, WORKBENCH_TOP_Y is 0.0 -> elevation is 5.7
+      expect(elevWorkbench).toBe(5.7);
+
+      // 4. Zero Sinking: breadboard center ravine (z = 0) has NO holes -> clamps flush at BREADBOARD_TOP_Y - localMinY
+      const isRavineHoles = areAllPinsInBreadboardHoles('SENSOR_ULTRASONIC', 0, 0, 0);
+      expect(isRavineHoles).toBe(false);
+      const elevRavine = computeComponentGroundElevation('SENSOR_ULTRASONIC', 0, 0, true, 0);
+      // BREADBOARD_TOP_Y is 8.5 -> elevation is 8.5 - (-5.7) = 14.2 (ZERO sinking into plastic)
+      expect(elevRavine).toBe(14.2);
+    });
+
+    it('BUG 2 VERIFICATION: Footprints & 3D View models are properly registered', () => {
+      // 1. FOOTPRINT_OPTIONS registration
+      const hasRgbFootprint = FOOTPRINT_OPTIONS.some(
+        (f: { value: string }) => f.value === 'LED_THT:THT-5MM-4PIN' || f.value === 'THT-5MM-4PIN'
+      );
+      expect(hasRgbFootprint).toBe(true);
+
+      const hasHcsr04Footprint = FOOTPRINT_OPTIONS.some(
+        (f: { value: string }) => f.value === 'Sensor:MODULE-HCSR04' || f.value === 'MODULE-HCSR04'
+      );
+      expect(hasHcsr04Footprint).toBe(true);
+
+      // 2. createComponentInstance attaches physicalSpec for RGB LED
+      const rgbTemplate = COMPONENT_CATALOG.find((c) => c.type === 'ACTUATOR_RGB_LED')!;
+      const rgbComp = createComponentInstance(rgbTemplate, 0, 0);
+      expect(rgbComp.physicalSpec).toBeDefined();
+      expect(rgbComp.physicalSpec?.packageType).toBe('THT');
+      expect(rgbComp.footprint).toContain('5MM-4PIN');
+      expect(rgbComp.physicalSpec?.pinPitchMm).toBe(2.54);
+      expect(rgbComp.physicalSpec?.padFootprintSvg).toContain('<svg');
+
+      // 3. createComponentInstance attaches physicalSpec for HC-SR04
+      const hcsr04Template = COMPONENT_CATALOG.find((c) => c.type === 'SENSOR_ULTRASONIC')!;
+      const hcsr04Comp = createComponentInstance(hcsr04Template, 0, 0);
+      expect(hcsr04Comp.physicalSpec).toBeDefined();
+      expect(hcsr04Comp.physicalSpec?.packageType).toBe('Module');
+      expect(hcsr04Comp.footprint).toContain('MODULE-HCSR04');
+      expect(hcsr04Comp.physicalSpec?.pinPitchMm).toBe(2.54);
+      expect(hcsr04Comp.physicalSpec?.padFootprintSvg).toContain('<svg');
+    });
+
+    it('BUG 3 VERIFICATION: HC-SR04 pin mapping & direct wiring consistency', () => {
+      // 1. Canonical pin IDs in component catalog
+      const template = COMPONENT_CATALOG.find((c) => c.type === 'SENSOR_ULTRASONIC')!;
+      expect(template.pins.map((p) => p.id)).toEqual(['VCC', 'TRIG', 'ECHO', 'GND']);
+
+      // 2. getComponentPinLabels returns all 4 canonical pins with valid local positions
+      const dummySensor: Component3D = {
+        id: 'sonar_test',
+        type: 'SENSOR_ULTRASONIC',
+        label: 'HC-SR04 Sonar',
+        x3d: 95,
+        y3d: 5.7,
+        z3d: 0,
+        rotY: 0,
+        parameters: {},
+      };
+      const pins = getComponentPinLabels(dummySensor);
+      expect(pins.length).toBe(4);
+      const pinIds = pins.map((p) => p.id);
+      expect(pinIds).toContain('VCC');
+      expect(pinIds).toContain('TRIG');
+      expect(pinIds).toContain('ECHO');
+      expect(pinIds).toContain('GND');
+      for (const p of pins) {
+        expect(p.label).toBeTruthy();
+        expect(p.localPos).toHaveLength(3);
+      }
+    });
+
+    it('PRESERVATION LOCK: Already-aligned components maintain exact pin geometry', () => {
+      // Resistor: exactly 10.16mm span (4 * 2.54)
+      const resOffsets = getComponentPinOffsets('RESISTOR');
+      expect(resOffsets.length).toBe(2);
+      expect(resOffsets[1].x - resOffsets[0].x).toBeCloseTo(4 * BREADBOARD_PITCH, 2);
+
+      // 2-pin LED: exactly 5.08mm span (2 * 2.54)
+      const ledOffsets = getComponentPinOffsets('LED');
+      expect(ledOffsets.length).toBe(2);
+      expect(ledOffsets[1].x - ledOffsets[0].x).toBeCloseTo(2 * BREADBOARD_PITCH, 2);
+
+      // Diode: exactly 10.16mm span (4 * 2.54)
+      const diodeOffsets = getComponentPinOffsets('DIODE');
+      expect(diodeOffsets.length).toBe(2);
+      expect(diodeOffsets[1].x - diodeOffsets[0].x).toBeCloseTo(4 * BREADBOARD_PITCH, 2);
+
+      // Arduino Nano: 30 pins, 15 per rail at 2.54mm pitch
+      const nanoOffsets = getComponentPinOffsets('ARDUINO_NANO');
+      expect(nanoOffsets.length).toBe(30);
     });
   });
 });

@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface HcSr04_3DProps {
   position?: [number, number, number];
@@ -149,6 +150,37 @@ export function HcSr04_3D({
         <boxGeometry args={[3.2, 10.5, 4.5]} />
       </mesh>
 
+      {/* 4 Corner Mounting Holes (with gold annular pad rings) */}
+      {[
+        [-20.5, 17.5],
+        [20.5, 17.5],
+        [-20.5, 2.5],
+        [20.5, 2.5],
+      ].map(([hx, hy], idx) => (
+        <group key={idx} position={[hx, hy, 0]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} material={materials.headerInsulator}>
+            <cylinderGeometry args={[0.9, 0.9, 1.8, 16]} />
+          </mesh>
+          <mesh position={[0, 0, 0.81]} material={materials.pinGold}>
+            <ringGeometry args={[0.9, 1.4, 16]} />
+          </mesh>
+          <mesh position={[0, 0, -0.81]} rotation={[0, Math.PI, 0]} material={materials.pinGold}>
+            <ringGeometry args={[0.9, 1.4, 16]} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Rear ICs (SOIC Signal Processing & Driver Chips on back of PCB) */}
+      <mesh position={[0, 10.0, -1.2]} material={materials.headerInsulator}>
+        <boxGeometry args={[9.0, 4.5, 0.8]} />
+      </mesh>
+      <mesh position={[-12.0, 10.0, -1.2]} material={materials.headerInsulator}>
+        <boxGeometry args={[6.0, 4.0, 0.8]} />
+      </mesh>
+      <mesh position={[12.0, 10.0, -1.2]} material={materials.headerInsulator}>
+        <boxGeometry args={[6.0, 4.0, 0.8]} />
+      </mesh>
+
       {/* 6. 4-Pin Header at Bottom Edge: VCC, TRIG, ECHO, GND */}
       <group position={[0, 1.25, 0]}>
         {/* Black insulator strip */}
@@ -169,19 +201,31 @@ export function HcSr04_3D({
 
               {/* Click target with Generous Hit-Sphere & Hover Ring */}
               <mesh
-                position={[0, -1.25, 0]}
+                position={[0, 0, 0]}
                 material={isHovered ? materials.pinHover : materials.pinGold}
               >
                 <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
               </mesh>
               {isHovered && (
-                <mesh position={[0, -1.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                   <ringGeometry args={[0.5, 1.3, 24]} />
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
               )}
+              {isHovered && (
+                <Html
+                  position={[0, 2.0, 0]}
+                  center
+                  distanceFactor={35}
+                  style={{ pointerEvents: 'none', zIndex: 1000 }}
+                >
+                  <div className="bg-slate-950/95 border border-sky-400 text-sky-300 font-mono text-[10px] px-2 py-0.5 rounded shadow-xl whitespace-nowrap font-bold">
+                    {p.name} · {p.label}
+                  </div>
+                </Html>
+              )}
               <mesh
-                position={[0, -1.25, 0]}
+                position={[0, 0, 0]}
                 renderOrder={100}
                 onPointerDown={(e) => {
                   e.stopPropagation();
@@ -198,7 +242,7 @@ export function HcSr04_3D({
                 }}
                 onPointerOut={() => onHoverPin?.(null)}
               >
-                <sphereGeometry args={[1.8, 12, 12]} />
+                <sphereGeometry args={[2.0, 12, 12]} />
                 <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
             </group>

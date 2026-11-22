@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface Esp32DevKit3DProps {
   position?: [number, number, number];
@@ -108,21 +109,32 @@ export function Esp32DevKit3D({
     ctx.fillText('ESP32 DEVKIT V1', 400, 260);
     ctx.font = '16px monospace';
     ctx.fillText('DOIT / NodeMCU 30-Pin', 400, 300);
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('PWR', 180, 220);
+    ctx.fillText('EN', 140, 105);
+    ctx.fillText('BOOT', 140, 465);
 
-    // Left row pin labels
+    const toCanvasX = (lx: number) => Math.round(((lx + 25.75) / 51.5) * 1024);
+
+    // Header pin labels mapped to exact coordinates
     ctx.font = 'bold 15px monospace';
-    const leftLabels = ['EN', 'VP', 'VN', '34', '35', '32', '33', '25', '26', '27', '14', '12', '13', 'GND', 'VIN'];
-    leftLabels.forEach((lbl, i) => {
-      const x = 70 + i * 62;
-      ctx.fillText(lbl, x, 40);
+    ESP32_PINS.forEach((pin) => {
+      const cx = toCanvasX(pin.localPos[0]);
+      let display = pin.name;
+      if (pin.name.startsWith('GND')) display = 'GND';
+
+      if (pin.localPos[2] < 0) {
+        ctx.fillText(display, cx, 55);
+      } else {
+        ctx.fillText(display, cx, 515);
+      }
     });
 
-    // Right row pin labels
-    const rightLabels = ['3V3', 'GND', 'D15', 'D2', 'D4', 'RX2', 'TX2', 'D5', 'D18', 'D19', 'D21', 'RX0', 'TX0', 'D22', 'D23'];
-    rightLabels.forEach((lbl, i) => {
-      const x = 70 + i * 62;
-      ctx.fillText(lbl, x, 530);
-    });
+    // Header outlines
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(120, 28, 784, 54);
+    ctx.strokeRect(120, 488, 784, 54);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -263,10 +275,22 @@ export function Esp32DevKit3D({
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.6, 1.4, 24]} />
-                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-              </mesh>
+              <>
+                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.6, 1.4, 24]} />
+                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+                </mesh>
+                <Html
+                  position={[0, 6.0, 0]}
+                  center
+                  distanceFactor={75}
+                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
+                >
+                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
+                    {pin.name}
+                  </div>
+                </Html>
+              </>
             )}
             <mesh
               position={[0, 0.5, 0]}

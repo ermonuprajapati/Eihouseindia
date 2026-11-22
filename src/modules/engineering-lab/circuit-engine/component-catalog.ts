@@ -2366,13 +2366,20 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     defaultValue: '45cm',
     defaultParams: { distanceCm: 45.0, vcc: 5.0 },
     pins: [
-      { id: 'vcc', name: 'VCC', x: -30, y: -15, pinType: 'power' },
-      { id: 'trig', name: 'TRIG', x: -10, y: 25, pinType: 'input' },
-      { id: 'echo', name: 'ECHO', x: 10, y: 25, pinType: 'output' },
-      { id: 'gnd', name: 'GND', x: 30, y: -15, pinType: 'power' },
+      { id: 'VCC', name: 'VCC', x: -30, y: -15, pinType: 'power' },
+      { id: 'TRIG', name: 'TRIG', x: -10, y: 25, pinType: 'input' },
+      { id: 'ECHO', name: 'ECHO', x: 10, y: 25, pinType: 'output' },
+      { id: 'GND', name: 'GND', x: 30, y: -15, pinType: 'power' },
     ],
-    footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical',
+    footprint: 'Sensor:MODULE-HCSR04',
     model3d: 'hcsr04_ultrasonic',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 45.0, height: 20.0, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+      padFootprintSvg: '<svg viewBox="-25 -12 50 24"><rect x="-22.5" y="-10" width="45" height="20" rx="2" fill="none" stroke="#38BDF8"/><circle cx="-3.81" cy="6" r="1.2" fill="#F59E0B"/><circle cx="-1.27" cy="6" r="1.2" fill="#F59E0B"/><circle cx="1.27" cy="6" r="1.2" fill="#F59E0B"/><circle cx="3.81" cy="6" r="1.2" fill="#F59E0B"/></svg>',
+    },
     width: 60,
     height: 50,
     symbolSvg: 'sensor_sonar',
@@ -3007,8 +3014,15 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
       { id: 'g', name: 'G', x: 10, y: -20, pinType: 'passive' },
       { id: 'b', name: 'B', x: 30, y: -20, pinType: 'passive' },
     ],
-    footprint: 'LED_THT:LED_D5.0mm-4',
+    footprint: 'LED_THT:THT-5MM-4PIN',
     model3d: 'led_rgb_5mm',
+    physicalSpec: {
+      packageType: 'THT',
+      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-10 -5 20 10"><rect x="-7.62" y="-1.5" width="3" height="3" fill="#F59E0B"/><circle cx="-2.54" cy="0" r="1.5" fill="#F59E0B"/><circle cx="2.54" cy="0" r="1.5" fill="#F59E0B"/><circle cx="7.62" cy="0" r="1.5" fill="#F59E0B"/></svg>',
+    },
     width: 60,
     height: 40,
     symbolSvg: 'actuator_rgb_led',
@@ -4246,6 +4260,134 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   },
 ];
 
+export function getPhysicalSpecForComponent(
+  type: string,
+  packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis',
+  footprint?: string
+): PhysicalSpec {
+  const t = (type || '').toUpperCase();
+  const fp = (footprint || '').toUpperCase();
+  const pkg: 'THT' | 'SMD' | 'Module' | 'Chassis' = packageType || (fp.includes('SMD') ? 'SMD' : fp.includes('MODULE') ? 'Module' : 'THT');
+
+  if (t === 'ARDUINO_UNO') {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 68.6, height: 53.4, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+      padFootprintSvg: '<svg viewBox="-35 -27 70 54"><rect x="-34.3" y="-26.7" width="68.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
+    };
+  }
+  if (t === 'ARDUINO_MEGA') {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 101.6, height: 53.4, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+      padFootprintSvg: '<svg viewBox="-51 -27 102 54"><rect x="-50.8" y="-26.7" width="101.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
+    };
+  }
+  if (t === 'ARDUINO_NANO') {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 45.0, height: 18.0, depth: 10.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-23 -9 46 18"><rect x="-22.5" y="-9" width="45" height="18" rx="2" fill="none" stroke="#00A896"/></svg>',
+    };
+  }
+  if (t === 'ESP32_DEVKIT' || t.includes('ESP32')) {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 51.5, height: 28.5, depth: 12.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-26 -15 52 30"><rect x="-25.75" y="-14.25" width="51.5" height="28.5" rx="2" fill="none" stroke="#38BDF8"/></svg>',
+    };
+  }
+  if (t === 'RASPBERRY_PI_PICO' || t.includes('PICO')) {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 51.0, height: 21.0, depth: 11.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-26 -11 52 22"><rect x="-25.5" y="-10.5" width="51" height="21" rx="2" fill="none" stroke="#10B981"/></svg>',
+    };
+  }
+  if (t === 'SENSOR_ULTRASONIC' || t === 'HC_SR04') {
+    return {
+      packageType: 'Module',
+      dimensionsMm: { width: 45.0, height: 20.0, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+      padFootprintSvg: '<svg viewBox="-23 -10 46 20"><rect x="-22.5" y="-10" width="45" height="20" rx="2" fill="none" stroke="#0284C7"/><circle cx="-12" cy="0" r="8" fill="#CBD5E1"/><circle cx="12" cy="0" r="8" fill="#CBD5E1"/></svg>',
+    };
+  }
+  if (t === 'ACTUATOR_RGB_LED' || t === 'LED_RGB') {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-6 -3 12 6"><circle cx="0" cy="0" r="2.5" fill="#EF4444"/><rect x="-3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="-1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/></svg>',
+    };
+  }
+  if (t.includes('LED')) {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-3 -3 6 6"><circle cx="0" cy="0" r="2.5" fill="#10B981"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
+    };
+  }
+  if (t.includes('RESISTOR') || t.includes('DIODE') || t.includes('INDUCTOR')) {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 10.16, height: 3.5, depth: 2.5 },
+      pinPitchMm: 7.62,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-6 -2 12 4"><rect x="-3" y="-1" width="6" height="2" fill="#D4A373"/><circle cx="-3.81" cy="0" r="0.8" fill="#F59E0B"/><circle cx="3.81" cy="0" r="0.8" fill="#F59E0B"/></svg>',
+    };
+  }
+  if (t.includes('CAPACITOR')) {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 6.3, height: 11.0, depth: 6.3 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-4 -4 8 8"><circle cx="0" cy="0" r="3" fill="#1E3A8A"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
+    };
+  }
+  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET')) {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 4.8, height: 4.8, depth: 3.8 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-4 -3 8 6"><path d="M-2.4,-2 A2.4,2.4 0 0,1 2.4,-2 L2.4,2 L-2.4,2 Z" fill="#18181B"/><circle cx="-1.27" cy="0" r="0.7" fill="#F59E0B"/><circle cx="0" cy="0" r="0.7" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.7" fill="#F59E0B"/></svg>',
+    };
+  }
+  if (t.includes('IC') || t.includes('555') || t.includes('OPAMP') || t.includes('DIP')) {
+    return {
+      packageType: 'THT',
+      dimensionsMm: { width: 9.8, height: 6.4, depth: 3.6 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+      padFootprintSvg: '<svg viewBox="-6 -5 12 10"><rect x="-5" y="-3.5" width="10" height="7" fill="#18181B"/></svg>',
+    };
+  }
+
+  // Generic fallback
+  return {
+    packageType: pkg,
+    dimensionsMm: { width: 10.0, height: 10.0, depth: 5.0 },
+    pinPitchMm: 2.54,
+    mountingType: pkg === 'SMD' ? 'Surface-Mount' : pkg === 'Module' ? 'Socketed' : 'Through-Hole',
+    padFootprintSvg: '<svg viewBox="-6 -6 12 12"><rect x="-5" y="-5" width="10" height="10" fill="none" stroke="#64748B"/></svg>',
+  };
+}
+
 export function createComponentInstance(
   template: ComponentTemplate,
   x: number,
@@ -4274,6 +4416,7 @@ export function createComponentInstance(
     subCategory: template.subCategory,
     simulationStatus: template.simulationStatus || 'full_mna',
     packageType: template.packageType,
+    physicalSpec: template.physicalSpec || getPhysicalSpecForComponent(template.type, template.packageType, template.footprint),
     manufacturerPartNumber: template.manufacturerPartNumber,
     datasheetUrl: template.datasheetUrl,
     x,

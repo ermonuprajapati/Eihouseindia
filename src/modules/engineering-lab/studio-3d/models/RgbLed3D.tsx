@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface RgbLed3DProps {
   position?: [number, number, number];
@@ -214,6 +215,18 @@ export function RgbLed3D({
                   <ringGeometry args={[0.5, 1.3, 24]} />
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
+              )}
+              {isHovered && (
+                <Html
+                  position={[0, 1.6, 0]}
+                  center
+                  distanceFactor={35}
+                  style={{ pointerEvents: 'none', zIndex: 1000 }}
+                >
+                  <div className="bg-slate-950/95 border border-sky-400 text-sky-300 font-mono text-[10px] px-2 py-0.5 rounded shadow-xl whitespace-nowrap font-bold">
+                    {p.name} · {p.label}
+                  </div>
+                </Html>
               )}
               {/* Invisible Hit-Sphere */}
               <mesh

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface RaspberryPiPico3DProps {
   position?: [number, number, number];
@@ -129,34 +130,35 @@ export function RaspberryPiPico3D({
 
     // Board Branding
     ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('Raspberry Pi', 210, 510);
+    ctx.fillText('Raspberry Pi', 210, 490);
     ctx.font = 'bold 22px monospace';
-    ctx.fillText('Pico (RP2040)', 210, 545);
+    ctx.fillText('Pico (RP2040)', 210, 525);
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('BOOTSEL', 210, 680);
 
-    // Left row pin labels (from top to bottom)
+    const toCanvasY = (lz: number) => Math.round(((lz + 25.5) / 51.0) * 1020);
+
+    // Left row pin labels mapped to exact coordinates
     ctx.font = 'bold 14px monospace';
-    ctx.textAlign = 'left';
-    const leftNames = [
-      'GP0', 'GP1', 'GND', 'GP2', 'GP3', 'GP4', 'GP5', 'GND',
-      'GP6', 'GP7', 'GP8', 'GP9', 'GND', 'GP10', 'GP11', 'GP12',
-      'GP13', 'GND', 'GP14', 'GP15'
-    ];
-    leftNames.forEach((name, i) => {
-      const y = 50 + i * 48;
-      ctx.fillText(name, 35, y);
+    PICO_PINS.forEach((pin) => {
+      const cy = toCanvasY(pin.localPos[2]);
+      let display = pin.name;
+      if (pin.name.startsWith('GND')) display = 'GND';
+
+      if (pin.localPos[0] < 0) {
+        ctx.textAlign = 'left';
+        ctx.fillText(display, 35, cy);
+      } else {
+        ctx.textAlign = 'right';
+        ctx.fillText(display, 385, cy);
+      }
     });
 
-    // Right row pin labels (from bottom to top)
-    ctx.textAlign = 'right';
-    const rightNames = [
-      'GP16', 'GP17', 'GND', 'GP18', 'GP19', 'GP20', 'GP21', 'GND',
-      'GP22', 'RUN', 'GP26', 'GP27', 'GND', 'GP28', 'ADC_REF', '3V3',
-      '3V3_EN', 'GND', 'VSYS', 'VBUS'
-    ];
-    rightNames.forEach((name, i) => {
-      const y = 962 - i * 48;
-      ctx.fillText(name, 385, y);
-    });
+    // Outer pin rectangle outlines
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(18, 15, 68, 990);
+    ctx.strokeRect(334, 15, 68, 990);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -293,10 +295,22 @@ export function RaspberryPiPico3D({
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.6, 1.4, 24]} />
-                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-              </mesh>
+              <>
+                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.6, 1.4, 24]} />
+                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+                </mesh>
+                <Html
+                  position={[0, 6.0, 0]}
+                  center
+                  distanceFactor={75}
+                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
+                >
+                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
+                    {pin.name}
+                  </div>
+                </Html>
+              </>
             )}
             <mesh
               position={[0, 0.5, 0]}

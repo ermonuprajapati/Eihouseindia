@@ -63,7 +63,7 @@ export interface PhysicalPackagePreset {
   model3d: string;
 }
 
-const FOOTPRINT_OPTIONS: FootprintOption[] = [
+export const FOOTPRINT_OPTIONS: FootprintOption[] = [
   // Resistors
   { value: 'Resistor_THT:R_Axial_DIN0207_P7.62mm_Horizontal', label: 'Through-Hole Axial Resistor (1/4W, 7.62mm)', categories: ['resistor'] },
   { value: 'Resistor_SMD:R_0805_2012Metric', label: 'Resistor SMD 0805 (2012 Metric)', categories: ['resistor'] },
@@ -84,6 +84,8 @@ const FOOTPRINT_OPTIONS: FootprintOption[] = [
   // LEDs
   { value: 'LED_THT:LED_D5.0mm', label: 'LED 5mm Through-Hole (Round Diffused)', categories: ['led'] },
   { value: 'LED_THT:LED_D3.0mm', label: 'LED 3mm Through-Hole (Compact)', categories: ['led'] },
+  { value: 'LED_THT:THT-5MM-4PIN', label: '5mm RGB LED 4-Pin Through-Hole (2.54mm Pitch)', categories: ['led'] },
+  { value: 'THT-5MM-4PIN', label: 'THT-5MM-4PIN (4-Pin 2.54mm Pitch)', categories: ['led'] },
   { value: 'LED_THT:LED_D5.0mm-4', label: 'RGB LED 4-Pin Common Cathode (5mm)', categories: ['led'] },
   { value: 'LED_SMD:LED_0805_2012Metric', label: 'SMD 0805 Chip LED (2012 Metric)', categories: ['led'] },
 
@@ -107,6 +109,8 @@ const FOOTPRINT_OPTIONS: FootprintOption[] = [
   { value: 'Buzzer_Beeper:Buzzer_CUI_CPE-122', label: 'Compact Radial Piezo Beeper', categories: ['buzzer'] },
 
   // Sensors
+  { value: 'Sensor:MODULE-HCSR04', label: 'HC-SR04 Ultrasonic Sonar Module 4-Pin (2.54mm Pitch)', categories: ['sensor'] },
+  { value: 'MODULE-HCSR04', label: 'MODULE-HCSR04 (4-Pin 2.54mm Pitch)', categories: ['sensor'] },
   { value: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical', label: 'Pin Header 1x04 (2.54mm, HC-SR04/Sensors)', categories: ['sensor'] },
   { value: 'Sensor_Optical:LDR_5mm_Radial', label: 'LDR Photoresistor 5mm Radial', categories: ['sensor'] },
 
@@ -199,7 +203,7 @@ const PHYSICAL_PACKAGES: PhysicalPackagePreset[] = [
   { id: 'rf_nrf24_module', label: 'nRF24L01+ 2.4GHz RF Transceiver 8-Pin', category: 'bluetooth', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_2x04_P2.54mm_Vertical', model3d: 'module_bluetooth_hc05' },
 
   // Sensors
-  { id: 'sen_hcsr04', label: 'HC-SR04 Ultrasonic Sonar Module (4-Pin)', category: 'sensor', packageType: 'Module', footprint: 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical', model3d: 'hcsr04_ultrasonic' },
+  { id: 'sen_hcsr04', label: 'HC-SR04 Ultrasonic Sonar Module (4-Pin)', category: 'sensor', packageType: 'Module', footprint: 'Sensor:MODULE-HCSR04', model3d: 'hcsr04_ultrasonic' },
   { id: 'sen_ldr', label: 'LDR Photoresistor 5mm (Radial Leads)', category: 'sensor', packageType: 'THT', footprint: 'Sensor_Optical:LDR_5mm_Radial', model3d: 'sensor_ldr_5mm' },
 
   // Displays
@@ -212,7 +216,7 @@ const PHYSICAL_PACKAGES: PhysicalPackagePreset[] = [
   // LEDs
   { id: 'led_tht_5mm', label: '5mm THT LED Round (Diffused)', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D5.0mm', model3d: 'led_5mm_diffused' },
   { id: 'led_tht_3mm', label: '3mm THT LED Round Compact', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D3.0mm', model3d: 'led_5mm_diffused' },
-  { id: 'led_rgb_5mm', label: '5mm RGB LED (4-Pin Common Cathode)', category: 'led', packageType: 'THT', footprint: 'LED_THT:LED_D5.0mm-4', model3d: 'led_rgb_5mm' },
+  { id: 'led_rgb_5mm', label: '5mm RGB LED (4-Pin Common Cathode)', category: 'led', packageType: 'THT', footprint: 'LED_THT:THT-5MM-4PIN', model3d: 'led_rgb_5mm' },
   { id: 'led_smd_0805', label: 'SMD 0805 Chip LED (2012 Metric)', category: 'led', packageType: 'SMD', footprint: 'LED_SMD:LED_0805_2012Metric', model3d: 'led_5mm_diffused' },
 
   // Resistors
