@@ -8,6 +8,7 @@ export interface HcSr04_3DProps {
   position?: [number, number, number];
   rotation?: [number, number, number];
   isSelected?: boolean;
+  renderContext?: 'studio' | '3d-view';
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
@@ -22,6 +23,7 @@ export function HcSr04_3D({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   isSelected = false,
+  renderContext = 'studio',
   onPinClick,
   hoveredPin,
   onHoverPin,
@@ -56,6 +58,11 @@ export function HcSr04_3D({
         color: '#F59E0B',
         metalness: 0.9,
         roughness: 0.15,
+      }),
+      solderFillet: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.18,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -199,6 +206,13 @@ export function HcSr04_3D({
                 <boxGeometry args={[0.64, 7.5, 0.64]} />
               </mesh>
 
+              {/* Solder Fillet cone on PCB pad (3D View mode) */}
+              {renderContext === '3d-view' && (
+                <mesh position={[0, -1.1, 0]} material={materials.solderFillet}>
+                  <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                </mesh>
+              )}
+
               {/* Click target with Generous Hit-Sphere & Hover Ring */}
               <mesh
                 position={[0, 0, 0]}
@@ -212,7 +226,7 @@ export function HcSr04_3D({
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
               )}
-              {isHovered && (
+              {renderContext !== '3d-view' && isHovered && (
                 <Html
                   position={[0, 2.0, 0]}
                   center
@@ -224,27 +238,29 @@ export function HcSr04_3D({
                   </div>
                 </Html>
               )}
-              <mesh
-                position={[0, 0, 0]}
-                renderOrder={100}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const worldPos = new THREE.Vector3();
-                  e.object.getWorldPosition(worldPos);
-                  onPinClick?.(p.name, worldPos);
-                }}
-                onPointerOver={(e) => {
-                  e.stopPropagation();
-                  onHoverPin?.(p.name);
-                }}
-                onPointerOut={() => onHoverPin?.(null)}
-              >
-                <sphereGeometry args={[2.0, 12, 12]} />
-                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-              </mesh>
+              {renderContext !== '3d-view' && (
+                <mesh
+                  position={[0, 0, 0]}
+                  renderOrder={100}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const worldPos = new THREE.Vector3();
+                    e.object.getWorldPosition(worldPos);
+                    onPinClick?.(p.name, worldPos);
+                  }}
+                  onPointerOver={(e) => {
+                    e.stopPropagation();
+                    onHoverPin?.(p.name);
+                  }}
+                  onPointerOut={() => onHoverPin?.(null)}
+                >
+                  <sphereGeometry args={[2.0, 12, 12]} />
+                  <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                </mesh>
+              )}
             </group>
           );
         })}

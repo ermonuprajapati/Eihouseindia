@@ -32,6 +32,7 @@ import {
   areAllPinsInBreadboardHoles,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { FOOTPRINT_OPTIONS } from '@/components/engineering-lab/Panels/PropertiesInspector';
+import { resolve3DModelType, Canonical3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
   let solver: CircuitSolver;
@@ -4715,6 +4716,106 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       // Arduino Nano: 30 pins, 15 per rail at 2.54mm pitch
       const nanoOffsets = getComponentPinOffsets('ARDUINO_NANO');
       expect(nanoOffsets.length).toBe(30);
+    });
+
+    it('CANONICAL 3D VIEW ARCHITECTURE: Every registered component maps to high-detail 3D models with zero crude fallbacks', () => {
+      // 1. Explicit RGB LED Assertions: NEVER fallback to 2-pin LED or generic DIP IC
+      expect(resolve3DModelType('ACTUATOR_RGB_LED')).toBe('LED_RGB');
+      expect(resolve3DModelType('LED_RGB')).toBe('LED_RGB');
+      expect(resolve3DModelType('LED', 'LED_THT:THT-5MM-4PIN')).toBe('LED_RGB');
+      expect(resolve3DModelType('LED', '', { model3d: 'led_rgb_5mm' })).toBe('LED_RGB');
+      expect(resolve3DModelType('ACTUATOR_RGB_LED')).not.toBe('LED');
+      expect(resolve3DModelType('ACTUATOR_RGB_LED')).not.toBe('DIP_PACKAGE');
+
+      // 2. Explicit HC-SR04 Assertions: NEVER fallback to generic IC or 2-pin LED
+      expect(resolve3DModelType('SENSOR_ULTRASONIC')).toBe('HC_SR04');
+      expect(resolve3DModelType('HC_SR04')).toBe('HC_SR04');
+      expect(resolve3DModelType('SENSOR', 'Sensor:MODULE-HCSR04')).toBe('HC_SR04');
+      expect(resolve3DModelType('MODULE', '', { model3d: 'hcsr04_ultrasonic' })).toBe('HC_SR04');
+      expect(resolve3DModelType('SENSOR_ULTRASONIC')).not.toBe('DIP_PACKAGE');
+      expect(resolve3DModelType('SENSOR_ULTRASONIC')).not.toBe('LED');
+
+      // 3. Microcontroller Boards: dedicated high-detail CAD dev boards
+      expect(resolve3DModelType('MCU_ARDUINO_UNO')).toBe('ARDUINO_UNO');
+      expect(resolve3DModelType('ARDUINO_UNO')).toBe('ARDUINO_UNO');
+      expect(resolve3DModelType('ARDUINO_MEGA')).toBe('ARDUINO_MEGA');
+      expect(resolve3DModelType('ARDUINO_NANO')).toBe('ARDUINO_NANO');
+      expect(resolve3DModelType('ESP32_DEVKIT')).toBe('ESP32_DEVKIT');
+      expect(resolve3DModelType('RASPBERRY_PI_PICO')).toBe('RASPBERRY_PI_PICO');
+
+      // 4. Actuators, Displays, Sensors, and Discrete Components
+      expect(resolve3DModelType('SERVO_SG90')).toBe('SERVO_SG90');
+      expect(resolve3DModelType('ACTUATOR_SERVO_SG90')).toBe('SERVO_SG90');
+      expect(resolve3DModelType('DISPLAY_LCD1602')).toBe('LCD_1602');
+      expect(resolve3DModelType('LCD_1602')).toBe('LCD_1602');
+      expect(resolve3DModelType('MODULE_BLUETOOTH_HC05')).toBe('BLUETOOTH_HC05');
+      expect(resolve3DModelType('BUZZER_ACTIVE')).toBe('BUZZER_ACTIVE');
+      expect(resolve3DModelType('SENSOR_LDR')).toBe('SENSOR_LDR');
+      expect(resolve3DModelType('RESISTOR')).toBe('RESISTOR');
+      expect(resolve3DModelType('LED')).toBe('LED');
+      expect(resolve3DModelType('DIODE')).toBe('DIODE');
+      expect(resolve3DModelType('INDUCTOR')).toBe('INDUCTOR');
+      expect(resolve3DModelType('TRANSISTOR_NPN')).toBe('TRANSISTOR_TO92');
+      expect(resolve3DModelType('BJT_NPN')).toBe('TRANSISTOR_TO92');
+      expect(resolve3DModelType('MOSFET_N')).toBe('TRANSISTOR_TO220');
+      expect(resolve3DModelType('REGULATOR_7805')).toBe('TRANSISTOR_TO220');
+      expect(resolve3DModelType('CAPACITOR_ELECTROLYTIC')).toBe('CAPACITOR_ELECTROLYTIC');
+      expect(resolve3DModelType('CAPACITOR')).toBe('CAPACITOR_CERAMIC');
+      expect(resolve3DModelType('PUSHBUTTON')).toBe('PUSHBUTTON');
+      expect(resolve3DModelType('SLIDE_SWITCH')).toBe('SLIDE_SWITCH');
+      expect(resolve3DModelType('POTENTIOMETER')).toBe('POTENTIOMETER');
+      expect(resolve3DModelType('BATTERY_9V')).toBe('BATTERY_9V');
+      expect(resolve3DModelType('TIMER_555')).toBe('DIP_PACKAGE');
+      expect(resolve3DModelType('OPAMP_LM358')).toBe('DIP_PACKAGE');
+
+      // 5. Full COMPONENT_CATALOG coverage audit: EVERY registered component maps cleanly
+      const validCanonicalTypes: Canonical3DModelType[] = [
+        'RESISTOR',
+        'LED',
+        'LED_RGB',
+        'HC_SR04',
+        'DIODE',
+        'INDUCTOR',
+        'SENSOR_LDR',
+        'BUZZER_ACTIVE',
+        'TRANSISTOR_TO92',
+        'TRANSISTOR_TO220',
+        'CAPACITOR_ELECTROLYTIC',
+        'CAPACITOR_CERAMIC',
+        'PUSHBUTTON',
+        'SLIDE_SWITCH',
+        'POTENTIOMETER',
+        'BATTERY_9V',
+        'DIP_PACKAGE',
+        'ARDUINO_UNO',
+        'ARDUINO_MEGA',
+        'ARDUINO_NANO',
+        'ESP32_DEVKIT',
+        'RASPBERRY_PI_PICO',
+        'SERVO_SG90',
+        'LCD_1602',
+        'BLUETOOTH_HC05',
+        'TERMINAL_BLOCK',
+      ];
+
+      for (const item of COMPONENT_CATALOG) {
+        const resolved = resolve3DModelType(item.type, item.footprint);
+        expect(validCanonicalTypes).toContain(resolved);
+
+        // Strict module/sensor guard: sensors and modules must never map to raw DIP fallback
+        if (item.type === 'ACTUATOR_RGB_LED') {
+          expect(resolved).toBe('LED_RGB');
+        }
+        if (item.type === 'SENSOR_ULTRASONIC') {
+          expect(resolved).toBe('HC_SR04');
+        }
+        if (item.type === 'ACTUATOR_SERVO_SG90') {
+          expect(resolved).toBe('SERVO_SG90');
+        }
+        if (item.type === 'DISPLAY_LCD1602') {
+          expect(resolved).toBe('LCD_1602');
+        }
+      }
     });
   });
 });

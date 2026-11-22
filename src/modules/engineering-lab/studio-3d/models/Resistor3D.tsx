@@ -11,6 +11,7 @@ export interface Resistor3DProps {
   value?: string; // e.g. '220Ω', '10kΩ'
   isBurned?: boolean;
   isSelected?: boolean;
+  renderContext?: 'studio' | '3d-view';
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
@@ -22,6 +23,7 @@ export function Resistor3D({
   value = '1kΩ',
   isBurned = false,
   isSelected = false,
+  renderContext = 'studio',
   onPinClick,
   hoveredPin,
   onHoverPin,
@@ -45,6 +47,11 @@ export function Resistor3D({
         transparent: false,
         opacity: 1,
         depthWrite: true,
+      }),
+      solderFillet: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.18,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -112,73 +119,89 @@ export function Resistor3D({
         <cylinderGeometry args={[0.38, 0.38, 12.5, 12]} />
       </mesh>
 
-      {/* Pin 1: Generous Invisible Hit-Sphere & Crisp Hover Highlight Ring */}
-      <group position={P_PIN1}>
-        <mesh material={hoveredPin === '1' ? materials.pinHover : materials.silverLead}>
-          <cylinderGeometry args={[hoveredPin === '1' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
-        </mesh>
-        {hoveredPin === '1' && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-            <ringGeometry args={[0.6, 1.4, 24]} />
-            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+      {/* Solder Fillet cones on PCB pads (3D View mode) */}
+      {renderContext === '3d-view' && (
+        <>
+          <mesh position={[-5.08, 0.15, 0]} material={materials.solderFillet}>
+            <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
           </mesh>
-        )}
-        {/* Generous Raycast Hit-Sphere */}
-        <mesh
-          renderOrder={100}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            const w = new THREE.Vector3();
-            e.object.getWorldPosition(w);
-            onPinClick?.('1', w);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onHoverPin?.('1');
-          }}
-          onPointerOut={() => onHoverPin?.(null)}
-        >
-          <sphereGeometry args={[1.8, 12, 12]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      </group>
+          <mesh position={[5.08, 0.15, 0]} material={materials.solderFillet}>
+            <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+          </mesh>
+        </>
+      )}
+
+      {/* Pin 1: Generous Invisible Hit-Sphere & Crisp Hover Highlight Ring */}
+      {renderContext === 'studio' && (
+        <group position={P_PIN1}>
+          <mesh material={hoveredPin === '1' ? materials.pinHover : materials.silverLead}>
+            <cylinderGeometry args={[hoveredPin === '1' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
+          </mesh>
+          {hoveredPin === '1' && (
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+              <ringGeometry args={[0.6, 1.4, 24]} />
+              <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+            </mesh>
+          )}
+          {/* Generous Raycast Hit-Sphere */}
+          <mesh
+            renderOrder={100}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const w = new THREE.Vector3();
+              e.object.getWorldPosition(w);
+              onPinClick?.('1', w);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              onHoverPin?.('1');
+            }}
+            onPointerOut={() => onHoverPin?.(null)}
+          >
+            <sphereGeometry args={[1.8, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
       {/* Pin 2: Generous Invisible Hit-Sphere & Crisp Hover Highlight Ring */}
-      <group position={P_PIN2}>
-        <mesh material={hoveredPin === '2' ? materials.pinHover : materials.silverLead}>
-          <cylinderGeometry args={[hoveredPin === '2' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
-        </mesh>
-        {hoveredPin === '2' && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-            <ringGeometry args={[0.6, 1.4, 24]} />
-            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+      {renderContext === 'studio' && (
+        <group position={P_PIN2}>
+          <mesh material={hoveredPin === '2' ? materials.pinHover : materials.silverLead}>
+            <cylinderGeometry args={[hoveredPin === '2' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
           </mesh>
-        )}
-        {/* Generous Raycast Hit-Sphere */}
-        <mesh
-          renderOrder={100}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            const w = new THREE.Vector3();
-            e.object.getWorldPosition(w);
-            onPinClick?.('2', w);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onHoverPin?.('2');
-          }}
-          onPointerOut={() => onHoverPin?.(null)}
-        >
-          <sphereGeometry args={[1.8, 12, 12]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      </group>
+          {hoveredPin === '2' && (
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+              <ringGeometry args={[0.6, 1.4, 24]} />
+              <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+            </mesh>
+          )}
+          {/* Generous Raycast Hit-Sphere */}
+          <mesh
+            renderOrder={100}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const w = new THREE.Vector3();
+              e.object.getWorldPosition(w);
+              onPinClick?.('2', w);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              onHoverPin?.('2');
+            }}
+            onPointerOut={() => onHoverPin?.(null)}
+          >
+            <sphereGeometry args={[1.8, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }

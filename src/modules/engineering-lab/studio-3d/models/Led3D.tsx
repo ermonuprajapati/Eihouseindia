@@ -13,6 +13,7 @@ export interface Led3DProps {
   brightness?: number;
   isBurned?: boolean;
   isSelected?: boolean;
+  renderContext?: 'studio' | '3d-view';
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
@@ -78,6 +79,7 @@ export function Led3D({
   brightness,
   isBurned = false,
   isSelected = false,
+  renderContext = 'studio',
   onPinClick,
   hoveredPin,
   onHoverPin,
@@ -134,6 +136,11 @@ export function Led3D({
         transparent: false,
         opacity: 1,
         depthWrite: true,
+      }),
+      solderFillet: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.18,
       }),
       leadHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -319,71 +326,87 @@ export function Led3D({
         <cylinderGeometry args={[0.38, 0.38, 9.5, 12]} />
       </mesh>
 
-      {/* Anode Terminal Pin Anchor with Generous Hit-Sphere and Hover Ring */}
-      <group position={P_ANODE}>
-        <mesh material={hoveredPin === 'anode' ? materials.anodeHover : materials.silverLead}>
-          <cylinderGeometry args={[hoveredPin === 'anode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-        </mesh>
-        {hoveredPin === 'anode' && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-            <ringGeometry args={[0.6, 1.4, 24]} />
-            <meshBasicMaterial color="#10B981" side={THREE.DoubleSide} />
+      {/* Solder Fillet cones on PCB pads (3D View mode) */}
+      {renderContext === '3d-view' && (
+        <>
+          <mesh position={[-2.54, 0.15, 0]} material={materials.solderFillet}>
+            <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
           </mesh>
-        )}
-        <mesh
-          renderOrder={100}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            const w = new THREE.Vector3();
-            e.object.getWorldPosition(w);
-            onPinClick?.('anode', w);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onHoverPin?.('anode');
-          }}
-          onPointerOut={() => onHoverPin?.(null)}
-        >
-          <sphereGeometry args={[1.8, 12, 12]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      </group>
+          <mesh position={[2.54, 0.15, 0]} material={materials.solderFillet}>
+            <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
+          </mesh>
+        </>
+      )}
+
+      {/* Anode Terminal Pin Anchor with Generous Hit-Sphere and Hover Ring */}
+      {renderContext === 'studio' && (
+        <group position={P_ANODE}>
+          <mesh material={hoveredPin === 'anode' ? materials.anodeHover : materials.silverLead}>
+            <cylinderGeometry args={[hoveredPin === 'anode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+          </mesh>
+          {hoveredPin === 'anode' && (
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+              <ringGeometry args={[0.6, 1.4, 24]} />
+              <meshBasicMaterial color="#10B981" side={THREE.DoubleSide} />
+            </mesh>
+          )}
+          <mesh
+            renderOrder={100}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const w = new THREE.Vector3();
+              e.object.getWorldPosition(w);
+              onPinClick?.('anode', w);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              onHoverPin?.('anode');
+            }}
+            onPointerOut={() => onHoverPin?.(null)}
+          >
+            <sphereGeometry args={[1.8, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
       {/* Cathode Terminal Pin Anchor with Generous Hit-Sphere and Hover Ring */}
-      <group position={P_CATHODE}>
-        <mesh material={hoveredPin === 'cathode' ? materials.cathodeHover : materials.silverLead}>
-          <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-        </mesh>
-        {hoveredPin === 'cathode' && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
-            <ringGeometry args={[0.6, 1.4, 24]} />
-            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+      {renderContext === 'studio' && (
+        <group position={P_CATHODE}>
+          <mesh material={hoveredPin === 'cathode' ? materials.cathodeHover : materials.silverLead}>
+            <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
           </mesh>
-        )}
-        <mesh
-          renderOrder={100}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            const w = new THREE.Vector3();
-            e.object.getWorldPosition(w);
-            onPinClick?.('cathode', w);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onHoverPin?.('cathode');
-          }}
-          onPointerOut={() => onHoverPin?.(null)}
-        >
-          <sphereGeometry args={[1.8, 12, 12]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      </group>
+          {hoveredPin === 'cathode' && (
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+              <ringGeometry args={[0.6, 1.4, 24]} />
+              <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+            </mesh>
+          )}
+          <mesh
+            renderOrder={100}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const w = new THREE.Vector3();
+              e.object.getWorldPosition(w);
+              onPinClick?.('cathode', w);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              onHoverPin?.('cathode');
+            }}
+            onPointerOut={() => onHoverPin?.(null)}
+          >
+            <sphereGeometry args={[1.8, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }

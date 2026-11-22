@@ -1580,6 +1580,8 @@ export function EngineeringLabApp() {
               setProject((p) => ({ ...p, pcb: updatedPcb }));
             }}
             is3DMode={true}
+            isSimulating={isSimulating}
+            simulationStates={simStates}
           />
         )}
 

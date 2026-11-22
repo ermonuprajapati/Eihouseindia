@@ -18,6 +18,7 @@ export interface DipPackage3DProps {
   pinNames?: Record<number, string>;
   isBurned?: boolean;
   isSelected?: boolean;
+  renderContext?: 'studio' | '3d-view';
   onPinClick?: (pinId: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinId: string | null) => void;
@@ -42,6 +43,7 @@ export function DipPackage3D({
   pinNames = DEFAULT_555_PINS,
   isBurned = false,
   isSelected = false,
+  renderContext = 'studio',
   onPinClick,
   hoveredPin,
   onHoverPin,
@@ -134,6 +136,11 @@ export function DipPackage3D({
         transparent: false,
         opacity: 1,
         depthWrite: true,
+      }),
+      solderFillet: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.18,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -246,6 +253,13 @@ export function DipPackage3D({
               <boxGeometry args={[0.65, 6.2, 0.45]} />
             </mesh>
 
+            {/* Solder Fillet cone on PCB pad (3D View mode) */}
+            {renderContext === '3d-view' && (
+              <mesh position={[0, 0.75, 0]} material={materials.solderFillet}>
+                <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+              </mesh>
+            )}
+
             {/* Crisp Hover Highlight Ring */}
             {isHovered && (
               <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -254,31 +268,33 @@ export function DipPackage3D({
               </mesh>
             )}
 
-            {/* Generous Raycast Hit-Sphere for Effortless Clicking */}
-            <mesh
-              position={[0, 0, 0]}
-              renderOrder={100}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onPinClick && groupRef.current) {
-                  const wPos = new THREE.Vector3();
-                  wPos.set(pin.pos[0], pin.pos[1], pin.pos[2]);
-                  wPos.applyMatrix4(groupRef.current.matrixWorld);
-                  onPinClick(pin.id, wPos);
-                }
-              }}
-              onPointerOver={(e) => {
-                e.stopPropagation();
-                onHoverPin?.(pin.id);
-              }}
-              onPointerOut={() => onHoverPin?.(null)}
-            >
-              <sphereGeometry args={[1.8, 12, 12]} />
-              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-            </mesh>
+            {/* Generous Raycast Hit-Sphere for Effortless Clicking (Studio only) */}
+            {renderContext === 'studio' && (
+              <mesh
+                position={[0, 0, 0]}
+                renderOrder={100}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onPinClick && groupRef.current) {
+                    const wPos = new THREE.Vector3();
+                    wPos.set(pin.pos[0], pin.pos[1], pin.pos[2]);
+                    wPos.applyMatrix4(groupRef.current.matrixWorld);
+                    onPinClick(pin.id, wPos);
+                  }
+                }}
+                onPointerOver={(e) => {
+                  e.stopPropagation();
+                  onHoverPin?.(pin.id);
+                }}
+                onPointerOut={() => onHoverPin?.(null)}
+              >
+                <sphereGeometry args={[1.8, 12, 12]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+            )}
           </group>
         );
       })}

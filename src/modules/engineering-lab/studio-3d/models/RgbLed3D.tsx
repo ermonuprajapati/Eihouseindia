@@ -13,6 +13,7 @@ export interface RgbLed3DProps {
   rLevel?: number; // 0..1 independent Red channel
   gLevel?: number; // 0..1 independent Green channel
   bLevel?: number; // 0..1 independent Blue channel
+  renderContext?: 'studio' | '3d-view';
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
@@ -27,6 +28,7 @@ export function RgbLed3D({
   rLevel,
   gLevel,
   bLevel,
+  renderContext = 'studio',
   onPinClick,
   hoveredPin,
   onHoverPin,
@@ -84,6 +86,11 @@ export function RgbLed3D({
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
+      }),
+      solderFillet: new THREE.MeshStandardMaterial({
+        color: '#E2E8F0',
+        metalness: 0.95,
+        roughness: 0.18,
       }),
       darkCollar: new THREE.MeshStandardMaterial({
         color: '#0F172A',
@@ -205,6 +212,13 @@ export function RgbLed3D({
               );
             })()}
 
+            {/* Solder Fillet cone on PCB pad (3D View mode) */}
+            {renderContext === '3d-view' && (
+              <mesh position={[p.x, 0.15, 0]} material={materials.solderFillet}>
+                <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+              </mesh>
+            )}
+
             {/* 3. Interactive Target with Generous Hit-Sphere & Hover Ring */}
             <group position={[p.x, 0, 0]}>
               <mesh material={isHovered ? materials.pinHover : materials.pinSilver}>
@@ -216,7 +230,7 @@ export function RgbLed3D({
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
               )}
-              {isHovered && (
+              {renderContext !== '3d-view' && isHovered && (
                 <Html
                   position={[0, 1.6, 0]}
                   center
@@ -229,26 +243,28 @@ export function RgbLed3D({
                 </Html>
               )}
               {/* Invisible Hit-Sphere */}
-              <mesh
-                renderOrder={100}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const worldPos = new THREE.Vector3();
-                  e.object.getWorldPosition(worldPos);
-                  onPinClick?.(p.name, worldPos);
-                }}
-                onPointerOver={(e) => {
-                  e.stopPropagation();
-                  onHoverPin?.(p.name);
-                }}
-                onPointerOut={() => onHoverPin?.(null)}
-              >
-                <sphereGeometry args={[1.8, 12, 12]} />
-                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-              </mesh>
+              {renderContext !== '3d-view' && (
+                <mesh
+                  renderOrder={100}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const worldPos = new THREE.Vector3();
+                    e.object.getWorldPosition(worldPos);
+                    onPinClick?.(p.name, worldPos);
+                  }}
+                  onPointerOver={(e) => {
+                    e.stopPropagation();
+                    onHoverPin?.(p.name);
+                  }}
+                  onPointerOut={() => onHoverPin?.(null)}
+                >
+                  <sphereGeometry args={[1.8, 12, 12]} />
+                  <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                </mesh>
+              )}
             </group>
           </group>
         );

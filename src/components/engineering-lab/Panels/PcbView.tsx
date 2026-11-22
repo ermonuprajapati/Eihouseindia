@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { PcbLayout, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
+import type { Pcb3dViewerProps } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
 import { Pcb2dEditor } from './Pcb2dEditor';
 import {
   Box,
@@ -36,6 +37,8 @@ export interface PcbViewProps {
   is3DMode?: boolean;
   onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
   onUpdatePcb?: (updated: PcbLayout) => void;
+  isSimulating?: boolean;
+  simulationStates?: Pcb3dViewerProps['simulationStates'];
 }
 
 export function PcbView({
@@ -47,6 +50,8 @@ export function PcbView({
   is3DMode = false,
   onUpdateDimensions,
   onUpdatePcb,
+  isSimulating = false,
+  simulationStates = {},
 }: PcbViewProps) {
   // 3D Visualizer Mode State
   const [solderMaskColor, setSolderMaskColor] = useState<string>('#0B4F28');
@@ -223,9 +228,12 @@ export function PcbView({
         <div className="w-full h-full relative">
           <Pcb3dViewer
             pcb={pcb}
+            components={components}
             solderMaskColor={solderMaskColor}
             cameraPreset={cameraPreset}
             show3dComponents={show3dComponents}
+            isSimulating={isSimulating}
+            simulationStates={simulationStates}
           />
         </div>
       </div>
