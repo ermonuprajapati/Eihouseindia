@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/next';
 import { AuthProvider } from '@/modules/auth/auth-context';
 import { SITE_CONFIG } from '@/config/site';
 import { JsonLd } from '@/components/seo/JsonLd';
@@ -201,6 +202,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AppLayoutShell>{children}</AppLayoutShell>
           <Toaster position="bottom-right" richColors closeButton />
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
