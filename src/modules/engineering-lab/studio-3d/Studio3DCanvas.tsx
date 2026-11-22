@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Canvas, ThreeEvent, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
+import { OrbitControls, Grid, Html } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import {
@@ -12,7 +12,7 @@ import {
   Compass,
   Search,
   Cpu,
-  RotateCw,
+  RotateCcw,
   Unplug,
   MoveLeft,
   MoveRight,
@@ -20,6 +20,14 @@ import {
   MoveDown,
   MousePointer,
   Cable,
+  Tag,
+  ChevronUp,
+  ChevronDown,
+  ArrowDownToLine,
+  FlipHorizontal,
+  Focus,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Component3D, Wire3D, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
@@ -40,6 +48,13 @@ import {
   findNearestUnoccupiedHole,
   START_X,
   PITCH_X,
+  getComponentElevationSpec,
+  computeComponentGroundElevation,
+  stepAngle45,
+  nudgeComponent3D,
+  rotateComponent45,
+  resetComponentOrientation,
+  snapComponentToSurface,
 } from './breadboard-topology';
 import { ArduinoMega3D, MEGA_PINS } from './models/ArduinoMega3D';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
@@ -230,9 +245,21 @@ export function BluetoothHC05_3D({
               <mesh position={[0, -3.0, 0]} material={materials.pinGold}>
                 <boxGeometry args={[0.64, 7.0, 0.64]} />
               </mesh>
+              {/* Terminal Target with Generous Hitbox & Hover Ring */}
               <mesh
                 position={[0, 0.5, 0]}
                 material={isHovered ? materials.pinHover : materials.pinGold}
+              >
+                <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+              </mesh>
+              {isHovered && (
+                <mesh position={[0, 0.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.5, 1.3, 24]} />
+                  <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                </mesh>
+              )}
+              <mesh
+                position={[0, 0.5, 0]}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();
@@ -245,7 +272,8 @@ export function BluetoothHC05_3D({
                 }}
                 onPointerOut={() => onHoverPin?.(null)}
               >
-                <sphereGeometry args={[isHovered ? 1.3 : 0.75, 12, 12]} />
+                <sphereGeometry args={[1.8, 12, 12]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
             </group>
           );
@@ -703,6 +731,198 @@ function getComponentFootprint(type: string): { halfW: number; halfD: number } {
   }
 }
 
+export interface PinLabelItem {
+  id: string;
+  label: string;
+  localPos: [number, number, number];
+}
+
+export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
+  const t = comp.type || '';
+  if (t === 'ARDUINO_UNO') {
+    return ARDUINO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
+  }
+  if (t === 'ARDUINO_MEGA') {
+    return MEGA_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
+  }
+  if (t === 'ARDUINO_NANO') {
+    return NANO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
+  }
+  if (t === 'ESP32_DEVKIT') {
+    return ESP32_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
+  }
+  if (t === 'RASPBERRY_PI_PICO') {
+    return PICO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
+  }
+  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
+    const pinNames = t === 'OPAMP_LM358'
+      ? ['OUT1', 'IN1-', 'IN1+', 'GND', 'IN2+', 'IN2-', 'OUT2', 'VCC']
+      : ['GND', 'TRIG', 'OUT', 'RESET', 'CTRL', 'THRES', 'DISCH', 'VCC'];
+    return [1, 2, 3, 4, 5, 6, 7, 8].map((num, i) => {
+      const lx = (i < 4) ? -3.81 + i * 2.54 : 3.81 - (i - 4) * 2.54;
+      const lz = (i < 4) ? -3.34 : 3.34;
+      return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
+    });
+  }
+  if (t === 'HC_SR04' || t === 'SENSOR_ULTRASONIC') {
+    return [
+      { id: 'VCC', label: 'VCC', localPos: [-3.81, 1.25, 0] },
+      { id: 'TRIG', label: 'TRIG', localPos: [-1.27, 1.25, 0] },
+      { id: 'ECHO', label: 'ECHO', localPos: [1.27, 1.25, 0] },
+      { id: 'GND', label: 'GND', localPos: [3.81, 1.25, 0] },
+    ];
+  }
+  if (t === 'MODULE_BLUETOOTH_HC05' || t.includes('BLUETOOTH') || t.includes('HC05')) {
+    return [
+      { id: 'STATE', label: 'STATE', localPos: [-6.35, 2.05, 16.0] },
+      { id: 'RXD', label: 'RXD', localPos: [-3.81, 2.05, 16.0] },
+      { id: 'TXD', label: 'TXD', localPos: [-1.27, 2.05, 16.0] },
+      { id: 'GND', label: 'GND', localPos: [1.27, 2.05, 16.0] },
+      { id: 'VCC', label: 'VCC', localPos: [3.81, 2.05, 16.0] },
+      { id: 'EN', label: 'EN', localPos: [6.35, 2.05, 16.0] },
+    ];
+  }
+  if (t === 'LED_RGB' || t === 'ACTUATOR_RGB_LED') {
+    return [
+      { id: 'r', label: 'R', localPos: [-3.81, 0, 0] },
+      { id: 'cc', label: 'GND', localPos: [-1.27, 0, 0] },
+      { id: 'g', label: 'G', localPos: [1.27, 0, 0] },
+      { id: 'b', label: 'B', localPos: [3.81, 0, 0] },
+    ];
+  }
+  if (t === 'LED') {
+    return [
+      { id: 'anode', label: 'A (+)', localPos: [-2.54, 0, 0] },
+      { id: 'cathode', label: 'K (-)', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t === 'DIODE' || t === 'DIODE_1N4007') {
+    return [
+      { id: '1', label: 'A (+)', localPos: [-5.08, 0, 0] },
+      { id: '2', label: 'K (-)', localPos: [5.08, 0, 0] },
+    ];
+  }
+  if (t === 'RESISTOR' || t === 'INDUCTOR') {
+    return [
+      { id: '1', label: '1', localPos: [-5.08, 0, 0] },
+      { id: '2', label: '2', localPos: [5.08, 0, 0] },
+    ];
+  }
+  if (t === 'CAPACITOR_ELECTROLYTIC') {
+    return [
+      { id: '+', label: '+', localPos: [-2.54, 0, 0] },
+      { id: '-', label: '-', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t === 'CAPACITOR') {
+    return [
+      { id: '1', label: '1', localPos: [-2.54, 0, 0] },
+      { id: '2', label: '2', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t.includes('TRANSISTOR') || t.includes('BJT')) {
+    return [
+      { id: 'e', label: 'E', localPos: [-2.54, 0, 0] },
+      { id: 'b', label: 'B', localPos: [0, 0, 0] },
+      { id: 'c', label: 'C', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t.includes('MOSFET') || t.includes('REGULATOR') || t.includes('7805') || t.includes('LM317')) {
+    const isReg = t.includes('REGULATOR') || t.includes('7805') || t.includes('LM317');
+    return [
+      { id: '1', label: isReg ? 'IN' : 'G', localPos: [-2.54, 0, 0.6] },
+      { id: '2', label: isReg ? 'GND' : 'D', localPos: [0, 0, 0.6] },
+      { id: '3', label: isReg ? 'OUT' : 'S', localPos: [2.54, 0, 0.6] },
+    ];
+  }
+  if (t === 'POTENTIOMETER') {
+    return [
+      { id: '1', label: '1', localPos: [-2.54, 0, 0] },
+      { id: '2', label: 'W', localPos: [0, 0, 2.54] },
+      { id: '3', label: '3', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t === 'BUZZER_ACTIVE' || t === 'ACTUATOR_BUZZER_ACTIVE' || t === 'BUZZER') {
+    return [
+      { id: '+', label: '+', localPos: [-2.54, 0, 0] },
+      { id: '-', label: '-', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t === 'PUSHBUTTON') {
+    return [
+      { id: '1A', label: '1A', localPos: [-2.54, 0, -2.54] },
+      { id: '1B', label: '1B', localPos: [2.54, 0, -2.54] },
+      { id: '2A', label: '2A', localPos: [-2.54, 0, 2.54] },
+      { id: '2B', label: '2B', localPos: [2.54, 0, 2.54] },
+    ];
+  }
+  if (t === 'SLIDE_SWITCH') {
+    return [
+      { id: '1', label: '1', localPos: [-2.54, 0, 0] },
+      { id: '2', label: 'COM', localPos: [0, 0, 0] },
+      { id: '3', label: '2', localPos: [2.54, 0, 0] },
+    ];
+  }
+  if (t === 'SENSOR_LDR') {
+    return [
+      { id: '1', label: '1', localPos: [-2.54, 0, 0] },
+      { id: '2', label: '2', localPos: [2.54, 0, 0] },
+    ];
+  }
+
+  return [];
+}
+
+export function ComponentPinLabelsOverlay({
+  comp,
+  isSelected,
+  hoveredPinName,
+  showAll,
+}: {
+  comp: Component3D;
+  isSelected: boolean;
+  hoveredPinName: string | null;
+  showAll: boolean;
+}) {
+  const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
+
+  if (!showAll && !isSelected && !hoveredPinName) return null;
+
+  return (
+    <group position={[comp.x3d, comp.y3d, comp.z3d]}>
+      {pinLabels.map((p, idx) => {
+        const isHovered = hoveredPinName === p.id;
+        const shouldShow = showAll || isSelected || isHovered;
+        if (!shouldShow) return null;
+
+        // Outward radial / staggered elevation offset to strictly eliminate overlapping between adjacent pins
+        const staggerY = (idx % 2 === 0 ? 4.2 : 6.8);
+        const staggerZ = p.localPos[2] < -0.5 ? -3.5 : p.localPos[2] > 0.5 ? 3.5 : (idx % 2 === 0 ? -2.8 : 2.8);
+
+        return (
+          <Html
+            key={p.id}
+            position={[p.localPos[0], p.localPos[1] + staggerY, p.localPos[2] + staggerZ]}
+            center
+            distanceFactor={160}
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            <div
+              className={`px-1.5 py-0.5 rounded-full font-mono font-bold text-[10px] whitespace-nowrap shadow-lg tracking-tight transition-transform ${
+                isHovered
+                  ? 'bg-amber-400 text-slate-950 scale-110 ring-2 ring-white border border-amber-300 shadow-amber-500/50'
+                  : 'bg-slate-950/95 text-cyan-200 border border-cyan-500/80 shadow-black/90'
+              }`}
+            >
+              {p.label}
+            </div>
+          </Html>
+        );
+      })}
+    </group>
+  );
+}
+
 function DragFrameController({
   draggingCompId,
   components3d,
@@ -769,7 +989,6 @@ function DragFrameController({
 
       if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
         // Automatic IC Snapping straddling center DIP notch (top pins in Row E, bottom pins in Row F)
-        // For even-pin DIP packages (like DIP-8), offset by 0.5 pitch so pins land centered on integer columns
         const isEvenDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC';
         if (isEvenDip) {
           const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
@@ -779,27 +998,25 @@ function DragFrameController({
           targetX = START_X + (nearestCol - 1) * PITCH_X;
         }
         targetZ = 0;   // Straddle center DIP ravine
-        targetY = 8.5; // Resting flush on breadboard
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
       } else if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
         const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
         if (freeHole) {
           targetX = freeHole.x;
           targetZ = freeHole.z;
-          targetY = 8.5; // Breadboard surface elevation
         }
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
       } else {
         targetX = Math.round(targetX / 2.54) * 2.54;
         targetZ = Math.round(targetZ / 2.54) * 2.54;
-        if (!isThroughHole) {
-          targetY = 0; // Table surface elevation
-        }
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, false);
       }
 
       targetX = Math.round(targetX * 100) / 100;
       targetY = Math.round(targetY * 100) / 100;
       targetZ = Math.round(targetZ * 100) / 100;
 
-      // Smooth Sliding 2D AABB Footprint Collision Guard
+      // Smooth Sliding 2D AABB Footprint Collision & Stacking Guard
       const myFp = getComponentFootprint(comp.type);
 
       const checkCollisionAt = (tx: number, tz: number) => {
@@ -832,7 +1049,27 @@ function DragFrameController({
           if (!checkCollisionAt(prevX, targetZ)) {
             targetX = prevX;
           } else {
-            return; // Blocked on both axes: freeze movement cleanly
+            // Clean stacking prevention: lift cleanly onto top surface so components do not clip inside each other
+            const collidingOthers = components3d.filter((other) => {
+              if (other.id === comp.id) return false;
+              const otherFp = getComponentFootprint(other.type);
+              const oMinX = other.x3d - otherFp.halfW;
+              const oMaxX = other.x3d + otherFp.halfW;
+              const oMinZ = other.z3d - otherFp.halfD;
+              const oMaxZ = other.z3d + otherFp.halfD;
+              const cMinX = targetX - myFp.halfW;
+              const cMaxX = targetX + myFp.halfW;
+              const cMinZ = targetZ - myFp.halfD;
+              const cMaxZ = targetZ + myFp.halfD;
+              return cMinX + 0.2 < oMaxX && cMaxX - 0.2 > oMinX && cMinZ + 0.2 < oMaxZ && cMaxZ - 0.2 > oMinZ;
+            });
+            if (collidingOthers.length > 0) {
+              const maxTopY = Math.max(...collidingOthers.map((o) => {
+                const spec = getComponentElevationSpec(o.type);
+                return o.y3d + (spec.packageHeight || 8.0);
+              }));
+              targetY = Math.max(targetY, maxTopY + 0.5);
+            }
           }
         }
       }
@@ -929,6 +1166,7 @@ export interface Studio3DCanvasProps {
   wireCurrents?: Record<string, number>;
   circuitWires?: CircuitWire[];
   circuitComponents?: CircuitComponent[];
+  onMirrorComponent?: (id: string) => void;
 }
 
 export function Studio3DCanvas({
@@ -946,6 +1184,7 @@ export function Studio3DCanvas({
   onAddWire3D,
   onDeleteWire3D,
   onUpdateWire3D,
+  onMirrorComponent,
   isSimulating = false,
   simulationStates = {},
   wireCurrents = {},
@@ -953,6 +1192,7 @@ export function Studio3DCanvas({
   circuitComponents: _circuitComponents = [],
 }: Studio3DCanvasProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [libSearch, setLibSearch] = useState('');
   const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
@@ -967,6 +1207,7 @@ export function Studio3DCanvas({
   const [activeWireColor, setActiveWireColor] = useState('#EF4444');
   const [hoveredHole, setHoveredHole] = useState<BreadboardHole3D | null>(null);
   const [hoveredPinInfo, setHoveredPinInfo] = useState<{ compId: string; pinName: string } | null>(null);
+  const [showPinLabels, setShowPinLabels] = useState(false);
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
   const draggingCompRef = useRef<{ id: string; startPos: [number, number, number] } | null>(null);
   const pointerDownPosRef = useRef<{ clientX: number; clientY: number; compId: string } | null>(null);
@@ -1056,7 +1297,7 @@ export function Studio3DCanvas({
     });
   }, [libCategory, libSubCategory, libSearch]);
 
-  // Keyboard shortcut listener (R to rotate, Arrows to nudge, Delete to remove, Esc to cancel wire)
+  // Keyboard shortcut listener (R to rotate 45°, Arrows/Page to nudge, Delete to remove, Esc to cancel wire)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -1066,11 +1307,20 @@ export function Studio3DCanvas({
           const comp = components3d.find((c) => c.id === selectedCompId);
           if (comp) {
             e.preventDefault();
+            const step = e.shiftKey ? -45 : 45;
+            const curY = comp.rotY || 0;
+            const nextY = stepAngle45(curY, step);
             onUpdateComponent3D({
               ...comp,
-              rotY: ((comp.rotY || 0) + 90) % 360,
+              rotY: nextY,
             });
+            toast.info(`Rotated ${comp.label} Yaw to ${nextY}°`);
           }
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (selectedCompId && onMirrorComponent) {
+          e.preventDefault();
+          onMirrorComponent(selectedCompId);
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         if (selectedCompId) {
@@ -1088,6 +1338,21 @@ export function Studio3DCanvas({
               ...comp,
               x3d: Math.round((comp.x3d + dx) * 100) / 100,
               z3d: Math.round((comp.z3d + dz) * 100) / 100,
+            });
+          }
+        }
+      } else if (e.key === 'PageUp' || e.key === 'PageDown' || e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E') {
+        if (selectedCompId) {
+          const comp = components3d.find((c) => c.id === selectedCompId);
+          if (comp) {
+            e.preventDefault();
+            const isUp = e.key === 'PageUp' || e.key === 'e' || e.key === 'E';
+            const dy = isUp ? 2.54 : -2.54;
+            const minGroundY = computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, false);
+            const nextY = Math.max(minGroundY, Math.round((comp.y3d + dy) * 100) / 100);
+            onUpdateComponent3D({
+              ...comp,
+              y3d: nextY,
             });
           }
         }
@@ -1110,6 +1375,10 @@ export function Studio3DCanvas({
         setToolMode3D('inspect');
         setActiveWireStart(null);
         setEditingWireEndpoint(null);
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        setShowPinLabels((v) => !v);
+        toast.info(!showPinLabels ? 'Pin Labels Shown [L]' : 'Pin Labels Hidden [L]');
       } else if (e.key === 'Escape') {
         setActiveWireStart(null);
         setEditingWireEndpoint(null);
@@ -1122,9 +1391,9 @@ export function Studio3DCanvas({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCompId, selectedWireId, components3d, onUpdateComponent3D, onDeleteWire3D, onDeleteComponent3D, onSelectWire, onSelectComponent]);
+  }, [selectedCompId, selectedWireId, components3d, onUpdateComponent3D, onDeleteWire3D, onDeleteComponent3D, onSelectWire, onSelectComponent, showPinLabels, onMirrorComponent]);
 
-  // Camera presets
+  // CAD Viewport Camera Presets & Navigation
   const setCameraView = (view: 'iso' | 'top' | 'front' | 'side') => {
     if (!controlsRef.current) return;
     const ctrl = controlsRef.current;
@@ -1143,6 +1412,75 @@ export function Studio3DCanvas({
     }
     ctrl.update();
   };
+
+  const focusSelectedOrBreadboard = useCallback(() => {
+    if (!controlsRef.current) return;
+    const ctrl = controlsRef.current;
+    if (selectedCompId) {
+      const comp = components3d.find((c) => c.id === selectedCompId);
+      if (comp) {
+        ctrl.target.set(comp.x3d, comp.y3d, comp.z3d);
+        ctrl.object.position.set(comp.x3d, comp.y3d + 55, comp.z3d + 65);
+        ctrl.update();
+        toast.info(`Framed view on ${comp.label}`);
+        return;
+      }
+    }
+    // Default: Center on breadboard
+    ctrl.target.set(0, 8.5, 0);
+    ctrl.object.position.set(0, 130, 150);
+    ctrl.update();
+    toast.info('Centered view on breadboard');
+  }, [selectedCompId, components3d]);
+
+  const zoomCamera = useCallback((direction: 'in' | 'out') => {
+    if (!controlsRef.current) return;
+    const ctrl = controlsRef.current;
+    const dir = new THREE.Vector3().subVectors(ctrl.object.position, ctrl.target);
+    const factor = direction === 'in' ? 0.8 : 1.25;
+    ctrl.object.position.copy(ctrl.target).add(dir.multiplyScalar(factor));
+    ctrl.update();
+  }, []);
+
+  const resetCamera = useCallback(() => {
+    if (!controlsRef.current) return;
+    const ctrl = controlsRef.current;
+    ctrl.target.set(0, 0, 0);
+    ctrl.object.position.set(0, 140, 160);
+    ctrl.update();
+    toast.info('Reset camera to home isometric view');
+  }, []);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      if (containerRef.current?.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(() => {
+          setIsFullscreen((prev) => !prev);
+        });
+      } else {
+        setIsFullscreen((prev) => !prev);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {
+          setIsFullscreen(false);
+        });
+      } else {
+        setIsFullscreen(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Helper to compute world position for any pin
   const getPinWorld3D = useCallback((compId: string, pinId: string): THREE.Vector3 => {
@@ -1540,7 +1878,10 @@ export function Studio3DCanvas({
 
   return (
     <div
-      className="relative w-full h-full bg-[#050B14] select-none overflow-hidden touch-none"
+      ref={containerRef}
+      className={`relative w-full h-full bg-[#050B14] select-none overflow-hidden touch-none ${
+        isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
+      }`}
       onContextMenu={(e) => {
         e.preventDefault();
         if (activeWireStart) setActiveWireStart(null);
@@ -1899,21 +2240,45 @@ export function Studio3DCanvas({
                   <meshStandardMaterial color="#2563EB" roughness={0.4} />
                 </mesh>
                 {/* Pins 1, wiper (2), 3 */}
-                {[-2.54, 0, 2.54].map((px, i) => (
-                  <mesh
-                    key={i}
-                    position={[px, -1.5, i === 1 ? 2.54 : 0]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const pinId = i === 0 ? '1' : i === 1 ? '2' : '3';
-                      const pPos = getPinWorld3D(comp.id, pinId);
-                      handlePinClick(comp.id, pinId, pPos);
-                    }}
-                  >
-                    <cylinderGeometry args={[0.35, 0.35, 4.0, 8]} />
-                    <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
-                  </mesh>
-                ))}
+                {[-2.54, 0, 2.54].map((px, i) => {
+                  const pinId = i === 0 ? '1' : i === 1 ? '2' : '3';
+                  const isHovered = hoveredPinInfo?.compId === comp.id && hoveredPinInfo?.pinName === pinId;
+                  const zPos = i === 1 ? 2.54 : 0;
+                  return (
+                    <group key={i} position={[px, 0, zPos]}>
+                      {/* Metallic Pin Lead extending down into breadboard */}
+                      <mesh position={[0, -1.0, 0]}>
+                        <cylinderGeometry args={[0.35, 0.35, 6.0, 8]} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                      </mesh>
+                      {/* Terminal Sphere with Generous Hitbox & Hover Ring */}
+                      <mesh material={new THREE.MeshBasicMaterial({ color: isHovered ? '#38BDF8' : '#CBD5E1' })}>
+                        <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+                      </mesh>
+                      {isHovered && (
+                        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                          <ringGeometry args={[0.5, 1.3, 24]} />
+                          <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                        </mesh>
+                      )}
+                      <mesh
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pPos = getPinWorld3D(comp.id, pinId);
+                          handlePinClick(comp.id, pinId, pPos);
+                        }}
+                        onPointerOver={(e) => {
+                          e.stopPropagation();
+                          setHoveredPinInfo({ compId: comp.id, pinName: pinId });
+                        }}
+                        onPointerOut={() => setHoveredPinInfo(null)}
+                      >
+                        <sphereGeometry args={[1.8, 12, 12]} />
+                        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                      </mesh>
+                    </group>
+                  );
+                })}
               </group>
             );
           }
@@ -1995,28 +2360,38 @@ export function Studio3DCanvas({
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
-                {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
+                {/* Interactive Click & Hover Terminals with Generous Hitbox & Hover Ring */}
                 {[-2.54, 2.54].map((px, i) => {
                   const pinId = i === 0 ? '+' : '-';
                   const isHovered = hoveredPinInfo?.compId === comp.id && hoveredPinInfo?.pinName === pinId;
                   return (
-                    <mesh
-                      key={pinId}
-                      position={[px, 0, 0]}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const pPos = getPinWorld3D(comp.id, pinId);
-                        handlePinClick(comp.id, pinId, pPos);
-                      }}
-                      onPointerOver={(e) => {
-                        e.stopPropagation();
-                        setHoveredPinInfo({ compId: comp.id, pinName: pinId });
-                      }}
-                      onPointerOut={() => setHoveredPinInfo(null)}
-                    >
-                      <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-                      <meshBasicMaterial color={isHovered ? (i === 0 ? '#10B981' : '#38BDF8') : (isBurned ? '#71717A' : '#CBD5E1')} />
-                    </mesh>
+                    <group key={pinId} position={[px, 0, 0]}>
+                      <mesh>
+                        <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+                        <meshBasicMaterial color={isHovered ? (i === 0 ? '#10B981' : '#38BDF8') : (isBurned ? '#71717A' : '#CBD5E1')} />
+                      </mesh>
+                      {isHovered && (
+                        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                          <ringGeometry args={[0.5, 1.3, 24]} />
+                          <meshBasicMaterial color={i === 0 ? '#10B981' : '#38BDF8'} side={THREE.DoubleSide} />
+                        </mesh>
+                      )}
+                      <mesh
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pPos = getPinWorld3D(comp.id, pinId);
+                          handlePinClick(comp.id, pinId, pPos);
+                        }}
+                        onPointerOver={(e) => {
+                          e.stopPropagation();
+                          setHoveredPinInfo({ compId: comp.id, pinName: pinId });
+                        }}
+                        onPointerOut={() => setHoveredPinInfo(null)}
+                      >
+                        <sphereGeometry args={[1.8, 12, 12]} />
+                        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                      </mesh>
+                    </group>
                   );
                 })}
               </group>
@@ -2077,28 +2452,38 @@ export function Studio3DCanvas({
                   <meshStandardMaterial color={isBurned ? '#71717A' : '#CBD5E1'} metalness={isBurned ? 0.4 : 0.9} />
                 </mesh>
 
-                {/* Interactive Click & Hover Terminals at Breadboard Surface (y = 0) */}
+                {/* Interactive Click & Hover Terminals with Generous Hitbox & Hover Ring */}
                 {[-2.54, 2.54].map((px, i) => {
                   const pinId = i === 0 ? '1' : '2';
                   const isHovered = hoveredPinInfo?.compId === comp.id && hoveredPinInfo?.pinName === pinId;
                   return (
-                    <mesh
-                      key={pinId}
-                      position={[px, 0, 0]}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const pPos = getPinWorld3D(comp.id, pinId);
-                        handlePinClick(comp.id, pinId, pPos);
-                      }}
-                      onPointerOver={(e) => {
-                        e.stopPropagation();
-                        setHoveredPinInfo({ compId: comp.id, pinName: pinId });
-                      }}
-                      onPointerOut={() => setHoveredPinInfo(null)}
-                    >
-                      <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-                      <meshBasicMaterial color={isHovered ? '#38BDF8' : (isBurned ? '#71717A' : '#CBD5E1')} />
-                    </mesh>
+                    <group key={pinId} position={[px, 0, 0]}>
+                      <mesh>
+                        <cylinderGeometry args={[isHovered ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+                        <meshBasicMaterial color={isHovered ? '#38BDF8' : (isBurned ? '#71717A' : '#CBD5E1')} />
+                      </mesh>
+                      {isHovered && (
+                        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                          <ringGeometry args={[0.5, 1.3, 24]} />
+                          <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                        </mesh>
+                      )}
+                      <mesh
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const pPos = getPinWorld3D(comp.id, pinId);
+                          handlePinClick(comp.id, pinId, pPos);
+                        }}
+                        onPointerOver={(e) => {
+                          e.stopPropagation();
+                          setHoveredPinInfo({ compId: comp.id, pinName: pinId });
+                        }}
+                        onPointerOut={() => setHoveredPinInfo(null)}
+                      >
+                        <sphereGeometry args={[1.8, 12, 12]} />
+                        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                      </mesh>
+                    </group>
                   );
                 })}
               </group>
@@ -2889,6 +3274,16 @@ export function Studio3DCanvas({
             />
           );
         })}
+        {/* Floating Pin Markings & Silkscreen Overlay with Staggered Non-Overlapping Offsets */}
+        {components3d.map((comp) => (
+          <ComponentPinLabelsOverlay
+            key={`labels_${comp.id}`}
+            comp={comp}
+            isSelected={selectedCompId === comp.id}
+            hoveredPinName={hoveredPinInfo?.compId === comp.id ? hoveredPinInfo.pinName : null}
+            showAll={showPinLabels}
+          />
+        ))}
       </Canvas>
 
       {/* Top Floating View Controls, Tool Mode & Wire Colors */}
@@ -2932,27 +3327,101 @@ export function Studio3DCanvas({
 
         <div className="h-4 w-px bg-slate-700 mx-0.5" />
 
+        {/* Viewport Camera CAD Presets & Navigation */}
+        <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+          <button
+            onClick={() => setCameraView('top')}
+            className="h-7 px-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center justify-center cursor-pointer transition-colors"
+            title="Top-Down Plan View [CAD Top]"
+          >
+            Top
+          </button>
+          <button
+            onClick={() => setCameraView('front')}
+            className="h-7 px-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center justify-center cursor-pointer hidden sm:flex transition-colors"
+            title="Front Elevation View [CAD Front]"
+          >
+            Front
+          </button>
+          <button
+            onClick={() => setCameraView('iso')}
+            className="h-7 px-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center gap-1 justify-center cursor-pointer transition-colors"
+            title="Isometric 3D CAD View"
+          >
+            <Compass className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Iso (3D)</span>
+          </button>
+
+          <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
+
+          {/* Focus Selected */}
+          <button
+            onClick={focusSelectedOrBreadboard}
+            className="h-7 px-2 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded text-xs font-mono flex items-center gap-1 cursor-pointer transition-colors"
+            title={selectedCompId ? "Focus View on Selected Component" : "Focus / Center Breadboard View"}
+          >
+            <Focus className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">Focus Selected</span>
+          </button>
+
+          {/* Reset View */}
+          <button
+            onClick={resetCamera}
+            className="h-7 px-2 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded text-xs font-mono flex items-center gap-1 cursor-pointer transition-colors"
+            title="Reset Camera to Home Isometric View"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+            <span className="hidden md:inline">Reset View</span>
+          </button>
+
+          <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
+
+          {/* Zoom Out (-) */}
+          <button
+            onClick={() => zoomCamera('out')}
+            className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded cursor-pointer transition-colors"
+            title="Zoom Out (- key / Scroll)"
+          >
+            <span className="font-bold text-xs">−</span>
+          </button>
+
+          {/* Zoom In (+) */}
+          <button
+            onClick={() => zoomCamera('in')}
+            className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-cyan-300 rounded cursor-pointer transition-colors"
+            title="Zoom In (+ key / Scroll)"
+          >
+            <span className="font-bold text-xs">+</span>
+          </button>
+
+          <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
+
+          {/* Full Console Screen Viewport */}
+          <button
+            onClick={toggleFullscreen}
+            className={`w-7 h-7 flex items-center justify-center rounded cursor-pointer transition-colors ${
+              isFullscreen ? 'bg-cyan-600 text-white' : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+            }`}
+            title={isFullscreen ? "Exit Full Console Screen (Esc)" : "Full Console Screen Viewport"}
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+        {/* Toggle Pin Labels */}
         <button
-          onClick={() => setCameraView('iso')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono flex items-center gap-1 cursor-pointer"
-          title="Isometric View"
+          onClick={() => setShowPinLabels((v) => !v)}
+          className={`px-2 py-1 rounded text-xs font-mono flex items-center gap-1 cursor-pointer transition-colors ${
+            showPinLabels
+              ? 'bg-cyan-600 text-white font-bold shadow-sm'
+              : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+          }`}
+          title="Toggle Floating Pin Markings & Silkscreen Labels [L]"
         >
-          <Compass className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Iso</span>
-        </button>
-        <button
-          onClick={() => setCameraView('top')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono cursor-pointer"
-          title="Top Down View"
-        >
-          Top
-        </button>
-        <button
-          onClick={() => setCameraView('front')}
-          className="px-2 py-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded text-xs font-mono cursor-pointer hidden sm:inline"
-          title="Front View"
-        >
-          Front
+          <Tag className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Labels</span>
         </button>
 
         <div className="h-4 w-px bg-slate-700 mx-0.5" />
@@ -3218,203 +3687,320 @@ export function Studio3DCanvas({
         </div>
       )}
 
-      {/* Floating Component Action Bar when a component is selected */}
+      {/* Floating CAD Component Manipulation Toolbar (Slim, Collapsible, 28px-32px buttons) */}
       {selectedComp && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/80 rounded-xl px-4 py-2 shadow-2xl z-30 font-mono text-xs flex flex-col gap-2 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-[95vw]">
-          {/* Row 1: Part Info, Nudge, and Delete */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-cyan-400 font-bold uppercase text-[10px]">Part:</span>
-              <span className="text-white font-semibold">{selectedComp.label}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
-                {selectedComp.value || selectedComp.type}
-              </span>
-            </div>
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/70 rounded-xl px-3 py-1.5 shadow-2xl z-30 font-mono text-xs flex flex-col gap-1.5 text-slate-200 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-150 max-w-[96vw] select-none pointer-events-auto">
+          {/* Collapsed Mini-Dock State */}
+          {isPanelCollapsed ? (
+            <div className="flex items-center gap-2 h-7">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-cyan-400 font-bold uppercase text-[9px]">Part:</span>
+                <span className="text-white font-semibold text-xs">{selectedComp.label}</span>
+                <span className="text-[9px] px-1 py-0.5 rounded bg-slate-800 text-cyan-300">
+                  {selectedComp.value || selectedComp.type}
+                </span>
+              </div>
 
-            <div className="h-4 w-px bg-slate-700" />
+              <div className="h-4 w-px bg-slate-800" />
 
-            {/* Rotate 90 deg */}
-            <button
-              onClick={() => {
-                onUpdateComponent3D({
-                  ...selectedComp,
-                  rotY: ((selectedComp.rotY || 0) + 90) % 360,
-                });
-              }}
-              className="flex items-center gap-1.5 text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
-              title="Rotate 90° Clockwise [R]"
-            >
-              <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Rotate [R]</span>
-            </button>
-
-            {/* Position Nudge Controls (2.54mm breadboard pitch) */}
-            <div className="flex items-center gap-1 bg-slate-800/80 px-1 py-0.5 rounded border border-slate-700/60" title="Nudge component on workbench [Arrow Keys]">
-              <span className="text-[10px] text-slate-400 font-bold px-0.5">Nudge:</span>
+              {/* Quick Snap */}
               <button
+                type="button"
                 onClick={() => {
-                  onUpdateComponent3D({
-                    ...selectedComp,
-                    x3d: Math.round((selectedComp.x3d - 2.54) * 100) / 100,
-                  });
+                  onUpdateComponent3D(snapComponentToSurface(selectedComp, hasBreadboard));
+                  toast.success(`Dropped ${selectedComp.label} to surface`);
                 }}
-                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-                title="Nudge Left -2.54mm [Left Arrow]"
+                className="w-7 h-7 flex items-center justify-center rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/60 text-cyan-300 hover:text-white transition-colors cursor-pointer"
+                title="Snap / Drop to Surface"
               >
-                <MoveLeft className="w-3 h-3 text-cyan-400" />
+                <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400" />
               </button>
-              <button
-                onClick={() => {
-                  onUpdateComponent3D({
-                    ...selectedComp,
-                    x3d: Math.round((selectedComp.x3d + 2.54) * 100) / 100,
-                  });
-                }}
-                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-                title="Nudge Right +2.54mm [Right Arrow]"
-              >
-                <MoveRight className="w-3 h-3 text-cyan-400" />
-              </button>
-              <button
-                onClick={() => {
-                  onUpdateComponent3D({
-                    ...selectedComp,
-                    z3d: Math.round((selectedComp.z3d - 2.54) * 100) / 100,
-                  });
-                }}
-                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-                title="Nudge Forward -2.54mm [Up Arrow]"
-              >
-                <MoveUp className="w-3 h-3 text-cyan-400" />
-              </button>
-              <button
-                onClick={() => {
-                  onUpdateComponent3D({
-                    ...selectedComp,
-                    z3d: Math.round((selectedComp.z3d + 2.54) * 100) / 100,
-                  });
-                }}
-                className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
-                title="Nudge Backward +2.54mm [Down Arrow]"
-              >
-                <MoveDown className="w-3 h-3 text-cyan-400" />
-              </button>
-            </div>
 
-            <div className="h-4 w-px bg-slate-700" />
-
-            {/* Delete Component Button */}
-            <button
-              onClick={() => {
-                onDeleteComponent3D(selectedComp.id);
-                onSelectComponent(null);
-              }}
-              className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 font-semibold cursor-pointer transition-colors ml-auto"
-              title="Delete this component and attached wires [Delete]"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete [Del]</span>
-            </button>
-          </div>
-
-          {/* Row 2: 3D Orientation & Free-Angle Flip Control Bar */}
-          <div className="flex items-center gap-2 pt-1 border-t border-slate-800 text-[11px] overflow-x-auto">
-            <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider">3D Angles:</span>
-
-            {/* Quick Action Buttons */}
-            <div className="flex items-center gap-1">
+              {/* Quick Yaw +45° */}
               <button
+                type="button"
                 onClick={() => {
-                  const curY = selectedComp.rotY || 0;
-                  const nextY = (curY + 45) > 180 ? curY + 45 - 360 : curY + 45;
-                  onUpdateComponent3D({ ...selectedComp, rotY: nextY });
+                  const updated = rotateComponent45(selectedComp, 'yaw', 1);
+                  onUpdateComponent3D(updated);
+                  toast.info(`Rotated ${selectedComp.label} Yaw to ${updated.rotY}° [R]`);
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-medium text-[10px] transition-colors"
-                title="Rotate +45° Yaw around Y"
+                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 transition-colors cursor-pointer text-[10px] font-bold"
+                title="Rotate +45° Yaw [R]"
               >
                 +45°
               </button>
+
+              {/* Quick Delete */}
               <button
+                type="button"
                 onClick={() => {
-                  const curX = selectedComp.rotX || 0;
-                  const nextX = curX > 0 ? curX - 180 : curX + 180;
-                  onUpdateComponent3D({ ...selectedComp, rotX: nextX });
+                  onDeleteComponent3D(selectedComp.id);
+                  onSelectComponent(null);
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-medium text-[10px] transition-colors"
-                title="Flip Tilt 180° around X axis"
+                className="w-7 h-7 flex items-center justify-center text-rose-400 hover:text-rose-200 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 cursor-pointer transition-colors"
+                title="Delete component [Del]"
               >
-                Flip X (180°)
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
+
+              <div className="h-4 w-px bg-slate-800" />
+
+              {/* Expand Toggle */}
               <button
-                onClick={() => {
-                  const curY = selectedComp.rotY || 0;
-                  const nextY = curY > 0 ? curY - 180 : curY + 180;
-                  onUpdateComponent3D({ ...selectedComp, rotY: nextY });
-                }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-medium text-[10px] transition-colors"
-                title="Flip Yaw 180° around Y axis"
+                type="button"
+                onClick={() => setIsPanelCollapsed(false)}
+                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Expand full 3D manipulation toolbar"
               >
-                Flip Y (180°)
-              </button>
-              <button
-                onClick={() => {
-                  onUpdateComponent3D({ ...selectedComp, rotX: 0, rotY: 0, rotZ: 0 });
-                }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 font-medium text-[10px] transition-colors"
-                title="Reset X, Y, Z rotations to 0°"
-              >
-                Reset
+                <ChevronUp className="w-3.5 h-3.5 text-cyan-400" />
               </button>
             </div>
+          ) : (
+            <>
+              {/* Row 1: Header & Primary Actions */}
+              <div className="flex items-center gap-2 justify-between">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-cyan-400 font-bold uppercase text-[9px]">Part:</span>
+                  <span className="text-white font-semibold text-xs">{selectedComp.label}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
+                    {selectedComp.value || selectedComp.type}
+                  </span>
+                </div>
 
-            <div className="h-3 w-px bg-slate-800" />
+                <div className="flex items-center gap-1 ml-auto">
+                  {/* Snap / Drop to Surface */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateComponent3D(snapComponentToSurface(selectedComp, hasBreadboard));
+                      toast.success(`Dropped ${selectedComp.label} to surface`);
+                    }}
+                    className="h-7 px-2 flex items-center gap-1 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/60 text-cyan-300 hover:text-white transition-colors cursor-pointer text-[11px]"
+                    title="Snap lowest pins/base flush to breadboard or workbench surface"
+                  >
+                    <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Snap</span>
+                  </button>
 
-            {/* Free-angle Sliders + Numeric inputs for X, Y, Z */}
-            <div className="flex items-center gap-3">
-              {(['X', 'Y', 'Z'] as const).map((axis) => {
-                const key = axis === 'X' ? 'rotX' : axis === 'Y' ? 'rotY' : 'rotZ';
-                const label = axis === 'X' ? 'X (Tilt Up/Down)' : axis === 'Y' ? 'Y (Rotate L/R)' : 'Z (Roll)';
-                const val = selectedComp[key] || 0;
-                return (
-                  <div key={axis} className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400">{axis}:</span>
-                    <input
-                      type="range"
-                      min={-180}
-                      max={180}
-                      step={1}
-                      value={val}
-                      onChange={(e) => {
-                        const num = parseInt(e.target.value, 10);
-                        onUpdateComponent3D({
-                          ...selectedComp,
-                          [key]: isNaN(num) ? 0 : num,
-                        });
-                      }}
-                      className="w-16 h-1 accent-cyan-400 bg-slate-800 rounded cursor-pointer"
-                      title={`${label} slider (-180° to +180°)`}
-                    />
-                    <input
-                      type="number"
-                      min={-180}
-                      max={180}
-                      value={val}
-                      onChange={(e) => {
-                        const num = parseInt(e.target.value, 10);
-                        onUpdateComponent3D({
-                          ...selectedComp,
-                          [key]: isNaN(num) ? 0 : Math.max(-180, Math.min(180, num)),
-                        });
-                      }}
-                      className="w-12 text-[10px] bg-slate-900 text-cyan-300 text-center rounded border border-slate-700 px-1 py-0.5 focus:outline-none focus:border-cyan-400"
-                      title={`${label} angle in degrees`}
-                    />
-                    <span className="text-[9px] text-slate-500">°</span>
+                  {/* Single Genuine Flip / Invert Button */}
+                  {onMirrorComponent && (
+                    <button
+                      type="button"
+                      onClick={() => onMirrorComponent(selectedComp.id)}
+                      className="h-7 px-2 flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
+                      title="Invert / Mirror component pinout orientation [F]"
+                    >
+                      <FlipHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Flip [F]</span>
+                    </button>
+                  )}
+
+                  {/* Reset Orientation */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateComponent3D(resetComponentOrientation(selectedComp));
+                      toast.info(`Reset orientation for ${selectedComp.label}`);
+                    }}
+                    className="h-7 px-2 flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer text-[11px]"
+                    title="Reset Yaw, Pitch, Roll angles back to 0°"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset</span>
+                  </button>
+
+                  {/* Delete Component Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteComponent3D(selectedComp.id);
+                      onSelectComponent(null);
+                    }}
+                    className="h-7 px-2 flex items-center gap-1 text-rose-400 hover:text-rose-200 rounded bg-rose-950/40 hover:bg-rose-950/80 border border-rose-800/60 font-semibold cursor-pointer transition-colors text-[11px]"
+                    title="Delete this component and attached wires [Delete]"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Del</span>
+                  </button>
+
+                  {/* Collapse to mini-dock */}
+                  <button
+                    type="button"
+                    onClick={() => setIsPanelCollapsed(true)}
+                    className="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer ml-0.5"
+                    title="Collapse toolbar into mini-dock"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2: 3D Directional Nudge & 45° Step Rotations (All 28px-32px Compact Buttons) */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800 text-[11px]">
+                {/* Position Nudge: X, Z, Y */}
+                <div className="flex items-center gap-1 bg-slate-950/70 p-0.5 rounded-lg border border-slate-800">
+                  <span className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider px-1">Move:</span>
+
+                  {/* X Axis */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-slate-400 font-bold px-0.5">X:</span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'x', -2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Move Left -2.54mm [-X / Left Arrow]"
+                    >
+                      <MoveLeft className="w-3 h-3 text-cyan-400" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'x', 2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Move Right +2.54mm [+X / Right Arrow]"
+                    >
+                      <MoveRight className="w-3 h-3 text-cyan-400" />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+
+                  {/* Z Axis */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-slate-400 font-bold px-0.5">Z:</span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'z', -2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Move Forward -2.54mm [-Z / Up Arrow]"
+                    >
+                      <MoveUp className="w-3 h-3 text-cyan-400" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'z', 2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Move Back +2.54mm [+Z / Down Arrow]"
+                    >
+                      <MoveDown className="w-3 h-3 text-cyan-400" />
+                    </button>
+                  </div>
+
+                  {/* Y Axis: Up / Down (clamped) */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-emerald-400 font-bold px-0.5">Y:</span>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'y', 2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Elevate Up +2.54mm [+Y / E / PgUp]"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateComponent3D(nudgeComponent3D(selectedComp, 'y', -2.54))}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded cursor-pointer transition-colors"
+                      title="Lower Down -2.54mm [-Y / Q / PgDn] (Clamped above workbench surface)"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-4 w-px bg-slate-800" />
+
+                {/* 45° Step Rotations: Yaw (Y), Pitch (X), Roll (Z) */}
+                <div className="flex items-center gap-1 bg-slate-950/70 p-0.5 rounded-lg border border-slate-800">
+                  <span className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider px-1">45° Steps:</span>
+
+                  {/* Yaw (Y-axis horizontal spin) */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-cyan-300 font-bold px-0.5">Yaw:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'yaw', -1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Rotated Yaw to ${updated.rotY}° [Shift+R]`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-cyan-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Rotate -45° Yaw counter-clockwise around Y [Shift+R]"
+                    >
+                      -45°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'yaw', 1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Rotated Yaw to ${updated.rotY}° [R]`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-cyan-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Rotate +45° Yaw clockwise around Y [R] (Two clicks = 90°)"
+                    >
+                      +45°
+                    </button>
+                  </div>
+
+                  {/* Pitch (X-axis tilt forward/back) */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-amber-300 font-bold px-0.5">Pitch:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'pitch', -1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Tilted Pitch to ${updated.rotX}°`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-amber-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Tilt -45° Pitch forward around X"
+                    >
+                      -45°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'pitch', 1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Tilted Pitch to ${updated.rotX}°`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-amber-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Tilt +45° Pitch backward around X"
+                    >
+                      +45°
+                    </button>
+                  </div>
+
+                  {/* Roll (Z-axis tilt left/right) */}
+                  <div className="flex items-center gap-0.5 bg-slate-900 px-0.5 py-0.5 rounded border border-slate-800">
+                    <span className="text-[9px] text-purple-300 font-bold px-0.5">Roll:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'roll', -1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Rolled to ${updated.rotZ}°`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-purple-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Roll -45° left around Z"
+                    >
+                      -45°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = rotateComponent45(selectedComp, 'roll', 1);
+                        onUpdateComponent3D(updated);
+                        toast.info(`Rolled to ${updated.rotZ}°`);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 text-purple-300 font-medium text-[10px] rounded cursor-pointer transition-colors"
+                      title="Roll +45° right around Z"
+                    >
+                      +45°
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

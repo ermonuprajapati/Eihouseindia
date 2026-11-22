@@ -93,14 +93,25 @@ export function Pushbutton3D({
         const isHovered = hoveredPin === pin.name;
         return (
           <group key={pin.name}>
-            {/* Lead leg wire */}
-            <mesh position={[pin.pos[0], -2, pin.pos[2]]} material={materials.metalBracket}>
-              <cylinderGeometry args={[0.25, 0.25, 4, 8]} />
+            {/* Lead leg wire extending into breadboard */}
+            <mesh position={[pin.pos[0], -2.25, pin.pos[2]]} material={materials.metalBracket}>
+              <cylinderGeometry args={[0.25, 0.25, 4.5, 8]} />
             </mesh>
-            {/* Clickable Terminal Sphere */}
+            {/* Clickable Terminal Sphere with Generous Hit-Sphere & Hover Ring */}
             <mesh
               position={pin.pos}
               material={isHovered ? materials.pinHover : materials.metalBracket}
+            >
+              <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+            </mesh>
+            {isHovered && (
+              <mesh position={[pin.pos[0], pin.pos[1] + 0.1, pin.pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.5, 1.3, 24]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
+            )}
+            <mesh
+              position={pin.pos}
               onClick={(e) => {
                 e.stopPropagation();
                 const w = new THREE.Vector3();
@@ -113,7 +124,8 @@ export function Pushbutton3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[0.7, 10, 10]} />
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
           </group>
         );

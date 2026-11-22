@@ -162,15 +162,26 @@ export function HcSr04_3D({
             (hoveredPin && (hoveredPin.toUpperCase() === p.name || p.aliases.includes(hoveredPin.toLowerCase())));
           return (
             <group key={p.name} position={[p.x, 0, 0]}>
-              {/* Square gold pin extending through insulator into breadboard (y = -4.0) */}
-              <mesh position={[0, -2.5, 0]} material={materials.pinGold}>
-                <boxGeometry args={[0.64, 6.0, 0.64]} />
+              {/* Square gold pin extending through insulator into breadboard to y = -5.5 */}
+              <mesh position={[0, -3.2, 0]} material={materials.pinGold}>
+                <boxGeometry args={[0.64, 7.5, 0.64]} />
               </mesh>
 
-              {/* Click target at breadboard surface (y = -1.25 in this group = y = 0 world) */}
+              {/* Click target with Generous Hit-Sphere & Hover Ring */}
               <mesh
                 position={[0, -1.25, 0]}
                 material={isHovered ? materials.pinHover : materials.pinGold}
+              >
+                <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+              </mesh>
+              {isHovered && (
+                <mesh position={[0, -1.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.5, 1.3, 24]} />
+                  <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                </mesh>
+              )}
+              <mesh
+                position={[0, -1.25, 0]}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();
@@ -183,7 +194,8 @@ export function HcSr04_3D({
                 }}
                 onPointerOut={() => onHoverPin?.(null)}
               >
-                <sphereGeometry args={[isHovered ? 1.3 : 0.75, 12, 12]} />
+                <sphereGeometry args={[1.8, 12, 12]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
             </group>
           );

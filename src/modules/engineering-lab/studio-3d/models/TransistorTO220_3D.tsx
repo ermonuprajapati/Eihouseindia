@@ -132,29 +132,40 @@ export function TransistorTO220_3D({
 
         return (
           <group key={p.name}>
-            {/* Lead shank extending from y = 4.0 down into breadboard (y = -7.0, zero gap) */}
+            {/* Lead shank extending from y = 4.0 down into breadboard to y = -7.0 */}
             <mesh position={[p.x, -1.5, 0.6]} material={materials.silverLead}>
               <boxGeometry args={[0.7, 11.0, 0.5]} />
             </mesh>
 
-            {/* Interactive Pin Click/Hover Target at breadboard surface (y = 0) */}
-            <mesh
-              position={[p.x, 0, 0.6]}
-              material={isHovered ? materials.pinHover : materials.silverLead}
-              onClick={(e) => {
-                e.stopPropagation();
-                const worldPos = new THREE.Vector3();
-                e.object.getWorldPosition(worldPos);
-                onPinClick?.(p.name, worldPos);
-              }}
-              onPointerOver={(e) => {
-                e.stopPropagation();
-                onHoverPin?.(p.name);
-              }}
-              onPointerOut={() => onHoverPin?.(null)}
-            >
-              <sphereGeometry args={[isHovered ? 1.0 : 0.6, 12, 12]} />
-            </mesh>
+            {/* Interactive Pin with Generous Hit-Sphere & Hover Highlight Ring */}
+            <group position={[p.x, 0, 0.6]}>
+              <mesh material={isHovered ? materials.pinHover : materials.silverLead}>
+                <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+              </mesh>
+              {isHovered && (
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+                  <ringGeometry args={[0.5, 1.3, 24]} />
+                  <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                </mesh>
+              )}
+              {/* Invisible Hit-Sphere */}
+              <mesh
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const worldPos = new THREE.Vector3();
+                  e.object.getWorldPosition(worldPos);
+                  onPinClick?.(p.name, worldPos);
+                }}
+                onPointerOver={(e) => {
+                  e.stopPropagation();
+                  onHoverPin?.(p.name);
+                }}
+                onPointerOut={() => onHoverPin?.(null)}
+              >
+                <sphereGeometry args={[1.8, 12, 12]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+            </group>
           </group>
         );
       })}

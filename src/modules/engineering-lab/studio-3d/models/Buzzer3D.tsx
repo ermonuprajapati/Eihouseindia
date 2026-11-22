@@ -168,10 +168,21 @@ export function Buzzer3D({
               <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
             </mesh>
 
-            {/* Click target at breadboard surface (y = 0) */}
+            {/* Click target with Generous Hit-Sphere & Hover Ring */}
             <mesh
               position={[0, 0, 0]}
               material={isHovered ? materials.pinHover : materials.pinSilver}
+            >
+              <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+            </mesh>
+            {isHovered && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
+            )}
+            <mesh
+              position={[0, 0, 0]}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();
@@ -184,7 +195,8 @@ export function Buzzer3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[isHovered ? 1.4 : 0.8, 12, 12]} />
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
           </group>
         );

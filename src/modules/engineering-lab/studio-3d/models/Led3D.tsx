@@ -284,60 +284,80 @@ export function Led3D({
         visible={isIlluminated}
       />
 
-      {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm) */}
-      {/* 1. Longer Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -5.5mm */}
+      {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm, 12mm length) */}
+      {/* 1. Longer Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -8.0mm */}
       <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[-2.54, -3.1, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 10.2, 12]} />
+      <mesh position={[-2.54, -3.0, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 10.0, 12]} />
       </mesh>
 
-      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down into breadboard */}
+      {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -7.5mm */}
       <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
       </mesh>
-      <mesh position={[2.54, -2.7, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 9.4, 12]} />
+      <mesh position={[2.54, -2.75, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 9.5, 12]} />
       </mesh>
 
-      {/* Anode Terminal Pin Anchor (x = -2.54, y = 0 Breadboard Surface) */}
-      <mesh
-        position={P_ANODE}
-        material={hoveredPin === 'anode' ? materials.anodeHover : materials.silverLead}
-        onClick={(e) => {
-          e.stopPropagation();
-          const w = new THREE.Vector3();
-          e.object.getWorldPosition(w);
-          onPinClick?.('anode', w);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          onHoverPin?.('anode');
-        }}
-        onPointerOut={() => onHoverPin?.(null)}
-      >
-        <cylinderGeometry args={[hoveredPin === 'anode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-      </mesh>
+      {/* Anode Terminal Pin Anchor with Generous Hit-Sphere and Hover Ring */}
+      <group position={P_ANODE}>
+        <mesh material={hoveredPin === 'anode' ? materials.anodeHover : materials.silverLead}>
+          <cylinderGeometry args={[hoveredPin === 'anode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+        </mesh>
+        {hoveredPin === 'anode' && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+            <ringGeometry args={[0.6, 1.4, 24]} />
+            <meshBasicMaterial color="#10B981" side={THREE.DoubleSide} />
+          </mesh>
+        )}
+        <mesh
+          onClick={(e) => {
+            e.stopPropagation();
+            const w = new THREE.Vector3();
+            e.object.getWorldPosition(w);
+            onPinClick?.('anode', w);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onHoverPin?.('anode');
+          }}
+          onPointerOut={() => onHoverPin?.(null)}
+        >
+          <sphereGeometry args={[1.8, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
 
-      {/* Cathode Terminal Pin Anchor (x = 2.54, y = 0 Breadboard Surface) */}
-      <mesh
-        position={P_CATHODE}
-        material={hoveredPin === 'cathode' ? materials.cathodeHover : materials.silverLead}
-        onClick={(e) => {
-          e.stopPropagation();
-          const w = new THREE.Vector3();
-          e.object.getWorldPosition(w);
-          onPinClick?.('cathode', w);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          onHoverPin?.('cathode');
-        }}
-        onPointerOut={() => onHoverPin?.(null)}
-      >
-        <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
-      </mesh>
+      {/* Cathode Terminal Pin Anchor with Generous Hit-Sphere and Hover Ring */}
+      <group position={P_CATHODE}>
+        <mesh material={hoveredPin === 'cathode' ? materials.cathodeHover : materials.silverLead}>
+          <cylinderGeometry args={[hoveredPin === 'cathode' ? 0.55 : 0.4, 0.4, 1.2, 12]} />
+        </mesh>
+        {hoveredPin === 'cathode' && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+            <ringGeometry args={[0.6, 1.4, 24]} />
+            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+          </mesh>
+        )}
+        <mesh
+          onClick={(e) => {
+            e.stopPropagation();
+            const w = new THREE.Vector3();
+            e.object.getWorldPosition(w);
+            onPinClick?.('cathode', w);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onHoverPin?.('cathode');
+          }}
+          onPointerOut={() => onHoverPin?.(null)}
+        >
+          <sphereGeometry args={[1.8, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
     </group>
   );
 }

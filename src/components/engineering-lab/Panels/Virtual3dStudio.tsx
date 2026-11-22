@@ -9,10 +9,11 @@ import {
   getTieGroupForHole,
   START_X,
   PITCH_X,
+  computeComponentGroundElevation,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
-import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders } from 'lucide-react';
+import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal } from 'lucide-react';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -290,6 +291,7 @@ export function Virtual3dStudio({
       // A. Main Microcontrollers: Place flat on workbench table (y = 0) in front of breadboard
       if (['ARDUINO_UNO', 'ARDUINO_MEGA'].includes(mappedType)) {
         const x3d = (mcuIdx % 2 === 0 ? 1 : -1) * Math.floor((mcuIdx + 1) / 2) * 85;
+        const z3d = 65; // In front of breadboard
         mcuIdx++;
         return {
           id: comp.id,
@@ -298,8 +300,8 @@ export function Virtual3dStudio({
           value: comp.value,
           parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
-          y3d: 0, // Flat on workbench
-          z3d: 65, // In front of breadboard
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
+          z3d,
           rotY: 0,
           rotX: 0,
           rotZ: 0,
@@ -309,6 +311,7 @@ export function Virtual3dStudio({
       // B. Batteries: Place flat on workbench table to the left (y = 0)
       if (mappedType === 'BATTERY_9V') {
         const x3d = -95 - batteryIdx * 35;
+        const z3d = 0;
         batteryIdx++;
         return {
           id: comp.id,
@@ -317,8 +320,8 @@ export function Virtual3dStudio({
           value: comp.value,
           parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
-          y3d: 0, // Flat on workbench
-          z3d: 0,
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
+          z3d,
           rotY: 0,
           rotX: 0,
           rotZ: 0,
@@ -337,7 +340,7 @@ export function Virtual3dStudio({
           value: comp.value,
           parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d,
-          y3d: 0,
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
           z3d,
           rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
           rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
@@ -346,10 +349,11 @@ export function Virtual3dStudio({
       }
 
       // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
-      // Straddle breadboard center isolation trench directly seated flush at y = 8.5
+      // Straddle breadboard center isolation trench directly seated with pin insertion clearance
       // For DIP-8 (NE555), center is at -3.81mm (START_X + 29.5 * PITCH_X) to seat pins 1..4 in cols 29..32 (Row E) and pins 5..8 in cols 32..29 (Row F)
       if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
         const colX = mappedType === 'TIMER_555' ? -3.81 : -5.08;
+        const z3d = 0;
         return {
           id: comp.id,
           type: mappedType,
@@ -357,8 +361,8 @@ export function Virtual3dStudio({
           value: comp.value,
           parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
           x3d: colX,
-          y3d: 8.5, // Resting flush on breadboard
-          z3d: 0,   // Straddling center isolation trench (pins in rows E and F)
+          y3d: computeComponentGroundElevation(mappedType, colX, z3d, true),
+          z3d, // Straddling center isolation trench (pins in rows E and F)
           rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
           rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
           rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
@@ -372,6 +376,7 @@ export function Virtual3dStudio({
       const assignedCol = DEDICATED_COLS[passiveIdx % DEDICATED_COLS.length];
       const colX = -78.74 + (assignedCol - 1) * 2.54;
       const isTopStrip = passiveIdx % 2 === 0;
+      const z3d = isTopStrip ? -8.42 : 8.42;
       passiveIdx++;
       return {
         id: comp.id,
@@ -380,8 +385,8 @@ export function Virtual3dStudio({
         value: comp.value,
         parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
         x3d: colX,
-        y3d: 8.5, // Firmly plugged into breadboard holes
-        z3d: isTopStrip ? -8.42 : 8.42, // Seated in terminal rows
+        y3d: computeComponentGroundElevation(mappedType, colX, z3d, true),
+        z3d, // Seated in terminal rows
         rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
         rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
         rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
@@ -1099,18 +1104,6 @@ export function Virtual3dStudio({
     }
   }, [activeComponents3d, components, onUpdateComponent, onUpdateComponent3DPosition]);
 
-  const handleRotateSelected = useCallback(() => {
-    if (!selectedCompId) return;
-    const comp = activeComponents3d.find((c) => c.id === selectedCompId);
-    if (!comp) return;
-    const newRotY = ((comp.rotY || 0) + 90) % 360;
-    handleUpdateComponent3D({
-      ...comp,
-      rotY: newRotY,
-    });
-    toast.info(`Rotated ${comp.label} to ${newRotY}°`);
-  }, [selectedCompId, activeComponents3d, handleUpdateComponent3D]);
-
   const handleMirrorSelected = useCallback(() => {
     if (!selectedCompId) return;
     const comp = components.find((c) => c.id === selectedCompId);
@@ -1134,12 +1127,7 @@ export function Virtual3dStudio({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'r' || e.key === 'R') {
-        if (selectedCompId) {
-          e.preventDefault();
-          handleRotateSelected();
-        }
-      } else if (e.key === 'f' || e.key === 'F') {
+      if (e.key === 'f' || e.key === 'F') {
         if (selectedCompId) {
           e.preventDefault();
           handleMirrorSelected();
@@ -1148,7 +1136,7 @@ export function Virtual3dStudio({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCompId, handleRotateSelected, handleMirrorSelected]);
+  }, [selectedCompId, handleMirrorSelected]);
 
   // Delete component from 3D studio
   const handleDeleteComponent3D = useCallback((id: string) => {
@@ -1269,24 +1257,16 @@ export function Virtual3dStudio({
             </button>
           </div>
 
-          {/* Rotate / Flip Component in 3D */}
+          {/* Flip / Invert Component in 3D */}
           {selectedCompId && (
             <div className="flex items-center gap-1 border-r border-slate-700/60 pr-1.5">
-              <button
-                type="button"
-                onClick={handleRotateSelected}
-                className="flex items-center gap-1 px-2 py-1 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-semibold rounded text-xs transition-colors cursor-pointer"
-                title="Rotate 3D Component by 90° (R key)"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Rotate (R)</span>
-              </button>
               <button
                 type="button"
                 onClick={handleMirrorSelected}
                 className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold rounded text-xs transition-colors cursor-pointer"
                 title="Flip / Mirror 3D Component (F key)"
               >
+                <FlipHorizontal className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden sm:inline">Flip (F)</span>
               </button>
             </div>
@@ -1360,6 +1340,7 @@ export function Virtual3dStudio({
           onAddWire3D={handleAddWire3D}
           onDeleteWire3D={handleDeleteWire3D}
           onUpdateWire3D={handleUpdateWire3D}
+          onMirrorComponent={handleMirrorSelected}
           isSimulating={isSimulating}
           simulationStates={simulationStates}
           wireCurrents={wireCurrents}

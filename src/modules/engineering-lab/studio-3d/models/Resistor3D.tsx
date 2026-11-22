@@ -85,62 +85,84 @@ export function Resistor3D({
         );
       })}
 
-      {/* Realistic Thin Silver/Tinned-Copper Cylindrical Wire Leads (radius 0.38mm) */}
+      {/* Realistic Thin Silver/Tinned-Copper Cylindrical Wire Leads (radius 0.38mm, 12.5mm length) */}
       {/* Left horizontal stem */}
       <mesh position={[-4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
-      {/* Left bent leg entering straight into exact center of breadboard hole */}
-      <mesh position={[-5.08, -2.0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 13, 12]} />
+      {/* Left bent leg entering straight into exact center of breadboard hole down to y = -8.0 */}
+      <mesh position={[-5.08, -1.75, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 12.5, 12]} />
       </mesh>
 
       {/* Right horizontal stem */}
       <mesh position={[4.04, 4.5, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 2.08, 12]} />
       </mesh>
-      {/* Right bent leg entering straight into exact center of breadboard hole */}
-      <mesh position={[5.08, -2.0, 0]} material={materials.silverLead}>
-        <cylinderGeometry args={[0.38, 0.38, 13, 12]} />
+      {/* Right bent leg entering straight into exact center of breadboard hole down to y = -8.0 */}
+      <mesh position={[5.08, -1.75, 0]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 12.5, 12]} />
       </mesh>
 
-      {/* Pin 1 Clean Clickable Terminal Anchor (No chunky discs) */}
-      <mesh
-        position={P_PIN1}
-        material={hoveredPin === '1' ? materials.pinHover : materials.silverLead}
-        onClick={(e) => {
-          e.stopPropagation();
-          const w = new THREE.Vector3();
-          e.object.getWorldPosition(w);
-          onPinClick?.('1', w);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          onHoverPin?.('1');
-        }}
-        onPointerOut={() => onHoverPin?.(null)}
-      >
-        <cylinderGeometry args={[0.35, 0.35, 1.2, 12]} />
-      </mesh>
+      {/* Pin 1: Generous Invisible Hit-Sphere & Crisp Hover Highlight Ring */}
+      <group position={P_PIN1}>
+        <mesh material={hoveredPin === '1' ? materials.pinHover : materials.silverLead}>
+          <cylinderGeometry args={[hoveredPin === '1' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
+        </mesh>
+        {hoveredPin === '1' && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+            <ringGeometry args={[0.6, 1.4, 24]} />
+            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+          </mesh>
+        )}
+        {/* Generous Raycast Hit-Sphere */}
+        <mesh
+          onClick={(e) => {
+            e.stopPropagation();
+            const w = new THREE.Vector3();
+            e.object.getWorldPosition(w);
+            onPinClick?.('1', w);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onHoverPin?.('1');
+          }}
+          onPointerOut={() => onHoverPin?.(null)}
+        >
+          <sphereGeometry args={[1.8, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
 
-      {/* Pin 2 Clean Clickable Terminal Anchor (No chunky discs) */}
-      <mesh
-        position={P_PIN2}
-        material={hoveredPin === '2' ? materials.pinHover : materials.silverLead}
-        onClick={(e) => {
-          e.stopPropagation();
-          const w = new THREE.Vector3();
-          e.object.getWorldPosition(w);
-          onPinClick?.('2', w);
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          onHoverPin?.('2');
-        }}
-        onPointerOut={() => onHoverPin?.(null)}
-      >
-        <cylinderGeometry args={[0.35, 0.35, 1.2, 12]} />
-      </mesh>
+      {/* Pin 2: Generous Invisible Hit-Sphere & Crisp Hover Highlight Ring */}
+      <group position={P_PIN2}>
+        <mesh material={hoveredPin === '2' ? materials.pinHover : materials.silverLead}>
+          <cylinderGeometry args={[hoveredPin === '2' ? 0.5 : 0.35, 0.35, 1.2, 12]} />
+        </mesh>
+        {hoveredPin === '2' && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+            <ringGeometry args={[0.6, 1.4, 24]} />
+            <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+          </mesh>
+        )}
+        {/* Generous Raycast Hit-Sphere */}
+        <mesh
+          onClick={(e) => {
+            e.stopPropagation();
+            const w = new THREE.Vector3();
+            e.object.getWorldPosition(w);
+            onPinClick?.('2', w);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onHoverPin?.('2');
+          }}
+          onPointerOut={() => onHoverPin?.(null)}
+        >
+          <sphereGeometry args={[1.8, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
     </group>
   );
 }

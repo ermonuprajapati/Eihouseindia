@@ -93,6 +93,14 @@ export function DipPackage3D({
     ctx.fillStyle = '#94A3B8';
     ctx.fillText('TI  2412M  e3', 270, 165);
 
+    // Edge Pin Number Indicators on top surface silkscreen
+    ctx.font = 'bold 20px monospace';
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillText('1', 50, 230);
+    ctx.fillText(String(halfPins), 460, 230);
+    ctx.fillText(String(halfPins + 1), 460, 30);
+    ctx.fillText(String(pinCount), 50, 30);
+
     // Bevel boundary lines
     ctx.strokeStyle = '#27272A';
     ctx.lineWidth = 3;
@@ -101,7 +109,7 @@ export function DipPackage3D({
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     return texture;
-  }, [partName]);
+  }, [partName, halfPins, pinCount]);
 
   useEffect(() => {
     return () => {
@@ -221,9 +229,9 @@ export function DipPackage3D({
               <boxGeometry args={[0.7, 0.3, 1.4]} />
             </mesh>
 
-            {/* Vertical pin shank dipping into breadboard spring clips */}
+            {/* Vertical pin shank dipping into breadboard spring clips (extended 6.2mm length) */}
             <mesh
-              position={[0, -0.9, 0]}
+              position={[0, -1.9, 0]}
               material={
                 isHovered
                   ? materials.pinHover
@@ -232,18 +240,38 @@ export function DipPackage3D({
                   : materials.leadSilver
               }
             >
-              <boxGeometry args={[0.65, 5.0, 0.45]} />
+              <boxGeometry args={[0.65, 6.2, 0.45]} />
             </mesh>
 
-            {/* Live Hover Tooltip showing pin number and name */}
+            {/* Crisp Hover Highlight Ring */}
             {isHovered && (
-              <group position={[0, 4.5, 0]}>
-                <mesh position={[0, 0, 0]}>
-                  <boxGeometry args={[Math.max(14, `${pin.num}: ${pin.name}`.length * 2.5 + 4), 3.5, 0.4]} />
-                  <meshBasicMaterial color="#0284C7" />
-                </mesh>
-              </group>
+              <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.5, 1.3, 24]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
             )}
+
+            {/* Generous Raycast Hit-Sphere for Effortless Clicking */}
+            <mesh
+              position={[0, 0, 0]}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onPinClick && groupRef.current) {
+                  const wPos = new THREE.Vector3();
+                  wPos.set(pin.pos[0], pin.pos[1], pin.pos[2]);
+                  wPos.applyMatrix4(groupRef.current.matrixWorld);
+                  onPinClick(pin.id, wPos);
+                }
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                onHoverPin?.(pin.id);
+              }}
+              onPointerOut={() => onHoverPin?.(null)}
+            >
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
           </group>
         );
       })}

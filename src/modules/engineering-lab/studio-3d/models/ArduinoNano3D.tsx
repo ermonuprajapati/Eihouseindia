@@ -261,11 +261,17 @@ export function ArduinoNano3D({
                 <meshBasicMaterial color="#00F0FF" />
               </mesh>
             )}
-            {/* Downward Silver Pin Leg into Breadboard Hole */}
-            <mesh position={[0, -1.8, 0]} material={materials.pinSilver}>
-              <boxGeometry args={[0.6, 4.0, 0.6]} />
+            {/* Downward Silver Pin Leg into Breadboard Hole (extended 5.5mm length) */}
+            <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
+              <boxGeometry args={[0.6, 5.5, 0.6]} />
             </mesh>
-            {/* Interactive Click & Hover Target */}
+            {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
+            {isHovered && (
+              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+              </mesh>
+            )}
             <mesh
               position={[0, 0.5, 0]}
               onPointerDown={(e) => e.stopPropagation()}
@@ -281,8 +287,8 @@ export function ArduinoNano3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <boxGeometry args={[2.4, 6.0, 2.4]} />
-              <meshBasicMaterial transparent opacity={0} />
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
           </group>
         );

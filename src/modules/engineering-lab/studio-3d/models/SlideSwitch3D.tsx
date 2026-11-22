@@ -88,12 +88,25 @@ export function SlideSwitch3D({
         const isHovered = hoveredPin === p.name;
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            <mesh position={[0, 1.0, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 4.0, 8]} />
+            {/* Metallic Lead Leg extending down into breadboard */}
+            <mesh position={[0, -0.5, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.3, 0.3, 5.0, 8]} />
             </mesh>
+            {/* Terminal Sphere with Generous Hit-Sphere & Hover Ring */}
             <mesh
-              position={[0, -1.0, 0]}
+              position={[0, 0, 0]}
               material={isHovered ? materials.pinHover : materials.pinSilver}
+            >
+              <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+            </mesh>
+            {isHovered && (
+              <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.5, 1.3, 24]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
+            )}
+            <mesh
+              position={[0, 0, 0]}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();
@@ -106,7 +119,8 @@ export function SlideSwitch3D({
               }}
               onPointerOut={() => onHoverPin?.(null)}
             >
-              <sphereGeometry args={[isHovered ? 1.4 : 0.8, 8, 8]} />
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
           </group>
         );

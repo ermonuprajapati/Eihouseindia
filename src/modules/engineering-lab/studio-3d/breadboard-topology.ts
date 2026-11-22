@@ -11,6 +11,8 @@
  * - Bottom Power Rails: Positive (+, Red) and Negative (-, Blue) -> 100 holes
  */
 
+import type { Component3D } from '../types';
+
 export interface BreadboardHole3D {
   id: string;
   name: string;
@@ -26,6 +28,137 @@ export interface BreadboardHole3D {
 export const BB830_WIDTH = 165; // mm along X
 export const BB830_DEPTH = 55;  // mm along Z
 export const BB830_HEIGHT = 8.5; // mm along Y
+
+// =========================================================================
+// Grounding & Surface Elevation Physics Constants
+// =========================================================================
+export const WORKBENCH_TOP_Y = 0.0; // Grounded antistatic ESD mat top surface
+export const BREADBOARD_TOP_Y = BB830_HEIGHT; // Top plastic face of 830-point solderless breadboard (8.5mm)
+export const BREADBOARD_INSERTION_DEPTH = 3.6; // Realistic pin insertion into internal spring clips (3.6mm, approx 35-42% of 9-11mm pins)
+
+export interface Component3DElevationSpec {
+  isThroughHole: boolean;
+  pinLength: number;
+  localMinY: number; // lowest point (usually pin tip) in local group coordinates
+  localMinBodyY: number; // base of component body / package in local group coordinates
+  packageHeight?: number;
+}
+
+export function getComponentElevationSpec(type: string): Component3DElevationSpec {
+  const t = (type || '').toUpperCase();
+
+  // 1. SMD / Flat Boards / Console-mount parts (No protruding bottom pins)
+  if (
+    t.includes('MEGA') ||
+    t === 'ARDUINO_UNO' ||
+    t.includes('BATTERY') ||
+    t === 'DC_VOLTAGE' ||
+    t.includes('LCD') ||
+    t.includes('SERVO')
+  ) {
+    return {
+      isThroughHole: false,
+      pinLength: 0,
+      localMinY: 0.0,
+      localMinBodyY: 0.0,
+      packageHeight: t.includes('BATTERY') ? 48.0 : t.includes('LCD') ? 10.0 : 15.0,
+    };
+  }
+
+  // 2. DIP ICs & Compact MCU Breakouts (NE555, LM358, LM741, Nano, ESP32, Pico)
+  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR') || t.includes('DIP')) {
+    return {
+      isThroughHole: true,
+      pinLength: 5.2,
+      localMinY: -5.0,
+      localMinBodyY: 0.2,
+      packageHeight: 4.0,
+    };
+  }
+
+  if (t.includes('NANO') || t.includes('ESP32') || t.includes('PICO')) {
+    return {
+      isThroughHole: true,
+      pinLength: 6.5,
+      localMinY: -5.5,
+      localMinBodyY: 0.8,
+      packageHeight: 7.0,
+    };
+  }
+
+  // 3. Sensor & Wireless Modules (HC-SR04 Ultrasonic, HC-05 Bluetooth)
+  if (t.includes('SR04') || t.includes('ULTRASONIC') || t.includes('BLUETOOTH') || t.includes('HC05') || t.includes('HC06')) {
+    return {
+      isThroughHole: true,
+      pinLength: 6.0,
+      localMinY: -5.0,
+      localMinBodyY: 1.0,
+      packageHeight: 18.0,
+    };
+  }
+
+  // 4. Through-Hole 3-pin Transistors (TO-92, TO-220, Regulators)
+  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('REGULATOR') || t.includes('7805') || t.includes('LM317')) {
+    const isTo220 = t.includes('REGULATOR') || t.includes('MOSFET') || t.includes('TO220');
+    return {
+      isThroughHole: true,
+      pinLength: 8.5,
+      localMinY: -7.0,
+      localMinBodyY: 1.0,
+      packageHeight: isTo220 ? 15.0 : 6.0,
+    };
+  }
+
+  // 5. Switches & Trimmers (Pushbutton, Slide Switch, Potentiometer)
+  if (t.includes('BUTTON') || t.includes('SWITCH') || t.includes('POTENTIOMETER')) {
+    const isButton = t.includes('BUTTON');
+    return {
+      isThroughHole: true,
+      pinLength: isButton ? 5.0 : 6.0,
+      localMinY: isButton ? -4.5 : -4.0,
+      localMinBodyY: 0.5,
+      packageHeight: isButton ? 5.0 : 12.0,
+    };
+  }
+
+  // 6. Axial & Radial 2-Pin / 4-Pin Passives (Resistor, LED, RGB LED, Capacitor, Diode, Inductor, Buzzer, LDR)
+  return {
+    isThroughHole: true,
+    pinLength: 11.0,
+    localMinY: -8.0,
+    localMinBodyY: 2.0,
+    packageHeight: t.includes('BUZZER') ? 10.0 : t.includes('LED') ? 9.0 : 5.0,
+  };
+}
+
+/**
+ * Calculates exact zero-sinking elevation Y for any component based on its location:
+ * - On Workbench (table surface): minY === WORKBENCH_TOP_Y (lowest pin tip rests on table sheet; never sinks).
+ * - On Breadboard: lower 35-45% of pins inserted into holes; body ALWAYS sits cleanly ABOVE BREADBOARD_TOP_Y with visible pin clearance.
+ */
+export function computeComponentGroundElevation(
+  type: string,
+  targetX: number,
+  targetZ: number,
+  hasBreadboard: boolean
+): number {
+  const spec = getComponentElevationSpec(type);
+
+  const isOnBreadboard =
+    hasBreadboard &&
+    spec.isThroughHole &&
+    Math.abs(targetX) <= (BB830_WIDTH / 2 + 2.54) &&
+    Math.abs(targetZ) <= (BB830_DEPTH / 2 + 2.54);
+
+  if (isOnBreadboard) {
+    const insertionDepth = Math.min(BREADBOARD_INSERTION_DEPTH, spec.pinLength * 0.42);
+    const elevatedY = BREADBOARD_TOP_Y - insertionDepth - spec.localMinY;
+    return Math.round(elevatedY * 100) / 100;
+  }
+
+  const benchY = WORKBENCH_TOP_Y - spec.localMinY;
+  return Math.round(benchY * 100) / 100;
+}
 
 export const PITCH_X = 2.54;
 export const PITCH_Z = 2.54;
@@ -455,6 +588,73 @@ export function getTieGroupForHole(holeId: string): string | undefined {
 
 export function getAllHolesInTieGroup(tieGroup: string): BreadboardHole3D[] {
   return HOLES_BY_TIE_GROUP.get(tieGroup) || [];
+}
+
+/**
+ * Normalizes an angle in degrees after applying a delta in 45-degree increments.
+ * Result stays within [-180, 180].
+ */
+export function stepAngle45(current: number, delta: number): number {
+  let next = Math.round((current + delta) / 45) * 45;
+  next = ((next % 360) + 360) % 360;
+  if (next > 180) next -= 360;
+  return next;
+}
+
+/**
+ * Nudges a 3D component along a distinct world axis (X, Y, or Z).
+ * Y translation is clamped at minGroundY (or WORKBENCH_TOP_Y) to prevent sinking below sheet.
+ */
+export function nudgeComponent3D(
+  comp: Component3D,
+  axis: 'x' | 'y' | 'z',
+  delta: number,
+  minGroundY?: number
+): Component3D {
+  if (axis === 'x') {
+    return { ...comp, x3d: Math.round((comp.x3d + delta) * 100) / 100 };
+  }
+  if (axis === 'z') {
+    return { ...comp, z3d: Math.round((comp.z3d + delta) * 100) / 100 };
+  }
+  // Y axis
+  const floorY = minGroundY !== undefined ? minGroundY : computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, false);
+  const nextY = Math.max(floorY, Math.round((comp.y3d + delta) * 100) / 100);
+  return { ...comp, y3d: nextY };
+}
+
+/**
+ * Rotates a 3D component by 45 degrees along a distinct axis (yaw=Y, pitch=X, roll=Z).
+ */
+export function rotateComponent45(
+  comp: Component3D,
+  axis: 'yaw' | 'pitch' | 'roll',
+  direction: 1 | -1
+): Component3D {
+  const delta = direction * 45;
+  if (axis === 'yaw') {
+    return { ...comp, rotY: stepAngle45(comp.rotY || 0, delta) };
+  }
+  if (axis === 'pitch') {
+    return { ...comp, rotX: stepAngle45(comp.rotX || 0, delta) };
+  }
+  // roll
+  return { ...comp, rotZ: stepAngle45(comp.rotZ || 0, delta) };
+}
+
+/**
+ * Resets a 3D component orientation back to 0 degrees for all 3 axes.
+ */
+export function resetComponentOrientation(comp: Component3D): Component3D {
+  return { ...comp, rotX: 0, rotY: 0, rotZ: 0 };
+}
+
+/**
+ * Drops / snaps a 3D component flush to breadboard or workbench surface.
+ */
+export function snapComponentToSurface(comp: Component3D, hasBreadboard: boolean = true): Component3D {
+  const groundY = computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, hasBreadboard);
+  return { ...comp, y3d: groundY };
 }
 
 

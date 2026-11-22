@@ -112,28 +112,37 @@ export function Inductor3D({
         <cylinderGeometry args={[0.38, 0.38, 13.0, 12]} />
       </mesh>
 
-      {/* 3. Interactive Click/Hover Terminals at Breadboard Surface (y = 0) */}
+      {/* 3. Interactive Click/Hover Terminals with Generous Hit-Sphere & Hover Ring */}
       {pins.map((p) => {
         const isHovered = hoveredPin === p.name;
         return (
-          <mesh
-            key={p.name}
-            position={[p.x, 0, 0]}
-            material={isHovered ? materials.pinHover : materials.silverLead}
-            onClick={(e) => {
-              e.stopPropagation();
-              const worldPos = new THREE.Vector3();
-              e.object.getWorldPosition(worldPos);
-              onPinClick?.(p.name, worldPos);
-            }}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              onHoverPin?.(p.name);
-            }}
-            onPointerOut={() => onHoverPin?.(null)}
-          >
-            <cylinderGeometry args={[isHovered ? 0.55 : 0.38, 0.38, 1.2, 12]} />
-          </mesh>
+          <group key={p.name} position={[p.x, 0, 0]}>
+            <mesh material={isHovered ? materials.pinHover : materials.silverLead}>
+              <cylinderGeometry args={[isHovered ? 0.5 : 0.38, 0.38, 1.2, 12]} />
+            </mesh>
+            {isHovered && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+              </mesh>
+            )}
+            <mesh
+              onClick={(e) => {
+                e.stopPropagation();
+                const worldPos = new THREE.Vector3();
+                e.object.getWorldPosition(worldPos);
+                onPinClick?.(p.name, worldPos);
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                onHoverPin?.(p.name);
+              }}
+              onPointerOut={() => onHoverPin?.(null)}
+            >
+              <sphereGeometry args={[1.8, 12, 12]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+          </group>
         );
       })}
     </group>

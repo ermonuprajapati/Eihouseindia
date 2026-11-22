@@ -104,28 +104,39 @@ export function Diode3D({
             <mesh position={[p.x / 2, 4.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.lead}>
               <cylinderGeometry args={[0.3, 0.3, Math.abs(p.x), 8]} />
             </mesh>
-            {/* Vertical lead leg extending down through breadboard hole */}
+            {/* Vertical lead leg extending down through breadboard hole to y = -8.0 */}
             <mesh position={[p.x, -2.0, 0]} material={materials.lead}>
               <cylinderGeometry args={[0.3, 0.3, 12.0, 8]} />
             </mesh>
-            {/* Click target at breadboard surface */}
-            <mesh
-              position={[p.x, 0, 0]}
-              material={isHovered ? materials.pinHover : materials.lead}
-              onClick={(e) => {
-                e.stopPropagation();
-                const worldPos = new THREE.Vector3();
-                e.object.getWorldPosition(worldPos);
-                onPinClick?.(p.name, worldPos);
-              }}
-              onPointerOver={(e) => {
-                e.stopPropagation();
-                onHoverPin?.(p.name);
-              }}
-              onPointerOut={() => onHoverPin?.(null)}
-            >
-              <sphereGeometry args={[isHovered ? 1.4 : 0.8, 8, 8]} />
-            </mesh>
+            {/* Click target with Generous Hit-Sphere & Hover Ring */}
+            <group position={[p.x, 0, 0]}>
+              <mesh material={isHovered ? materials.pinHover : materials.lead}>
+                <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
+              </mesh>
+              {isHovered && (
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+                  <ringGeometry args={[0.6, 1.4, 24]} />
+                  <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
+                </mesh>
+              )}
+              {/* Generous Raycast Hit-Sphere */}
+              <mesh
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const worldPos = new THREE.Vector3();
+                  e.object.getWorldPosition(worldPos);
+                  onPinClick?.(p.name, worldPos);
+                }}
+                onPointerOver={(e) => {
+                  e.stopPropagation();
+                  onHoverPin?.(p.name);
+                }}
+                onPointerOut={() => onHoverPin?.(null)}
+              >
+                <sphereGeometry args={[1.8, 12, 12]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+            </group>
           </group>
         );
       })}

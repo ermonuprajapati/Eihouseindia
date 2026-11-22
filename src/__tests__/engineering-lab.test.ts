@@ -17,6 +17,14 @@ import {
   getResistorColorBands,
 } from '@/modules/engineering-lab/virtual3d-engine/breadboard-model';
 import { getLedColorPalette } from '@/modules/engineering-lab/studio-3d/models/Led3D';
+import { Component3D } from '@/modules/engineering-lab/types';
+import {
+  stepAngle45,
+  nudgeComponent3D,
+  rotateComponent45,
+  resetComponentOrientation,
+  snapComponentToSurface,
+} from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
   let solver: CircuitSolver;
@@ -3915,6 +3923,231 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(res.x).toBeCloseTo(0, 2);
       expect(res.y).toBeCloseTo(0, 2);
       expect(res.z).toBeCloseTo(-2.54, 2);
+    });
+
+    it('3D Studio CAD Manipulation: stepAngle45 wraps angles cleanly in 45-degree steps within [-180, 180]', () => {
+      expect(stepAngle45(0, 45)).toBe(45);
+      expect(stepAngle45(45, 45)).toBe(90);
+      expect(stepAngle45(90, 45)).toBe(135);
+      expect(stepAngle45(135, 45)).toBe(180);
+      expect(stepAngle45(180, 45)).toBe(-135);
+      expect(stepAngle45(0, -45)).toBe(-45);
+      expect(stepAngle45(-45, -45)).toBe(-90);
+      expect(stepAngle45(-90, -45)).toBe(-135);
+      expect(stepAngle45(-135, -45)).toBe(180);
+    });
+
+    it('3D Studio CAD Manipulation: X-axis nudge produces distinct left/right delta while preserving Y and Z', () => {
+      const initialComp: Component3D = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        parameters: {},
+        x3d: 0,
+        y3d: 12.9,
+        z3d: -8.42,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+      };
+
+      const leftNudged = nudgeComponent3D(initialComp, 'x', -2.54);
+      expect(leftNudged.x3d).toBe(-2.54);
+      expect(leftNudged.y3d).toBe(initialComp.y3d);
+      expect(leftNudged.z3d).toBe(initialComp.z3d);
+
+      const rightNudged = nudgeComponent3D(initialComp, 'x', 2.54);
+      expect(rightNudged.x3d).toBe(2.54);
+      expect(rightNudged.y3d).toBe(initialComp.y3d);
+      expect(rightNudged.z3d).toBe(initialComp.z3d);
+    });
+
+    it('3D Studio CAD Manipulation: Z-axis nudge produces distinct forward/backward delta while preserving X and Y', () => {
+      const initialComp: Component3D = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        parameters: {},
+        x3d: 10,
+        y3d: 12.9,
+        z3d: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+      };
+
+      const fwdNudged = nudgeComponent3D(initialComp, 'z', -2.54);
+      expect(fwdNudged.z3d).toBe(-2.54);
+      expect(fwdNudged.x3d).toBe(initialComp.x3d);
+      expect(fwdNudged.y3d).toBe(initialComp.y3d);
+
+      const backNudged = nudgeComponent3D(initialComp, 'z', 2.54);
+      expect(backNudged.z3d).toBe(2.54);
+      expect(backNudged.x3d).toBe(initialComp.x3d);
+      expect(backNudged.y3d).toBe(initialComp.y3d);
+    });
+
+    it('3D Studio CAD Manipulation: Y-axis elevation produces distinct Up delta and clamps Down above workbench', () => {
+      const initialComp: Component3D = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        parameters: {},
+        x3d: 10,
+        y3d: 8.0, // lowest lead tip rests at y = 0
+        z3d: 65,  // placed on workbench sheet
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+      };
+
+      // Up (+Y)
+      const elevated = nudgeComponent3D(initialComp, 'y', 2.54);
+      expect(elevated.y3d).toBe(10.54);
+      expect(elevated.x3d).toBe(initialComp.x3d);
+      expect(elevated.z3d).toBe(initialComp.z3d);
+
+      // Down (-Y): clamping at minGroundY (8.0 for Resistor so lowest pin tip stays >= WORKBENCH_TOP_Y = 0)
+      const clampedDown = nudgeComponent3D(initialComp, 'y', -5.0);
+      expect(clampedDown.y3d).toBe(8.0); // Never sinks below sheet
+      expect(clampedDown.x3d).toBe(initialComp.x3d);
+      expect(clampedDown.z3d).toBe(initialComp.z3d);
+    });
+
+    it('3D Studio CAD Manipulation: Yaw (Y-axis) rotation modifies rotY exclusively in 45-deg increments', () => {
+      const initialComp: Component3D = {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        parameters: {},
+        x3d: 0,
+        y3d: 12.9,
+        z3d: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+      };
+
+      const yawCw = rotateComponent45(initialComp, 'yaw', 1);
+      expect(yawCw.rotY).toBe(45);
+      expect(yawCw.rotX).toBe(0);
+      expect(yawCw.rotZ).toBe(0);
+
+      const yawCcw = rotateComponent45(initialComp, 'yaw', -1);
+      expect(yawCcw.rotY).toBe(-45);
+      expect(yawCcw.rotX).toBe(0);
+      expect(yawCcw.rotZ).toBe(0);
+
+      // Two clicks = 90 deg
+      const twoClicks = rotateComponent45(yawCw, 'yaw', 1);
+      expect(twoClicks.rotY).toBe(90);
+    });
+
+    it('3D Studio CAD Manipulation: Pitch (X-axis) rotation modifies rotX exclusively in 45-deg increments', () => {
+      const initialComp: Component3D = {
+        id: 'ic1',
+        type: 'TIMER_555',
+        label: 'U1',
+        parameters: {},
+        x3d: 0,
+        y3d: 8.5,
+        z3d: 0,
+        rotX: 0,
+        rotY: 45,
+        rotZ: 0,
+      };
+
+      const pitchFwd = rotateComponent45(initialComp, 'pitch', -1);
+      expect(pitchFwd.rotX).toBe(-45);
+      expect(pitchFwd.rotY).toBe(45); // rotY preserved
+      expect(pitchFwd.rotZ).toBe(0);
+
+      const pitchBack = rotateComponent45(initialComp, 'pitch', 1);
+      expect(pitchBack.rotX).toBe(45);
+      expect(pitchBack.rotY).toBe(45);
+      expect(pitchBack.rotZ).toBe(0);
+    });
+
+    it('3D Studio CAD Manipulation: Roll (Z-axis) rotation modifies rotZ exclusively in 45-deg increments', () => {
+      const initialComp: Component3D = {
+        id: 'ic1',
+        type: 'TIMER_555',
+        label: 'U1',
+        parameters: {},
+        x3d: 0,
+        y3d: 8.5,
+        z3d: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+      };
+
+      const rollLeft = rotateComponent45(initialComp, 'roll', -1);
+      expect(rollLeft.rotZ).toBe(-45);
+      expect(rollLeft.rotX).toBe(0);
+      expect(rollLeft.rotY).toBe(0);
+
+      const rollRight = rotateComponent45(initialComp, 'roll', 1);
+      expect(rollRight.rotZ).toBe(45);
+      expect(rollRight.rotX).toBe(0);
+      expect(rollRight.rotY).toBe(0);
+    });
+
+    it('3D Studio CAD Manipulation: resetComponentOrientation zeroes all 3 angles back to 0 deg', () => {
+      const rotatedComp: Component3D = {
+        id: 'c1',
+        type: 'CAPACITOR_CERAMIC',
+        label: 'C1',
+        parameters: {},
+        x3d: 5,
+        y3d: 10,
+        z3d: 5,
+        rotX: 45,
+        rotY: 90,
+        rotZ: -45,
+      };
+
+      const reset = resetComponentOrientation(rotatedComp);
+      expect(reset.rotX).toBe(0);
+      expect(reset.rotY).toBe(0);
+      expect(reset.rotZ).toBe(0);
+      expect(reset.x3d).toBe(5);
+      expect(reset.y3d).toBe(10);
+      expect(reset.z3d).toBe(5);
+    });
+
+    it('3D Studio CAD Manipulation: snapComponentToSurface seats component cleanly on breadboard and workbench surfaces', () => {
+      // Over breadboard: bounds are inside breadboard footprint
+      const compOnBb: Component3D = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        parameters: {},
+        x3d: 0, // centered on breadboard
+        y3d: 30, // floating high in air
+        z3d: 0,
+        rotY: 0,
+      };
+
+      const droppedOnBb = snapComponentToSurface(compOnBb, true);
+      // Resistor ground elevation on breadboard = 8.5 - 3.6 - (-8.0) = 12.9
+      expect(droppedOnBb.y3d).toBe(12.9);
+
+      // Over workbench: outside breadboard footprint
+      const compOnWb: Component3D = {
+        id: 'r2',
+        type: 'RESISTOR',
+        label: 'R2',
+        parameters: {},
+        x3d: -120, // out on workbench mat
+        y3d: 50,   // floating in air
+        z3d: 80,
+        rotY: 0,
+      };
+
+      const droppedOnWb = snapComponentToSurface(compOnWb, true);
+      // Resistor ground elevation on workbench = 0 - (-8.0) = 8.0 (lowest pin touches y = 0 flush)
+      expect(droppedOnWb.y3d).toBe(8.0);
     });
   });
 });
