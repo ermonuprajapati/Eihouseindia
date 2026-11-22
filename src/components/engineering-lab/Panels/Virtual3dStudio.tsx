@@ -10,6 +10,7 @@ import {
   START_X,
   PITCH_X,
   computeComponentGroundElevation,
+  flipComponent3D,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
@@ -1109,19 +1110,17 @@ export function Virtual3dStudio({
     const comp = components.find((c) => c.id === selectedCompId);
     const c3d = activeComponents3d.find((c) => c.id === selectedCompId);
     if (!comp || !c3d) return;
-    const nextMirrored = !comp.mirrored;
+    const flipped = flipComponent3D(c3d);
+    const nextMirrored = Boolean(flipped.parameters?.mirrored ?? !comp.mirrored);
     if (onUpdateComponent) {
       onUpdateComponent({
         ...comp,
         mirrored: nextMirrored,
-        parameters: { ...comp.parameters, mirrored: nextMirrored },
+        parameters: { ...comp.parameters, mirrored: nextMirrored, rotY: flipped.rotY },
       });
     }
-    handleUpdateComponent3D({
-      ...c3d,
-      parameters: { ...c3d.parameters, mirrored: nextMirrored },
-    });
-    toast.info(`Flipped ${comp.label} ${nextMirrored ? 'mirrored' : 'normal'}`);
+    handleUpdateComponent3D(flipped);
+    toast.info(`Flipped ${comp.label} 180° (Yaw: ${flipped.rotY}°)`);
   }, [selectedCompId, components, activeComponents3d, onUpdateComponent, handleUpdateComponent3D]);
 
   useEffect(() => {

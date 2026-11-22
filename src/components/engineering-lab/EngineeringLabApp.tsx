@@ -1464,7 +1464,6 @@ export function EngineeringLabApp() {
                   setSelectedCompId(id);
                   if (id) {
                     setSelectedWireId(null);
-                    setIsInspectorOpen(true);
                   }
                 }}
                 onSelectWire={(id) => {

@@ -361,10 +361,10 @@ export function PropertiesInspector({
   // PERSISTENT COLLAPSED TAB ON RIGHT EDGE
   if (!isOpen) {
     return (
-      <div className="relative z-30 shrink-0">
+      <div className="relative z-30 shrink-0 pointer-events-none">
         <button
           onClick={onToggleOpen || onClose}
-          className="absolute right-0 top-1/2 -translate-y-1/2 bg-[#0B1528] hover:bg-slate-800 border-y border-l border-slate-700 text-slate-300 hover:text-white py-3 px-2 rounded-l-lg shadow-2xl transition-all flex flex-col items-center gap-2 group cursor-pointer"
+          className="pointer-events-auto absolute right-0 top-1/2 -translate-y-1/2 bg-[#0B1528] hover:bg-slate-800 border-y border-l border-slate-700 text-slate-300 hover:text-white py-3 px-2 rounded-l-lg shadow-2xl transition-all flex flex-col items-center gap-2 group cursor-pointer"
           title="Open Properties Inspector (Shortcut: I)"
         >
           <ChevronLeft className="w-4 h-4 text-sky-400 group-hover:scale-125 transition-transform" />

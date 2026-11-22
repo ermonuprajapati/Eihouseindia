@@ -55,6 +55,7 @@ import {
   rotateComponent45,
   resetComponentOrientation,
   snapComponentToSurface,
+  flipComponent3D,
 } from './breadboard-topology';
 import { ArduinoMega3D, MEGA_PINS } from './models/ArduinoMega3D';
 import { ArduinoUno3D, ARDUINO_PINS } from './models/ArduinoUno3D';
@@ -875,7 +876,7 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
 
 export function ComponentPinLabelsOverlay({
   comp,
-  isSelected: _isSelected,
+  isSelected = false,
   hoveredPinName,
   showAll,
 }: {
@@ -886,10 +887,11 @@ export function ComponentPinLabelsOverlay({
 }) {
   const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
 
-  // If showAll is false, ONLY show the single hovered pin badge. Never render all permanent badges when merely selected.
-  if (!showAll && !hoveredPinName) return null;
+  // When "Show All Pin Labels" toggle is ON or a component is selected, render full pin set with fan-out
+  const shouldRenderMulti = showAll || isSelected;
+  if (!shouldRenderMulti && !hoveredPinName) return null;
 
-  const pinsToRender = showAll
+  const pinsToRender = shouldRenderMulti
     ? pinLabels
     : pinLabels.filter(
         (p) =>
@@ -907,14 +909,28 @@ export function ComponentPinLabelsOverlay({
           hoveredPinName === p.id ||
           hoveredPinName?.toLowerCase() === p.id.toLowerCase();
 
-        // Single hovered pin gets clean prominent elevation above terminal
-        const elevationY = isHovered ? 4.5 : (idx % 2 === 0 ? 3.5 : 5.8);
-        const offsetZ = p.localPos[2] < -0.5 ? -3.0 : p.localPos[2] > 0.5 ? 3.0 : 0;
+        // Stagger labels across 3 distinct vertical tiers:
+        // Tier 0: 4.2mm, Tier 1: 7.6mm, Tier 2: 11.0mm
+        const tier = idx % 3;
+        const elevationY = isHovered ? 5.2 : 4.2 + tier * 3.4;
+
+        // Outward radial leader offsets:
+        // Push outward radially from component center in XZ plane with minimum clearance
+        const lx = p.localPos[0];
+        const lz = p.localPos[2];
+        const dist = Math.hypot(lx, lz);
+        const radX = dist > 0.1 ? lx / dist : (idx % 2 === 0 ? 1 : -1);
+        const radZ = dist > 0.1 ? lz / dist : (idx % 2 === 0 ? -1 : 1);
+
+        // Stagger outward radial push per tier so adjacent pins on standard 2.54mm pitch never collide:
+        const pushDistance = (idx % 2 === 0 ? 3.6 : 6.0) + tier * 1.2;
+        const offsetX = radX * pushDistance;
+        const offsetZ = radZ * pushDistance;
 
         return (
           <Html
             key={p.id}
-            position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2] + offsetZ]}
+            position={[lx + offsetX, p.localPos[1] + elevationY, lz + offsetZ]}
             center
             distanceFactor={160}
             style={{ pointerEvents: 'none', userSelect: 'none' }}
@@ -922,8 +938,8 @@ export function ComponentPinLabelsOverlay({
             <div
               className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] whitespace-nowrap shadow-xl tracking-tight transition-transform ${
                 isHovered
-                  ? 'bg-amber-400 text-slate-950 scale-110 ring-2 ring-white border border-amber-300 shadow-amber-500/50'
-                  : 'bg-slate-950/95 text-cyan-200 border border-cyan-500/80 shadow-black/90'
+                  ? 'bg-amber-400 text-slate-950 scale-125 ring-2 ring-white border border-amber-300 shadow-amber-500/60 z-50'
+                  : 'bg-slate-950/95 text-cyan-200 border border-cyan-500/70 shadow-black/90'
               }`}
             >
               {p.label}
@@ -1330,9 +1346,15 @@ export function Studio3DCanvas({
           }
         }
       } else if (e.key === 'f' || e.key === 'F') {
-        if (selectedCompId && onMirrorComponent) {
-          e.preventDefault();
-          onMirrorComponent(selectedCompId);
+        if (selectedCompId) {
+          const comp = components3d.find((c) => c.id === selectedCompId);
+          if (comp) {
+            e.preventDefault();
+            const flipped = flipComponent3D(comp);
+            onUpdateComponent3D(flipped);
+            onMirrorComponent?.(selectedCompId);
+            toast.info(`Flipped ${comp.label} 180° (Yaw: ${flipped.rotY}°) [F]`);
+          }
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         if (selectedCompId) {
@@ -1648,7 +1670,7 @@ export function Studio3DCanvas({
       else if (pinId === '1B' || pinId === '2') { lx = 2.54; lz = -2.54; }
       else if (pinId === '2A' || pinId === '3') { lx = -2.54; lz = 2.54; }
       else { lx = 2.54; lz = 2.54; }
-      ly = -4;
+      ly = 0;
     } else if (
       comp.type === 'MODULE_BLUETOOTH_HC05' ||
       comp.type === 'BLUETOOTH' ||
@@ -3752,6 +3774,21 @@ export function Studio3DCanvas({
                 <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400" />
               </button>
 
+              {/* Quick Flip 180° */}
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = flipComponent3D(selectedComp);
+                  onUpdateComponent3D(updated);
+                  if (onMirrorComponent) onMirrorComponent(selectedComp.id);
+                  toast.info(`Flipped ${selectedComp.label} 180° [F]`);
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 hover:text-amber-200 transition-colors cursor-pointer"
+                title="Flip / Invert Orientation 180° [F]"
+              >
+                <FlipHorizontal className="w-3.5 h-3.5" />
+              </button>
+
               {/* Quick Yaw +45° */}
               <button
                 type="button"
@@ -3819,17 +3856,20 @@ export function Studio3DCanvas({
                   </button>
 
                   {/* Single Genuine Flip / Invert Button */}
-                  {onMirrorComponent && (
-                    <button
-                      type="button"
-                      onClick={() => onMirrorComponent(selectedComp.id)}
-                      className="h-7 px-2 flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
-                      title="Invert / Mirror component pinout orientation [F]"
-                    >
-                      <FlipHorizontal className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Flip [F]</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = flipComponent3D(selectedComp);
+                      onUpdateComponent3D(updated);
+                      if (onMirrorComponent) onMirrorComponent(selectedComp.id);
+                      toast.info(`Flipped ${selectedComp.label} 180° [F]`);
+                    }}
+                    className="h-7 px-2 flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 hover:text-amber-200 transition-colors cursor-pointer text-[11px]"
+                    title="Invert / Mirror component pinout orientation 180° [F]"
+                  >
+                    <FlipHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Flip [F]</span>
+                  </button>
 
                   {/* Reset Orientation */}
                   <button

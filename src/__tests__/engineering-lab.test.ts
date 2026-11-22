@@ -24,6 +24,7 @@ import {
   rotateComponent45,
   resetComponentOrientation,
   snapComponentToSurface,
+  flipComponent3D,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 
 describe('Engineering Lab - Full Acceptance Test Suite', () => {
@@ -4123,15 +4124,18 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         type: 'RESISTOR',
         label: 'R1',
         parameters: {},
-        x3d: 0, // centered on breadboard
+        x3d: 1.2, // slightly off grid
         y3d: 30, // floating high in air
-        z3d: 0,
+        z3d: 5.5, // slightly off grid
         rotY: 0,
       };
 
       const droppedOnBb = snapComponentToSurface(compOnBb, true);
       // Resistor ground elevation on breadboard = 8.5 - 3.6 - (-8.0) = 12.9
       expect(droppedOnBb.y3d).toBe(12.9);
+      // X and Z snap to nearest 2.54mm grid: 1.2 -> 0, 5.5 -> 5.08
+      expect(droppedOnBb.x3d).toBe(0);
+      expect(droppedOnBb.z3d).toBe(5.08);
 
       // Over workbench: outside breadboard footprint
       const compOnWb: Component3D = {
@@ -4139,15 +4143,39 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         type: 'RESISTOR',
         label: 'R2',
         parameters: {},
-        x3d: -120, // out on workbench mat
+        x3d: -120.3, // out on workbench mat
         y3d: 50,   // floating in air
-        z3d: 80,
+        z3d: 81.1,
         rotY: 0,
       };
 
       const droppedOnWb = snapComponentToSurface(compOnWb, true);
       // Resistor ground elevation on workbench = 0 - (-8.0) = 8.0 (lowest pin touches y = 0 flush)
       expect(droppedOnWb.y3d).toBe(8.0);
+      // Snapped to 2.54mm grid
+      expect(droppedOnWb.x3d).toBeCloseTo(-119.38, 1);
+      expect(droppedOnWb.z3d).toBeCloseTo(81.28, 1);
+    });
+
+    it('3D Studio CAD Manipulation: flipComponent3D flips rotY by 180 degrees and toggles mirrored parameter', () => {
+      const comp: Component3D = {
+        id: 'ic1',
+        type: 'TIMER_555',
+        label: 'U1',
+        parameters: { mirrored: false },
+        x3d: 0,
+        y3d: 12.9,
+        z3d: 0,
+        rotY: 0,
+      };
+
+      const flipped = flipComponent3D(comp);
+      expect(flipped.rotY).toBe(180);
+      expect(flipped.parameters?.mirrored).toBe(true);
+
+      const flippedBack = flipComponent3D(flipped);
+      expect(flippedBack.rotY).toBe(0);
+      expect(flippedBack.parameters?.mirrored).toBe(false);
     });
   });
 });

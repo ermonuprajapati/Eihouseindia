@@ -650,11 +650,38 @@ export function resetComponentOrientation(comp: Component3D): Component3D {
 }
 
 /**
- * Drops / snaps a 3D component flush to breadboard or workbench surface.
+ * Drops / snaps a 3D component:
+ * 1. Immediately aligns X and Z cleanly to the nearest 2.54mm breadboard/grid point.
+ * 2. Snaps Y cleanly onto BREADBOARD_TOP_Y (if over breadboard) or WORKBENCH_TOP_Y (if on sheet) with zero sinking.
  */
 export function snapComponentToSurface(comp: Component3D, hasBreadboard: boolean = true): Component3D {
-  const groundY = computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, hasBreadboard);
-  return { ...comp, y3d: groundY };
+  const snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
+  const snappedZ = Math.round(comp.z3d / PITCH_Z) * PITCH_Z;
+  const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, hasBreadboard);
+  return {
+    ...comp,
+    x3d: Math.round(snappedX * 100) / 100,
+    y3d: Math.round(groundY * 100) / 100,
+    z3d: Math.round(snappedZ * 100) / 100,
+  };
+}
+
+/**
+ * Visibly flips/mirrors a 3D component orientation by 180 degrees around its vertical Yaw axis (Y-axis),
+ * cleanly reversing pin order and updating both the 3D transform and pin coordinates used by wires.
+ */
+export function flipComponent3D(comp: Component3D): Component3D {
+  const nextRotY = stepAngle45(comp.rotY || 0, 180);
+  const nextMirrored = !comp.parameters?.mirrored;
+  return {
+    ...comp,
+    rotY: nextRotY,
+    parameters: {
+      ...comp.parameters,
+      mirrored: nextMirrored,
+      rotY: nextRotY,
+    },
+  };
 }
 
 
