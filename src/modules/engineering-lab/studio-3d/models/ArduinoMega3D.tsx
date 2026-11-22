@@ -487,6 +487,7 @@ export function ArduinoMega3D({
             {/* Invisible Responsive Click & Hover Target */}
             <mesh
               position={[0, 4.0, 0]}
+              renderOrder={100}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();

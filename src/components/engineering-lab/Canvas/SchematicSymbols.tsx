@@ -16,6 +16,8 @@ interface SchematicSymbolProps {
     burned?: boolean;
     fault?: string;
     digitalOut?: number;
+    pwrLed?: boolean;
+    channels?: { r: number; g: number; b: number };
     onRed?: boolean;
     onGreen?: boolean;
     onBlue?: boolean;
@@ -905,24 +907,32 @@ export function SchematicSymbol({
         const onB = Boolean(simState?.onBlue);
         const anyOn = onR || onG || onB;
 
-        // Compute blended synthesized color
-        let glowColor = '#38BDF8';
-        if (onR && onG && onB) glowColor = '#F8FAFC'; // White
-        else if (onR && onG) glowColor = '#FBBF24'; // Yellow
-        else if (onR && onB) glowColor = '#F472B6'; // Magenta
-        else if (onG && onB) glowColor = '#22D3EE'; // Cyan
-        else if (onR) glowColor = '#EF4444'; // Red
-        else if (onG) glowColor = '#10B981'; // Green
-        else if (onB) glowColor = '#3B82F6'; // Blue
+        const rBright = Math.max(0, Math.min(1, typeof simState?.redBrightness === 'number' ? simState.redBrightness : (onR ? 1.0 : 0)));
+        const gBright = Math.max(0, Math.min(1, typeof simState?.greenBrightness === 'number' ? simState.greenBrightness : (onG ? 1.0 : 0)));
+        const bBright = Math.max(0, Math.min(1, typeof simState?.blueBrightness === 'number' ? simState.blueBrightness : (onB ? 1.0 : 0)));
+
+        // Continuous additive optical color synthesis rgb(r, g, b)
+        const rByte = Math.round(rBright * 255);
+        const gByte = Math.round(gBright * 255);
+        const bByte = Math.round(bBright * 255);
+        const glowColor = `rgb(${rByte}, ${gByte}, ${bByte})`;
+        const maxBright = Math.max(rBright, gBright, bBright);
 
         return (
           <g>
-            {/* Active Blended Optical Glow */}
+            {/* Active Blended Optical Additive Glow Halo */}
             {isSimulating && anyOn && (
-              <circle cx="0" cy="-2" r="26" fill={glowColor} opacity="0.45" filter="blur(4px)" />
+              <circle
+                cx="0"
+                cy="-2"
+                r="28"
+                fill={glowColor}
+                opacity={Math.max(0.35, maxBright * 0.75)}
+                filter="blur(5px)"
+              />
             )}
 
-            {/* Diffused Lens Boundary */}
+            {/* Diffused 5mm Epoxy Lens Boundary */}
             <circle cx="0" cy="-2" r="22" stroke={strokeColor} strokeWidth="1.8" fill="#070E1B" />
 
             {/* Channel Leads */}
@@ -935,31 +945,37 @@ export function SchematicSymbol({
             <polygon
               points="-18,-9 -10,-9 -14,-2"
               fill={onR ? '#EF4444' : '#7F1D1D'}
-              fillOpacity={onR ? 1 : 0.4}
+              fillOpacity={onR ? Math.max(0.7, rBright) : 0.35}
               stroke="#EF4444"
               strokeWidth="1.2"
             />
-            {onR && <circle cx="-14" cy="-5" r="7" fill="#EF4444" opacity="0.6" />}
+            {onR && (
+              <circle cx="-14" cy="-5" r={5 + rBright * 3} fill="#EF4444" opacity={0.6 * rBright} />
+            )}
 
             {/* Green Channel Diode */}
             <polygon
               points="-4,-9 4,-9 0,-2"
               fill={onG ? '#10B981' : '#064E3B'}
-              fillOpacity={onG ? 1 : 0.4}
+              fillOpacity={onG ? Math.max(0.7, gBright) : 0.35}
               stroke="#10B981"
               strokeWidth="1.2"
             />
-            {onG && <circle cx="0" cy="-5" r="7" fill="#10B981" opacity="0.6" />}
+            {onG && (
+              <circle cx="0" cy="-5" r={5 + gBright * 3} fill="#10B981" opacity={0.6 * gBright} />
+            )}
 
             {/* Blue Channel Diode */}
             <polygon
               points="10,-9 18,-9 14,-2"
               fill={onB ? '#3B82F6' : '#1E3A8A'}
-              fillOpacity={onB ? 1 : 0.4}
+              fillOpacity={onB ? Math.max(0.7, bBright) : 0.35}
               stroke="#3B82F6"
               strokeWidth="1.2"
             />
-            {onB && <circle cx="14" cy="-5" r="7" fill="#3B82F6" opacity="0.6" />}
+            {onB && (
+              <circle cx="14" cy="-5" r={5 + bBright * 3} fill="#3B82F6" opacity={0.6 * bBright} />
+            )}
 
             {/* Common Cathode/Anode Bus Bar */}
             <line x1="-16" y1="-2" x2="16" y2="-2" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
@@ -1009,110 +1025,146 @@ export function SchematicSymbol({
         );
 
       case 'ARDUINO_UNO': {
-        const pin13High = isSimulating && simState && (simState.on || simState.voltage > 2.5);
+        const isUsbPlugged = component.parameters?.usbPlugged !== false;
+        const isDcJackPlugged = Boolean(component.parameters?.dcJackPlugged);
+        const isBoardPowered = (isUsbPlugged || isDcJackPlugged) && (simState?.pwrLed ?? (simState?.on ?? isSimulating));
+        const pin13High = isBoardPowered && isSimulating && simState && (simState.on || simState.voltage > 2.5);
         const leftPins = [
-          { label: 'RESET', y: -80 },
-          { label: '3.3V', y: -70 },
-          { label: '5V', y: -60 },
-          { label: 'GND', y: -50 },
-          { label: 'GND', y: -40 },
-          { label: 'VIN', y: -30 },
-          { label: 'A0', y: 0 },
-          { label: 'A1', y: 10 },
-          { label: 'A2', y: 20 },
-          { label: 'A3', y: 30 },
-          { label: 'A4/SDA', y: 40 },
-          { label: 'A5/SCL', y: 50 },
+          { label: 'RESET', y: -80, type: 'pwr' },
+          { label: '3.3V', y: -70, type: 'pwr' },
+          { label: '5V', y: -60, type: 'pwr' },
+          { label: 'GND', y: -50, type: 'pwr' },
+          { label: 'GND', y: -40, type: 'pwr' },
+          { label: 'VIN', y: -30, type: 'pwr' },
+          { label: 'A0', y: 0, type: 'ana' },
+          { label: 'A1', y: 10, type: 'ana' },
+          { label: 'A2', y: 20, type: 'ana' },
+          { label: 'A3', y: 30, type: 'ana' },
+          { label: 'A4 (SDA)', y: 40, type: 'ana' },
+          { label: 'A5 (SCL)', y: 50, type: 'ana' },
         ];
         const rightPins = [
-          { label: 'AREF', y: -80 },
-          { label: 'GND', y: -70 },
-          { label: '13', y: -60 },
-          { label: '12', y: -50 },
-          { label: '~11', y: -40 },
-          { label: '~10', y: -30 },
-          { label: '~9', y: -20 },
-          { label: '8', y: -10 },
-          { label: '7', y: 0 },
-          { label: '~6', y: 10 },
-          { label: '~5', y: 20 },
-          { label: '4', y: 30 },
-          { label: '~3', y: 40 },
-          { label: '2', y: 50 },
-          { label: 'TX>1', y: 60 },
-          { label: 'RX<0', y: 70 },
+          { label: 'AREF', y: -80, type: 'pwr' },
+          { label: 'GND', y: -70, type: 'pwr' },
+          { label: 'D13', y: -60, type: 'dig' },
+          { label: 'D12', y: -50, type: 'dig' },
+          { label: '~D11', y: -40, type: 'pwm' },
+          { label: '~D10', y: -30, type: 'pwm' },
+          { label: '~D9', y: -20, type: 'pwm' },
+          { label: 'D8', y: -10, type: 'dig' },
+          { label: 'D7', y: 0, type: 'dig' },
+          { label: '~D6', y: 10, type: 'pwm' },
+          { label: '~D5', y: 20, type: 'pwm' },
+          { label: 'D4', y: 30, type: 'dig' },
+          { label: '~D3', y: 40, type: 'pwm' },
+          { label: 'D2', y: 50, type: 'dig' },
+          { label: 'TX>1', y: 60, type: 'comm' },
+          { label: 'RX<0', y: 70, type: 'comm' },
         ];
         return (
           <g>
-            {/* Real Arduino Uno R3 Italian Turquoise Blue PCB */}
-            <rect x="-65" y="-90" width="130" height="180" rx="8" fill="#00878F" stroke="#005B60" strokeWidth="2.5" />
-            <rect x="-61" y="-86" width="122" height="172" rx="6" fill="none" stroke="#00979C" strokeWidth="1" opacity="0.6" />
+            {/* IEEE/KiCad Standard Schematic Block Substrate */}
+            <rect x="-65" y="-90" width="130" height="180" rx="4" fill="#04121F" stroke="#00979C" strokeWidth="2" />
+            <rect x="-61" y="-86" width="122" height="172" rx="2" fill="none" stroke="#005B60" strokeWidth="0.8" opacity="0.6" />
 
-            {/* Silver Metallic USB-B Socket */}
-            <rect x="-68" y="-70" width="16" height="24" rx="2" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1.5" />
-            <rect x="-66" y="-64" width="10" height="12" rx="1" fill="#334155" />
-
-            {/* Black DC Power Barrel Jack */}
-            <rect x="-68" y="-15" width="18" height="22" rx="3" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-            <circle cx="-58" cy="-4" r="3.5" fill="#F59E0B" />
-
-            {/* ATmega328P DIP-28 IC Socket & Microcontroller Chip */}
-            <rect x="-18" y="-20" width="36" height="52" rx="2" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
-            <path d="M -4,-20 C -4,-16 4,-16 4,-20" fill="#1E293B" stroke="#334155" />
-            <text x="0" y="8" fill="#E2E8F0" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
-              ATmega328P
+            {/* Header Title & Chip Silkscreen */}
+            <text x="0" y="-76" fill="#00C4CC" fontSize="7.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ARDUINO UNO R3
+            </text>
+            <text x="0" y="-68" fill="#64748B" fontSize="4.5" fontFamily="sans-serif" textAnchor="middle">
+              ATmega328P • 16MHz
             </text>
 
-            {/* 16MHz Crystal Resonator */}
-            <rect x="-28" y="-6" width="7" height="18" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1" />
-            <text x="-24.5" y="6" fill="#1E293B" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">16.0</text>
+            {/* Interactive USB Connection Status Badge */}
+            <g transform="translate(0, -58)">
+              <rect
+                x="-36"
+                y="-6"
+                width="72"
+                height="12"
+                rx="3"
+                fill={isUsbPlugged ? '#082F49' : '#1E293B'}
+                stroke={isUsbPlugged ? '#0284C7' : '#475569'}
+                strokeWidth="1"
+              />
+              <circle cx="-28" cy="0" r="2.2" fill={isUsbPlugged ? '#38BDF8' : '#64748B'} />
+              <text x="-21" y="3" fill={isUsbPlugged ? '#38BDF8' : '#94A3B8'} fontSize="5" fontFamily="monospace" fontWeight="bold">
+                {isUsbPlugged ? 'USB: 5.0V ON' : 'USB: UNPLUGGED'}
+              </text>
+            </g>
 
-            {/* Left Header Strip (Power & Analog) */}
-            <rect x="-64" y="-86" width="10" height="145" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {/* Functional Status LEDs: PWR (Green) and Builtin L / D13 (Amber) */}
+            {/* 1. PWR (ON) LED */}
+            <circle cx="-14" cy="-44" r="2.8" fill={isBoardPowered ? '#10B981' : '#064E3B'} stroke="#047857" strokeWidth="0.8" />
+            {isBoardPowered && <circle cx="-14" cy="-44" r="6.5" fill="rgba(16,185,129,0.45)" filter="blur(1px)" />}
+            <text x="-14" y="-49" fill={isBoardPowered ? '#A7F3D0' : '#4B5563'} fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              PWR
+            </text>
+
+            {/* 2. L (D13) LED */}
+            <circle cx="14" cy="-44" r="2.8" fill={pin13High ? '#F59E0B' : '#78350F'} stroke="#B45309" strokeWidth="0.8" />
+            {pin13High && <circle cx="14" cy="-44" r="6.5" fill="rgba(245,158,11,0.45)" filter="blur(1px)" />}
+            <text x="14" y="-49" fill={pin13High ? '#FDE68A' : '#4B5563'} fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              L (D13)
+            </text>
+
+            {/* Section Divider Labels inside block */}
+            <text x="-52" y="-83" fill="#38BDF8" fontSize="4" fontFamily="monospace" fontWeight="bold">
+              [POWER]
+            </text>
+            <text x="-52" y="-8" fill="#34D399" fontSize="4" fontFamily="monospace" fontWeight="bold">
+              [ANALOG]
+            </text>
+            <text x="52" y="-83" fill="#FBBF24" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+              [DIGITAL PWM~]
+            </text>
+
+            {/* Left Header Pins */}
             {leftPins.map((lp, idx) => (
               <g key={idx}>
-                <circle cx="-59" cy={lp.y} r="2" fill="#F59E0B" />
-                <text x="-52" y={lp.y + 2} fill="#FFFFFF" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="start">
+                {/* Pin terminal stub line on schematic grid */}
+                <line x1="-65" y1={lp.y} x2="-58" y2={lp.y} stroke={lp.type === 'pwr' ? '#38BDF8' : '#34D399'} strokeWidth="1.2" />
+                <circle cx="-65" cy={lp.y} r="1.8" fill={lp.type === 'pwr' ? '#38BDF8' : '#34D399'} />
+                <text x="-54" y={lp.y + 2.5} fill="#E2E8F0" fontSize="4.5" fontFamily="monospace" fontWeight="bold">
                   {lp.label}
                 </text>
               </g>
             ))}
 
-            {/* Right Header Strip (Digital PWM) */}
-            <rect x="54" y="-86" width="10" height="165" rx="2" fill="#0F172A" stroke="#1E293B" strokeWidth="1" />
+            {/* Right Header Pins */}
             {rightPins.map((rp, idx) => (
               <g key={idx}>
-                <circle cx="59" cy={rp.y} r="2" fill="#F59E0B" />
-                <text x="52" y={rp.y + 2} fill="#FFFFFF" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                {/* Pin terminal stub line on schematic grid */}
+                <line x1="58" y1={rp.y} x2="65" y2={rp.y} stroke={rp.type === 'pwm' ? '#F59E0B' : rp.type === 'comm' ? '#A78BFA' : rp.type === 'pwr' ? '#38BDF8' : '#94A3B8'} strokeWidth="1.2" />
+                <circle cx="65" cy={rp.y} r="1.8" fill={rp.type === 'pwm' ? '#F59E0B' : rp.type === 'comm' ? '#A78BFA' : rp.type === 'pwr' ? '#38BDF8' : '#94A3B8'} />
+                <text x="54" y={rp.y + 2.5} fill="#E2E8F0" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
                   {rp.label}
                 </text>
               </g>
             ))}
 
-            {/* Active Pin 13 LED (L) & Power LED (ON) */}
-            <circle cx="2" cy="-45" r="2.5" fill="#10B981" />
-            <circle cx="10" cy="-45" r="2.5" fill={pin13High ? '#F59E0B' : '#78350F'} />
-            {pin13High && <circle cx="10" cy="-45" r="7" fill="rgba(245,158,11,0.4)" />}
-            <text x="2" y="-49" fill="#A7F3D0" fontSize="4" fontFamily="monospace" textAnchor="middle">ON</text>
-            <text x="10" y="-49" fill="#FDE68A" fontSize="4" fontFamily="monospace" textAnchor="middle">L</text>
-
-            {/* Arduino White Silkscreen Branding */}
-            <text x="0" y="-60" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">
-              ARDUINO
+            {/* Center Chip Silhouette & KiCad Designator */}
+            <rect x="-24" y="-30" width="48" height="60" rx="3" fill="#0B132B" stroke="#1E293B" strokeWidth="1" />
+            <path d="M -6,-30 C -6,-26 6,-26 6,-30" fill="#04121F" stroke="#1E293B" />
+            <text x="0" y="2" fill="#94A3B8" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ATmega328P
             </text>
-            <text x="0" y="55" fill="#FFFFFF" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              UNO R3
+            <text x="0" y="12" fill="#0284C7" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
+              28-DIP IC
             </text>
           </g>
         );
       }
 
       case 'ARDUINO_NANO': {
+        const isUsbPlugged = component.parameters?.usbPlugged !== false;
+        const isBoardPowered = isUsbPlugged && (simState?.pwrLed ?? (simState?.on ?? isSimulating));
+        const pin13High = isBoardPowered && isSimulating && simState && (simState.on || simState.voltage > 2.5);
         const leftNano = [
           { label: 'TX1', y: -70 }, { label: 'RX0', y: -60 }, { label: 'RST', y: -50 }, { label: 'GND', y: -40 },
-          { label: 'D2', y: -30 }, { label: 'D3~', y: -20 }, { label: 'D4', y: -10 }, { label: 'D5~', y: 0 },
-          { label: 'D6~', y: 10 }, { label: 'D7', y: 20 }, { label: 'D8', y: 30 }, { label: 'D9~', y: 40 },
-          { label: 'D10~', y: 50 }, { label: 'D11~', y: 60 }, { label: 'D12', y: 70 },
+          { label: 'D2', y: -30 }, { label: '~D3', y: -20 }, { label: 'D4', y: -10 }, { label: '~D5', y: 0 },
+          { label: '~D6', y: 10 }, { label: 'D7', y: 20 }, { label: 'D8', y: 30 }, { label: '~D9', y: 40 },
+          { label: '~D10', y: 50 }, { label: '~D11', y: 60 }, { label: 'D12', y: 70 },
         ];
         const rightNano = [
           { label: 'VIN', y: -70 }, { label: 'GND', y: -60 }, { label: 'RST', y: -50 }, { label: '5V', y: -40 },
@@ -1122,42 +1174,64 @@ export function SchematicSymbol({
         ];
         return (
           <g>
-            <rect x="-45" y="-80" width="90" height="160" rx="5" fill="#0284C7" stroke="#0369A1" strokeWidth="2" />
-            {/* Mini-USB on Top */}
-            <rect x="-10" y="-83" width="20" height="10" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
-            {/* ATmega328P TQFP Square Chip rotated 45 deg */}
-            <g transform="translate(0, -6) rotate(45)">
-              <rect x="-10" y="-10" width="20" height="20" rx="1" fill="#0F172A" stroke="#334155" />
-              <circle cx="-6" cy="-6" r="1.5" fill="#94A3B8" />
+            <rect x="-45" y="-80" width="90" height="160" rx="4" fill="#031E33" stroke="#0284C7" strokeWidth="2" />
+            <text x="0" y="-72" fill="#38BDF8" fontSize="6.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ARDUINO NANO
+            </text>
+
+            {/* USB Status Badge */}
+            <g transform="translate(0, -62)">
+              <rect x="-26" y="-5" width="52" height="10" rx="2" fill={isUsbPlugged ? '#082F49' : '#1E293B'} stroke={isUsbPlugged ? '#0284C7' : '#475569'} strokeWidth="0.8" />
+              <text x="0" y="2.5" fill={isUsbPlugged ? '#38BDF8' : '#94A3B8'} fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                {isUsbPlugged ? 'USB: 5V ON' : 'USB: OFF'}
+              </text>
             </g>
-            {/* Left Header Strip & Silkscreen text */}
-            <rect x="-44" y="-76" width="8" height="152" fill="#0F172A" />
+
+            {/* PWR and L LEDs */}
+            <circle cx="-10" cy="-48" r="2.2" fill={isBoardPowered ? '#10B981' : '#064E3B'} />
+            {isBoardPowered && <circle cx="-10" cy="-48" r="5" fill="rgba(16,185,129,0.4)" />}
+            <text x="-10" y="-52" fill={isBoardPowered ? '#A7F3D0' : '#4B5563'} fontSize="3.5" fontFamily="monospace" textAnchor="middle">PWR</text>
+
+            <circle cx="10" cy="-48" r="2.2" fill={pin13High ? '#F59E0B' : '#78350F'} />
+            {pin13High && <circle cx="10" cy="-48" r="5" fill="rgba(245,158,11,0.4)" />}
+            <text x="10" y="-52" fill={pin13High ? '#FDE68A' : '#4B5563'} fontSize="3.5" fontFamily="monospace" textAnchor="middle">L</text>
+
+            {/* Left Header Pins */}
             {leftNano.map((lp, idx) => (
               <g key={idx}>
-                <circle cx="-40" cy={lp.y} r="1.8" fill="#F59E0B" />
-                <text x="-34" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
+                <line x1="-45" y1={lp.y} x2="-40" y2={lp.y} stroke="#0284C7" strokeWidth="1" />
+                <circle cx="-45" cy={lp.y} r="1.5" fill="#38BDF8" />
+                <text x="-37" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
                   {lp.label}
                 </text>
               </g>
             ))}
-            {/* Right Header Strip & Silkscreen text */}
-            <rect x="36" y="-76" width="8" height="152" fill="#0F172A" />
+
+            {/* Right Header Pins */}
             {rightNano.map((rp, idx) => (
               <g key={idx}>
-                <circle cx="40" cy={rp.y} r="1.8" fill="#F59E0B" />
-                <text x="34" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                <line x1="40" y1={rp.y} x2="45" y2={rp.y} stroke="#0284C7" strokeWidth="1" />
+                <circle cx="45" cy={rp.y} r="1.5" fill="#38BDF8" />
+                <text x="37" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
                   {rp.label}
                 </text>
               </g>
             ))}
-            <text x="0" y="38" fill="#FFFFFF" fontSize="6.5" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              NANO V3
-            </text>
+
+            <g transform="translate(0, 0) rotate(45)">
+              <rect x="-9" y="-9" width="18" height="18" rx="1.5" fill="#0F172A" stroke="#334155" />
+            </g>
+            <text x="0" y="24" fill="#94A3B8" fontSize="4.5" fontFamily="monospace" textAnchor="middle">ATmega328P</text>
           </g>
         );
       }
 
       case 'ARDUINO_MEGA': {
+        const isUsbPlugged = component.parameters?.usbPlugged !== false;
+        const isDcJackPlugged = Boolean(component.parameters?.dcJackPlugged);
+        const isBoardPowered = (isUsbPlugged || isDcJackPlugged) && (simState?.pwrLed ?? (simState?.on ?? isSimulating));
+        const pin13High = isBoardPowered && isSimulating && simState && (simState.on || simState.voltage > 2.5);
+
         const leftPins = [
           { name: 'VIN', y: -180 }, { name: '5V', y: -165 }, { name: '3V3', y: -150 },
           { name: 'GND', y: -135 }, { name: 'RESET', y: -120 }, { name: 'IOREF', y: -105 },
@@ -1168,11 +1242,11 @@ export function SchematicSymbol({
         ];
 
         const rightPins = [
-          { name: 'D0 (RX0)', y: -180 }, { name: 'D1 (TX0)', y: -165 }, { name: 'D2 (PWM)', y: -150 },
-          { name: 'D3 (PWM)', y: -135 }, { name: 'D4 (PWM)', y: -120 }, { name: 'D5 (PWM)', y: -105 },
-          { name: 'D6 (PWM)', y: -90 }, { name: 'D7 (PWM)', y: -75 }, { name: 'D8 (PWM)', y: -60 },
-          { name: 'D9 (PWM)', y: -45 }, { name: 'D10 (PWM)', y: -30 }, { name: 'D11 (PWM)', y: -15 },
-          { name: 'D12 (PWM)', y: 0 }, { name: 'D13 (LED)', y: 15 }, { name: 'D14 (TX3)', y: 35 },
+          { name: 'D0 (RX0)', y: -180 }, { name: 'D1 (TX0)', y: -165 }, { name: '~D2', y: -150 },
+          { name: '~D3', y: -135 }, { name: '~D4', y: -120 }, { name: '~D5', y: -105 },
+          { name: '~D6', y: -90 }, { name: '~D7', y: -75 }, { name: '~D8', y: -60 },
+          { name: '~D9', y: -45 }, { name: '~D10', y: -30 }, { name: '~D11', y: -15 },
+          { name: '~D12', y: 0 }, { name: 'D13', y: 15 }, { name: 'D14 (TX3)', y: 35 },
           { name: 'D15 (RX3)', y: 50 }, { name: 'D16 (TX2)', y: 65 }, { name: 'D17 (RX2)', y: 80 },
           { name: 'D18 (TX1)', y: 95 }, { name: 'D19 (RX1)', y: 110 }, { name: 'D20 (SDA)', y: 125 },
           { name: 'D21 (SCL)', y: 140 }, { name: 'AREF', y: 155 },
@@ -1180,12 +1254,7 @@ export function SchematicSymbol({
 
         return (
           <g>
-            {/* Main PCB Chassis */}
             <rect x="-85" y="-195" width="170" height="430" rx="8" fill="#04121A" stroke="#00878F" strokeWidth="2.5" />
-
-            {/* Top Connectors: USB-B & DC Jack */}
-            <rect x="-35" y="-203" width="22" height="14" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1" />
-            <rect x="15" y="-203" width="20" height="15" rx="2" fill="#1E293B" stroke="#0F172A" strokeWidth="1" />
 
             {/* Header Titles */}
             <text x="0" y="-184" fill="#00C4CC" fontSize="8.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
@@ -1195,23 +1264,40 @@ export function SchematicSymbol({
               ATmega2560 • 54 DIGITAL I/O • 16 ADC • 4 UART
             </text>
 
+            {/* USB Status Badge */}
+            <g transform="translate(0, -162)">
+              <rect x="-38" y="-6" width="76" height="12" rx="3" fill={isUsbPlugged ? '#082F49' : '#1E293B'} stroke={isUsbPlugged ? '#0284C7' : '#475569'} strokeWidth="1" />
+              <text x="0" y="3" fill={isUsbPlugged ? '#38BDF8' : '#94A3B8'} fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                {isUsbPlugged ? 'USB: 5.0V ON' : 'USB: UNPLUGGED'}
+              </text>
+            </g>
+
+            {/* Live PWR and L LEDs */}
+            <circle cx="-16" cy="-148" r="2.8" fill={isBoardPowered ? '#10B981' : '#064E3B'} />
+            {isBoardPowered && <circle cx="-16" cy="-148" r="6" fill="rgba(16,185,129,0.4)" />}
+            <text x="-16" y="-153" fill={isBoardPowered ? '#A7F3D0' : '#4B5563'} fontSize="4" fontFamily="monospace" textAnchor="middle">PWR</text>
+
+            <circle cx="16" cy="-148" r="2.8" fill={pin13High ? '#F59E0B' : '#78350F'} />
+            {pin13High && <circle cx="16" cy="-148" r="6" fill="rgba(245,158,11,0.4)" />}
+            <text x="16" y="-153" fill={pin13High ? '#FDE68A' : '#4B5563'} fontSize="4" fontFamily="monospace" textAnchor="middle">L</text>
+
             {/* Left Header Strip (Power & Analog) */}
-            <rect x="-84" y="-186" width="8" height="340" fill="#0B1320" stroke="#1E293B" strokeWidth="0.5" />
             {leftPins.map((lp, i) => (
               <g key={`lp-${i}`}>
-                <circle cx="-80" cy={lp.y} r="2" fill="#F59E0B" />
-                <text x="-74" y={lp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold">
+                <line x1="-85" y1={lp.y} x2="-80" y2={lp.y} stroke="#00878F" strokeWidth="1" />
+                <circle cx="-85" cy={lp.y} r="2" fill="#F59E0B" />
+                <text x="-76" y={lp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold">
                   {lp.name}
                 </text>
               </g>
             ))}
 
             {/* Right Header Strip (Digital & Comm) */}
-            <rect x="76" y="-186" width="8" height="350" fill="#0B1320" stroke="#1E293B" strokeWidth="0.5" />
             {rightPins.map((rp, i) => (
               <g key={`rp-${i}`}>
-                <circle cx="80" cy={rp.y} r="2" fill="#38BDF8" />
-                <text x="73" y={rp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                <line x1="80" y1={rp.y} x2="85" y2={rp.y} stroke="#00878F" strokeWidth="1" />
+                <circle cx="85" cy={rp.y} r="2" fill="#38BDF8" />
+                <text x="76" y={rp.y + 2.5} fill="#CBD5E1" fontSize="4.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
                   {rp.name}
                 </text>
               </g>
@@ -1220,7 +1306,6 @@ export function SchematicSymbol({
             {/* Center: ATmega2560 TQFP IC Package */}
             <g transform="translate(0, -20) rotate(45)">
               <rect x="-18" y="-18" width="36" height="36" rx="3" fill="#0F172A" stroke="#334155" strokeWidth="1.5" />
-              <circle cx="-13" cy="-13" r="1.5" fill="#64748B" />
             </g>
             <text x="0" y="-17" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
               ATmega2560
@@ -1234,9 +1319,6 @@ export function SchematicSymbol({
             <text x="0" y="174" fill="#F59E0B" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
               EXTENDED DIGITAL I/O (D22 - D53)
             </text>
-            <text x="0" y="224" fill="#64748B" fontSize="4.5" fontFamily="monospace" textAnchor="middle">
-              D50(MISO) • D51(MOSI) • D52(SCK) • D53(SS)
-            </text>
           </g>
         );
       }
@@ -1244,6 +1326,8 @@ export function SchematicSymbol({
       case 'ESP32_DEVKIT':
       case 'ESP32_S3':
       case 'ESP32_C3': {
+        const isUsbPlugged = component.parameters?.usbPlugged !== false;
+        const isBoardPowered = isUsbPlugged && (simState?.pwrLed ?? (simState?.on ?? isSimulating));
         const leftEsp = [
           { label: 'EN', y: -70 }, { label: 'VP', y: -60 }, { label: 'VN', y: -50 }, { label: '34', y: -40 },
           { label: '35', y: -30 }, { label: '32', y: -20 }, { label: '33', y: -10 }, { label: '25', y: 0 },
@@ -1258,39 +1342,59 @@ export function SchematicSymbol({
         ];
         return (
           <g>
-            <rect x="-55" y="-80" width="110" height="160" rx="5" fill="#0F172A" stroke="#1E293B" strokeWidth="2" />
-            <rect x="-26" y="-35" width="52" height="45" rx="3" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" />
-            <path d="M -18,-45 L 18,-45 L 18,-40 L -12,-40 L -12,-37 L 18,-37" fill="none" stroke="#F59E0B" strokeWidth="1.8" />
-            <text x="0" y="-18" fill="#1E293B" fontSize="5.5" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">
+            <rect x="-55" y="-80" width="110" height="160" rx="4" fill="#0C1322" stroke="#334155" strokeWidth="2" />
+            <text x="0" y="-72" fill="#38BDF8" fontSize="6.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              ESP32 DEVKIT V1
+            </text>
+
+            {/* USB Status Badge */}
+            <g transform="translate(0, -62)">
+              <rect x="-28" y="-5" width="56" height="10" rx="2" fill={isUsbPlugged ? '#082F49' : '#1E293B'} stroke={isUsbPlugged ? '#0284C7' : '#475569'} strokeWidth="0.8" />
+              <text x="0" y="2.5" fill={isUsbPlugged ? '#38BDF8' : '#94A3B8'} fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                {isUsbPlugged ? 'USB: 3.3V ON' : 'USB: OFF'}
+              </text>
+            </g>
+
+            {/* Red Power LED on ESP32 */}
+            <circle cx="0" cy="-48" r="2.2" fill={isBoardPowered ? '#EF4444' : '#7F1D1D'} />
+            {isBoardPowered && <circle cx="0" cy="-48" r="5" fill="rgba(239,68,68,0.4)" />}
+            <text x="0" y="-52" fill={isBoardPowered ? '#FCA5A5' : '#4B5563'} fontSize="3.5" fontFamily="monospace" textAnchor="middle">PWR</text>
+
+            {/* RF Shield */}
+            <rect x="-24" y="-32" width="48" height="38" rx="2" fill="#1E293B" stroke="#475569" strokeWidth="1" />
+            <text x="0" y="-12" fill="#E2E8F0" fontSize="5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
               ESP-WROOM-32
             </text>
-            <rect x="-54" y="-76" width="8" height="152" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+
+            {/* Left Header Pins */}
             {leftEsp.map((lp, idx) => (
               <g key={idx}>
-                <circle cx="-50" cy={lp.y} r="1.8" fill="#F59E0B" />
-                <text x="-44" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
+                <line x1="-55" y1={lp.y} x2="-50" y2={lp.y} stroke="#475569" strokeWidth="1" />
+                <circle cx="-55" cy={lp.y} r="1.5" fill="#F59E0B" />
+                <text x="-47" y={lp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold">
                   {lp.label}
                 </text>
               </g>
             ))}
-            <rect x="46" y="-76" width="8" height="152" fill="#0F172A" stroke="#F59E0B" strokeWidth="0.5" />
+
+            {/* Right Header Pins */}
             {rightEsp.map((rp, idx) => (
               <g key={idx}>
-                <circle cx="50" cy={rp.y} r="1.8" fill="#F59E0B" />
-                <text x="44" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                <line x1="50" y1={rp.y} x2="55" y2={rp.y} stroke="#475569" strokeWidth="1" />
+                <circle cx="55" cy={rp.y} r="1.5" fill="#F59E0B" />
+                <text x="47" y={rp.y + 2} fill="#FFFFFF" fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="end">
                   {rp.label}
                 </text>
               </g>
             ))}
-            <text x="0" y="45" fill="#38BDF8" fontSize="7" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
-              ESP32 DEVKIT
-            </text>
           </g>
         );
       }
 
       case 'RASPBERRY_PI_PICO':
       case 'RASPBERRY_PI_PICO2': {
+        const isUsbPlugged = component.parameters?.usbPlugged !== false;
+        const isBoardPowered = isUsbPlugged && (simState?.pwrLed ?? (simState?.on ?? isSimulating));
         const leftPico = [
           'GP0', 'GP1', 'GND', 'GP2', 'GP3', 'GP4', 'GP5', 'GND', 'GP6', 'GP7',
           'GP8', 'GP9', 'GND', 'GP10', 'GP11', 'GP12', 'GP13', 'GND', 'GP14', 'GP15'
@@ -1301,41 +1405,51 @@ export function SchematicSymbol({
         ];
         return (
           <g>
-            <rect x="-50" y="-85" width="100" height="172" rx="5" fill="#005930" stroke="#004324" strokeWidth="2" />
-            <rect x="-9" y="-88" width="18" height="9" rx="1.5" fill="#CBD5E1" stroke="#94A3B8" />
-            <g transform="translate(0, -6) rotate(45)">
-              <rect x="-10" y="-10" width="20" height="20" rx="1" fill="#0F172A" stroke="#334155" />
+            <rect x="-50" y="-85" width="100" height="172" rx="4" fill="#003B20" stroke="#005930" strokeWidth="2" />
+            <text x="0" y="-76" fill="#4ADE80" fontSize="6.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              {type === 'RASPBERRY_PI_PICO2' ? 'PICO RP2350' : 'PICO RP2040'}
+            </text>
+
+            {/* USB Status Badge */}
+            <g transform="translate(0, -66)">
+              <rect x="-26" y="-5" width="52" height="10" rx="2" fill={isUsbPlugged ? '#064E3B' : '#1E293B'} stroke={isUsbPlugged ? '#10B981' : '#475569'} strokeWidth="0.8" />
+              <text x="0" y="2.5" fill={isUsbPlugged ? '#4ADE80' : '#94A3B8'} fontSize="4" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                {isUsbPlugged ? 'USB: 3.3V ON' : 'USB: OFF'}
+              </text>
             </g>
-            <text x="0" y="2" fill="#FFFFFF" fontSize="5.5" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
-              {type === 'RASPBERRY_PI_PICO2' ? 'RP2350' : 'RP2040'}
-            </text>
-            <rect x="-49" y="-80" width="8" height="162" fill="#004324" />
+
+            {/* Green Power LED */}
+            <circle cx="0" cy="-52" r="2.2" fill={isBoardPowered ? '#10B981' : '#064E3B'} />
+            {isBoardPowered && <circle cx="0" cy="-52" r="5" fill="rgba(16,185,129,0.4)" />}
+            <text x="0" y="-56" fill={isBoardPowered ? '#A7F3D0' : '#4B5563'} fontSize="3.5" fontFamily="monospace" textAnchor="middle">PWR</text>
+
+            {/* Left Header Pins */}
             {leftPico.map((label, idx) => {
-              const py = -75 + idx * 8;
+              const py = -45 + idx * 6;
               return (
                 <g key={idx}>
-                  <circle cx="-45" cy={py} r="1.5" fill="#F59E0B" />
-                  <text x="-40" y={py + 1.8} fill="#FFFFFF" fontSize="3.5" fontFamily="monospace" fontWeight="bold">
+                  <line x1="-50" y1={py} x2="-45" y2={py} stroke="#005930" strokeWidth="0.8" />
+                  <circle cx="-50" cy={py} r="1.3" fill="#F59E0B" />
+                  <text x="-42" y={py + 1.6} fill="#FFFFFF" fontSize="3.2" fontFamily="monospace" fontWeight="bold">
                     {label}
                   </text>
                 </g>
               );
             })}
-            <rect x="41" y="-80" width="8" height="162" fill="#004324" />
+
+            {/* Right Header Pins */}
             {rightPico.map((label, idx) => {
-              const py = -75 + idx * 8;
+              const py = -45 + idx * 6;
               return (
                 <g key={idx}>
-                  <circle cx="45" cy={py} r="1.5" fill="#F59E0B" />
-                  <text x="40" y={py + 1.8} fill="#FFFFFF" fontSize="3.5" fontFamily="monospace" fontWeight="bold" textAnchor="end">
+                  <line x1="45" y1={py} x2="50" y2={py} stroke="#005930" strokeWidth="0.8" />
+                  <circle cx="50" cy={py} r="1.3" fill="#F59E0B" />
+                  <text x="42" y={py + 1.6} fill="#FFFFFF" fontSize="3.2" fontFamily="monospace" fontWeight="bold" textAnchor="end">
                     {label}
                   </text>
                 </g>
               );
             })}
-            <text x="0" y="45" fill="#A7F3D0" fontSize="5" fontFamily="monospace" textAnchor="middle">
-              PICO RP2040
-            </text>
           </g>
         );
       }

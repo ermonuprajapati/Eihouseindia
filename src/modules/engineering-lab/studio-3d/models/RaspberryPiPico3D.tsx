@@ -300,6 +300,7 @@ export function RaspberryPiPico3D({
             )}
             <mesh
               position={[0, 0.5, 0]}
+              renderOrder={100}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();

@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
+import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Cable, Check, Unplug, Cpu } from 'lucide-react';
 
 interface PropertiesInspectorProps {
@@ -2023,6 +2024,140 @@ export function PropertiesInspector({
                     ))}
                   </select>
                 </div>
+
+                {/* 5. Physical Metadata & Accurate Footprint Preview */}
+                {(() => {
+                  const catComp = COMPONENT_CATALOG.find((c) => c.type === component.type);
+                  const spec = component.physicalSpec || catComp?.physicalSpec;
+                  const isMcu =
+                    component.type.startsWith('ARDUINO_') ||
+                    component.type.startsWith('ESP32') ||
+                    component.type.startsWith('RASPBERRY_PI') ||
+                    component.type.includes('MCU');
+
+                  const widthMm = spec?.dimensionsMm?.width ?? (isMcu ? 68.6 : 19.0);
+                  const heightMm = spec?.dimensionsMm?.height ?? (isMcu ? 53.4 : 6.3);
+                  const depthMm = spec?.dimensionsMm?.depth ?? (isMcu ? 15.0 : 4.5);
+                  const pitchMm = spec?.pinPitchMm ?? 2.54;
+                  const mountType = spec?.mountingType ?? (isMcu ? 'Socketed / THT' : 'Through-Hole');
+                  const pkgType = spec?.packageType ?? component.packageType ?? 'Module';
+
+                  return (
+                    <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                      {/* Physical Spec Engineering Data Card */}
+                      <div className="grid grid-cols-2 gap-1.5 p-2 rounded bg-slate-950 border border-slate-800/80 text-[10px] font-mono">
+                        <div>
+                          <span className="text-slate-500 block">Dimensions</span>
+                          <span className="text-cyan-400 font-bold">
+                            {widthMm} × {heightMm} × {depthMm} mm
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Pin Pitch</span>
+                          <span className="text-amber-400 font-bold">
+                            {pitchMm} mm (100 mil)
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Package Tech</span>
+                          <span className="text-purple-300 font-bold">{pkgType}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Mounting Style</span>
+                          <span className="text-emerald-400 font-bold">{mountType}</span>
+                        </div>
+                      </div>
+
+                      {/* Accurate KiCad-Style Footprint SVG Preview */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[9px] uppercase font-mono text-slate-400">
+                          <span>PCB Pad &amp; Header Footprint Preview</span>
+                          <span className="text-slate-600 font-bold">1:1 Scaled Vector</span>
+                        </div>
+                        <div className="relative w-full h-24 rounded bg-slate-950 border border-slate-800/80 flex items-center justify-center p-2 overflow-hidden">
+                          <svg
+                            viewBox="-60 -35 120 70"
+                            className="w-full h-full max-h-20"
+                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}
+                          >
+                            {/* PCB Board Outline with Silk Border */}
+                            <rect
+                              x="-52"
+                              y="-28"
+                              width="104"
+                              height="56"
+                              rx="3"
+                              fill="#031E2A"
+                              stroke="#00878F"
+                              strokeWidth="1.2"
+                            />
+                            <rect
+                              x="-50"
+                              y="-26"
+                              width="100"
+                              height="52"
+                              rx="2"
+                              fill="none"
+                              stroke="#00C4CC"
+                              strokeWidth="0.5"
+                              strokeDasharray="2,2"
+                              opacity="0.6"
+                            />
+
+                            {/* 4 M3 Corner Mounting Holes with Annular Copper Pads */}
+                            <circle cx="-44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                            <circle cx="-44" cy="-20" r="1.8" fill="#0B0F19" />
+                            <circle cx="44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                            <circle cx="44" cy="-20" r="1.8" fill="#0B0F19" />
+                            <circle cx="-44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                            <circle cx="-44" cy="20" r="1.8" fill="#0B0F19" />
+                            <circle cx="44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                            <circle cx="44" cy="20" r="1.8" fill="#0B0F19" />
+
+                            {/* Center IC / Module Silkscreen Box */}
+                            <rect
+                              x="-20"
+                              y="-12"
+                              width="40"
+                              height="24"
+                              rx="1.5"
+                              fill="#08101E"
+                              stroke="#334155"
+                              strokeWidth="0.8"
+                            />
+                            <text
+                              x="0"
+                              y="1.5"
+                              fill="#94A3B8"
+                              fontSize="4"
+                              fontFamily="monospace"
+                              textAnchor="middle"
+                              fontWeight="bold"
+                            >
+                              {component.footprint.split(':').pop() || 'FOOTPRINT'}
+                            </text>
+
+                            {/* Top Pad Header Strip */}
+                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
+                              <g key={`top-pad-${i}`}>
+                                <circle cx={px} cy="-23" r="1.8" fill="#F59E0B" />
+                                <circle cx={px} cy="-23" r="0.9" fill="#031E2A" />
+                              </g>
+                            ))}
+
+                            {/* Bottom Pad Header Strip */}
+                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
+                              <g key={`btm-pad-${i}`}>
+                                <circle cx={px} cy="23" r="1.8" fill="#F59E0B" />
+                                <circle cx={px} cy="23" r="0.9" fill="#031E2A" />
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}

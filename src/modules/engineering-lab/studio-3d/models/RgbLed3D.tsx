@@ -191,10 +191,18 @@ export function RgbLed3D({
               <sphereGeometry args={[0.3, 8, 8]} />
             </mesh>
 
-            {/* 2. Lower Vertical Leg: From [p.x, 0.6, 0] down into breadboard holes (y = -8.0) */}
-            <mesh position={[p.x, -3.7, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 8.6, 8]} />
-            </mesh>
+            {/* 2. Lower Vertical Leg: From [p.x, 0.6, 0] down into breadboard holes */}
+            {/* Common terminal (C) is standardly the longest lead (~1.8mm longer than R, G, B) */}
+            {(() => {
+              const isCommon = p.name === 'C';
+              const legLength = isCommon ? 10.4 : 8.6;
+              const legCenterY = 0.6 - legLength / 2;
+              return (
+                <mesh position={[p.x, legCenterY, 0]} material={materials.pinSilver}>
+                  <cylinderGeometry args={[0.3, 0.3, legLength, 8]} />
+                </mesh>
+              );
+            })()}
 
             {/* 3. Interactive Target with Generous Hit-Sphere & Hover Ring */}
             <group position={[p.x, 0, 0]}>

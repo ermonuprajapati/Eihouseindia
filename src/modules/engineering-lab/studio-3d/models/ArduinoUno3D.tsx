@@ -241,6 +241,25 @@ export function ArduinoUno3D({
         <boxGeometry args={[68.6, 1.6, 53.4]} />
       </mesh>
 
+      {/* 4 Standard Uno M3 Corner Mounting Holes with Copper Annular Rings */}
+      {[
+        { x: -20.32, z: -24.13 },
+        { x: 30.48, z: -17.78 },
+        { x: 30.48, z: 10.16 },
+        { x: -20.32, z: 24.13 },
+      ].map((hole, i) => (
+        <group key={`mhole-${i}`} position={[hole.x, 1.61, hole.z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[1.6, 2.8, 24]} />
+            <meshStandardMaterial color="#D97706" metalness={0.85} roughness={0.2} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, -0.8, 0]}>
+            <cylinderGeometry args={[1.6, 1.6, 1.8, 16]} />
+            <meshBasicMaterial color="#0B0F19" />
+          </mesh>
+        </group>
+      ))}
+
       {/* High-Resolution White Silkscreen Face Overlay */}
       {silkscreenTexture && (
         <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -420,6 +439,7 @@ export function ArduinoUno3D({
             {/* Invisible Responsive Click & Hover Target */}
             <mesh
               position={[0, 4.0, 0]}
+              renderOrder={100}
               onPointerDown={(e) => {
                 e.stopPropagation();
               }}

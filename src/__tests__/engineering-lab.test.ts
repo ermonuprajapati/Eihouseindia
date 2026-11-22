@@ -4177,5 +4177,335 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(flippedBack.rotY).toBe(0);
       expect(flippedBack.parameters?.mirrored).toBe(false);
     });
+
+    it('TASK 1 VERIFICATION: RGB LED multi-channel mixing (R, G, B, Yellow, Cyan, Magenta, White) and Common Anode polarity', () => {
+      const solver = new CircuitSolver();
+
+      const vcc: CircuitComponent = {
+        id: 'vcc',
+        type: 'DC_VOLTAGE',
+        label: 'V1',
+        category: 'sources',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        value: '5V',
+        footprint: '',
+        pins: [
+          { id: 'p', name: '+', x: 0, y: -20, pinType: 'passive' },
+          { id: 'n', name: '-', x: 0, y: 20, pinType: 'passive' },
+        ],
+        parameters: { voltage: 5.0 },
+      };
+
+      const gnd: CircuitComponent = {
+        id: 'gnd',
+        type: 'GROUND',
+        label: 'GND',
+        category: 'sources',
+        x: 0,
+        y: 60,
+        rotation: 0,
+        value: '0V',
+        footprint: '',
+        pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'passive' }],
+        parameters: {},
+      };
+
+      const rR: CircuitComponent = {
+        id: 'rR',
+        type: 'RESISTOR',
+        label: 'R_Red',
+        category: 'passive',
+        x: 40,
+        y: -20,
+        rotation: 0,
+        value: '220',
+        footprint: '',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      const rG: CircuitComponent = {
+        id: 'rG',
+        type: 'RESISTOR',
+        label: 'R_Green',
+        category: 'passive',
+        x: 40,
+        y: 0,
+        rotation: 0,
+        value: '220',
+        footprint: '',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      const rB: CircuitComponent = {
+        id: 'rB',
+        type: 'RESISTOR',
+        label: 'R_Blue',
+        category: 'passive',
+        x: 40,
+        y: 20,
+        rotation: 0,
+        value: '220',
+        footprint: '',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      const rgbLed: CircuitComponent = {
+        id: 'rgbLed',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB_LED',
+        category: 'actuators',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        value: 'RGB CC',
+        footprint: 'LED_THT:LED_D5.0mm-4',
+        pins: [
+          { id: 'r', name: 'R', x: -30, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'COM', x: -10, y: 20, pinType: 'passive' },
+          { id: 'g', name: 'G', x: 10, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 30, y: -20, pinType: 'passive' },
+        ],
+        parameters: { redVf: 2.0, greenVf: 3.0, blueVf: 3.2, commonType: 'cathode' },
+      };
+
+      const baseComps = [vcc, gnd, rR, rG, rB, rgbLed];
+
+      // 1. All 3 channels connected (R + G + B = White)
+      const whiteWires: CircuitWire[] = [
+        { id: 'w_gnd1', fromCompId: 'vcc', fromPinId: 'n', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_gnd2', fromCompId: 'rgbLed', fromPinId: 'cc', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_r1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rR', toPinId: '1' },
+        { id: 'w_r2', fromCompId: 'rR', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'r' },
+        { id: 'w_g1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rG', toPinId: '1' },
+        { id: 'w_g2', fromCompId: 'rG', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'g' },
+        { id: 'w_b1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rB', toPinId: '1' },
+        { id: 'w_b2', fromCompId: 'rB', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'b' },
+      ];
+
+      const resWhite = solver.step(baseComps, whiteWires, 0.001);
+      const stWhite = resWhite.componentStates['rgbLed'];
+      expect(stWhite).toBeDefined();
+      expect(stWhite.onRed).toBe(true);
+      expect(stWhite.onGreen).toBe(true);
+      expect(stWhite.onBlue).toBe(true);
+      expect(stWhite.channels?.r).toBeGreaterThan(0.4);
+      expect(stWhite.channels?.g).toBeGreaterThan(0.4);
+      expect(stWhite.channels?.b).toBeGreaterThan(0.4);
+
+      // 2. Cyan mixing (G + B connected, R disconnected)
+      const cyanWires: CircuitWire[] = [
+        { id: 'w_gnd1', fromCompId: 'vcc', fromPinId: 'n', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_gnd2', fromCompId: 'rgbLed', fromPinId: 'cc', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_g1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rG', toPinId: '1' },
+        { id: 'w_g2', fromCompId: 'rG', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'g' },
+        { id: 'w_b1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rB', toPinId: '1' },
+        { id: 'w_b2', fromCompId: 'rB', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'b' },
+      ];
+      const solverCyan = new CircuitSolver();
+      const resCyan = solverCyan.step(baseComps, cyanWires, 0.001);
+      const stCyan = resCyan.componentStates['rgbLed'];
+      expect(stCyan.onRed).toBe(false);
+      expect(stCyan.onGreen).toBe(true);
+      expect(stCyan.onBlue).toBe(true);
+
+      // 3. Magenta mixing (R + B connected, G disconnected)
+      const magentaWires: CircuitWire[] = [
+        { id: 'w_gnd1', fromCompId: 'vcc', fromPinId: 'n', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_gnd2', fromCompId: 'rgbLed', fromPinId: 'cc', toCompId: 'gnd', toPinId: '1' },
+        { id: 'w_r1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rR', toPinId: '1' },
+        { id: 'w_r2', fromCompId: 'rR', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'r' },
+        { id: 'w_b1', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'rB', toPinId: '1' },
+        { id: 'w_b2', fromCompId: 'rB', fromPinId: '2', toCompId: 'rgbLed', toPinId: 'b' },
+      ];
+      const solverMagenta = new CircuitSolver();
+      const resMagenta = solverMagenta.step(baseComps, magentaWires, 0.001);
+      const stMagenta = resMagenta.componentStates['rgbLed'];
+      expect(stMagenta.onRed).toBe(true);
+      expect(stMagenta.onGreen).toBe(false);
+      expect(stMagenta.onBlue).toBe(true);
+
+      // 4. Common Anode Polarity Test: Anode COM connected to 5V, Red cathode pulled to GND via resistor
+      const caRgbLed: CircuitComponent = {
+        ...rgbLed,
+        id: 'caRgb',
+        parameters: { redVf: 2.0, greenVf: 3.0, blueVf: 3.2, commonType: 'anode' },
+      };
+      const caWires: CircuitWire[] = [
+        { id: 'ca1', fromCompId: 'vcc', fromPinId: 'n', toCompId: 'gnd', toPinId: '1' },
+        { id: 'ca2', fromCompId: 'vcc', fromPinId: 'p', toCompId: 'caRgb', toPinId: 'cc' }, // Common Anode to 5V
+        { id: 'ca3', fromCompId: 'caRgb', fromPinId: 'r', toCompId: 'rR', toPinId: '1' },
+        { id: 'ca4', fromCompId: 'rR', fromPinId: '2', toCompId: 'gnd', toPinId: '1' },
+      ];
+      const solverCA = new CircuitSolver();
+      const resCA = solverCA.step([vcc, gnd, rR, caRgbLed], caWires, 0.001);
+      const stCA = resCA.componentStates['caRgb'];
+      expect(stCA.onRed).toBe(true);
+      expect(stCA.onGreen).toBe(false);
+      expect(stCA.onBlue).toBe(false);
+    });
+
+    it('TASK 2 VERIFICATION: MCU USB Connect/Disconnect state machine and zero ghost voltage on rails', () => {
+      const solver = new CircuitSolver();
+
+      const mcuUno: CircuitComponent = {
+        id: 'mcu1',
+        type: 'ARDUINO_UNO',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        value: 'Uno R3',
+        footprint: 'Module:Arduino_Uno_R3',
+        pins: [
+          { id: '5V', name: '5V', x: -65, y: -60, pinType: 'power' },
+          { id: '3V3', name: '3V3', x: -65, y: -70, pinType: 'power' },
+          { id: 'GND', name: 'GND', x: -65, y: -50, pinType: 'power' },
+          { id: 'D13', name: 'D13', x: 65, y: -60, pinType: 'bidirectional' },
+        ],
+        parameters: { usbPlugged: true },
+      };
+
+      const ledLoad: CircuitComponent = {
+        id: 'ledLoad',
+        type: 'LED',
+        label: 'D1',
+        category: 'actuators',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        value: 'Red LED',
+        footprint: '',
+        pins: [
+          { id: 'a', name: 'A', x: -20, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardVoltage: 2.0 },
+      };
+
+      const resLoad: CircuitComponent = {
+        id: 'resLoad',
+        type: 'RESISTOR',
+        label: 'R_lim',
+        category: 'passive',
+        x: 60,
+        y: 0,
+        rotation: 0,
+        value: '220',
+        footprint: '',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      // Connect MCU 5V -> Resistor -> LED -> MCU GND
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'mcu1', fromPinId: '5V', toCompId: 'resLoad', toPinId: '1' },
+        { id: 'w2', fromCompId: 'resLoad', fromPinId: '2', toCompId: 'ledLoad', toPinId: 'a' },
+        { id: 'w3', fromCompId: 'ledLoad', fromPinId: 'k', toCompId: 'mcu1', toPinId: 'GND' },
+      ];
+
+      // 1. USB CONNECTED: 5V Rail is live, MCU pwrLed is ON, LED illuminates
+      const resConnected = solver.step([mcuUno, resLoad, ledLoad], wires, 0.001);
+      const mcuStateConn = resConnected.componentStates['mcu1'];
+      const ledStateConn = resConnected.componentStates['ledLoad'];
+
+      expect(mcuStateConn).toBeDefined();
+      expect(mcuStateConn.on).toBe(true);
+      expect(mcuStateConn.pwrLed).toBe(true);
+      expect(mcuStateConn.status).toBe('NORMAL');
+      expect(mcuStateConn.voltage).toBe(5.0);
+      expect(ledStateConn.on).toBe(true);
+      expect(ledStateConn.current).toBeGreaterThan(0.010);
+
+      // 2. USB DISCONNECTED: 5V rail clamps to 0.0V, zero ghost voltage, LED turns OFF
+      const mcuUnoUnplugged: CircuitComponent = {
+        ...mcuUno,
+        parameters: { usbPlugged: false },
+      };
+
+      const solverUnplugged = new CircuitSolver();
+      const resUnplugged = solverUnplugged.step([mcuUnoUnplugged, resLoad, ledLoad], wires, 0.001);
+      const mcuStateUnpl = resUnplugged.componentStates['mcu1'];
+      const ledStateUnpl = resUnplugged.componentStates['ledLoad'];
+
+      expect(mcuStateUnpl).toBeDefined();
+      expect(mcuStateUnpl.on).toBe(false);
+      expect(mcuStateUnpl.pwrLed).toBe(false);
+      expect(mcuStateUnpl.status).toBe('NORMAL');
+      expect(mcuStateUnpl.voltage).toBe(0.0);
+      expect(ledStateUnpl.on).toBe(false);
+      expect(ledStateUnpl.current).toBe(0);
+
+      // 3. Raspberry Pi Pico USB Power Verification (VBUS and 3V3 rails)
+      const pico: CircuitComponent = {
+        id: 'pico1',
+        type: 'RASPBERRY_PI_PICO',
+        label: 'RP2040 Pico',
+        category: 'microcontrollers',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        value: 'RP2040',
+        footprint: 'Module:RP2040_Pico',
+        pins: [
+          { id: 'VBUS', name: 'VBUS', x: 50, y: -75, pinType: 'power' },
+          { id: '3V3', name: '3V3', x: 50, y: -43, pinType: 'power' },
+          { id: 'GND', name: 'GND', x: -50, y: -59, pinType: 'power' },
+        ],
+        parameters: { usbPlugged: true },
+      };
+
+      const solverPico = new CircuitSolver();
+      const resPico = solverPico.step([pico], [], 0.001);
+      const picoState = resPico.componentStates['pico1'];
+      expect(picoState.on).toBe(true);
+      expect(picoState.pwrLed).toBe(true);
+      expect(picoState.voltage).toBe(5.0);
+    });
+
+    it('TASK 3 VERIFICATION: Physical specifications and canonical pin parity across MCU catalog definitions', () => {
+      const uno = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_UNO');
+      const mega = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_MEGA');
+      const nano = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_NANO');
+      const esp32 = COMPONENT_CATALOG.find((c) => c.type === 'ESP32_DEVKIT');
+      const pico = COMPONENT_CATALOG.find((c) => c.type === 'RASPBERRY_PI_PICO');
+
+      expect(uno?.physicalSpec).toBeDefined();
+      expect(uno?.physicalSpec?.dimensionsMm.width).toBe(68.6);
+      expect(uno?.physicalSpec?.dimensionsMm.height).toBe(53.4);
+      expect(uno?.physicalSpec?.pinPitchMm).toBe(2.54);
+
+      expect(mega?.physicalSpec).toBeDefined();
+      expect(mega?.physicalSpec?.dimensionsMm.width).toBe(101.6);
+      expect(mega?.physicalSpec?.pinPitchMm).toBe(2.54);
+
+      expect(nano?.physicalSpec).toBeDefined();
+      expect(nano?.physicalSpec?.dimensionsMm.width).toBe(45.0);
+      expect(nano?.physicalSpec?.pinPitchMm).toBe(2.54);
+
+      expect(esp32?.physicalSpec).toBeDefined();
+      expect(esp32?.physicalSpec?.pinPitchMm).toBe(2.54);
+
+      expect(pico?.physicalSpec).toBeDefined();
+      expect(pico?.physicalSpec?.dimensionsMm.width).toBe(51.0);
+      expect(pico?.physicalSpec?.pinPitchMm).toBe(2.54);
+    });
   });
 });

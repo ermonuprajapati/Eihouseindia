@@ -14,6 +14,8 @@ export interface SolverStepResult {
     thermalStress?: number;
     fault?: string;
     digitalOut?: number;
+    pwrLed?: boolean;
+    channels?: { r: number; g: number; b: number };
     onRed?: boolean;
     onGreen?: boolean;
     onBlue?: boolean;
@@ -549,35 +551,58 @@ export class CircuitSolver {
         const isUsbPowered = !isDcPowered && comp.parameters?.usbPlugged !== false;
         const isPowered = isUsbPowered || isDcPowered;
 
+        // Support all power rails across Arduino Uno/Nano/Mega, ESP32, Raspberry Pi Pico
+        const pwr5VPins = [
+          this.netMap.get(`${comp.id}:5V`),
+          this.netMap.get(`${comp.id}:5V_1`),
+          this.netMap.get(`${comp.id}:VBUS`),
+          this.netMap.get(`${comp.id}:VSYS`),
+        ].filter(Boolean) as string[];
+
+        const pwr3V3Pins = [
+          this.netMap.get(`${comp.id}:3V3`),
+          this.netMap.get(`${comp.id}:3.3V`),
+          this.netMap.get(`${comp.id}:3V3_OUT`),
+        ].filter(Boolean) as string[];
+
+        const vinPin = this.netMap.get(`${comp.id}:VIN`);
+
+        // Support all GND pin designators across Uno, Nano, Mega, ESP32, Pico
+        const gndPins = [
+          this.netMap.get(`${comp.id}:GND`),
+          this.netMap.get(`${comp.id}:GND_1`),
+          this.netMap.get(`${comp.id}:GND_2`),
+          this.netMap.get(`${comp.id}:GND_3`),
+          this.netMap.get(`${comp.id}:GND_4`),
+          this.netMap.get(`${comp.id}:GND_5`),
+          this.netMap.get(`${comp.id}:GND_6`),
+          this.netMap.get(`${comp.id}:GND_7`),
+          this.netMap.get(`${comp.id}:GND_8`),
+          this.netMap.get(`${comp.id}:GND_TOP`),
+          this.netMap.get(`${comp.id}:GND_EXT`),
+        ].filter(Boolean) as string[];
+
         if (isPowered) {
-          const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
-          const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
-          const vinPin = this.netMap.get(`${comp.id}:VIN`);
-
-          // Support all GND pin designators: GND, GND_1, GND_2, GND_3
-          const gndPins = [
-            this.netMap.get(`${comp.id}:GND`),
-            this.netMap.get(`${comp.id}:GND_1`),
-            this.netMap.get(`${comp.id}:GND_2`),
-            this.netMap.get(`${comp.id}:GND_3`),
-          ].filter(Boolean) as string[];
-
           // Anchor 0V GND nodes
           for (const gNet of gndPins) {
             if (!fixedNodes.has(gNet)) {
-              nodeVoltages[gNet] = 0;
+              nodeVoltages[gNet] = 0.0;
               fixedNodes.add(gNet);
             }
           }
 
           // Anchor Regulated 5.0V / 3.3V nodes
-          if (pwr5VPin && !fixedNodes.has(pwr5VPin)) {
-            nodeVoltages[pwr5VPin] = 5.0;
-            fixedNodes.add(pwr5VPin);
+          for (const p5 of pwr5VPins) {
+            if (!fixedNodes.has(p5)) {
+              nodeVoltages[p5] = 5.0;
+              fixedNodes.add(p5);
+            }
           }
-          if (pwr3V3Pin && !fixedNodes.has(pwr3V3Pin)) {
-            nodeVoltages[pwr3V3Pin] = 3.3;
-            fixedNodes.add(pwr3V3Pin);
+          for (const p3 of pwr3V3Pins) {
+            if (!fixedNodes.has(p3)) {
+              nodeVoltages[p3] = 3.3;
+              fixedNodes.add(p3);
+            }
           }
           if (isDcPowered && vinPin && !fixedNodes.has(vinPin)) {
             nodeVoltages[vinPin] = Number(comp.parameters?.dcVoltage ?? 9.0);
@@ -596,6 +621,7 @@ export class CircuitSolver {
                   this.netMap.get(`${comp.id}:${pinKey}`) ||
                   this.netMap.get(`${comp.id}:D${pinKey}`) ||
                   this.netMap.get(`${comp.id}:A${pinKey}`) ||
+                  this.netMap.get(`${comp.id}:GP${pinKey}`) ||
                   this.netMap.get(`${comp.id}:pin_${pinKey}`) ||
                   this.netMap.get(`${comp.id}:pin${pinKey}`);
                 if (targetNet && !fixedNodes.has(targetNet)) {
@@ -612,21 +638,28 @@ export class CircuitSolver {
             }
           }
         } else {
-          // Unpowered MCU: USB unplugged and no external power -> 5V, 3.3V, VIN, and all GPIOs output 0.0V
-          const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
-          const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`);
-          const vinPin = this.netMap.get(`${comp.id}:VIN`);
-          if (pwr5VPin && !fixedNodes.has(pwr5VPin)) {
-            nodeVoltages[pwr5VPin] = 0.0;
-            fixedNodes.add(pwr5VPin);
+          // Unpowered MCU: USB unplugged and no external power -> strictly clamp 5V, 3.3V, VIN, and all GPIOs to 0.0V (zero ghost voltage)
+          for (const p5 of pwr5VPins) {
+            if (!fixedNodes.has(p5)) {
+              nodeVoltages[p5] = 0.0;
+              fixedNodes.add(p5);
+            }
           }
-          if (pwr3V3Pin && !fixedNodes.has(pwr3V3Pin)) {
-            nodeVoltages[pwr3V3Pin] = 0.0;
-            fixedNodes.add(pwr3V3Pin);
+          for (const p3 of pwr3V3Pins) {
+            if (!fixedNodes.has(p3)) {
+              nodeVoltages[p3] = 0.0;
+              fixedNodes.add(p3);
+            }
           }
           if (vinPin && !fixedNodes.has(vinPin)) {
             nodeVoltages[vinPin] = 0.0;
             fixedNodes.add(vinPin);
+          }
+          for (const gNet of gndPins) {
+            if (!fixedNodes.has(gNet)) {
+              nodeVoltages[gNet] = 0.0;
+              fixedNodes.add(gNet);
+            }
           }
           if (gpioStates) {
             for (const pinKey of Object.keys(gpioStates)) {
@@ -634,6 +667,7 @@ export class CircuitSolver {
                 this.netMap.get(`${comp.id}:${pinKey}`) ||
                 this.netMap.get(`${comp.id}:D${pinKey}`) ||
                 this.netMap.get(`${comp.id}:A${pinKey}`) ||
+                this.netMap.get(`${comp.id}:GP${pinKey}`) ||
                 this.netMap.get(`${comp.id}:pin_${pinKey}`);
               if (targetNet && !fixedNodes.has(targetNet)) {
                 nodeVoltages[targetNet] = 0.0;
@@ -1304,16 +1338,16 @@ export class CircuitSolver {
               sumG[kPin] += gDiode;
             }
           }
-        } else if (comp.type === 'ACTUATOR_RGB_LED') {
-          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
-          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:3`);
-          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:4`);
-          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:k`);
+        } else if (comp.type === 'ACTUATOR_RGB_LED' || comp.type === 'LED_RGB') {
+          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:R`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:red`);
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:3`) || this.netMap.get(`${comp.id}:green`);
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:blue`);
+          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:COM`) || this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:anode`);
           const isCommonAnode = comp.parameters?.commonType === 'anode';
 
           const channels = [
             { pin: rPin, vf: Number(comp.parameters?.redVf) || 2.0 },
-            { pin: gPin, vf: Number(comp.parameters?.greenVf) || 3.2 },
+            { pin: gPin, vf: Number(comp.parameters?.greenVf) || 3.0 },
             { pin: bPin, vf: Number(comp.parameters?.blueVf) || 3.2 },
           ];
 
@@ -1801,11 +1835,11 @@ export class CircuitSolver {
               brightness = 0;
             }
           }
-        } else if (comp.type === 'ACTUATOR_RGB_LED') {
-          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:1`);
-          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:3`);
-          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:4`);
-          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:k`);
+        } else if (comp.type === 'ACTUATOR_RGB_LED' || comp.type === 'LED_RGB') {
+          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:R`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:red`);
+          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:3`) || this.netMap.get(`${comp.id}:green`);
+          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:blue`);
+          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:COM`) || this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:anode`);
           const isCommonAnode = comp.parameters?.commonType === 'anode';
           const vCom = comPin ? (nodeVoltages[comPin] || 0) : 0;
           const vR = rPin ? (nodeVoltages[rPin] || 0) : 0;
@@ -1817,7 +1851,7 @@ export class CircuitSolver {
           const bDrop = isCommonAnode ? (vCom - vB) : (vB - vCom);
 
           const rVf = Number(comp.parameters?.redVf) || 2.0;
-          const gVf = Number(comp.parameters?.greenVf) || 3.2;
+          const gVf = Number(comp.parameters?.greenVf) || 3.0;
           const bVf = Number(comp.parameters?.blueVf) || 3.2;
 
           let rCur = 0;
@@ -1837,7 +1871,7 @@ export class CircuitSolver {
             gCur = gDrop > gVf ? (gDrop - gVf) / rd : 0;
             bCur = bDrop > bVf ? (bDrop - bVf) / rd : 0;
 
-            if (rCur > 0.030 || gCur > 0.030 || bCur > 0.030) {
+            if (rCur > 0.035 || gCur > 0.035 || bCur > 0.035) {
               this.burnedComponents.add(comp.id);
               burned = true;
               status = 'BURNED';
@@ -1882,6 +1916,11 @@ export class CircuitSolver {
             redBrightness,
             greenBrightness,
             blueBrightness,
+            channels: {
+              r: redBrightness,
+              g: greenBrightness,
+              b: blueBrightness,
+            },
             status,
             faultState: status,
             burned,
@@ -2077,10 +2116,14 @@ export class CircuitSolver {
           comp.type.startsWith('ARDUINO_') ||
           comp.type.startsWith('ESP32') ||
           comp.type.startsWith('STM32') ||
-          comp.type.startsWith('RASPBERRY_PI_PICO') ||
+          comp.type.startsWith('RASPBERRY_PI') ||
           comp.type === 'MCU_ARDUINO_UNO' ||
           comp.type.includes('MCU')
         ) {
+          const isDcPowered = comp.parameters?.dcJackPlugged === true;
+          const isUsbPowered = !isDcPowered && comp.parameters?.usbPlugged !== false;
+          const isPowered = isUsbPowered || isDcPowered;
+
           if (this.burnedComponents.has(comp.id)) {
             current = 0;
             on = false;
@@ -2091,21 +2134,26 @@ export class CircuitSolver {
             thermalStress = 1.5;
             fault = this.burnFaultReasons.get(comp.id);
           } else {
-            const pwr5VPin = this.netMap.get(`${comp.id}:5V`);
+            const pwr5VPin = this.netMap.get(`${comp.id}:5V`) || this.netMap.get(`${comp.id}:VBUS`) || this.netMap.get(`${comp.id}:VSYS`);
+            const pwr3V3Pin = this.netMap.get(`${comp.id}:3V3`) || this.netMap.get(`${comp.id}:3.3V`) || this.netMap.get(`${comp.id}:3V3_OUT`);
             const gndPin = this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:GND_1`);
             const v5V = pwr5VPin ? (nodeVoltages[pwr5VPin] || 0) : 0;
+            const v3V3 = pwr3V3Pin ? (nodeVoltages[pwr3V3Pin] || 0) : 0;
             const vGnd = gndPin ? (nodeVoltages[gndPin] || 0) : 0;
-            const vSpan5V = v5V - vGnd;
-            on = vSpan5V > 4.0;
-            vDiff = vSpan5V;
+            const vSpan = Math.max(v5V - vGnd, v3V3 - vGnd);
 
-            if (vSpan5V > 5.8) {
+            // Board powered either from USB, DC jack, or external source
+            on = isPowered || vSpan > 2.8;
+            vDiff = isPowered ? (vSpan > 0.5 ? vSpan : (comp.type.includes('PICO') || comp.type.includes('ESP32') ? 3.3 : 5.0)) : vSpan;
+            current = on ? 0.045 : 0;
+
+            if (vSpan > 6.5) {
               this.burnedComponents.add(comp.id);
               burned = true;
               isBurnedOut = true;
               status = 'BURNED';
               faultState = 'BURNED';
-              fault = `FAULT: ${comp.label || 'MCU'} burned out (Supply voltage ${vSpan5V.toFixed(1)}V exceeded 5.5V max rating).`;
+              fault = `FAULT: ${comp.label || 'MCU'} burned out (Supply voltage ${vSpan.toFixed(1)}V exceeded max rating).`;
               this.burnFaultReasons.set(comp.id, fault);
               this.recordedFaults.push({
                 compId: comp.id,
@@ -2115,13 +2163,13 @@ export class CircuitSolver {
                 timestamp: Date.now(),
               });
               on = false;
-            } else if (vSpan5V < -0.3) {
+            } else if (vSpan < -0.3) {
               this.burnedComponents.add(comp.id);
               burned = true;
               isBurnedOut = true;
               status = 'BURNED';
               faultState = 'BURNED';
-              fault = `FAULT: ${comp.label || 'MCU'} destroyed by reverse polarity (${vSpan5V.toFixed(1)}V).`;
+              fault = `FAULT: ${comp.label || 'MCU'} destroyed by reverse polarity (${vSpan.toFixed(1)}V).`;
               this.burnFaultReasons.set(comp.id, fault);
               this.recordedFaults.push({
                 compId: comp.id,
@@ -2131,6 +2179,9 @@ export class CircuitSolver {
                 timestamp: Date.now(),
               });
               on = false;
+            } else {
+              status = 'NORMAL';
+              faultState = 'NORMAL';
             }
           }
         } else if (comp.type.startsWith('LOGIC_')) {
@@ -2216,6 +2267,7 @@ export class CircuitSolver {
           voltage: Math.round(vDiff * 1000) / 1000,
           current: Math.round(current * 1000000) / 1000000,
           on,
+          pwrLed: on,
           brightness,
           status,
           faultState,

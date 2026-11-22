@@ -1,4 +1,4 @@
-import { CircuitComponent, ComponentCategory, SimulationSupportStatus } from '../types';
+import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus } from '../types';
 
 export interface ComponentTemplate {
   type: string;
@@ -8,6 +8,7 @@ export interface ComponentTemplate {
   subCategory?: string;
   simulationStatus?: SimulationSupportStatus;
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  physicalSpec?: PhysicalSpec;
   defaultValue: string;
   defaultParams: Record<string, number | string | boolean>;
   pins: { id: string; name: string; x: number; y: number; pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive' }[];
@@ -1773,6 +1774,12 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     subCategory: 'Arduino & AVR',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 68.6, height: 53.4, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+    },
     defaultValue: 'Uno R3',
     defaultParams: { clockMhz: 16, flashKb: 32, ramKb: 2 },
     pins: [
@@ -1820,6 +1827,12 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     subCategory: 'Arduino & AVR',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 101.6, height: 53.4, depth: 15.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Socketed',
+    },
     defaultValue: 'Mega 2560',
     defaultParams: { clockMhz: 16, flashKb: 256, ramKb: 8 },
     pins: [
@@ -1923,6 +1936,12 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     subCategory: 'Arduino & AVR',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 45.0, height: 18.0, depth: 10.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+    },
     defaultValue: 'Nano V3',
     defaultParams: { clockMhz: 16, flashKb: 32, ramKb: 2 },
     pins: [
@@ -2020,6 +2039,12 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     subCategory: 'ESP & Wireless MCU',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 51.5, height: 28.5, depth: 12.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+    },
     defaultValue: 'ESP32',
     defaultParams: { clockMhz: 240, flashMb: 4, sramKb: 520 },
     pins: [
@@ -2200,6 +2225,12 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     subCategory: 'ARM & RP2040',
     simulationStatus: 'transpiled_mcu',
     packageType: 'Module',
+    physicalSpec: {
+      packageType: 'Module',
+      dimensionsMm: { width: 51.0, height: 21.0, depth: 11.0 },
+      pinPitchMm: 2.54,
+      mountingType: 'Through-Hole',
+    },
     defaultValue: 'RP2040',
     defaultParams: { clockMhz: 133, flashMb: 2, ramKb: 264 },
     pins: [

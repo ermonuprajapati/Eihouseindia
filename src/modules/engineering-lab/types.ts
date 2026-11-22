@@ -59,6 +59,13 @@ export interface ComponentPin {
   pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive';
 }
 
+export interface PhysicalSpec {
+  packageType: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  dimensionsMm: { width: number; height: number; depth?: number };
+  pinPitchMm: number;
+  mountingType?: 'Through-Hole' | 'Surface-Mount' | 'Socketed' | 'Chassis';
+}
+
 export interface CircuitComponent {
   id: string;
   type: string;
@@ -68,6 +75,7 @@ export interface CircuitComponent {
   subCategory?: string;
   simulationStatus?: SimulationSupportStatus;
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  physicalSpec?: PhysicalSpec;
   manufacturerPartNumber?: string;
   datasheetUrl?: string;
   x: number;
@@ -100,6 +108,8 @@ export interface CircuitComponent {
     status?: 'NORMAL' | 'WARNING' | 'BURNED';
     burned?: boolean;
     fault?: string;
+    pwrLed?: boolean;
+    channels?: { r: number; g: number; b: number };
   };
 }
 
@@ -128,6 +138,8 @@ export interface ComponentSimTelemetry {
   thermalStress?: number;
   fault?: string;
   digitalOut?: number;
+  pwrLed?: boolean;
+  channels?: { r: number; g: number; b: number };
   onRed?: boolean;
   onGreen?: boolean;
   onBlue?: boolean;
