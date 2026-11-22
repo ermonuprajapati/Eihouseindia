@@ -87,6 +87,10 @@ export function Ldr3D({
             )}
             <mesh
               position={[0, 0, 0]}
+              renderOrder={100}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

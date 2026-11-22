@@ -875,40 +875,52 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
 
 export function ComponentPinLabelsOverlay({
   comp,
-  isSelected,
+  isSelected: _isSelected,
   hoveredPinName,
   showAll,
 }: {
   comp: Component3D;
-  isSelected: boolean;
+  isSelected?: boolean;
   hoveredPinName: string | null;
   showAll: boolean;
 }) {
   const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
 
-  if (!showAll && !isSelected && !hoveredPinName) return null;
+  // If showAll is false, ONLY show the single hovered pin badge. Never render all permanent badges when merely selected.
+  if (!showAll && !hoveredPinName) return null;
+
+  const pinsToRender = showAll
+    ? pinLabels
+    : pinLabels.filter(
+        (p) =>
+          p.id === hoveredPinName ||
+          p.id.toLowerCase() === hoveredPinName?.toLowerCase() ||
+          p.label.toLowerCase() === hoveredPinName?.toLowerCase()
+      );
+
+  if (pinsToRender.length === 0) return null;
 
   return (
     <group position={[comp.x3d, comp.y3d, comp.z3d]}>
-      {pinLabels.map((p, idx) => {
-        const isHovered = hoveredPinName === p.id;
-        const shouldShow = showAll || isSelected || isHovered;
-        if (!shouldShow) return null;
+      {pinsToRender.map((p, idx) => {
+        const isHovered =
+          hoveredPinName === p.id ||
+          hoveredPinName?.toLowerCase() === p.id.toLowerCase();
 
-        // Outward radial / staggered elevation offset to strictly eliminate overlapping between adjacent pins
-        const staggerY = (idx % 2 === 0 ? 4.2 : 6.8);
-        const staggerZ = p.localPos[2] < -0.5 ? -3.5 : p.localPos[2] > 0.5 ? 3.5 : (idx % 2 === 0 ? -2.8 : 2.8);
+        // Single hovered pin gets clean prominent elevation above terminal
+        const elevationY = isHovered ? 4.5 : (idx % 2 === 0 ? 3.5 : 5.8);
+        const offsetZ = p.localPos[2] < -0.5 ? -3.0 : p.localPos[2] > 0.5 ? 3.0 : 0;
 
         return (
           <Html
             key={p.id}
-            position={[p.localPos[0], p.localPos[1] + staggerY, p.localPos[2] + staggerZ]}
+            position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2] + offsetZ]}
             center
             distanceFactor={160}
             style={{ pointerEvents: 'none', userSelect: 'none' }}
           >
             <div
-              className={`px-1.5 py-0.5 rounded-full font-mono font-bold text-[10px] whitespace-nowrap shadow-lg tracking-tight transition-transform ${
+              className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] whitespace-nowrap shadow-xl tracking-tight transition-transform ${
                 isHovered
                   ? 'bg-amber-400 text-slate-950 scale-110 ring-2 ring-white border border-amber-300 shadow-amber-500/50'
                   : 'bg-slate-950/95 text-cyan-200 border border-cyan-500/80 shadow-black/90'
@@ -1806,50 +1818,48 @@ export function Studio3DCanvas({
       }
     }
 
-    // In Inspect mode: Clicking a component pin or body selects the component, does not draw wires
-    if (toolMode3D !== 'wire' && !activeWireStart) {
-      if (compId !== 'breadboard') {
-        onSelectComponent(compId);
-        onSelectWire(null);
+    // Start wire routing if no wire is currently being drawn (works seamlessly across all tool modes):
+    if (!activeWireStart) {
+      setActiveWireStart({ compId, pinId, pos: worldPos });
+      if (toolMode3D !== 'wire') {
+        setToolMode3D('wire');
       }
+      toast.info(`Started wire from ${compId === 'breadboard' ? pinId : `${compId}:${pinId}`}. Click target pin or hole.`);
       return;
     }
 
-    // In Wire mode:
-    if (!activeWireStart) {
-      setActiveWireStart({ compId, pinId, pos: worldPos });
-    } else {
-      // Prevent connecting to self pin
-      if (activeWireStart.compId === compId && activeWireStart.pinId === pinId) {
-        setActiveWireStart(null);
-        return;
-      }
-
-      // Use user-selected wire color
-      const wireColor = activeWireColor;
-
-      // Prevent wire stacking in the same breadboard/rail hole:
-      let finalToPin = pinId;
-      if (compId === 'breadboard' && occupiedHoleIds.has(pinId)) {
-        finalToPin = findNearestUnoccupiedHole(pinId, occupiedHoleIds);
-      }
-      let finalFromPin = activeWireStart.pinId;
-      if (activeWireStart.compId === 'breadboard' && occupiedHoleIds.has(activeWireStart.pinId)) {
-        finalFromPin = findNearestUnoccupiedHole(activeWireStart.pinId, occupiedHoleIds);
-      }
-
-      // Complete wire connection
-      const newWire: Wire3D = {
-        id: `wire3d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        fromPin: { compId: activeWireStart.compId, pinId: finalFromPin },
-        toPin: { compId, pinId: finalToPin },
-        color: wireColor,
-      };
-
-      onAddWire3D(newWire);
+    // If activeWireStart is present:
+    // Prevent connecting to self pin: cancel routing if clicked again
+    if (activeWireStart.compId === compId && activeWireStart.pinId === pinId) {
       setActiveWireStart(null);
-      toast.success(`Connected jumper wire from ${activeWireStart.pinId} to ${pinId}`);
+      toast.info('Cancelled wire routing');
+      return;
     }
+
+    // Use user-selected wire color
+    const wireColor = activeWireColor;
+
+    // Prevent wire stacking in the same breadboard/rail hole:
+    let finalToPin = pinId;
+    if (compId === 'breadboard' && occupiedHoleIds.has(pinId)) {
+      finalToPin = findNearestUnoccupiedHole(pinId, occupiedHoleIds);
+    }
+    let finalFromPin = activeWireStart.pinId;
+    if (activeWireStart.compId === 'breadboard' && occupiedHoleIds.has(activeWireStart.pinId)) {
+      finalFromPin = findNearestUnoccupiedHole(activeWireStart.pinId, occupiedHoleIds);
+    }
+
+    // Complete wire connection
+    const newWire: Wire3D = {
+      id: `wire3d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      fromPin: { compId: activeWireStart.compId, pinId: finalFromPin },
+      toPin: { compId, pinId: finalToPin },
+      color: wireColor,
+    };
+
+    onAddWire3D(newWire);
+    setActiveWireStart(null);
+    toast.success(`Connected jumper wire from ${activeWireStart.pinId} to ${pinId}`);
   };
 
   const selectedWire = wires3d.find((w) => w.id === selectedWireId);
@@ -1898,7 +1908,13 @@ export function Studio3DCanvas({
           logarithmicDepthBuffer: true,
         }}
         camera={{ position: [0, 130, 150], fov: 45, near: 0.5, far: 500 }}
-        className="w-full h-full cursor-grab active:cursor-grabbing touch-none"
+        className={`w-full h-full touch-none ${
+          hoveredPinInfo || hoveredHole
+            ? toolMode3D === 'wire' || activeWireStart
+              ? 'cursor-crosshair'
+              : 'cursor-pointer'
+            : 'cursor-grab active:cursor-grabbing'
+        }`}
         onContextMenu={(e) => {
           e.preventDefault();
           if (activeWireStart) {
@@ -2262,6 +2278,10 @@ export function Studio3DCanvas({
                         </mesh>
                       )}
                       <mesh
+                        renderOrder={100}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const pPos = getPinWorld3D(comp.id, pinId);
@@ -2377,6 +2397,10 @@ export function Studio3DCanvas({
                         </mesh>
                       )}
                       <mesh
+                        renderOrder={100}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const pPos = getPinWorld3D(comp.id, pinId);
@@ -2469,6 +2493,10 @@ export function Studio3DCanvas({
                         </mesh>
                       )}
                       <mesh
+                        renderOrder={100}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const pPos = getPinWorld3D(comp.id, pinId);
@@ -3140,6 +3168,10 @@ export function Studio3DCanvas({
                       </mesh>
                       <mesh
                         position={[0, -4.5, 0]}
+                        renderOrder={100}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const pId = String(pi + 1);
@@ -3168,6 +3200,10 @@ export function Studio3DCanvas({
                         <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
                       </mesh>
                       <mesh
+                        renderOrder={100}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const pId = String(pi + 1);

@@ -285,6 +285,10 @@ export function Led3D({
       />
 
       {/* Realistic Thin Metallic Leads Firmly Seated Into Breadboard Holes (radius 0.38mm, 12mm length) */}
+      {/* Internal anode stem penetrating 2.5mm inside epoxy body from anvil at y = 4.5 down to collar at y = 2.0 */}
+      <mesh position={[-0.7, 3.25, 0]} rotation={[0, 0, Math.atan2(0.6, 2.5)]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.57, 12]} />
+      </mesh>
       {/* 1. Longer Anode Lead (Left, +): Bends from base to x = -2.54 and extends down to y = -8.0mm */}
       <mesh position={[-1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
@@ -293,6 +297,10 @@ export function Led3D({
         <cylinderGeometry args={[0.38, 0.38, 10.0, 12]} />
       </mesh>
 
+      {/* Internal cathode stem penetrating 2.5mm inside epoxy body from cup at y = 4.5 down to collar at y = 2.0 */}
+      <mesh position={[0.7, 3.25, 0]} rotation={[0, 0, -Math.atan2(0.6, 2.5)]} material={materials.silverLead}>
+        <cylinderGeometry args={[0.38, 0.38, 2.57, 12]} />
+      </mesh>
       {/* 2. Shorter Cathode Lead (Right, -): Bends from base to x = 2.54 and extends down to y = -7.5mm */}
       <mesh position={[1.77, 2.0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.silverLead}>
         <cylinderGeometry args={[0.38, 0.38, 1.54, 12]} />
@@ -313,6 +321,10 @@ export function Led3D({
           </mesh>
         )}
         <mesh
+          renderOrder={100}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             const w = new THREE.Vector3();
@@ -342,6 +354,10 @@ export function Led3D({
           </mesh>
         )}
         <mesh
+          renderOrder={100}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             const w = new THREE.Vector3();

@@ -201,6 +201,10 @@ export function RgbLed3D({
               )}
               {/* Invisible Hit-Sphere */}
               <mesh
+                renderOrder={100}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();

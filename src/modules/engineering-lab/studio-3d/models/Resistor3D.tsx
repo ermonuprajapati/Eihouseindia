@@ -117,6 +117,10 @@ export function Resistor3D({
         )}
         {/* Generous Raycast Hit-Sphere */}
         <mesh
+          renderOrder={100}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             const w = new THREE.Vector3();
@@ -147,6 +151,10 @@ export function Resistor3D({
         )}
         {/* Generous Raycast Hit-Sphere */}
         <mesh
+          renderOrder={100}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             const w = new THREE.Vector3();

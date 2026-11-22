@@ -155,6 +155,10 @@ export function ServoSG903D({
               <mesh
                 position={[-8, 0, 0]}
                 material={isHovered ? materials.pinHover : pin.color}
+                renderOrder={100}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();

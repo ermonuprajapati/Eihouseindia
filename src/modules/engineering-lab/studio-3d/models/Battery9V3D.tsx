@@ -155,6 +155,10 @@ export function Battery9V3D({
       <mesh
         position={P_POS}
         material={hoveredPin === '+' ? materials.pinHover : materials.snapMetal}
+        renderOrder={100}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+        }}
         onClick={(e) => {
           e.stopPropagation();
           const w = new THREE.Vector3();
@@ -174,6 +178,10 @@ export function Battery9V3D({
       <mesh
         position={P_NEG}
         material={hoveredPin === '-' ? materials.pinHover : materials.snapMetal}
+        renderOrder={100}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+        }}
         onClick={(e) => {
           e.stopPropagation();
           const w = new THREE.Vector3();

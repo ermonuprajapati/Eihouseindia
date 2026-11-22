@@ -182,6 +182,10 @@ export function HcSr04_3D({
               )}
               <mesh
                 position={[0, -1.25, 0]}
+                renderOrder={100}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();

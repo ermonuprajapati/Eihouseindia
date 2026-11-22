@@ -209,6 +209,9 @@ export function DipPackage3D({
           <group
             key={pin.id}
             position={pin.pos}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (onPinClick && groupRef.current) {
@@ -254,6 +257,10 @@ export function DipPackage3D({
             {/* Generous Raycast Hit-Sphere for Effortless Clicking */}
             <mesh
               position={[0, 0, 0]}
+              renderOrder={100}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (onPinClick && groupRef.current) {

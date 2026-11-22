@@ -258,6 +258,10 @@ export function Lcd1602_3D({
               <mesh
                 position={[0, 5.0, 0]}
                 material={isHovered ? materials.pinHover : materials.pinGold}
+                renderOrder={100}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   const worldPos = new THREE.Vector3();

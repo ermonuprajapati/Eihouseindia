@@ -88,9 +88,9 @@ export function SlideSwitch3D({
         const isHovered = hoveredPin === p.name;
         return (
           <group key={p.name} position={[p.x, 0, 0]}>
-            {/* Metallic Lead Leg extending down into breadboard */}
-            <mesh position={[0, -0.5, 0]} material={materials.pinSilver}>
-              <cylinderGeometry args={[0.3, 0.3, 5.0, 8]} />
+            {/* Metallic Lead Leg penetrating 1.0mm inside switch body and dipping into breadboard */}
+            <mesh position={[0, -2.0, 0]} material={materials.pinSilver}>
+              <cylinderGeometry args={[0.3, 0.3, 10.0, 8]} />
             </mesh>
             {/* Terminal Sphere with Generous Hit-Sphere & Hover Ring */}
             <mesh
@@ -107,6 +107,10 @@ export function SlideSwitch3D({
             )}
             <mesh
               position={[0, 0, 0]}
+              renderOrder={100}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 const worldPos = new THREE.Vector3();

@@ -52,11 +52,11 @@ export function Pushbutton3D({
     };
   }, []);
 
-  // 4 Pins: 6mm x 6mm button with breadboard pin span
-  const P_1A: [number, number, number] = [-2.54, -4, -2.54];
-  const P_1B: [number, number, number] = [2.54, -4, -2.54];
-  const P_2A: [number, number, number] = [-2.54, -4, 2.54];
-  const P_2B: [number, number, number] = [2.54, -4, 2.54];
+  // 4 Pins: 6mm x 6mm button with breadboard pin span (terminals at surface level y = 0)
+  const P_1A: [number, number, number] = [-2.54, 0, -2.54];
+  const P_1B: [number, number, number] = [2.54, 0, -2.54];
+  const P_2A: [number, number, number] = [-2.54, 0, 2.54];
+  const P_2B: [number, number, number] = [2.54, 0, 2.54];
 
   return (
     <group position={position} rotation={rotation}>
@@ -83,7 +83,7 @@ export function Pushbutton3D({
         <cylinderGeometry args={[1.6, 1.6, 2.2, 16]} />
       </mesh>
 
-      {/* 4 Metallic Terminal Legs */}
+      {/* 4 Metallic Terminal Legs penetrating 1.0mm inside body and extending into breadboard holes */}
       {[
         { name: '1A', pos: P_1A },
         { name: '1B', pos: P_1B },
@@ -93,9 +93,9 @@ export function Pushbutton3D({
         const isHovered = hoveredPin === pin.name;
         return (
           <group key={pin.name}>
-            {/* Lead leg wire extending into breadboard */}
-            <mesh position={[pin.pos[0], -2.25, pin.pos[2]]} material={materials.metalBracket}>
-              <cylinderGeometry args={[0.25, 0.25, 4.5, 8]} />
+            {/* Lead leg wire penetrating body from y = 1.0 down to y = -7.5 */}
+            <mesh position={[pin.pos[0], -3.25, pin.pos[2]]} material={materials.metalBracket}>
+              <cylinderGeometry args={[0.28, 0.28, 8.5, 8]} />
             </mesh>
             {/* Clickable Terminal Sphere with Generous Hit-Sphere & Hover Ring */}
             <mesh
@@ -112,6 +112,10 @@ export function Pushbutton3D({
             )}
             <mesh
               position={pin.pos}
+              renderOrder={100}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 const w = new THREE.Vector3();
