@@ -35,6 +35,9 @@ export const MASTER_25_CATEGORIES: MasterCategory25[] = [
   { id: 'mechanical_thermal', number: '25', name: 'Mechanical & Thermal Accessories', label: '25. Mechanical & Thermal Accessories' },
 ];
 
+const categoryObjectCache = new WeakMap<object, MasterCategory25>();
+const categoryStringCache = new Map<string, MasterCategory25>();
+
 /**
  * Maps any component to its exact 25-category engineering classification
  */
@@ -44,8 +47,30 @@ export function getCategory25ForComponent(comp: {
   category?: string;
   subCategory?: string;
 }): MasterCategory25 {
+  if (comp && typeof comp === 'object') {
+    const cached = categoryObjectCache.get(comp);
+    if (cached) return cached;
+  }
+  const key = `${comp.type}|${comp.name || ''}|${comp.category || ''}|${comp.subCategory || ''}`;
+  const strCached = categoryStringCache.get(key);
+  if (strCached) {
+    if (comp && typeof comp === 'object') categoryObjectCache.set(comp, strCached);
+    return strCached;
+  }
+
+  const result = computeCategory25Raw(comp);
+  categoryStringCache.set(key, result);
+  if (comp && typeof comp === 'object') categoryObjectCache.set(comp, result);
+  return result;
+}
+
+function computeCategory25Raw(comp: {
+  type: string;
+  name?: string;
+  category?: string;
+  subCategory?: string;
+}): MasterCategory25 {
   const t = (comp.type || '').toUpperCase();
-  const n = (comp.name || '').toUpperCase();
   const cat = (comp.category || '').toLowerCase();
   const sub = (comp.subCategory || '').toLowerCase();
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import {
   CircuitComponent,
@@ -31,7 +32,11 @@ import {
 } from 'lucide-react';
 import { SchematicSymbol } from './SchematicSymbols';
 import { SchematicSheetFrame } from './SchematicSheetFrame';
-import { ErcReportModal } from '../Panels/ErcReportModal';
+
+const ErcReportModal = dynamic(
+  () => import('../Panels/ErcReportModal').then((m) => m.ErcReportModal),
+  { ssr: false }
+);
 import {
   runElectricalRulesCheck,
   ErcViolation,
@@ -2008,13 +2013,15 @@ export function SchematicCanvas({
       )}
 
       {/* Electrical Rules Check (ERC) Modal */}
-      <ErcReportModal
-        isOpen={isErcModalOpen}
-        onClose={() => setIsErcModalOpen(false)}
-        violations={ercViolations}
-        onLocateViolation={handleLocateViolation}
-        onAutoAnnotate={onAutoAnnotate}
-      />
+      {isErcModalOpen && (
+        <ErcReportModal
+          isOpen={isErcModalOpen}
+          onClose={() => setIsErcModalOpen(false)}
+          violations={ercViolations}
+          onLocateViolation={handleLocateViolation}
+          onAutoAnnotate={onAutoAnnotate}
+        />
+      )}
     </div>
   );
 }

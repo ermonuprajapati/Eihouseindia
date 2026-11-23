@@ -1089,6 +1089,8 @@ function resolvePhysicalSpecRaw(comp: {
   };
 }
 
+const physicalSpecStringCache = new Map<string, PhysicalSpec>();
+
 /**
  * Validated Physical Specification Exporter
  * Guarantees courtyard bounds strictly enclose physical bodies with clearance
@@ -1109,6 +1111,12 @@ export function resolvePhysicalSpec(
     | string,
   footprint?: string
 ): PhysicalSpec {
+  if (typeof compOrType === 'string') {
+    const key = `${compOrType}::${footprint || ''}`;
+    const cached = physicalSpecStringCache.get(key);
+    if (cached) return cached;
+  }
+
   const comp =
     typeof compOrType === 'string'
       ? { type: compOrType, footprint }
@@ -1131,6 +1139,12 @@ export function resolvePhysicalSpec(
       spec.courtyardMm.depth = Math.round((spec.bodyDimensionsMm.depth + 1.5) * 10) / 10;
     }
   }
+
+  if (typeof compOrType === 'string') {
+    const key = `${compOrType}::${footprint || ''}`;
+    physicalSpecStringCache.set(key, spec);
+  }
+
   return spec;
 }
 
