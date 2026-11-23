@@ -30,6 +30,8 @@ import {
   filterComponentsByTier,
   getSimulationBadgeInfo,
 } from '@/modules/engineering-lab/circuit-engine/component-categories-25';
+import { ARDUINO_PINS } from '@/modules/engineering-lab/studio-3d/models/ArduinoUno3D';
+import { MEGA_PINS } from '@/modules/engineering-lab/studio-3d/models/ArduinoMega3D';
 
 describe('Virtual Lab v3 Verification Suite', () => {
   describe('Task 1: RGB LED Schematic Multi-Channel Glow', () => {
@@ -1888,6 +1890,266 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(passiveSpec.pinLength).toBe(11.0);
       expect(passiveSpec.localMinY).toBe(-8.0);
       expect(passiveSpec.localMinBodyY).toBe(2.0);
+    });
+  });
+
+  describe('Batch 2E: Manufacturing-Grade Authentic PCB Footprints, Dynamic Auto-Sizing, PTH & M3 Plated Mounting Holes', () => {
+    it('Task 1: Arduino Uno R3 authentic dual-bank header pads match ArduinoUno3D model (<0.05mm error) with zero fake DIP-28 fallback', () => {
+      const unoSpec = resolvePhysicalSpec('ARDUINO_UNO');
+      expect(unoSpec.placementClass).toBe('dev-board');
+      expect(unoSpec.packageCode).toBe('BOARD-UNO-R3');
+      expect(unoSpec.pads).toBeDefined();
+      expect(unoSpec.pads!.length).toBeGreaterThanOrEqual(28);
+
+      // Verify authentic dual-bank geometry: top row at Y = -23.0mm, bottom row at Y = +23.0mm
+      const topPads = unoSpec.pads!.filter((p) => p.yMm === -23.0);
+      const botPads = unoSpec.pads!.filter((p) => p.yMm === 23.0);
+      expect(topPads.length).toBeGreaterThanOrEqual(14);
+      expect(botPads.length).toBeGreaterThanOrEqual(12);
+
+      // Verify exact alignment with ArduinoUno3D.tsx ARDUINO_PINS (<0.05mm error)
+      ARDUINO_PINS.forEach((pinDef) => {
+        const matchingPad = unoSpec.pads!.find((p) => {
+          if (p.pinId.toUpperCase() === pinDef.name.toUpperCase()) return true;
+          if (pinDef.name === 'TX' && (p.pinId === 'D1' || p.pinId === 'TX1')) return true;
+          if (pinDef.name === 'RX' && (p.pinId === 'D0' || p.pinId === 'RX0')) return true;
+          if (pinDef.name === 'GND_1' && (p.pinId === 'GND' || p.pinId === 'GND_1')) return true;
+          if (pinDef.name === 'GND_2' && p.pinId === 'GND_2') return true;
+          return false;
+        });
+        expect(matchingPad).toBeDefined();
+        if (matchingPad) {
+          // X alignment check
+          expect(Math.abs(matchingPad.xMm - pinDef.localPos[0])).toBeLessThanOrEqual(0.05);
+          // Y alignment check (PCB Y = 3D Z: pinDef.localPos[2] is -23 or 23)
+          expect(Math.abs(matchingPad.yMm - pinDef.localPos[2])).toBeLessThanOrEqual(0.05);
+        }
+      });
+
+      // Verify PcbGenerator.calculateFootprintPads outputs dual-bank pads and NEVER DIP-28 JEDEC pads
+      const unoComp: CircuitComponent = {
+        id: 'uno-1',
+        type: 'ARDUINO_UNO',
+        label: 'U1',
+        value: 'Uno R3',
+        category: 'microcontrollers',
+        footprint: 'Module:Arduino_Uno_R3',
+        rotation: 0,
+        parameters: {},
+        x: 100,
+        y: 100,
+        pins: unoSpec.pads!.map((p) => ({ id: p.pinId, name: p.pinId, pinType: 'bidirectional', x: 0, y: 0 })),
+      };
+      const calculatedPads = PcbGenerator.calculateFootprintPads(unoComp, 50, 40, 0);
+      expect(calculatedPads.length).toBe(unoSpec.pads!.length);
+
+      // Confirm pads are at y = 40 - 23 = 17 and y = 40 + 23 = 63, NOT JEDEC DIP-28 rows (oy: +/-3.81)
+      const yCoords = calculatedPads.map((p) => p.y);
+      const minY = Math.min(...yCoords);
+      const maxY = Math.max(...yCoords);
+      expect(minY).toBeCloseTo(17.0, 1);
+      expect(maxY).toBeCloseTo(63.0, 1);
+      expect(maxY - minY).toBeCloseTo(46.0, 1); // 46mm header separation (never 7.62mm DIP IC row spacing!)
+    });
+
+    it('Task 2: Arduino Mega 2560 header banks match ArduinoMega3D MEGA_PINS', () => {
+      const megaSpec = resolvePhysicalSpec('ARDUINO_MEGA');
+      expect(megaSpec.placementClass).toBe('dev-board');
+      expect(megaSpec.pads).toBeDefined();
+      expect(megaSpec.pads!.length).toBeGreaterThanOrEqual(50);
+
+      // Check header separation: top at Y = -23.0, bottom at Y = +23.0
+      const topPads = megaSpec.pads!.filter((p) => p.yMm === -23.0);
+      const botPads = megaSpec.pads!.filter((p) => p.yMm === 23.0);
+      expect(topPads.length).toBeGreaterThanOrEqual(18);
+      expect(botPads.length).toBeGreaterThanOrEqual(16);
+
+      // Check key communication and analog pins match MEGA_PINS
+      const d0Pad = megaSpec.pads!.find((p) => p.pinId === 'D0');
+      expect(d0Pad).toBeDefined();
+      expect(d0Pad!.xMm).toBeCloseTo(-36.8, 1);
+
+      const a0Pad = megaSpec.pads!.find((p) => p.pinId === 'A0');
+      expect(a0Pad).toBeDefined();
+      expect(a0Pad!.xMm).toBeCloseTo(-10.5, 1);
+    });
+
+    it('Task 3: Ceramic Capacitor PCB footprint pads are spaced at 5.08mm (oxSpan = 2.54mm), strictly matching CapacitorCeramic3D leads', () => {
+      const capSpec = resolvePhysicalSpec('CAPACITOR_CERAMIC');
+      expect(capSpec.packageCode).toBe('RADIAL-5.08MM');
+      expect(capSpec.pinPitchMm).toBe(5.08);
+      expect(capSpec.pads).toBeDefined();
+      expect(capSpec.pads!.length).toBe(2);
+      expect(capSpec.pads![0].xMm).toBeCloseTo(-2.54, 2);
+      expect(capSpec.pads![1].xMm).toBeCloseTo(2.54, 2);
+      expect(capSpec.pads![1].xMm - capSpec.pads![0].xMm).toBeCloseTo(5.08, 2);
+
+      // Verify in PcbGenerator.calculateFootprintPads
+      const capComp: CircuitComponent = {
+        id: 'c1',
+        type: 'CAPACITOR_CERAMIC',
+        label: 'C1',
+        value: '100nF',
+        category: 'passive',
+        footprint: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm',
+        rotation: 0,
+        parameters: {},
+        x: 0,
+        y: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: 0, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 0, y: 0 },
+        ],
+      };
+      const pads = PcbGenerator.calculateFootprintPads(capComp, 20, 20, 0);
+      expect(pads.length).toBe(2);
+      expect(pads[0].x).toBeCloseTo(20 - 2.54, 2);
+      expect(pads[1].x).toBeCloseTo(20 + 2.54, 2);
+      expect(pads[1].x - pads[0].x).toBeCloseTo(5.08, 2);
+    });
+
+    it('Task 4: Dynamic PCB Auto-Sizing & Courtyard-Aware Zero-Overlap - board dynamically auto-expands with 4 corner M3 plated mounting holes', () => {
+      // Create a circuit containing large MCU dev boards and multiple modules
+      const largeCircuitComps: CircuitComponent[] = [
+        {
+          id: 'uno',
+          type: 'ARDUINO_UNO',
+          label: 'U1',
+          value: 'Uno R3',
+          category: 'microcontrollers',
+          footprint: 'Module:Arduino_Uno_R3',
+          rotation: 0,
+          parameters: {},
+          x: 100,
+          y: 100,
+          pins: [
+            { id: 'D0', name: 'D0', pinType: 'bidirectional', x: 0, y: 0 },
+            { id: '5V', name: '5V', pinType: 'power', x: 0, y: 0 },
+            { id: 'GND', name: 'GND', pinType: 'power', x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'mega',
+          type: 'ARDUINO_MEGA',
+          label: 'U2',
+          value: 'Mega 2560',
+          category: 'microcontrollers',
+          footprint: 'Module:Arduino_Mega2560',
+          rotation: 0,
+          parameters: {},
+          x: 400,
+          y: 100,
+          pins: [
+            { id: 'D0', name: 'D0', pinType: 'bidirectional', x: 0, y: 0 },
+            { id: '5V', name: '5V', pinType: 'power', x: 0, y: 0 },
+            { id: 'GND', name: 'GND', pinType: 'power', x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'sr04',
+          type: 'HC_SR04',
+          label: 'U3',
+          value: 'HC-SR04',
+          category: 'sensors',
+          footprint: 'MODULE-HCSR04',
+          rotation: 0,
+          parameters: {},
+          x: 100,
+          y: 400,
+          pins: [
+            { id: 'VCC', name: 'VCC', pinType: 'power', x: 0, y: 0 },
+            { id: 'TRIG', name: 'TRIG', pinType: 'input', x: 0, y: 0 },
+            { id: 'ECHO', name: 'ECHO', pinType: 'output', x: 0, y: 0 },
+            { id: 'GND', name: 'GND', pinType: 'power', x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'timer',
+          type: 'TIMER_555',
+          label: 'U4',
+          value: 'NE555P',
+          category: 'analog_ics',
+          footprint: 'Package_DIP:DIP-8_W7.62mm',
+          rotation: 0,
+          parameters: {},
+          x: 400,
+          y: 400,
+          pins: [
+            { id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 },
+            { id: '2', name: 'TRIG', pinType: 'input', x: 0, y: 0 },
+            { id: '3', name: 'OUT', pinType: 'output', x: 0, y: 0 },
+            { id: '4', name: 'RESET', pinType: 'input', x: 0, y: 0 },
+            { id: '5', name: 'CTRL', pinType: 'input', x: 0, y: 0 },
+            { id: '6', name: 'THRES', pinType: 'input', x: 0, y: 0 },
+            { id: '7', name: 'DISCH', pinType: 'input', x: 0, y: 0 },
+            { id: '8', name: 'VCC', pinType: 'power', x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'cap',
+          type: 'CAPACITOR_CERAMIC',
+          label: 'C1',
+          value: '100nF',
+          category: 'passive',
+          footprint: 'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm',
+          rotation: 0,
+          parameters: {},
+          x: 250,
+          y: 250,
+          pins: [
+            { id: '1', name: '1', pinType: 'passive', x: 0, y: 0 },
+            { id: '2', name: '2', pinType: 'passive', x: 0, y: 0 },
+          ],
+        },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(largeCircuitComps, []);
+
+      // 1. Board dimension expands dynamically to fit both Uno (68.6x53.4) + Mega (101.6x53.3) + HC-SR04
+      expect(pcb.widthMm).toBeGreaterThanOrEqual(100);
+      expect(pcb.heightMm).toBeGreaterThanOrEqual(75);
+
+      // 2. All 5 components are placed
+      expect(pcb.components).toBeDefined();
+      expect(pcb.components!.length).toBe(5);
+
+      // 3. Pairwise AABB zero-overlap verification
+      const placed = pcb.components!;
+      for (let i = 0; i < placed.length; i++) {
+        for (let j = i + 1; j < placed.length; j++) {
+          const c1 = placed[i];
+          const c2 = placed[j];
+          const spec1 = resolvePhysicalSpec(c1.type, c1.footprint);
+          const spec2 = resolvePhysicalSpec(c2.type, c2.footprint);
+          const w1 = spec1.courtyardMm?.width || spec1.bodyDimensionsMm?.width || 10;
+          const h1 = spec1.courtyardMm?.depth || spec1.bodyDimensionsMm?.depth || 8;
+          const w2 = spec2.courtyardMm?.width || spec2.bodyDimensionsMm?.width || 10;
+          const h2 = spec2.courtyardMm?.depth || spec2.bodyDimensionsMm?.depth || 8;
+
+          const dx = Math.abs(c1.x - c2.x);
+          const dy = Math.abs(c1.y - c2.y);
+          const minSepX = (w1 + w2) / 2;
+          const minSepY = (h1 + h2) / 2;
+
+          // Neither X nor Y overlap simultaneously (zero overlap guarantee!)
+          const overlaps = dx < minSepX && dy < minSepY;
+          expect(overlaps).toBe(false);
+        }
+      }
+
+      // 4. 4 Corner M3 Plated Mounting Holes present with exact d=3.2mm drill
+      expect(pcb.mountingHoles).toBeDefined();
+      expect(pcb.mountingHoles!.length).toBe(4);
+      pcb.mountingHoles!.forEach((hole) => {
+        expect(hole.diameterMm).toBe(3.2);
+        // Inset 4mm from borders
+        const nearLeft = Math.abs(hole.x - 4.0) < 0.1;
+        const nearRight = Math.abs(hole.x - (pcb.widthMm - 4.0)) < 0.1;
+        const nearTop = Math.abs(hole.y - 4.0) < 0.1;
+        const nearBot = Math.abs(hole.y - (pcb.heightMm - 4.0)) < 0.1;
+        expect(nearLeft || nearRight).toBe(true);
+        expect(nearTop || nearBot).toBe(true);
+      });
     });
   });
 });

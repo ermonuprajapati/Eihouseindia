@@ -180,6 +180,225 @@ export function buildDualHeaderPads(
   return pads;
 }
 
+export function buildArduinoUnoPads(
+  pins?: Array<{ id: string; name?: string; num?: number | string }>
+): PadSpec[] {
+  // Real Arduino Uno R3 header layout matching ArduinoUno3D.tsx:
+  // Top digital header along Y = -23.0mm:
+  // D0..D7, 160mil gap, D8..D13, GND_3, AREF, SDA, SCL
+  // Bottom power & analog header along Y = +23.0mm:
+  // IOREF, RESET, 3V3, 5V, GND, GND_2, VIN, A0..A5
+  const pinCoordMap: Record<string, { x: number; y: number; num: number }> = {
+    // Top Row (Y = -23.0mm)
+    RX: { x: -19.08, y: -23.0, num: 1 },
+    RX0: { x: -19.08, y: -23.0, num: 1 },
+    D0: { x: -19.08, y: -23.0, num: 1 },
+    TX: { x: -16.54, y: -23.0, num: 2 },
+    TX1: { x: -16.54, y: -23.0, num: 2 },
+    D1: { x: -16.54, y: -23.0, num: 2 },
+    D2: { x: -14.0, y: -23.0, num: 3 },
+    D3: { x: -11.46, y: -23.0, num: 4 },
+    D4: { x: -8.92, y: -23.0, num: 5 },
+    D5: { x: -6.38, y: -23.0, num: 6 },
+    D6: { x: -3.84, y: -23.0, num: 7 },
+    D7: { x: -1.3, y: -23.0, num: 8 },
+    D8: { x: 3.3, y: -23.0, num: 9 },
+    D9: { x: 5.84, y: -23.0, num: 10 },
+    D10: { x: 8.38, y: -23.0, num: 11 },
+    D11: { x: 10.92, y: -23.0, num: 12 },
+    D12: { x: 13.46, y: -23.0, num: 13 },
+    D13: { x: 16.0, y: -23.0, num: 14 },
+    GND_3: { x: 18.54, y: -23.0, num: 15 },
+    AREF: { x: 21.08, y: -23.0, num: 16 },
+    SDA: { x: 23.62, y: -23.0, num: 17 },
+    SCL: { x: 26.16, y: -23.0, num: 18 },
+
+    // Bottom Row (Y = +23.0mm)
+    IOREF: { x: -19.08, y: 23.0, num: 19 },
+    RESET: { x: -16.54, y: 23.0, num: 20 },
+    '3V3': { x: -14.0, y: 23.0, num: 21 },
+    '3.3V': { x: -14.0, y: 23.0, num: 21 },
+    '5V': { x: -11.46, y: 23.0, num: 22 },
+    GND: { x: -8.92, y: 23.0, num: 23 },
+    GND_1: { x: -8.92, y: 23.0, num: 23 },
+    GND_2: { x: -6.38, y: 23.0, num: 24 },
+    VIN: { x: -3.84, y: 23.0, num: 25 },
+    A0: { x: 3.3, y: 23.0, num: 26 },
+    A1: { x: 5.84, y: 23.0, num: 27 },
+    A2: { x: 8.38, y: 23.0, num: 28 },
+    A3: { x: 10.92, y: 23.0, num: 29 },
+    A4: { x: 13.46, y: 23.0, num: 30 },
+    A5: { x: 16.0, y: 23.0, num: 31 },
+  };
+
+  const defaultUnoPinIds = [
+    'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7',
+    'D8', 'D9', 'D10', 'D11', 'D12', 'D13', 'GND_3', 'AREF',
+    'RESET', '3V3', '5V', 'GND', 'GND_2', 'VIN',
+    'A0', 'A1', 'A2', 'A3', 'A4', 'A5',
+  ];
+  const effectivePins: Array<{ id: string; name?: string; num?: number | string }> =
+    pins && pins.length > 0 ? pins : defaultUnoPinIds.map((id) => ({ id }));
+
+  const pads: PadSpec[] = [];
+  effectivePins.forEach((p, idx) => {
+    const rawId = p.id || '';
+    const normKey = rawId.toUpperCase().replace(/\s+/g, '');
+    const mapped = pinCoordMap[normKey] || pinCoordMap[normKey.replace(/~.*$/, '')];
+
+    if (mapped) {
+      pads.push({
+        pinId: p.id,
+        pinNumber: p.num ?? mapped.num,
+        xMm: mapped.x,
+        yMm: mapped.y,
+        drillMm: 1.0,
+        padDiameterMm: 1.8,
+        shape: idx === 0 || mapped.num === 1 || mapped.num === 20 ? 'rect' : 'circle',
+      });
+    } else {
+      const fallbackX = Math.round((-20 + idx * 2.54) * 100) / 100;
+      pads.push({
+        pinId: p.id,
+        pinNumber: p.num ?? idx + 1,
+        xMm: fallbackX,
+        yMm: 23.0,
+        drillMm: 1.0,
+        padDiameterMm: 1.8,
+        shape: idx === 0 ? 'rect' : 'circle',
+      });
+    }
+  });
+
+  return pads;
+}
+
+export function buildArduinoMegaPads(
+  pins?: Array<{ id: string; name?: string; num?: number | string }>
+): PadSpec[] {
+  // Real Arduino Mega 2560 layout matching ArduinoMega3D.tsx (MEGA_PINS)
+  // Top digital header (Z = -23.0mm, Y = -23.0mm):
+  // D0..D7 (-36.8 to -19.02), gap, D8..D13, GND_TOP, AREF, D20, D21, D14..D19
+  // Bottom header (Z = +23.0mm, Y = +23.0mm):
+  // IOREF, RESET, 3V3, 5V, GND, GND_2, VIN, A0..A7, A8..A15
+  // Extended double row header (X = 43.5 / 46.04)
+  const pinCoordMap: Record<string, { x: number; y: number; num: number }> = {
+    // Top Row (Y = -23.0mm)
+    D0: { x: -36.8, y: -23.0, num: 1 },
+    RX0: { x: -36.8, y: -23.0, num: 1 },
+    D1: { x: -34.26, y: -23.0, num: 2 },
+    TX0: { x: -34.26, y: -23.0, num: 2 },
+    D2: { x: -31.72, y: -23.0, num: 3 },
+    D3: { x: -29.18, y: -23.0, num: 4 },
+    D4: { x: -26.64, y: -23.0, num: 5 },
+    D5: { x: -24.1, y: -23.0, num: 6 },
+    D6: { x: -21.56, y: -23.0, num: 7 },
+    D7: { x: -19.02, y: -23.0, num: 8 },
+    D8: { x: -14.5, y: -23.0, num: 9 },
+    D9: { x: -11.96, y: -23.0, num: 10 },
+    D10: { x: -9.42, y: -23.0, num: 11 },
+    D11: { x: -6.88, y: -23.0, num: 12 },
+    D12: { x: -4.34, y: -23.0, num: 13 },
+    D13: { x: -1.8, y: -23.0, num: 14 },
+    GND_TOP: { x: 0.74, y: -23.0, num: 15 },
+    AREF: { x: 3.28, y: -23.0, num: 16 },
+    D20: { x: 5.82, y: -23.0, num: 17 },
+    SDA: { x: 5.82, y: -23.0, num: 17 },
+    D21: { x: 8.36, y: -23.0, num: 18 },
+    SCL: { x: 8.36, y: -23.0, num: 18 },
+    D14: { x: 14.0, y: -23.0, num: 19 },
+    TX3: { x: 14.0, y: -23.0, num: 19 },
+    D15: { x: 16.54, y: -23.0, num: 20 },
+    RX3: { x: 16.54, y: -23.0, num: 20 },
+    D16: { x: 19.08, y: -23.0, num: 21 },
+    TX2: { x: 19.08, y: -23.0, num: 21 },
+    D17: { x: 21.62, y: -23.0, num: 22 },
+    RX2: { x: 21.62, y: -23.0, num: 22 },
+    D18: { x: 24.16, y: -23.0, num: 23 },
+    TX1: { x: 24.16, y: -23.0, num: 23 },
+    D19: { x: 26.7, y: -23.0, num: 24 },
+    RX1: { x: 26.7, y: -23.0, num: 24 },
+
+    // Bottom Row (Y = +23.0mm)
+    IOREF: { x: -33.0, y: 23.0, num: 25 },
+    RESET: { x: -30.46, y: 23.0, num: 26 },
+    '3V3': { x: -27.92, y: 23.0, num: 27 },
+    '3.3V': { x: -27.92, y: 23.0, num: 27 },
+    '5V': { x: -25.38, y: 23.0, num: 28 },
+    GND: { x: -22.84, y: 23.0, num: 29 },
+    GND_1: { x: -22.84, y: 23.0, num: 29 },
+    GND_2: { x: -20.3, y: 23.0, num: 30 },
+    VIN: { x: -17.76, y: 23.0, num: 31 },
+    A0: { x: -10.5, y: 23.0, num: 32 },
+    A1: { x: -7.96, y: 23.0, num: 33 },
+    A2: { x: -5.42, y: 23.0, num: 34 },
+    A3: { x: -2.88, y: 23.0, num: 35 },
+    A4: { x: -0.34, y: 23.0, num: 36 },
+    A5: { x: 2.2, y: 23.0, num: 37 },
+    A6: { x: 4.74, y: 23.0, num: 38 },
+    A7: { x: 7.28, y: 23.0, num: 39 },
+    A8: { x: 12.0, y: 23.0, num: 40 },
+    A9: { x: 14.54, y: 23.0, num: 41 },
+    A10: { x: 17.08, y: 23.0, num: 42 },
+    A11: { x: 19.62, y: 23.0, num: 43 },
+    A12: { x: 22.16, y: 23.0, num: 44 },
+    A13: { x: 24.7, y: 23.0, num: 45 },
+    A14: { x: 27.24, y: 23.0, num: 46 },
+    A15: { x: 29.78, y: 23.0, num: 47 },
+  };
+
+  // Add D22..D53 mapping for extended double-row header
+  for (let i = 0; i < 16; i++) {
+    const dOdd = 23 + i * 2;
+    const dEven = 22 + i * 2;
+    const yCoord = Math.round((-20.32 + i * 2.54) * 100) / 100;
+    pinCoordMap[`D${dOdd}`] = { x: 43.5, y: yCoord, num: 48 + i * 2 };
+    pinCoordMap[`D${dEven}`] = { x: 46.04, y: yCoord, num: 49 + i * 2 };
+  }
+
+  const defaultMegaPinIds = [
+    'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12', 'D13', 'GND_TOP', 'AREF', 'D20', 'D21',
+    'D14', 'D15', 'D16', 'D17', 'D18', 'D19',
+    'IOREF', 'RESET', '3V3', '5V', 'GND', 'GND_2', 'VIN',
+    'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15',
+    ...Array.from({ length: 32 }, (_, i) => `D${22 + i}`),
+  ];
+  const effectivePins: Array<{ id: string; name?: string; num?: number | string }> =
+    pins && pins.length > 0 ? pins : defaultMegaPinIds.map((id) => ({ id }));
+
+  const pads: PadSpec[] = [];
+  effectivePins.forEach((p, idx) => {
+    const rawId = p.id || '';
+    const normKey = rawId.toUpperCase().replace(/\s+/g, '');
+    const mapped = pinCoordMap[normKey] || pinCoordMap[normKey.replace(/~.*$/, '')];
+
+    if (mapped) {
+      pads.push({
+        pinId: p.id,
+        pinNumber: p.num ?? mapped.num,
+        xMm: mapped.x,
+        yMm: mapped.y,
+        drillMm: 1.0,
+        padDiameterMm: 1.8,
+        shape: idx === 0 || mapped.num === 1 ? 'rect' : 'circle',
+      });
+    } else {
+      const fallbackX = Math.round((-40 + idx * 2.54) * 100) / 100;
+      pads.push({
+        pinId: p.id,
+        pinNumber: p.num ?? idx + 1,
+        xMm: fallbackX,
+        yMm: 23.0,
+        drillMm: 1.0,
+        padDiameterMm: 1.8,
+        shape: idx === 0 ? 'rect' : 'circle',
+      });
+    }
+  });
+
+  return pads;
+}
+
 /**
  * Universal Physical Representation Resolver
  * Provides 100% complete, realistic, datasheet-verified physical specifications
@@ -481,7 +700,7 @@ function resolvePhysicalSpecRaw(comp: {
       dimensionsMm: { width: 68.6, height: 53.4, depth: 15.0 },
       bodyDimensionsMm: { width: 68.6, depth: 53.4, height: 15.0 },
       courtyardMm: { width: 70.0, depth: 55.0, margin: 1.0 },
-      pads: buildInlinePads(pins, 2.54, 0, 1.0, 1.8),
+      pads: buildArduinoUnoPads(pins),
     };
   }
   if (upperType.includes('NANO')) {
@@ -508,7 +727,7 @@ function resolvePhysicalSpecRaw(comp: {
       dimensionsMm: { width: 101.6, height: 15.0, depth: 53.3 },
       bodyDimensionsMm: { width: 101.6, depth: 53.3, height: 15.0 },
       courtyardMm: { width: 103.0, depth: 55.0, margin: 1.0 },
-      pads: buildInlinePads(pins, 2.54, 0, 1.0, 1.8),
+      pads: buildArduinoMegaPads(pins),
     };
   }
   if (upperType.includes('ESP32') || upperType.includes('ESP8266')) {
@@ -715,14 +934,14 @@ function resolvePhysicalSpecRaw(comp: {
     }
     return {
       packageType: 'THT',
-      packageCode: 'RADIAL-2.54MM',
+      packageCode: 'RADIAL-5.08MM',
       mountingType: 'THT',
       placementClass: 'single-passive',
-      pinPitchMm: 2.54,
-      dimensionsMm: { width: 4.5, height: 6.0, depth: 2.5 },
-      bodyDimensionsMm: { width: 4.5, depth: 2.5, height: 6.0 },
-      courtyardMm: { width: 6.0, depth: 3.8, margin: 0.5 },
-      pads: buildRadialPads(p1, p2, 2.54, 0.8, 1.6),
+      pinPitchMm: 5.08,
+      dimensionsMm: { width: 6.0, height: 6.0, depth: 2.5 },
+      bodyDimensionsMm: { width: 6.0, depth: 2.5, height: 6.0 },
+      courtyardMm: { width: 8.0, depth: 3.8, margin: 0.5 },
+      pads: buildRadialPads(p1, p2, 5.08, 0.8, 1.7),
     };
   }
 

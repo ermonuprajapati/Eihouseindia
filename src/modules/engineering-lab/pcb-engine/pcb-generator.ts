@@ -310,7 +310,7 @@ export class PcbGenerator {
     }
 
     const compSpecs = targetComps.map((comp) => {
-      const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+      const spec = resolvePhysicalSpec({ ...comp });
       const upperType = (comp.type || '').toUpperCase();
       const upperFp = (comp.footprint || '').toUpperCase();
       const bodyW = spec.bodyDimensionsMm?.width || 10;
@@ -371,8 +371,15 @@ export class PcbGenerator {
     const placedBoxes: PlacedItem[] = [];
     const padLookup: Map<string, { x: number; y: number }> = new Map();
 
-    let availW = Math.max(boardWidthMm, 65);
-    let availH = Math.max(boardHeightMm, 50);
+    const totalAreaWithCorridors = compSpecs.reduce(
+      (sum, c) => sum + (c.cw + c.clearance * 2) * (c.cd + c.clearance * 2),
+      0
+    );
+    const maxSingleW = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cw + c.clearance * 2)) : 40;
+    const maxSingleD = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cd + c.clearance * 2)) : 30;
+    const estSide = Math.sqrt(totalAreaWithCorridors * 1.35);
+    let availW = Math.max(boardWidthMm, Math.ceil((estSide * 1.15) / 5) * 5, maxSingleW + EDGE_MARGIN * 2, 80);
+    let availH = Math.max(boardHeightMm, Math.ceil((estSide * 0.85) / 5) * 5, maxSingleD + EDGE_MARGIN * 2, 60);
 
     placementOrder.forEach(({ comp, cw, cd, clearance }) => {
       // Net-aware topological initial position from schematic coordinates clamped to board margin
@@ -439,8 +446,8 @@ export class PcbGenerator {
                   candX = testX;
                   candY = testY;
                   found = true;
-                  availW = Math.max(availW, candX + cw / 2 + EDGE_MARGIN);
-                  availH = Math.max(availH, candY + cd / 2 + EDGE_MARGIN);
+                  availW = Math.max(availW, candX + cw / 2 + clearance + EDGE_MARGIN);
+                  availH = Math.max(availH, candY + cd / 2 + clearance + EDGE_MARGIN);
                   break;
                 }
               }
@@ -725,11 +732,24 @@ export class PcbGenerator {
     // Run Design Rule Checks
     const drcErrors = this.runDrc(pads, routedTracks, effectiveWidth, effectiveHeight);
 
+    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 4mm from corners
+    const cornerInset = 4.0;
+    const mountingHoles = [
+      { x: cornerInset, y: cornerInset, diameterMm: 3.2 },
+      { x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
+      { x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+      { x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+    ];
+
     return {
       widthMm: effectiveWidth,
       heightMm: effectiveHeight,
       boardThicknessMm: 1.6,
       copperLayers: 2,
+      units: 'mm',
+      gridSizeMm: 2.54,
+      mountingHoles,
+      edgeClearanceMm: EDGE_MARGIN,
       pads,
       tracks: routedTracks,
       components: placedComponents,
@@ -764,14 +784,17 @@ export class PcbGenerator {
       };
     };
 
-    const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+    const spec = resolvePhysicalSpec({ ...comp });
 
     // 0. Microcontroller Dev Boards & Modules with verified multi-pin headers
+    // Checked BEFORE DIP IC check, so Arduino Uno (mentions ATmega328P) and Mega never fall into DIP-28!
     if (
       spec.placementClass === 'dev-board' ||
       spec.placementClass === 'module-breadboard' ||
       upperType.includes('BOARD') ||
       upperType.includes('ARDUINO') ||
+      upperType.includes('UNO') ||
+      upperType.includes('MEGA') ||
       upperType.includes('ESP32') ||
       upperType.includes('PICO') ||
       upperType.includes('LCD1602') ||
@@ -800,14 +823,17 @@ export class PcbGenerator {
     // 1. DIP ICs (NE555 Timer, LM358, LM741, ATmega, DIP-8, DIP-14, DIP-16, DIP-28)
     // Strictly adheres to JEDEC Top-View CCW Counter-Clockwise numbering
     if (
-      upperType.includes('555') ||
+      !upperType.includes('UNO') &&
+      !upperType.includes('MEGA') &&
+      spec.placementClass !== 'dev-board' &&
+      (upperType.includes('555') ||
       upperType.includes('TIMER') ||
       upperType.includes('DIP') ||
       upperFootprint.includes('DIP') ||
       ((upperType.includes('_IC') || upperType.startsWith('IC_') || upperType === 'IC' || upperType.includes('INTEGRATED_CIRCUIT')) && comp.pins.length >= 4) ||
       upperType.includes('OPAMP') ||
       upperType.includes('AMPLIFIER') ||
-      upperType.includes('ATMEGA')
+      upperType.includes('ATMEGA'))
     ) {
       const is14or16 =
         upperFootprint.includes('DIP-14') ||
@@ -1014,14 +1040,14 @@ export class PcbGenerator {
       return pads;
     }
 
-    // 8. Capacitors: Polarized Electrolytic (5.08mm) vs Ceramic Disc (2.54mm)
+    // 8. Capacitors: Polarized Electrolytic (5.08mm) vs Ceramic Disc (5.08mm IPC standard / 3D model)
     if (upperType.includes('CAPACITOR')) {
       const isElectrolytic =
         upperType.includes('ELECTROLYTIC') ||
         upperType.includes('RADIAL') ||
         Boolean(comp.parameters?.polarized) ||
         (comp.value && (comp.value.includes('u') || comp.value.includes('µ') || comp.value.includes('U')));
-      const oxSpan = isElectrolytic ? 2.54 : 1.27;
+      const oxSpan = 2.54; // 5.08mm pitch (-2.54 to +2.54mm) strictly matching CapacitorCeramic3D leads and radial packages
 
       comp.pins.forEach((pin, idx) => {
         const ox = idx === 0 ? -oxSpan : oxSpan;

@@ -223,21 +223,24 @@ export function Pcb3dViewer({
   useEffect(() => {
     if (!cameraPreset || !controlsRef.current) return;
     const ctrl = controlsRef.current;
+    const maxDim = Math.max(pcb.widthMm, pcb.heightMm);
+    const topDist = Math.max(130, maxDim * 1.55);
+    const isoDist = Math.max(100, maxDim * 1.35);
     if (cameraPreset === 'iso' || cameraPreset === 'reset') {
-      ctrl.object.position.set(0, 80, 100);
+      ctrl.object.position.set(0, isoDist * 0.8, isoDist);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'top') {
-      ctrl.object.position.set(0, 130, 0.1);
+      ctrl.object.position.set(0, topDist, 0.1);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'bot') {
-      ctrl.object.position.set(0, -130, 0.1);
+      ctrl.object.position.set(0, -topDist, 0.1);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'front') {
-      ctrl.object.position.set(0, 0, 120);
+      ctrl.object.position.set(0, 0, topDist);
       ctrl.target.set(0, 0, 0);
     }
     ctrl.update();
-  }, [cameraPreset]);
+  }, [cameraPreset, pcb.widthMm, pcb.heightMm]);
 
   // High-Resolution Crisp Silkscreen Texture Decal
   const silkscreenTexture = useMemo(() => {
@@ -829,10 +832,12 @@ export function Pcb3dViewer({
                   <cylinderGeometry args={[r, r, 0.028, 20]} />
                 )}
               </mesh>
-              {/* Silver Solder Fillet Ring around through-hole pin */}
-              <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
-                <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
-              </mesh>
+              {/* Silver Solder Fillet Ring around through-hole pin (omitted on bare vias) */}
+              {!isVia && (
+                <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
+                  <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
+                </mesh>
+              )}
               {/* Bottom Pad / Annular Ring */}
               <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
                 {isRect ? (
@@ -848,6 +853,39 @@ export function Pcb3dViewer({
               {/* Hollow Drill Hole Center */}
               <mesh position={[0, 0, 0]} material={materials.drillHole}>
                 <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.1, 16]} />
+              </mesh>
+            </group>
+          );
+        })}
+
+        {/* 5.1 Plated M3 Corner Mounting Holes (ENIG Gold Ring, Plated Barrel, Bore) */}
+        {(pcb.mountingHoles || [
+          { x: 4.0, y: 4.0, diameterMm: 3.2 },
+          { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+          { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+          { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+        ]).map((hole, hIdx) => {
+          const hx = hole.x - halfW;
+          const hz = hole.y - halfH;
+          const holeR = (hole.diameterMm || 3.2) / 2;
+          const padR = holeR + 1.4; // 6.0mm annular ring
+          return (
+            <group key={`m3_mount_${hIdx}`} position={[hx, 0, hz]}>
+              {/* Top Gold Annular Ring */}
+              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
+                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
+              </mesh>
+              {/* Bottom Gold Annular Ring */}
+              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
+                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
+              </mesh>
+              {/* Plated Through Hole Copper Inner Barrel */}
+              <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
+                <cylinderGeometry args={[holeR + 0.05, holeR + 0.05, thickness + 0.04, 20]} />
+              </mesh>
+              {/* Hollow Drill Hole Bore */}
+              <mesh position={[0, 0, 0]} material={materials.drillHole}>
+                <cylinderGeometry args={[holeR, holeR, thickness + 0.1, 20]} />
               </mesh>
             </group>
           );

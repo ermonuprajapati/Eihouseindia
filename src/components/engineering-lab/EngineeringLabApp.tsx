@@ -195,6 +195,19 @@ export function EngineeringLabApp() {
   // Synchronize Tab with URL query parameter and localStorage
   const handleModeChange = useCallback((newMode: WorkspaceMode) => {
     setActiveMode(newMode);
+    if (newMode === 'pcb2d' || newMode === 'pcb3d') {
+      setProject((prev) => {
+        const schematicRealComps = prev.components.filter(
+          (c) => !c.type?.toUpperCase().includes('GND') && !c.type?.toUpperCase().includes('VCC')
+        );
+        const pcbComps = prev.pcb?.components || [];
+        if (pcbComps.length === 0 || pcbComps.length !== schematicRealComps.length) {
+          const updatedPcb = PcbGenerator.generatePcbFromSchematic(prev.components, prev.wires);
+          return { ...prev, pcb: updatedPcb };
+        }
+        return prev;
+      });
+    }
     if (typeof window !== 'undefined') {
       const slug = MODE_TO_PARAM[newMode] || newMode;
       try {

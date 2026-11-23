@@ -13,7 +13,8 @@ import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/p
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
-import { isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { PcbGenerator, isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { resolvePhysicalSpec } from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
 import {
   Layers,
   Download,
@@ -365,6 +366,17 @@ export function Pcb2dEditor({
     setDrcViolations(drcViolationsFresh);
     toast.success(`Auto-routed ${routedTracks.length} tracks with ${vias.length} layer-hop vias`);
   };
+
+  // Courtyard-Aware Zero-Overlap Auto-Placement & Dynamic Board Auto-Sizing
+  const handleAutoPlace = useCallback(() => {
+    if (!onUpdatePcb) return;
+    const newPcb = PcbGenerator.generatePcbFromSchematic(components, wires);
+    onUpdatePcb(newPcb);
+    if (onUpdateDimensions) {
+      onUpdateDimensions(newPcb.widthMm, newPcb.heightMm);
+    }
+    toast.success(`Auto-placed ${newPcb.components?.length || 0} components (${newPcb.widthMm}×${newPcb.heightMm}mm board)`);
+  }, [components, wires, onUpdatePcb, onUpdateDimensions]);
 
   // Clear all tracks
   const handleClearAllTraces = () => {
@@ -748,15 +760,19 @@ export function Pcb2dEditor({
             ctx.rotate((comp.rotation * Math.PI) / 180);
           }
 
+          const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+          const selW = (spec.courtyardMm?.width || spec.bodyDimensionsMm?.width || 12) * scale;
+          const selH = (spec.courtyardMm?.depth || spec.bodyDimensionsMm?.depth || 10) * scale;
+
           if (isCompSelected) {
             ctx.strokeStyle = '#38BDF8';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 3]);
-            ctx.strokeRect(-9 * scale, -9 * scale, 18 * scale, 18 * scale);
+            ctx.strokeRect(-selW / 2, -selH / 2, selW, selH);
             ctx.setLineDash([]);
             ctx.fillStyle = '#38BDF8';
             ctx.font = 'bold 8px monospace';
-            ctx.fillText('↺ [R]', -7 * scale, 13 * scale);
+            ctx.fillText('↺ [R]', -selW / 2 + 2, selH / 2 + 10);
           }
 
           ctx.strokeStyle = isCompSelected ? '#38BDF8' : '#E2E8F0';
@@ -772,7 +788,7 @@ export function Pcb2dEditor({
             x: 0,
             y: 0,
             rotation: comp.rotation || 0,
-            physicalSpec: (comp as unknown as { physicalSpec?: PhysicalSpec }).physicalSpec,
+            physicalSpec: spec,
           });
 
           // Draw authentic IPC-7351 EDA silkscreen symbols
@@ -1180,7 +1196,13 @@ export function Pcb2dEditor({
     const { mmX, mmY } = coords;
 
     if (toolMode === 'select' && !routingStartPad) {
-      const clickedComp = pcb.components?.find((c) => Math.hypot(c.x - mmX, c.y - mmY) <= 8);
+      const clickedComp = pcb.components?.find((c) => {
+        if (isVirtualSchematicSymbol(c.type)) return false;
+        const spec = resolvePhysicalSpec(c.type, c.footprint);
+        const halfW = (spec.courtyardMm?.width || spec.bodyDimensionsMm?.width || 12) / 2;
+        const halfH = (spec.courtyardMm?.depth || spec.bodyDimensionsMm?.depth || 10) / 2;
+        return Math.abs(c.x - mmX) <= Math.max(halfW, 5) && Math.abs(c.y - mmY) <= Math.max(halfH, 5);
+      });
       if (clickedComp) {
         setSelectedCompId(clickedComp.componentId);
         setSelectedTrackId(null);
@@ -1462,6 +1484,16 @@ export function Pcb2dEditor({
             >
               <Wand2 className="w-3.5 h-3.5 text-cyan-400" />
               <span className="hidden xl:inline">Auto-Route</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAutoPlace}
+              className="h-7 px-2 rounded font-semibold text-[11px] text-amber-300 hover:text-white hover:bg-amber-950/60 transition-all cursor-pointer flex items-center gap-1"
+              title="Courtyard-Aware Zero-Overlap Auto-Placement & Dynamic Board Auto-Sizing"
+            >
+              <Crosshair className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xl:inline">Auto-Place</span>
             </button>
           </div>
 
