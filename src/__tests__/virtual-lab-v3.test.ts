@@ -876,13 +876,13 @@ describe('Virtual Lab v3 Verification Suite', () => {
       const offsets = getComponentPinOffsets('IC_74HC14');
       expect(offsets.length).toBe(14);
 
-      // Pins 1..7: top row (Row E, z = -3.34)
+      // Pins 1..7: top row (Row E, z = -3.81)
       for (let i = 0; i < 7; i++) {
-        expect(offsets[i].z).toBeCloseTo(-3.34, 2);
+        expect(offsets[i].z).toBeCloseTo(-3.81, 2);
       }
-      // Pins 8..14: bottom row (Row F, z = +3.34)
+      // Pins 8..14: bottom row (Row F, z = +3.81)
       for (let i = 7; i < 14; i++) {
-        expect(offsets[i].z).toBeCloseTo(3.34, 2);
+        expect(offsets[i].z).toBeCloseTo(3.81, 2);
       }
     });
 
@@ -1564,16 +1564,16 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(h1?.id).toBe('bb_col_10_C');
 
       // Board 2 at z = -60.0
-      const h2 = findNearestHole830(START_X + 9 * PITCH_X, -68.42, 5.0, 3);
+      const h2 = findNearestHole830(START_X + 9 * PITCH_X, -68.89, 5.0, 3);
       expect(h2).not.toBeNull();
       expect(h2?.id).toBe('bb2_col_10_C');
-      expect(h2?.z).toBeCloseTo(-68.42, 1);
+      expect(h2?.z).toBeCloseTo(-68.89, 1);
 
       // Board 3 at z = -120.0
-      const h3 = findNearestHole830(START_X + 9 * PITCH_X, -128.42, 5.0, 3);
+      const h3 = findNearestHole830(START_X + 9 * PITCH_X, -128.89, 5.0, 3);
       expect(h3).not.toBeNull();
       expect(h3?.id).toBe('bb3_col_10_C');
-      expect(h3?.z).toBeCloseTo(-128.42, 1);
+      expect(h3?.z).toBeCloseTo(-128.89, 1);
     });
 
     it('Task 4: Multi-Breadboard Tie Groups and Occupancy Tracking', () => {
@@ -1770,9 +1770,9 @@ describe('Virtual Lab v3 Verification Suite', () => {
       // 2. DIP-28 IC (ATmega328P) 28 pins at 2.54mm pitch and 7.62mm row spacing
       const dip28Pins = getComponentPinOffsets('ATMEGA328P');
       expect(dip28Pins.length).toBe(28);
-      // Row E pins are at z = -3.34, Row F pins are at z = +3.34 (ravine straddle)
-      expect(dip28Pins[0].z).toBeCloseTo(-3.34, 2);
-      expect(dip28Pins[14].z).toBeCloseTo(3.34, 2);
+      // Row E pins are at z = -3.81, Row F pins are at z = +3.81 (ravine straddle)
+      expect(dip28Pins[0].z).toBeCloseTo(-3.81, 2);
+      expect(dip28Pins[14].z).toBeCloseTo(3.81, 2);
       expect(dip28Pins[1].x - dip28Pins[0].x).toBeCloseTo(2.54, 2);
 
       // 3. Potentiometer 3-pin offsets
@@ -1855,26 +1855,26 @@ describe('Virtual Lab v3 Verification Suite', () => {
     });
 
     it('Task 4: Solid Metallic Pins - Authentically proportioned pin length and zero-sinking elevation specs', () => {
-      // 1. DIP IC Elevation Spec: through-hole, 5.2mm pin length, 4.0mm package height
+      // 1. DIP IC Elevation Spec: through-hole, 5.6mm pin length, 4.0mm package height
       const dipSpec = getComponentElevationSpec('TIMER_555');
       expect(dipSpec.isThroughHole).toBe(true);
-      expect(dipSpec.pinLength).toBe(5.2);
-      expect(dipSpec.localMinY).toBe(-5.0);
-      expect(dipSpec.localMinBodyY).toBe(0.2);
+      expect(dipSpec.pinLength).toBe(5.6);
+      expect(dipSpec.localMinY).toBe(-5.6);
+      expect(dipSpec.localMinBodyY).toBe(0.0);
 
-      // 2. MCU Breakouts (Nano, ESP32, Pico): 6.5mm pin length
+      // 2. MCU Breakouts (Nano, ESP32, Pico): 5.5mm pin length
       const mcuSpec = getComponentElevationSpec('ARDUINO_NANO');
       expect(mcuSpec.isThroughHole).toBe(true);
-      expect(mcuSpec.pinLength).toBe(6.5);
-      expect(mcuSpec.localMinY).toBe(-5.5);
-      expect(mcuSpec.localMinBodyY).toBe(0.8);
+      expect(mcuSpec.pinLength).toBe(5.5);
+      expect(mcuSpec.localMinY).toBe(-7.75);
+      expect(mcuSpec.localMinBodyY).toBe(-2.4);
 
       // 3. Sensor / Wireless Modules (HC-SR04, HC-05, OLED, DHT, PIR, MPU-6050): 6.0mm pin length
       const sensorSpec = getComponentElevationSpec('HC_SR04');
       expect(sensorSpec.isThroughHole).toBe(true);
       expect(sensorSpec.pinLength).toBe(6.0);
       expect(sensorSpec.localMinY).toBe(-5.7);
-      expect(sensorSpec.localMinBodyY).toBe(1.0);
+      expect(sensorSpec.localMinBodyY).toBe(0.0);
 
       const hc05Spec = getComponentElevationSpec('MODULE_BLUETOOTH_HC05');
       expect(hc05Spec.isThroughHole).toBe(true);
@@ -2149,6 +2149,146 @@ describe('Virtual Lab v3 Verification Suite', () => {
         const nearBot = Math.abs(hole.y - (pcb.heightMm - 4.0)) < 0.1;
         expect(nearLeft || nearRight).toBe(true);
         expect(nearTop || nearBot).toBe(true);
+      });
+    });
+  });
+
+  describe('Batch 2F: Precision Breadboard Mechanics, Real Mesh-to-Hole Seating (<0.05mm) & Strict Anti-Sink Elevation', () => {
+    it('1. Off-board boards & modules elevated strictly on top of breadboard when overlapping (zero sinking)', () => {
+      const offboardTypes = [
+        'ARDUINO_UNO',
+        'ARDUINO_MEGA',
+        'MODULE_RELAY_SPDT',
+        'LCD_1602',
+        'MOTOR_DRIVER_L298N',
+        'BATTERY_9V',
+      ];
+
+      offboardTypes.forEach((type) => {
+        // When placed directly over Breadboard #1 center (x = 0, z = 0):
+        const overBoardElev = computeComponentGroundElevation(type, 0, 0, true, 0, 1);
+        expect(overBoardElev).toBeGreaterThanOrEqual(BREADBOARD_TOP_Y);
+
+        // When placed off the breadboard on the workbench ESD mat (x = 150, z = 65):
+        const offBoardElev = computeComponentGroundElevation(type, 150, 65, true, 0, 1);
+        expect(offBoardElev).toBeCloseTo(0.0, 2);
+      });
+    });
+
+    it('2. Breadboard-fittable parts seat 100% of pins inside real breadboard hole centers (<0.05mm error) with body >= BREADBOARD_TOP_Y + 0.3mm', () => {
+      // Test cases with exact placement target coordinates
+      const testCases: Array<{
+        type: string;
+        targetX: number;
+        targetZ: number;
+        expectedPinsCount: number;
+        name: string;
+      }> = [
+        {
+          name: 'DIP-8 (NE555 / LM358)',
+          type: 'TIMER_555',
+          targetX: START_X + (20 - 0.5) * PITCH_X,
+          targetZ: 0,
+          expectedPinsCount: 8,
+        },
+        {
+          name: 'DIP-14 (74HC14 / LM324)',
+          type: 'IC_74HC14',
+          targetX: START_X + (20 - 1) * PITCH_X,
+          targetZ: 0,
+          expectedPinsCount: 14,
+        },
+        {
+          name: 'DIP-16 (74HC595 / CD4017 / L293D)',
+          type: 'IC_74HC595',
+          targetX: START_X + (25 - 0.5) * PITCH_X,
+          targetZ: 0,
+          expectedPinsCount: 16,
+        },
+        {
+          name: 'DIP-28 (ATmega328P)',
+          type: 'MCU_ATMEGA328P_DIP28',
+          targetX: START_X + (30 - 0.5) * PITCH_X,
+          targetZ: 0,
+          expectedPinsCount: 28,
+        },
+        {
+          name: 'ESP32 DevKit (Row B & Row I at 22.86mm = 9 pitches)',
+          type: 'ESP32_DEVKIT',
+          targetX: START_X + (20 - 1) * PITCH_X,
+          targetZ: 0,
+          expectedPinsCount: 30,
+        },
+        {
+          name: 'HC-SR04 Ultrasonic Sensor (Row C at -8.89mm)',
+          type: 'HC_SR04',
+          targetX: START_X + (15 - 0.5) * PITCH_X,
+          targetZ: ROW_Z_MAP.C,
+          expectedPinsCount: 4,
+        },
+        {
+          name: 'HC-05 Bluetooth Module (Row H at +8.89mm)',
+          type: 'MODULE_BLUETOOTH_HC05',
+          targetX: START_X + (35 - 0.5) * PITCH_X,
+          targetZ: ROW_Z_MAP.H,
+          expectedPinsCount: 6,
+        },
+        {
+          name: 'TO-220 Power Package (Row C at -8.89mm)',
+          type: 'MOSFET_N',
+          targetX: START_X + (10 - 1) * PITCH_X,
+          targetZ: ROW_Z_MAP.C,
+          expectedPinsCount: 3,
+        },
+        {
+          name: 'RGB LED 4-Pin (Row H at +8.89mm)',
+          type: 'LED_RGB',
+          targetX: START_X + (45 - 0.5) * PITCH_X,
+          targetZ: ROW_Z_MAP.H,
+          expectedPinsCount: 4,
+        },
+      ];
+
+      testCases.forEach((tc) => {
+        const pinOffsets = getComponentPinOffsets(tc.type);
+        expect(pinOffsets.length).toBe(tc.expectedPinsCount);
+
+        // Verify every pin lands within < 0.05mm of a real breadboard hole
+        pinOffsets.forEach((p) => {
+          const worldPinX = tc.targetX + p.x;
+          const worldPinZ = tc.targetZ + p.z;
+          const hole = findNearestHole830(worldPinX, worldPinZ, 1.44, 1);
+          expect(hole).toBeDefined();
+          const dist = Math.hypot(hole!.x - worldPinX, hole!.z - worldPinZ);
+          expect(dist).toBeLessThanOrEqual(0.05);
+        });
+
+        // Verify areAllPinsInBreadboardHoles reports true
+        const allIn = areAllPinsInBreadboardHoles(tc.type, tc.targetX, tc.targetZ, 0, 1);
+        expect(allIn).toBe(true);
+
+        // Verify body bottom elevation strictly clears breadboard plastic:
+        const spec = getComponentElevationSpec(tc.type);
+        const elev = computeComponentGroundElevation(tc.type, tc.targetX, tc.targetZ, true, 0, 1);
+        const worldBodyBottomY = elev + spec.localMinBodyY;
+        expect(worldBodyBottomY).toBeGreaterThanOrEqual(BREADBOARD_TOP_Y + 0.29);
+      });
+    });
+
+    it('3. Misaligned / ravine placement clamps lowest pin tip flush to BREADBOARD_TOP_Y (zero sinking through plastic)', () => {
+      // Placing single-row modules over the solid center ravine (z = 0):
+      const ravineTests = ['HC_SR04', 'MODULE_BLUETOOTH_HC05', 'LED_RGB', 'MOSFET_N'];
+
+      ravineTests.forEach((type) => {
+        const colX = START_X + (20 - 0.5) * PITCH_X;
+        const allIn = areAllPinsInBreadboardHoles(type, colX, 0, 0, 1);
+        expect(allIn).toBe(false);
+
+        const elev = computeComponentGroundElevation(type, colX, 0, true, 0, 1);
+        const spec = getComponentElevationSpec(type);
+        const worldLowestMeshY = elev + Math.min(spec.localMinY, spec.localMinBodyY);
+        // Lowest mesh point is strictly at BREADBOARD_TOP_Y (never sinks through plastic!)
+        expect(worldLowestMeshY).toBeCloseTo(BREADBOARD_TOP_Y, 1);
       });
     });
   });

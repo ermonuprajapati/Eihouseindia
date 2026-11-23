@@ -55,6 +55,7 @@ import {
   START_X,
   PITCH_X,
   getComponentElevationSpec,
+  getComponentFootprint,
   computeComponentGroundElevation,
   stepAngle45,
   nudgeComponent3D,
@@ -651,94 +652,6 @@ interface DragFrameControllerProps {
   onUpdateComponent3D: (comp: Component3D) => void;
 }
 
-function getComponentFootprint(type: string): { halfW: number; halfD: number } {
-  switch (type) {
-    case 'ARDUINO_UNO':
-      return { halfW: 34.0, halfD: 26.5 };
-    case 'ARDUINO_MEGA':
-      return { halfW: 50.5, halfD: 26.5 };
-    case 'ARDUINO_NANO':
-      return { halfW: 21.5, halfD: 9.0 };
-    case 'ESP32_DEVKIT':
-    case 'ESP32_S3':
-    case 'ESP32_C3':
-      return { halfW: 27.5, halfD: 14.0 };
-    case 'RASPBERRY_PI_PICO':
-    case 'RASPBERRY_PI_PICO2':
-      return { halfW: 25.5, halfD: 10.5 };
-    case 'LCD_1602':
-    case 'DISPLAY_LCD1602':
-      return { halfW: 40.0, halfD: 18.0 };
-    case 'DISPLAY_OLED_SSD1306':
-      return { halfW: 15.0, halfD: 14.0 };
-    case 'MODULE_BLUETOOTH_HC05':
-    case 'BLUETOOTH':
-    case 'HC05':
-    case 'HC06':
-    case 'RF_BLUETOOTH':
-      return { halfW: 9.0, halfD: 19.0 };
-    case 'HC_SR04':
-    case 'SENSOR_ULTRASONIC':
-      return { halfW: 22.5, halfD: 10.0 };
-    case 'SERVO_SG90':
-    case 'ACTUATOR_SERVO_SG90':
-      return { halfW: 16.0, halfD: 12.0 };
-    case 'BATTERY_9V':
-    case 'BATTERY':
-    case 'DC_VOLTAGE':
-      return { halfW: 13.0, halfD: 8.5 };
-    case 'POTENTIOMETER':
-      return { halfW: 5.0, halfD: 5.0 };
-    case 'PUSHBUTTON':
-    case 'PUSHBUTTON_NO':
-    case 'PUSHBUTTON_NC':
-    case 'EMERGENCY_STOP':
-      return { halfW: 4.0, halfD: 4.0 };
-    case 'SLIDE_SWITCH':
-    case 'SWITCH_SPST':
-      return { halfW: 4.5, halfD: 2.5 };
-    case 'BUZZER_ACTIVE':
-    case 'ACTUATOR_BUZZER_ACTIVE':
-      return { halfW: 6.0, halfD: 6.0 };
-    case 'TIMER_555':
-    case 'DIP_IC':
-    case 'ATMEGA328P':
-    case 'OPAMP_LM358':
-    case 'OPAMP_LM741':
-    case 'COMPARATOR_LM393':
-      return { halfW: 5.5, halfD: 4.0 };
-    case 'LED_RGB':
-    case 'ACTUATOR_RGB_LED':
-      return { halfW: 3.0, halfD: 3.0 };
-    case 'LED':
-      return { halfW: 2.8, halfD: 2.8 };
-    case 'RESISTOR':
-      return { halfW: 6.0, halfD: 2.0 };
-    case 'INDUCTOR':
-      return { halfW: 6.0, halfD: 2.2 };
-    case 'DIODE':
-    case 'DIODE_1N4007':
-      return { halfW: 5.5, halfD: 2.0 };
-    case 'BJT_NPN':
-    case 'BJT_PNP':
-    case 'TRANSISTOR_NPN':
-    case 'TRANSISTOR_PNP':
-      return { halfW: 3.5, halfD: 2.5 };
-    case 'MOSFET_N':
-    case 'MOSFET_P':
-    case 'REGULATOR_7805':
-    case 'REGULATOR_LM317':
-      return { halfW: 5.5, halfD: 3.0 };
-    case 'SENSOR_LDR':
-      return { halfW: 3.0, halfD: 3.0 };
-    case 'CAPACITOR':
-    case 'CAPACITOR_ELECTROLYTIC':
-      return { halfW: 3.5, halfD: 3.5 };
-    default:
-      return { halfW: 3.5, halfD: 3.5 };
-  }
-}
-
 export interface PinLabelItem {
   id: string;
   label: string;
@@ -1222,7 +1135,7 @@ function DragFrameController({
       } else {
         targetX = Math.round(targetX / 2.54) * 2.54;
         targetZ = Math.round(targetZ / 2.54) * 2.54;
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, false, 0, breadboardCount);
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, hasBreadboard, 0, breadboardCount);
       }
 
       targetX = Math.round(targetX * 100) / 100;
@@ -2288,11 +2201,14 @@ export function Studio3DCanvas({
         {components3d.map((comp) => {
           const isSelected = selectedCompId === comp.id;
           const isDraggingThis = draggingCompId === comp.id;
-          // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release
-          const pos: [number, number, number] = [comp.x3d, isDraggingThis ? comp.y3d + 3.5 : comp.y3d, comp.z3d];
+          // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release with strict anti-sink safety floor
+          const rotYRad = THREE.MathUtils.degToRad(comp.rotY || 0);
+          const safeGroundY = computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, hasBreadboard, rotYRad, breadboardCount);
+          const effectiveY = Math.max(comp.y3d ?? safeGroundY, safeGroundY);
+          const pos: [number, number, number] = [comp.x3d, isDraggingThis ? effectiveY + 3.5 : effectiveY, comp.z3d];
           const rot: [number, number, number] = [
             THREE.MathUtils.degToRad(comp.rotX || 0),
-            THREE.MathUtils.degToRad(comp.rotY || 0),
+            rotYRad,
             THREE.MathUtils.degToRad(comp.rotZ || 0),
           ];
           const myFp = getComponentFootprint(comp.type);
@@ -3564,19 +3480,19 @@ export function Studio3DCanvas({
                     <cylinderGeometry args={[0.8, 0.8, 0.4, 16, 1, false, -Math.PI / 2, Math.PI]} />
                     <meshBasicMaterial color="#09090B" />
                   </mesh>
-                  {/* Solid metallic pin rows on both sides with authentic DIP shank length */}
+                  {/* Solid metallic pin rows on both sides with authentic DIP shank length (7.62mm pitch across Row E & Row F) */}
                   {Array.from({ length: Math.ceil(pinCount / 2) }).map((_, i) => {
                     const startX = -((Math.ceil(pinCount / 2) - 1) * 2.54) / 2;
                     const px = startX + i * 2.54;
                     return (
                       <group key={i}>
                         {/* Row E pin */}
-                        <mesh position={[px, -2.0, -3.34]}>
+                        <mesh position={[px, -2.0, -3.81]}>
                           <boxGeometry args={[0.65, 6.2, 0.45]} />
                           <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Row F pin */}
-                        <mesh position={[px, -2.0, 3.34]}>
+                        <mesh position={[px, -2.0, 3.81]}>
                           <boxGeometry args={[0.65, 6.2, 0.45]} />
                           <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
@@ -3586,19 +3502,19 @@ export function Studio3DCanvas({
                 </group>
               )}
 
-              {/* Sub-Branch D: Module / Sensor / Breakout / Industrial Board */}
+              {/* Sub-Branch D: Module / Sensor / Breakout / Industrial Board (Pins centered on z = 0 for exact breadboard row seating) */}
               {isModulePackage && (
                 <group position={[0, 0.8, 0]}>
-                  {/* Flat FR-4 PCB */}
-                  <mesh material={new THREE.MeshStandardMaterial({ color: isSelected ? '#059669' : '#0F766E', roughness: 0.35 })}>
+                  {/* Flat FR-4 PCB extending away from header pins */}
+                  <mesh position={[0, 0, -Math.max(10, myFp.halfD)]} material={new THREE.MeshStandardMaterial({ color: isSelected ? '#059669' : '#0F766E', roughness: 0.35 })}>
                     <boxGeometry args={[Math.max(30, myFp.halfW * 2), 1.6, Math.max(20, myFp.halfD * 2)]} />
                   </mesh>
-                  {/* Black Header Strip */}
-                  <mesh position={[0, 2.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                  {/* Black Header Strip centered at z = 0 */}
+                  <mesh position={[0, 1.2, 0]}>
                     <boxGeometry args={[Math.max(16, pinCount * 2.54), 2.5, 2.5]} />
                     <meshStandardMaterial color="#18181B" roughness={0.8} />
                   </mesh>
-                  {/* Solid Metallic Square Pins (Downward Insertion Legs + Upward Terminals) */}
+                  {/* Solid Metallic Square Pins seated dead-center at z = 0 */}
                   {Array.from({ length: Math.min(pinCount, 16) }).map((_, pi) => {
                     const startX = -((Math.min(pinCount, 16) - 1) * 2.54) / 2;
                     const px = startX + pi * 2.54;
@@ -3606,14 +3522,14 @@ export function Studio3DCanvas({
                     const pinName = pinItem?.name || pinItem?.id || String(pi + 1);
                     const isHovered = hoveredPinInfo?.compId === comp.id && (hoveredPinInfo.pinName === pinName || hoveredPinInfo.pinName === pinItem?.id);
                     return (
-                      <group key={pi} position={[px, 0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                      <group key={pi} position={[px, 0, 0]}>
                         {/* Downward solid metallic pin into breadboard spring clips */}
-                        <mesh position={[0, -2.5, 0]}>
+                        <mesh position={[0, -3.2, 0]}>
                           <boxGeometry args={[0.64, 6.5, 0.64]} />
                           <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Upward header pin terminal */}
-                        <mesh position={[0, 4.0, 0]}>
+                        <mesh position={[0, 3.2, 0]}>
                           <boxGeometry args={[0.64, 4.0, 0.64]} />
                           <meshStandardMaterial color={isHovered ? '#FDE047' : '#d4dce6'} metalness={0.88} roughness={0.22} />
                         </mesh>

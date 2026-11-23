@@ -116,13 +116,13 @@ export function BluetoothHC05_3D({
   return (
     <group position={position} rotation={rotation}>
       {/* Carrier PCB (27mm x 13mm x 1.6mm) elevated on header pins */}
-      <mesh position={[0, 6.0, 0]} material={materials.pcbCarrier} castShadow>
+      <mesh position={[0, 6.0, -5.0]} material={materials.pcbCarrier} castShadow>
         <boxGeometry args={[27.0, 1.6, 13.0]} />
       </mesh>
 
       {/* Crisp White Silkscreen Overlay with polygonOffset to prevent z-fighting */}
       {silkscreenTexture && (
-        <mesh position={[0, 6.82, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 6.82, -5.0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[26.5, 12.5]} />
           <meshBasicMaterial
             map={silkscreenTexture}
@@ -137,49 +137,49 @@ export function BluetoothHC05_3D({
       )}
 
       {/* Blue Daughterboard module */}
-      <mesh position={[0, 7.2, -1.0]} material={materials.daughterBoard}>
+      <mesh position={[0, 7.2, -6.0]} material={materials.daughterBoard}>
         <boxGeometry args={[24.0, 0.8, 10.0]} />
       </mesh>
 
       {/* Stamped Nickel RF Shield Box */}
-      <mesh position={[2.0, 8.2, -1.0]} material={materials.rfShield}>
+      <mesh position={[2.0, 8.2, -6.0]} material={materials.rfShield}>
         <boxGeometry args={[14.0, 1.2, 8.5]} />
       </mesh>
 
       {/* Gold Meander PCB Antenna at left edge */}
-      <mesh position={[-9.5, 7.8, -1.0]} material={materials.antennaGold}>
+      <mesh position={[-9.5, 7.8, -6.0]} material={materials.antennaGold}>
         <boxGeometry args={[4.0, 0.2, 7.0]} />
       </mesh>
 
       {/* Status Indicator LEDs */}
-      <mesh position={[9.5, 8.0, 2.5]} material={materials.ledBlue}>
+      <mesh position={[9.5, 8.0, -2.5]} material={materials.ledBlue}>
         <boxGeometry args={[1.2, 0.6, 0.8]} />
       </mesh>
       {isPowered && (
-        <pointLight position={[9.5, 8.5, 2.5]} color="#38BDF8" intensity={0.6} distance={10} />
+        <pointLight position={[9.5, 8.5, -2.5]} color="#38BDF8" intensity={0.6} distance={10} />
       )}
 
-      {/* 6-Pin Bottom Header: Insulator and Gold Pins extending into PCB */}
-      <mesh position={[0, 2.5, 5.0]} material={materials.headerBlack}>
+      {/* 6-Pin Bottom Header: Insulator and Gold Pins extending into PCB at z = 0 */}
+      <mesh position={[0, 2.5, 0.0]} material={materials.headerBlack}>
         <boxGeometry args={[16.0, 2.5, 2.5]} />
       </mesh>
 
       {pins.map((p) => (
         <group key={p.name}>
           {/* Square metallic pin extending through insulator into PCB pads */}
-          <mesh position={[p.x, -1.5, 5.0]} material={materials.pinSilver}>
+          <mesh position={[p.x, -1.5, 0.0]} material={materials.pinSilver}>
             <boxGeometry args={[0.64, 6.0, 0.64]} />
           </mesh>
 
           {/* Solder Fillet on PCB pad */}
-          <mesh position={[p.x, 0.15, 5.0]} material={materials.solderFillet}>
+          <mesh position={[p.x, 0.15, 0.0]} material={materials.solderFillet}>
             <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
           </mesh>
 
           {/* Interactive Hitbox (Studio only) */}
           {renderContext === 'studio' && (
             <mesh
-              position={[p.x, 0, 5.0]}
+              position={[p.x, 0, 0.0]}
               renderOrder={100}
               onClick={(e) => {
                 e.stopPropagation();

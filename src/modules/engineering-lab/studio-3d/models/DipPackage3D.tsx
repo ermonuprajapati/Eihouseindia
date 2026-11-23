@@ -158,8 +158,8 @@ export function DipPackage3D({
   const pins = useMemo(() => {
     const list: { id: string; num: number; name: string; pos: [number, number, number] }[] = [];
     const startX = -((halfPins - 1) * pitch) / 2;
-    // Standard JEDEC DIP row pitch in PCB 3D View is 7.62mm (+/- 3.81mm); in Studio breadboard it seats into rows E/F (+/- 3.34mm)
-    const rowZ = renderContext === '3d-view' ? 3.81 : 3.34;
+    // Standard JEDEC DIP row pitch is 7.62mm (+/- 3.81mm across Row E & Row F)
+    const rowZ = 3.81;
 
     // Top row (Pins 1..halfPins, along row E / -rowZ: Z = -rowZ)
     for (let i = 0; i < halfPins; i++) {

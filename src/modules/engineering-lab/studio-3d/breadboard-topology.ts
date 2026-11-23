@@ -44,6 +44,142 @@ export interface Component3DElevationSpec {
   packageHeight?: number;
 }
 
+export function getComponentFootprint(type: string): { halfW: number; halfD: number } {
+  const t = (type || '').toUpperCase();
+  switch (t) {
+    case 'ARDUINO_UNO':
+      return { halfW: 34.3, halfD: 26.65 };
+    case 'ARDUINO_MEGA':
+      return { halfW: 50.8, halfD: 26.65 };
+    case 'ARDUINO_NANO':
+      return { halfW: 21.6, halfD: 9.0 };
+    case 'ESP32_DEVKIT':
+    case 'ESP32_S3':
+    case 'ESP32_C3':
+      return { halfW: 27.5, halfD: 14.0 };
+    case 'RASPBERRY_PI_PICO':
+    case 'RASPBERRY_PI_PICO2':
+      return { halfW: 25.5, halfD: 10.5 };
+    case 'LCD_1602':
+    case 'DISPLAY_LCD1602':
+      return { halfW: 40.0, halfD: 18.0 };
+    case 'DISPLAY_OLED_SSD1306':
+    case 'OLED':
+      return { halfW: 15.0, halfD: 14.0 };
+    case 'MODULE_BLUETOOTH_HC05':
+    case 'BLUETOOTH':
+    case 'HC05':
+    case 'HC06':
+    case 'RF_BLUETOOTH':
+      return { halfW: 9.0, halfD: 19.0 };
+    case 'HC_SR04':
+    case 'SENSOR_ULTRASONIC':
+      return { halfW: 22.5, halfD: 10.0 };
+    case 'SERVO_SG90':
+    case 'ACTUATOR_SERVO_SG90':
+      return { halfW: 16.0, halfD: 12.0 };
+    case 'MODULE_RELAY_SPDT':
+    case 'RELAY':
+      return { halfW: 20.0, halfD: 15.0 };
+    case 'MOTOR_DRIVER_L298N':
+    case 'L298N':
+      return { halfW: 21.5, halfD: 21.5 };
+    case 'BATTERY_9V':
+    case 'BATTERY':
+    case 'DC_VOLTAGE':
+      return { halfW: 13.0, halfD: 8.5 };
+    case 'POTENTIOMETER':
+    case 'POTENTIOMETER_ROTARY':
+      return { halfW: 5.0, halfD: 5.0 };
+    case 'PUSHBUTTON':
+    case 'PUSHBUTTON_TACTILE':
+    case 'PUSHBUTTON_NO':
+    case 'PUSHBUTTON_NC':
+    case 'EMERGENCY_STOP':
+      return { halfW: 4.0, halfD: 4.0 };
+    case 'SLIDE_SWITCH':
+    case 'SWITCH_SLIDE_SPDT':
+    case 'SWITCH_SPST':
+      return { halfW: 4.5, halfD: 2.5 };
+    case 'BUZZER':
+    case 'BUZZER_ACTIVE':
+    case 'ACTUATOR_BUZZER_ACTIVE':
+      return { halfW: 6.0, halfD: 6.0 };
+    case 'TIMER_555':
+    case 'DIP_IC':
+    case 'ATMEGA328P':
+    case 'OPAMP_LM358':
+    case 'OPAMP_LM741':
+    case 'COMPARATOR_LM393':
+      return { halfW: 5.5, halfD: 4.0 };
+    case 'LED_RGB':
+    case 'ACTUATOR_RGB_LED':
+      return { halfW: 3.0, halfD: 3.0 };
+    case 'LED':
+      return { halfW: 2.8, halfD: 2.8 };
+    case 'RESISTOR':
+      return { halfW: 6.0, halfD: 2.0 };
+    case 'INDUCTOR':
+      return { halfW: 6.0, halfD: 2.2 };
+    case 'DIODE':
+    case 'DIODE_1N4007':
+      return { halfW: 5.5, halfD: 2.0 };
+    case 'BJT_NPN':
+    case 'BJT_PNP':
+    case 'TRANSISTOR_NPN':
+    case 'TRANSISTOR_PNP':
+      return { halfW: 3.5, halfD: 2.5 };
+    case 'MOSFET_N':
+    case 'MOSFET_P':
+    case 'REGULATOR_7805':
+    case 'REGULATOR_LM317':
+      return { halfW: 5.5, halfD: 3.0 };
+    case 'SENSOR_LDR':
+      return { halfW: 3.0, halfD: 3.0 };
+    case 'CAPACITOR':
+    case 'CAPACITOR_ELECTROLYTIC':
+    case 'CAPACITOR_CERAMIC':
+      return { halfW: 3.5, halfD: 3.5 };
+    case 'SENSOR_PIR':
+    case 'PIR':
+      return { halfW: 16.0, halfD: 12.0 };
+    case 'MPU6050':
+    case 'GY521':
+      return { halfW: 11.0, halfD: 8.0 };
+    case 'DHT11':
+    case 'DHT22':
+      return { halfW: 8.0, halfD: 10.0 };
+    default:
+      return { halfW: 6.0, halfD: 4.0 };
+  }
+}
+
+export function doesFootprintOverlapBreadboard(
+  type: string,
+  targetX: number,
+  targetZ: number,
+  breadboardCount: number = 1
+): boolean {
+  const fp = getComponentFootprint(type);
+  const minX = targetX - fp.halfW;
+  const maxX = targetX + fp.halfW;
+  const minZ = targetZ - fp.halfD;
+  const maxZ = targetZ + fp.halfD;
+
+  for (let b = 0; b < breadboardCount; b++) {
+    const bZ = -b * BREADBOARD_SPACING_Z;
+    const bbMinX = -BB830_WIDTH / 2;
+    const bbMaxX = BB830_WIDTH / 2;
+    const bbMinZ = bZ - BB830_DEPTH / 2;
+    const bbMaxZ = bZ + BB830_DEPTH / 2;
+
+    if (maxX > bbMinX && minX < bbMaxX && maxZ > bbMinZ && minZ < bbMaxZ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function getComponentElevationSpec(type: string): Component3DElevationSpec {
   const t = (type || '').toUpperCase();
 
@@ -56,7 +192,8 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     t.includes('LCD') ||
     t.includes('SERVO') ||
     t.includes('L298N') ||
-    t.includes('MOTOR_DRIVER')
+    t.includes('MOTOR_DRIVER') ||
+    t.includes('RELAY')
   ) {
     return {
       isThroughHole: false,
@@ -67,7 +204,7 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     };
   }
 
-  // 2. DIP ICs & Compact MCU Breakouts (NE555, LM358, LM741, Nano, ESP32, Pico, 74HC, CD40, ULN, L293, ATmega328P)
+  // 2. DIP ICs & Real DIP Packages (NE555, LM358, LM741, 74HC, CD40, ULN, L293, LM324, ATmega328P)
   if (
     t === 'TIMER_555' ||
     t === 'DIP_IC' ||
@@ -83,24 +220,25 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
   ) {
     return {
       isThroughHole: true,
-      pinLength: 5.2,
-      localMinY: -5.0,
-      localMinBodyY: 0.2,
+      pinLength: 5.6,
+      localMinY: -5.6,
+      localMinBodyY: 0.0,
       packageHeight: 4.0,
     };
   }
 
-  if (t.includes('NANO') || t.includes('ESP32') || t.includes('PICO')) {
+  // 3. Compact MCU Breakouts (Nano, ESP32, Pico, STM32)
+  if (t.includes('NANO') || t.includes('ESP32') || t.includes('PICO') || t.includes('STM32') || t.includes('BLUEPILL')) {
     return {
       isThroughHole: true,
-      pinLength: 6.5,
-      localMinY: -5.5,
-      localMinBodyY: 0.8,
+      pinLength: 5.5,
+      localMinY: -7.75,
+      localMinBodyY: -2.4, // Bottom of black plastic pin header shroud
       packageHeight: 7.0,
     };
   }
 
-  // 3. Sensor & Wireless Modules (HC-SR04 Ultrasonic, HC-05 Bluetooth, OLED, DHT, PIR, MPU6050)
+  // 4. Sensor & Wireless Modules (HC-SR04, HC-05, OLED, DHT, PIR, MPU6050)
   if (
     t.includes('SR04') ||
     t.includes('ULTRASONIC') ||
@@ -112,28 +250,29 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     t.includes('PIR') ||
     t.includes('MPU6050')
   ) {
+    const isHc05 = t.includes('HC05') || t.includes('BLUETOOTH');
     return {
       isThroughHole: true,
       pinLength: 6.0,
-      localMinY: -5.7,
-      localMinBodyY: 1.0,
+      localMinY: isHc05 ? -4.5 : -5.7,
+      localMinBodyY: isHc05 ? 1.25 : 0.0,
       packageHeight: 20.0,
     };
   }
 
-  // 4. Through-Hole 3-pin Transistors (TO-92, TO-220, Regulators)
+  // 5. Through-Hole 3-pin Transistors (TO-92, TO-220, Regulators)
   if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('REGULATOR') || t.includes('7805') || t.includes('LM317')) {
     const isTo220 = t.includes('REGULATOR') || t.includes('MOSFET') || t.includes('TO220');
     return {
       isThroughHole: true,
-      pinLength: 8.5,
+      pinLength: isTo220 ? 9.0 : 8.5,
       localMinY: -7.0,
-      localMinBodyY: 1.0,
+      localMinBodyY: isTo220 ? 2.0 : 2.6,
       packageHeight: isTo220 ? 15.0 : 6.0,
     };
   }
 
-  // 5. Switches & Trimmers (Pushbutton, Slide Switch, Potentiometer)
+  // 6. Switches & Trimmers (Pushbutton, Slide Switch, Potentiometer)
   if (t.includes('BUTTON') || t.includes('SWITCH') || t.includes('POTENTIOMETER')) {
     const isButton = t.includes('BUTTON');
     return {
@@ -145,18 +284,29 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     };
   }
 
-  // 6. RGB LED 5mm 4-Pin Through-Hole
+  // 7. RGB LED 5mm 4-Pin Through-Hole
   if (t.includes('RGB') || t === 'ACTUATOR_RGB_LED') {
     return {
       isThroughHole: true,
-      pinLength: 11.0,
+      pinLength: 10.4,
       localMinY: -9.8,
-      localMinBodyY: 1.8,
+      localMinBodyY: 1.5,
       packageHeight: 9.0,
     };
   }
 
-  // 7. Axial & Radial 2-Pin / 4-Pin Passives (Resistor, LED, Capacitor, Diode, Inductor, Buzzer, LDR)
+  // 8. Ceramic Disc Capacitor
+  if (t.includes('CERAMIC') || t.includes('CAPACITOR_CERAMIC')) {
+    return {
+      isThroughHole: true,
+      pinLength: 7.0,
+      localMinY: -5.3,
+      localMinBodyY: 2.0,
+      packageHeight: 5.0,
+    };
+  }
+
+  // 9. Axial & Radial 2-Pin Passives (Resistor, LED, Capacitor, Diode, Inductor, Buzzer, LDR)
   return {
     isThroughHole: true,
     pinLength: 11.0,
@@ -255,62 +405,62 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
   }
   if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
     return [
-      { x: -3.81, z: -3.34 },
-      { x: -1.27, z: -3.34 },
-      { x: 1.27, z: -3.34 },
-      { x: 3.81, z: -3.34 },
-      { x: 3.81, z: 3.34 },
-      { x: 1.27, z: 3.34 },
-      { x: -1.27, z: 3.34 },
-      { x: -3.81, z: 3.34 },
-    ];
-  }
-  if (t === 'IC_74HC14' || t.includes('74HC') || t.includes('DIP_14') || t.includes('DIP14') || t.includes('LM324')) {
-    return [
-      { x: -7.62, z: -3.34 },
-      { x: -5.08, z: -3.34 },
-      { x: -2.54, z: -3.34 },
-      { x: 0, z: -3.34 },
-      { x: 2.54, z: -3.34 },
-      { x: 5.08, z: -3.34 },
-      { x: 7.62, z: -3.34 },
-      { x: 7.62, z: 3.34 },
-      { x: 5.08, z: 3.34 },
-      { x: 2.54, z: 3.34 },
-      { x: 0, z: 3.34 },
-      { x: -2.54, z: 3.34 },
-      { x: -5.08, z: 3.34 },
-      { x: -7.62, z: 3.34 },
+      { x: -3.81, z: -3.81 },
+      { x: -1.27, z: -3.81 },
+      { x: 1.27, z: -3.81 },
+      { x: 3.81, z: -3.81 },
+      { x: 3.81, z: 3.81 },
+      { x: 1.27, z: 3.81 },
+      { x: -1.27, z: 3.81 },
+      { x: -3.81, z: 3.81 },
     ];
   }
   if (t.includes('595') || t.includes('4017') || t.includes('2003') || t.includes('293') || t.includes('DIP_16') || t.includes('DIP16')) {
     return [
-      { x: -8.89, z: -3.34 },
-      { x: -6.35, z: -3.34 },
-      { x: -3.81, z: -3.34 },
-      { x: -1.27, z: -3.34 },
-      { x: 1.27, z: -3.34 },
-      { x: 3.81, z: -3.34 },
-      { x: 6.35, z: -3.34 },
-      { x: 8.89, z: -3.34 },
-      { x: 8.89, z: 3.34 },
-      { x: 6.35, z: 3.34 },
-      { x: 3.81, z: 3.34 },
-      { x: 1.27, z: 3.34 },
-      { x: -1.27, z: 3.34 },
-      { x: -3.81, z: 3.34 },
-      { x: -6.35, z: 3.34 },
-      { x: -8.89, z: 3.34 },
+      { x: -8.89, z: -3.81 },
+      { x: -6.35, z: -3.81 },
+      { x: -3.81, z: -3.81 },
+      { x: -1.27, z: -3.81 },
+      { x: 1.27, z: -3.81 },
+      { x: 3.81, z: -3.81 },
+      { x: 6.35, z: -3.81 },
+      { x: 8.89, z: -3.81 },
+      { x: 8.89, z: 3.81 },
+      { x: 6.35, z: 3.81 },
+      { x: 3.81, z: 3.81 },
+      { x: 1.27, z: 3.81 },
+      { x: -1.27, z: 3.81 },
+      { x: -3.81, z: 3.81 },
+      { x: -6.35, z: 3.81 },
+      { x: -8.89, z: 3.81 },
+    ];
+  }
+  if (t === 'IC_74HC14' || t.includes('74HC') || t.includes('DIP_14') || t.includes('DIP14') || t.includes('LM324')) {
+    return [
+      { x: -7.62, z: -3.81 },
+      { x: -5.08, z: -3.81 },
+      { x: -2.54, z: -3.81 },
+      { x: 0, z: -3.81 },
+      { x: 2.54, z: -3.81 },
+      { x: 5.08, z: -3.81 },
+      { x: 7.62, z: -3.81 },
+      { x: 7.62, z: 3.81 },
+      { x: 5.08, z: 3.81 },
+      { x: 2.54, z: 3.81 },
+      { x: 0, z: 3.81 },
+      { x: -2.54, z: 3.81 },
+      { x: -5.08, z: 3.81 },
+      { x: -7.62, z: 3.81 },
     ];
   }
   if (t.includes('ATMEGA328P') || t.includes('DIP_28') || t.includes('DIP28')) {
     const pins: Array<{ x: number; z: number }> = [];
     const startX = -((14 - 1) * 2.54) / 2;
     for (let i = 0; i < 14; i++) {
-      pins.push({ x: startX + i * 2.54, z: -3.34 });
+      pins.push({ x: startX + i * 2.54, z: -3.81 });
     }
     for (let i = 0; i < 14; i++) {
-      pins.push({ x: startX + (13 - i) * 2.54, z: 3.34 });
+      pins.push({ x: startX + (13 - i) * 2.54, z: 3.81 });
     }
     return pins;
   }
@@ -362,7 +512,7 @@ export function areAllPinsInBreadboardHoles(
     const wx = targetX + rx;
     const wz = targetZ + rz;
 
-    const hole = findNearestHole830(wx, wz, 1.44, breadboardCount);
+    const hole = findNearestHole830(wx, wz, 2.0, breadboardCount);
     if (!hole) {
       return false;
     }
@@ -388,25 +538,30 @@ export function computeComponentGroundElevation(
   const spec = getComponentElevationSpec(type);
   const lowestLocalY = Math.min(spec.localMinY, spec.localMinBodyY);
 
+  const isOverBoard = hasBreadboard && (
+    !spec.isThroughHole
+      ? doesFootprintOverlapBreadboard(type, targetX, targetZ, breadboardCount)
+      : Array.from({ length: breadboardCount }).some((_, b) => {
+          const bZ = -b * BREADBOARD_SPACING_Z;
+          return (
+            Math.abs(targetX) <= (BB830_WIDTH / 2) &&
+            Math.abs(targetZ - bZ) <= (BB830_DEPTH / 2)
+          );
+        })
+  );
+
   if (!spec.isThroughHole || !hasBreadboard) {
-    const benchY = WORKBENCH_TOP_Y - lowestLocalY;
+    const surfaceTopY = isOverBoard ? BREADBOARD_TOP_Y : WORKBENCH_TOP_Y;
+    const benchY = surfaceTopY - lowestLocalY;
     return Math.round(benchY * 100) / 100;
   }
-
-  const isOverBoard = Array.from({ length: breadboardCount }).some((_, b) => {
-    const bZ = -b * BREADBOARD_SPACING_Z;
-    return (
-      Math.abs(targetX) <= (BB830_WIDTH / 2) &&
-      Math.abs(targetZ - bZ) <= (BB830_DEPTH / 2)
-    );
-  });
 
   const allPinsInHoles = areAllPinsInBreadboardHoles(type, targetX, targetZ, rotationYRad, breadboardCount);
 
   if (allPinsInHoles) {
     const insertionDepth = Math.min(BREADBOARD_INSERTION_DEPTH, spec.pinLength * 0.42);
-    // Strict Anti-Sink Rule: component PCB/housing bottom (elevatedY + spec.localMinBodyY) must NEVER sink below BREADBOARD_TOP_Y + 0.2mm
-    const minBodyAllowedElevatedY = BREADBOARD_TOP_Y + 0.2 - spec.localMinBodyY;
+    // Strict Anti-Sink Rule: component PCB/housing bottom (elevatedY + spec.localMinBodyY) must NEVER sink below BREADBOARD_TOP_Y + 0.35mm
+    const minBodyAllowedElevatedY = BREADBOARD_TOP_Y + 0.35 - spec.localMinBodyY;
     const standardElevatedY = BREADBOARD_TOP_Y - insertionDepth - spec.localMinY;
     const elevatedY = Math.max(minBodyAllowedElevatedY, standardElevatedY);
     return Math.round(elevatedY * 100) / 100;
@@ -425,17 +580,17 @@ export const PITCH_Z = 2.54;
 export const START_X = -((63 - 1) * PITCH_X) / 2; // -78.74 mm
 export const ROW_Z_MAP: Record<string, number> = {
   // Upper terminal rows A..E (above trough)
-  A: -13.5,
-  B: -10.96,
-  C: -8.42,
-  D: -5.88,
-  E: -3.34,
+  A: -13.97,
+  B: -11.43,
+  C: -8.89,
+  D: -6.35,
+  E: -3.81,
   // Lower terminal rows F..J (below trough)
-  F: 3.34,
-  G: 5.88,
-  H: 8.42,
-  I: 10.96,
-  J: 13.5,
+  F: 3.81,
+  G: 6.35,
+  H: 8.89,
+  I: 11.43,
+  J: 13.97,
 };
 
 export const RAIL_Z_MAP = {
@@ -1040,10 +1195,40 @@ export function snapComponentToSurface(
       snappedX = START_X + (nearestCol - 1) * PITCH_X;
     }
 
-    const isDip = comp.type.includes('DIP') || comp.type === 'TIMER_555' || comp.type.includes('OPAMP') || comp.type.includes('74HC') || comp.type.includes('NANO') || comp.type.includes('ESP32') || comp.type.includes('PICO');
+    const upper = comp.type.toUpperCase();
+    const isDip = upper.includes('DIP') || upper === 'TIMER_555' || upper.includes('OPAMP') || upper.includes('74HC') || upper.includes('ESP32') || upper.includes('PICO');
+    const isNano = upper.includes('NANO');
+    const isSingleRowModule = [
+      'HC_SR04',
+      'SENSOR_ULTRASONIC',
+      'BLUETOOTH',
+      'HC05',
+      'HC06',
+      'OLED',
+      'DHT11',
+      'DHT22',
+      'PIR',
+      'MPU6050',
+      'GY521',
+    ].some((k) => upper.includes(k));
+
     const relZ = comp.z3d - boardCenterZ;
-    if (isDip && Math.abs(relZ) <= 4.0) {
-      snappedZ = boardCenterZ; // Straddle center ravine
+    if (isDip && Math.abs(relZ) <= 5.0) {
+      snappedZ = boardCenterZ; // Straddle center DIP ravine
+    } else if (isNano && Math.abs(relZ) <= 5.0) {
+      snappedZ = boardCenterZ + 1.27; // Spans Row D (-6.35) and Row H (+8.89) at exact 15.24mm pitch
+    } else if (isSingleRowModule) {
+      // Snap directly to nearest valid breadboard row Z
+      let bestRowZ = ROW_Z_MAP.C;
+      let minRowDiff = Infinity;
+      for (const r of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) {
+        const diff = Math.abs(relZ - ROW_Z_MAP[r]);
+        if (diff < minRowDiff) {
+          minRowDiff = diff;
+          bestRowZ = ROW_Z_MAP[r];
+        }
+      }
+      snappedZ = boardCenterZ + bestRowZ;
     } else {
       snappedZ = boardCenterZ + Math.round(relZ / PITCH_Z) * PITCH_Z;
     }

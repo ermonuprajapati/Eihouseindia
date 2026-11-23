@@ -9,6 +9,7 @@ import {
   getTieGroupForHole,
   START_X,
   PITCH_X,
+  ROW_Z_MAP,
   computeComponentGroundElevation,
   flipComponent3D,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
@@ -314,7 +315,7 @@ export function Virtual3dStudio({
         mcuIdx++;
         posMap.set(comp.id, {
           x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false, 0, breadboardCount),
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
           z3d,
           rotY: 0,
           rotX: 0,
@@ -330,7 +331,7 @@ export function Virtual3dStudio({
         batteryIdx++;
         posMap.set(comp.id, {
           x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false, 0, breadboardCount),
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
           z3d,
           rotY: 0,
           rotX: 0,
@@ -346,7 +347,7 @@ export function Virtual3dStudio({
         offboardModuleIdx++;
         posMap.set(comp.id, {
           x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false, 0, breadboardCount),
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
           z3d,
           rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
           rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
@@ -372,9 +373,9 @@ export function Virtual3dStudio({
             const pattern = STRADDLER_SLOTS[Math.min(2, Math.max(0, straddlersPerBoard - 1))];
             const assignedCol = pattern[slotIdx % pattern.length];
             const span = getStraddlerSpan(mappedType);
-            const isDip8or16 = mappedType === 'TIMER_555' || mappedType.includes('358') || mappedType.includes('595') || mappedType.includes('4017') || mappedType.includes('2003') || mappedType.includes('293') || mappedType.includes('16');
+            const isDip8or16 = mappedType === 'TIMER_555' || mappedType.includes('358') || mappedType.includes('595') || mappedType.includes('4017') || mappedType.includes('2003') || mappedType.includes('293') || mappedType.includes('16') || mappedType.includes('328') || mappedType.includes('DIP_8') || mappedType.includes('DIP_16') || mappedType.includes('DIP_28');
             const colX = isDip8or16 ? START_X + (assignedCol - 0.5) * PITCH_X : START_X + (assignedCol - 1) * PITCH_X;
-            const z3d = -targetBoard * 60.0;
+            const z3d = -targetBoard * 60.0 + (mappedType.includes('NANO') ? 1.27 : 0);
             const y3d = computeComponentGroundElevation(mappedType, colX, z3d, true, 0, breadboardCount);
 
             // Block columns occupied by this IC + minimum 3 empty columns margin on each side
@@ -439,7 +440,7 @@ export function Virtual3dStudio({
             const isEvenPin = mappedType === 'LED_RGB' || mappedType === 'ACTUATOR_RGB_LED' || mappedType === 'HC_SR04' || mappedType === 'SENSOR_ULTRASONIC' || mappedType.includes('BLUETOOTH') || mappedType.includes('HC05');
             const colX = isEvenPin ? START_X + (assignedCol - 0.5) * PITCH_X : START_X + (assignedCol - 1) * PITCH_X;
             const boardCenterZ = -targetBoard * 60.0;
-            const z3d = boardCenterZ + (isTopHalf ? -8.42 : 8.42);
+            const z3d = boardCenterZ + (isTopHalf ? ROW_Z_MAP.C : ROW_Z_MAP.H);
             const y3d = computeComponentGroundElevation(mappedType, colX, z3d, true, 0, breadboardCount);
 
             posMap.set(comp.id, {

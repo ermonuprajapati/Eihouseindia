@@ -104,41 +104,41 @@ export function TransistorTO220_3D({
   return (
     <group position={position} rotation={rotation}>
       {/* 1. Metal Heatsink Backplate & Tab (10.2mm x 15mm x 1.3mm) with hole */}
-      <mesh position={[0, 9.5, -1.6]} material={materials.heatsinkTab} castShadow>
+      <mesh position={[0, 9.5, -2.2]} material={materials.heatsinkTab} castShadow>
         <boxGeometry args={[10.2, 15.0, 1.3]} />
       </mesh>
       {/* Tab Mounting Hole (3.6mm dia) */}
-      <mesh position={[0, 14.5, -1.6]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 14.5, -2.2]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[1.8, 1.8, 1.35, 24]} />
         <meshBasicMaterial color="#090D16" />
       </mesh>
 
       {/* 2. Molded Black Epoxy Lower Body (10.0mm x 9.0mm x 3.2mm) */}
-      <mesh position={[0, 6.5, 0.6]} material={materials.bodyBlack} castShadow>
+      <mesh position={[0, 6.5, 0.0]} material={materials.bodyBlack} castShadow>
         <boxGeometry args={[10.0, 9.0, 3.2]} />
       </mesh>
 
       {/* 3. Laser-etched Silkscreen on Front Face */}
       {silkscreenTexture && (
-        <mesh position={[0, 6.5, 2.22]}>
+        <mesh position={[0, 6.5, 1.62]}>
           <planeGeometry args={[9.4, 8.4]} />
           <meshBasicMaterial map={silkscreenTexture} />
         </mesh>
       )}
 
-      {/* 4. 3 Robust Rectangular Metallic Leads entering body at y = 4.0 and extending into breadboard (y = -4.0) */}
+      {/* 4. 3 Robust Rectangular Metallic Leads entering body at y = 4.0 and extending into breadboard (z = 0) */}
       {pins.map((p) => {
         const isHovered = hoveredPin === p.name || hoveredPin === p.label || (hoveredPin && hoveredPin.toLowerCase() === p.name);
 
         return (
           <group key={p.name}>
             {/* Lead shank extending from y = 4.0 down into breadboard to y = -7.0 */}
-            <mesh position={[p.x, -1.5, 0.6]} material={materials.silverLead}>
+            <mesh position={[p.x, -1.5, 0.0]} material={materials.silverLead}>
               <boxGeometry args={[0.7, 11.0, 0.5]} />
             </mesh>
 
             {/* Interactive Pin with Generous Hit-Sphere & Hover Highlight Ring */}
-            <group position={[p.x, 0, 0.6]}>
+            <group position={[p.x, 0, 0.0]}>
               <mesh material={isHovered ? materials.pinHover : materials.silverLead}>
                 <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
               </mesh>
