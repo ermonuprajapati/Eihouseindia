@@ -486,6 +486,28 @@ export function Pcb3dViewer({
       ctx.restore();
     });
 
+    // Custom user silkscreen text labels
+    if (pcb.texts && pcb.texts.length > 0) {
+      pcb.texts.forEach((txt) => {
+        if (txt.layer === 'F.SilkS' || !txt.layer) {
+          const tx = txt.xMm * scale;
+          const ty = txt.yMm * scale;
+          ctx.save();
+          ctx.translate(tx, ty);
+          if (txt.rotation) {
+            ctx.rotate((txt.rotation * Math.PI) / 180);
+          }
+          const fontPx = Math.max(10, Math.round((txt.fontSizeMm || 2.0) * scale));
+          ctx.font = `bold ${fontPx}px monospace`;
+          ctx.fillStyle = silkColor;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(txt.text, 0, 0);
+          ctx.restore();
+        }
+      });
+    }
+
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     return texture;

@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { CircuitComponent, CircuitWire, Component3D } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, Component3D, PcbLayout, PcbSilkscreenText } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
 import {
   resolvePhysicalSpec,
@@ -2290,6 +2291,271 @@ describe('Virtual Lab v3 Verification Suite', () => {
         // Lowest mesh point is strictly at BREADBOARD_TOP_Y (never sinks through plastic!)
         expect(worldLowestMeshY).toBeCloseTo(BREADBOARD_TOP_Y, 1);
       });
+    });
+  });
+
+  describe('Task 5: 2D/3D PCB Sync, Low-Noise DRC Engine & Silkscreen Text (fix/pcb-2d-drc-sync)', () => {
+    const mockComponents: CircuitComponent[] = [
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '10k',
+        x: 50,
+        y: 50,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -10, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 10, y: 0 },
+        ],
+      },
+      {
+        id: 'c1',
+        type: 'CAPACITOR_CERAMIC',
+        label: 'C1',
+        value: '100nF',
+        x: 80,
+        y: 50,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -10, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 10, y: 0 },
+        ],
+      },
+    ];
+
+    const mockWires: CircuitWire[] = [
+      {
+        id: 'w1',
+        fromCompId: 'r1',
+        fromPinId: '2',
+        toCompId: 'c1',
+        toPinId: '1',
+      },
+    ];
+
+    it('1. PcbGenerator preserves manual tracks, component movements, silkscreen text, and dimensions when syncing', () => {
+      // Step A: Initial PCB generation
+      const pcb1 = PcbGenerator.generatePcbFromSchematic(mockComponents, mockWires, 90, 70);
+      expect(pcb1.components?.length).toBe(2);
+
+      // Step B: User makes manual edits in 2D PCB
+      const editedPcb: PcbLayout = {
+        ...pcb1,
+        widthMm: 110,
+        heightMm: 85,
+        tracks: [
+          ...pcb1.tracks,
+          {
+            id: 'user_track_1',
+            layer: 'top_copper',
+            from: { x: 20, y: 20 },
+            to: { x: 40, y: 40 },
+            widthMm: 0.55,
+            netId: 'NET_CUSTOM',
+          },
+        ],
+        components: pcb1.components?.map((c) =>
+          c.componentId === 'r1' ? { ...c, x: 35.5, y: 28.5, rotation: 90 } : c
+        ),
+        texts: [
+          {
+            id: 'txt_rev',
+            text: 'EI LAB V3 REV B',
+            xMm: 25.0,
+            yMm: 15.0,
+            fontSizeMm: 2.5,
+            layer: 'F.SilkS',
+            rotation: 0,
+          },
+        ],
+      };
+
+      // Step C: Re-sync PCB with schematic passing existing edited PCB
+      const pcbSynced = PcbGenerator.generatePcbFromSchematic(mockComponents, mockWires, 80, 60, editedPcb);
+
+      // Verify custom board dimensions are preserved
+      expect(pcbSynced.widthMm).toBeGreaterThanOrEqual(110);
+      expect(pcbSynced.heightMm).toBeGreaterThanOrEqual(85);
+
+      // Verify user custom track is preserved
+      const customTrk = pcbSynced.tracks.find((t) => t.id === 'user_track_1');
+      expect(customTrk).toBeDefined();
+      expect(customTrk?.widthMm).toBe(0.55);
+
+      // Verify user component move and rotation are preserved
+      const r1 = pcbSynced.components?.find((c) => c.componentId === 'r1');
+      expect(r1).toBeDefined();
+      expect(r1?.x).toBe(35.5);
+      expect(r1?.y).toBe(28.5);
+      expect(r1?.rotation).toBe(90);
+
+      // Verify user silkscreen text is preserved
+      expect(pcbSynced.texts?.length).toBe(1);
+      expect(pcbSynced.texts?.[0].text).toBe('EI LAB V3 REV B');
+      expect(pcbSynced.texts?.[0].layer).toBe('F.SilkS');
+    });
+
+    it('2. Low-Noise DRC Engine produces 0 false-positive errors on same-net copper and internal component pins', () => {
+      const cleanPcb: PcbLayout = {
+        widthMm: 100,
+        heightMm: 80,
+        boardThicknessMm: 1.6,
+        copperLayers: 2,
+        pads: [
+          {
+            id: 'pad_u1_1',
+            componentId: 'U1',
+            pinId: '1',
+            x: 40,
+            y: 40,
+            diameterMm: 1.6,
+            holeMm: 0.8,
+            shape: 'round',
+            layer: 'all',
+            netId: 'NET_A',
+          },
+          {
+            id: 'pad_u1_2',
+            componentId: 'U1',
+            pinId: '2',
+            x: 40,
+            y: 42.54, // standard 2.54mm pitch within the same IC package
+            diameterMm: 1.6,
+            holeMm: 0.8,
+            shape: 'round',
+            layer: 'all',
+            netId: 'NET_B',
+          },
+        ],
+        tracks: [
+          // Same-net track entering pad 1
+          {
+            id: 'trk_net_a_1',
+            layer: 'top_copper',
+            from: { x: 40, y: 40 },
+            to: { x: 40, y: 30 },
+            widthMm: 0.35,
+            netId: 'NET_A',
+          },
+          // Adjacent same-net segment meeting track 1
+          {
+            id: 'trk_net_a_2',
+            layer: 'top_copper',
+            from: { x: 40, y: 30 },
+            to: { x: 50, y: 30 },
+            widthMm: 0.35,
+            netId: 'NET_A',
+          },
+        ],
+        drcErrors: [],
+      };
+
+      const violations = DrcEngine.runChecks(cleanPcb);
+      // Same-net track-to-pad and same-net track-to-track are not violations
+      const clearanceErrors = violations.filter(
+        (v) => v.rule === 'track_clearance' || v.rule === 'pad_clearance' || v.rule === 'hole_clearance'
+      );
+      expect(clearanceErrors.length).toBe(0);
+    });
+
+    it('3. DRC Engine accurately detects true shorts and different-net clearance violations with AI diagnostic format', () => {
+      const shortedPcb: PcbLayout = {
+        widthMm: 100,
+        heightMm: 80,
+        boardThicknessMm: 1.6,
+        copperLayers: 2,
+        pads: [
+          {
+            id: 'pad_vcc',
+            componentId: 'J1',
+            pinId: '1',
+            x: 30,
+            y: 30,
+            diameterMm: 1.8,
+            holeMm: 0.9,
+            shape: 'round',
+            layer: 'all',
+            netId: 'VCC',
+          },
+          {
+            id: 'pad_gnd',
+            componentId: 'J2',
+            pinId: '1',
+            x: 31.0, // only 1.0mm center distance! Pads overlap/touch!
+            y: 30,
+            diameterMm: 1.8,
+            holeMm: 0.9,
+            shape: 'round',
+            layer: 'all',
+            netId: 'GND',
+          },
+        ],
+        tracks: [
+          // Crossing tracks on same layer with different nets
+          {
+            id: 'trk_vcc',
+            layer: 'top_copper',
+            from: { x: 50, y: 20 },
+            to: { x: 50, y: 60 },
+            widthMm: 0.35,
+            netId: 'VCC',
+          },
+          {
+            id: 'trk_gnd',
+            layer: 'top_copper',
+            from: { x: 30, y: 40 },
+            to: { x: 70, y: 40 },
+            widthMm: 0.35,
+            netId: 'GND',
+          },
+        ],
+        drcErrors: [],
+      };
+
+      const violations = DrcEngine.runChecks(shortedPcb);
+      expect(violations.length).toBeGreaterThanOrEqual(2);
+
+      // Verify short circuit between crossing tracks
+      const crossingShort = violations.find(
+        (v) => v.id.includes('drc_short') || v.message.includes('crossing') || v.message.includes('Short circuit')
+      );
+      expect(crossingShort).toBeDefined();
+      expect(crossingShort?.severity).toBe('error');
+      expect(crossingShort?.message).toContain('[ERROR][CLEARANCE]');
+      expect(crossingShort?.message).toContain('Fix:');
+
+      // Verify pad-to-pad clearance violation between different nets VCC and GND
+      const padShort = violations.find((v) => v.id.includes('drc_pad_pad'));
+      expect(padShort).toBeDefined();
+      expect(padShort?.severity).toBe('error');
+      expect(padShort?.message).toContain('Net VCC vs Net GND');
+      expect(padShort?.message).toContain('Fix:');
+    });
+
+    it('4. Silkscreen Text Model supports F.SilkS and B.SilkS layers, custom font sizing, and rotations', () => {
+      const silkscreenText1: PcbSilkscreenText = {
+        id: 'txt_top_1',
+        text: 'STATUS_OK',
+        xMm: 15.5,
+        yMm: 22.0,
+        fontSizeMm: 2.0,
+        layer: 'F.SilkS',
+        rotation: 90,
+      };
+
+      const silkscreenText2: PcbSilkscreenText = {
+        id: 'txt_bot_1',
+        text: 'SERIAL #10928',
+        xMm: 50.0,
+        yMm: 45.0,
+        fontSizeMm: 1.5,
+        layer: 'B.SilkS',
+        rotation: 0,
+      };
+
+      expect(silkscreenText1.layer).toBe('F.SilkS');
+      expect(silkscreenText1.rotation).toBe(90);
+      expect(silkscreenText2.layer).toBe('B.SilkS');
+      expect(silkscreenText2.fontSizeMm).toBe(1.5);
     });
   });
 });

@@ -288,10 +288,15 @@ export class PcbGenerator {
     components: CircuitComponent[],
     wires: CircuitWire[],
     boardWidthMm: number = 80,
-    boardHeightMm: number = 60
+    boardHeightMm: number = 60,
+    existingPcb?: PcbLayout
   ): PcbLayout & { gndPourLayer?: 'bottom_copper' | 'top_copper' | 'off' } {
     const pads: PcbPad[] = [];
     const placedComponents: PcbComponentPlacement[] = [];
+
+    // If existingPcb provided, use its board dimensions if larger or customized
+    if (existingPcb?.widthMm) boardWidthMm = Math.max(boardWidthMm, existingPcb.widthMm);
+    if (existingPcb?.heightMm) boardHeightMm = Math.max(boardHeightMm, existingPcb.heightMm);
 
     // Filter virtual schematic symbols from physical component placements
     const physicalComponents = components.filter((c) => !isVirtualSchematicSymbol(c.type));
@@ -382,73 +387,82 @@ export class PcbGenerator {
     let availH = Math.max(boardHeightMm, Math.ceil((estSide * 0.85) / 5) * 5, maxSingleD + EDGE_MARGIN * 2, 60);
 
     placementOrder.forEach(({ comp, cw, cd, clearance }) => {
-      // Net-aware topological initial position from schematic coordinates clamped to board margin
-      const minXBound = EDGE_MARGIN + cw / 2;
-      const minYBound = EDGE_MARGIN + cd / 2;
-      const maxXBound = Math.max(minXBound, availW - EDGE_MARGIN - cw / 2);
-      const maxYBound = Math.max(minYBound, availH - EDGE_MARGIN - cd / 2);
+      const existingComp = existingPcb?.components?.find((c) => c.componentId === comp.id);
+      let candX: number;
+      let candY: number;
 
-      let targetX = minXBound + ((comp.x - minX) / spanX) * (maxXBound - minXBound);
-      let targetY = minYBound + ((comp.y - minY) / spanY) * (maxYBound - minYBound);
+      if (existingComp) {
+        candX = existingComp.x;
+        candY = existingComp.y;
+      } else {
+        // Net-aware topological initial position from schematic coordinates clamped to board margin
+        const minXBound = EDGE_MARGIN + cw / 2;
+        const minYBound = EDGE_MARGIN + cd / 2;
+        const maxXBound = Math.max(minXBound, availW - EDGE_MARGIN - cw / 2);
+        const maxYBound = Math.max(minYBound, availH - EDGE_MARGIN - cd / 2);
 
-      // Snap to 2.54mm grid within bounds
-      targetX = Math.max(minXBound, Math.min(maxXBound, Math.round(targetX / 2.54) * 2.54));
-      targetY = Math.max(minYBound, Math.min(maxYBound, Math.round(targetY / 2.54) * 2.54));
+        let targetX = minXBound + ((comp.x - minX) / spanX) * (maxXBound - minXBound);
+        let targetY = minYBound + ((comp.y - minY) / spanY) * (maxYBound - minYBound);
 
-      let candX = targetX;
-      let candY = targetY;
+        // Snap to 2.54mm grid within bounds
+        targetX = Math.max(minXBound, Math.min(maxXBound, Math.round(targetX / 2.54) * 2.54));
+        targetY = Math.max(minYBound, Math.min(maxYBound, Math.round(targetY / 2.54) * 2.54));
 
-      // Pairwise AABB non-overlap verification
-      const hasCollision = (tx: number, ty: number): boolean => {
-        for (const pb of placedBoxes) {
-          const minSepX = (cw + pb.cw) / 2 + Math.max(clearance, pb.clearance);
-          const minSepY = (cd + pb.cd) / 2 + Math.max(clearance, pb.clearance);
-          if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
-            return true;
-          }
-        }
-        return false;
-      };
+        candX = targetX;
+        candY = targetY;
 
-      if (hasCollision(candX, candY)) {
-        let found = false;
-        // First try within current board bounds
-        const maxSearch = Math.max(availW, availH, 120);
-        for (let r = 2.54; r <= maxSearch && !found; r += 2.54) {
-          const steps = Math.max(8, Math.round((2 * Math.PI * r) / 2.54));
-          for (let s = 0; s < steps; s++) {
-            const angle = (s * 2 * Math.PI) / steps;
-            const testX = Math.round((targetX + r * Math.cos(angle)) / 2.54) * 2.54;
-            const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
-
-            if (testX >= minXBound && testX <= maxXBound && testY >= minYBound && testY <= maxYBound) {
-              if (!hasCollision(testX, testY)) {
-                candX = testX;
-                candY = testY;
-                found = true;
-                break;
-              }
+        // Pairwise AABB non-overlap verification
+        const hasCollision = (tx: number, ty: number): boolean => {
+          for (const pb of placedBoxes) {
+            const minSepX = (cw + pb.cw) / 2 + Math.max(clearance, pb.clearance);
+            const minSepY = (cd + pb.cd) / 2 + Math.max(clearance, pb.clearance);
+            if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
+              return true;
             }
           }
-        }
+          return false;
+        };
 
-        // If crowded and no spot within current bounds, search outward and expand bounds
-        if (!found) {
-          for (let r = 2.54; r <= 300 && !found; r += 2.54) {
+        if (hasCollision(candX, candY)) {
+          let found = false;
+          // First try within current board bounds
+          const maxSearch = Math.max(availW, availH, 120);
+          for (let r = 2.54; r <= maxSearch && !found; r += 2.54) {
             const steps = Math.max(8, Math.round((2 * Math.PI * r) / 2.54));
             for (let s = 0; s < steps; s++) {
               const angle = (s * 2 * Math.PI) / steps;
               const testX = Math.round((targetX + r * Math.cos(angle)) / 2.54) * 2.54;
               const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
 
-              if (testX >= minXBound && testY >= minYBound) {
+              if (testX >= minXBound && testX <= maxXBound && testY >= minYBound && testY <= maxYBound) {
                 if (!hasCollision(testX, testY)) {
                   candX = testX;
                   candY = testY;
                   found = true;
-                  availW = Math.max(availW, candX + cw / 2 + clearance + EDGE_MARGIN);
-                  availH = Math.max(availH, candY + cd / 2 + clearance + EDGE_MARGIN);
                   break;
+                }
+              }
+            }
+          }
+
+          // If crowded and no spot within current bounds, search outward and expand bounds
+          if (!found) {
+            for (let r = 2.54; r <= 300 && !found; r += 2.54) {
+              const steps = Math.max(8, Math.round((2 * Math.PI * r) / 2.54));
+              for (let s = 0; s < steps; s++) {
+                const angle = (s * 2 * Math.PI) / steps;
+                const testX = Math.round((targetX + r * Math.cos(angle)) / 2.54) * 2.54;
+                const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
+
+                if (testX >= minXBound && testY >= minYBound) {
+                  if (!hasCollision(testX, testY)) {
+                    candX = testX;
+                    candY = testY;
+                    found = true;
+                    availW = Math.max(availW, candX + cw / 2 + clearance + EDGE_MARGIN);
+                    availH = Math.max(availH, candY + cd / 2 + clearance + EDGE_MARGIN);
+                    break;
+                  }
                 }
               }
             }
@@ -468,6 +482,7 @@ export class PcbGenerator {
         clearance,
       });
 
+      const compRot = existingComp?.rotation ?? (comp.rotation || 0);
       placedComponents.push({
         componentId: comp.id,
         designator: comp.designator || comp.label,
@@ -477,12 +492,12 @@ export class PcbGenerator {
         footprint: comp.footprint,
         x: candX,
         y: candY,
-        rotation: comp.rotation || 0,
+        rotation: compRot,
         parameters: comp.parameters,
       });
 
       // Compute physical IPC-7351 footprint pads strictly aligned with package geometry
-      const footprintPads = PcbGenerator.calculateFootprintPads(comp, candX, candY, comp.rotation || 0);
+      const footprintPads = PcbGenerator.calculateFootprintPads(comp, candX, candY, compRot);
       footprintPads.forEach((pad) => {
         pads.push(pad);
         padLookup.set(`${comp.id}:${pad.pinId}`, { x: pad.x, y: pad.y });
@@ -729,12 +744,23 @@ export class PcbGenerator {
       }
     }
 
+    // Retain user-placed manual vias if existingPcb provided
+    if (existingPcb?.pads) {
+      existingPcb.pads.filter((p) => p.componentId === 'VIA' || p.id.startsWith('via_')).forEach((via) => {
+        if (!pads.some((p) => p.id === via.id)) {
+          pads.push(via);
+        }
+      });
+    }
+
+    const finalTracks = (existingPcb?.tracks && existingPcb.tracks.length > 0) ? existingPcb.tracks : routedTracks;
+
     // Run Design Rule Checks
-    const drcErrors = this.runDrc(pads, routedTracks, effectiveWidth, effectiveHeight);
+    const drcErrors = this.runDrc(pads, finalTracks, effectiveWidth, effectiveHeight);
 
     // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 4mm from corners
     const cornerInset = 4.0;
-    const mountingHoles = [
+    const mountingHoles = existingPcb?.mountingHoles || [
       { x: cornerInset, y: cornerInset, diameterMm: 3.2 },
       { x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
       { x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
@@ -744,17 +770,18 @@ export class PcbGenerator {
     return {
       widthMm: effectiveWidth,
       heightMm: effectiveHeight,
-      boardThicknessMm: 1.6,
-      copperLayers: 2,
-      units: 'mm',
-      gridSizeMm: 2.54,
+      boardThicknessMm: existingPcb?.boardThicknessMm || 1.6,
+      copperLayers: existingPcb?.copperLayers || 2,
+      units: existingPcb?.units || 'mm',
+      gridSizeMm: existingPcb?.gridSizeMm || 2.54,
       mountingHoles,
       edgeClearanceMm: EDGE_MARGIN,
       pads,
-      tracks: routedTracks,
+      tracks: finalTracks,
       components: placedComponents,
+      texts: existingPcb?.texts || [],
       drcErrors,
-      gndPourLayer: DEFAULT_GND_POUR_LAYER,
+      gndPourLayer: (existingPcb as { gndPourLayer?: 'bottom_copper' | 'top_copper' | 'off' })?.gndPourLayer || DEFAULT_GND_POUR_LAYER,
     } as PcbLayout & { gndPourLayer: 'bottom_copper' | 'top_copper' | 'off' };
   }
 
@@ -1286,6 +1313,7 @@ export class PcbGenerator {
     for (let i = 0; i < tracks.length; i++) {
       for (let j = i + 1; j < tracks.length; j++) {
         if (tracks[i].layer === tracks[j].layer) {
+          if (tracks[i].netId && tracks[j].netId && tracks[i].netId === tracks[j].netId) continue;
           const dist = Math.hypot(
             (tracks[i].from.x + tracks[i].to.x) / 2 - (tracks[j].from.x + tracks[j].to.x) / 2,
             (tracks[i].from.y + tracks[i].to.y) / 2 - (tracks[j].from.y + tracks[j].to.y) / 2
