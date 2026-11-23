@@ -5,6 +5,7 @@ import {
   PcbLayout,
   PcbTrack,
   PcbPad,
+  PcbSilkscreenText,
   CircuitComponent,
   CircuitWire,
   PhysicalSpec,
@@ -41,6 +42,9 @@ import {
   Printer,
   GripHorizontal,
   X,
+  Type,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -152,6 +156,15 @@ export function Pcb2dEditor({
   const [sidebarTab, setSidebarTab] = useState<'drc' | 'stackup' | 'inspector'>('drc');
   const [drcViolations, setDrcViolations] = useState<DrcViolation[]>([]);
   const [highlightLocation, setHighlightLocation] = useState<{ x: number; y: number } | null>(null);
+
+  // Silkscreen Text State
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [isAddingText, setIsAddingText] = useState<boolean>(false);
+  const [newTextValue, setNewTextValue] = useState<string>('REV 1.0');
+  const [newTextFontSizeMm, setNewTextFontSizeMm] = useState<number>(2.0);
+  const [newTextLayer, setNewTextLayer] = useState<'F.SilkS' | 'B.SilkS'>('F.SilkS');
+  const [isDraggingText, setIsDraggingText] = useState<boolean>(false);
+  const [textDragOffset, setTextDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Draggable Floating Stackup Modal State
   const [isStackupModalOpen, setIsStackupModalOpen] = useState<boolean>(false);
@@ -290,13 +303,33 @@ export function Pcb2dEditor({
     }
   }, [activeLayer, mouseCoord, snapCoord, pcb, routingStartPad, onUpdatePcb, traceWidth]);
 
+  const handleDeleteSelectedText = useCallback(() => {
+    if (!selectedTextId || !onUpdatePcb) return;
+    const nextTexts = (pcb.texts || []).filter((t) => t.id !== selectedTextId);
+    onUpdatePcb({ ...pcb, texts: nextTexts });
+    setSelectedTextId(null);
+    toast.success('Deleted silkscreen text');
+  }, [selectedTextId, pcb, onUpdatePcb]);
+
+  const handleRotateSelectedText = useCallback(() => {
+    if (!selectedTextId || !onUpdatePcb) return;
+    const nextTexts = (pcb.texts || []).map((t) =>
+      t.id === selectedTextId ? { ...t, rotation: ((t.rotation || 0) + 90) % 360 } : t
+    );
+    onUpdatePcb({ ...pcb, texts: nextTexts });
+    toast.info('Rotated silkscreen text 90°');
+  }, [selectedTextId, pcb, onUpdatePcb]);
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedTrackId && onUpdatePcb) {
+        if (selectedTextId && onUpdatePcb) {
+          e.preventDefault();
+          handleDeleteSelectedText();
+        } else if (selectedTrackId && onUpdatePcb) {
           e.preventDefault();
           const nextTracks = pcb.tracks.filter((t) => t.id !== selectedTrackId);
           onUpdatePcb({ ...pcb, tracks: nextTracks });
@@ -308,17 +341,26 @@ export function Pcb2dEditor({
         setSelectedTrackId(null);
         setSelectedPadId(null);
         setSelectedCompId(null);
+        setSelectedTextId(null);
         setIsDraggingComp(false);
+        setIsDraggingText(false);
+        setIsAddingText(false);
         setToolMode('select');
         setIsExportMenuOpen(false);
       } else if (e.key === 'r' || e.key === 'R') {
-        if (selectedCompId && pcb.components && onUpdatePcb) {
+        if (selectedTextId && onUpdatePcb) {
+          e.preventDefault();
+          handleRotateSelectedText();
+        } else if (selectedCompId && pcb.components && onUpdatePcb) {
           e.preventDefault();
           handleRotateSelectedComponent();
         } else {
           setToolMode((m) => (m === 'route' ? 'select' : 'route'));
           setRoutingStartPad(null);
         }
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        setIsAddingText((prev) => !prev);
       } else if (e.key === 'x' || e.key === 'X') {
         e.preventDefault();
         setToolMode('route');
@@ -339,7 +381,22 @@ export function Pcb2dEditor({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTrackId, selectedCompId, routingStartPad, mouseCoord, activeLayer, pcb, onUpdatePcb, snapCoord, handleRotateSelectedComponent, traceWidth, handleInsertPlatedVia]);
+  }, [
+    selectedTrackId,
+    selectedCompId,
+    selectedTextId,
+    routingStartPad,
+    mouseCoord,
+    activeLayer,
+    pcb,
+    onUpdatePcb,
+    snapCoord,
+    handleRotateSelectedComponent,
+    handleRotateSelectedText,
+    handleDeleteSelectedText,
+    traceWidth,
+    handleInsertPlatedVia,
+  ]);
 
   // Run full Auto-Router with Manhattan 45-chamfered tracks
   const handleAutoRoute = () => {
@@ -748,6 +805,45 @@ export function Pcb2dEditor({
       ctx.fillText('EI HOUSE ENG LAB', offsetX + 8, offsetY + 16);
       ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, offsetX + 8, offsetY + pcb.heightMm * scale - 8);
 
+      // User Custom Silkscreen Texts
+      if (pcb.texts && pcb.texts.length > 0) {
+        pcb.texts.forEach((txt) => {
+          const tx = offsetX + txt.xMm * scale;
+          const ty = offsetY + txt.yMm * scale;
+          const isTextSelected = txt.id === selectedTextId;
+          const isTop = txt.layer === 'F.SilkS' || !txt.layer;
+
+          ctx.save();
+          ctx.translate(tx, ty);
+          if (txt.rotation) {
+            ctx.rotate((txt.rotation * Math.PI) / 180);
+          }
+          const fontPx = Math.max(9, Math.round((txt.fontSizeMm || 2.0) * scale));
+          ctx.font = `bold ${fontPx}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          if (isTextSelected) {
+            ctx.strokeStyle = '#38BDF8';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            const textMetrics = ctx.measureText(txt.text);
+            const boxW = textMetrics.width + 8;
+            const boxH = fontPx + 6;
+            ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#38BDF8';
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText('↺ [R]', -boxW / 2 + 10, boxH / 2 + 8);
+            ctx.font = `bold ${fontPx}px monospace`;
+          }
+
+          ctx.fillStyle = isTextSelected ? '#38BDF8' : isTop ? '#F8FAFC' : '#93C5FD';
+          ctx.fillText(txt.text, 0, 0);
+          ctx.restore();
+        });
+      }
+
       if (pcb.components) {
         pcb.components.filter((comp) => !isVirtualSchematicSymbol(comp.type)).forEach((comp) => {
           const cx = offsetX + comp.x * scale;
@@ -1083,6 +1179,7 @@ export function Pcb2dEditor({
     selectedTrackId,
     selectedPadId,
     selectedCompId,
+    selectedTextId,
     traceWidth,
     zoomLevel,
     panOffset,
@@ -1123,6 +1220,19 @@ export function Pcb2dEditor({
         x: coords.canvasX - panStart.x,
         y: coords.canvasY - panStart.y,
       });
+      return;
+    }
+
+    // Live Silkscreen Text Dragging
+    if (isDraggingText && selectedTextId && pcb.texts && onUpdatePcb) {
+      const snapX = snapCoord(coords.mmX - textDragOffset.x);
+      const snapY = snapCoord(coords.mmY - textDragOffset.y);
+      const clampedX = Math.max(2, Math.min(pcb.widthMm - 2, snapX));
+      const clampedY = Math.max(2, Math.min(pcb.heightMm - 2, snapY));
+      const nextTexts = pcb.texts.map((t) =>
+        t.id === selectedTextId ? { ...t, xMm: clampedX, yMm: clampedY } : t
+      );
+      onUpdatePcb({ ...pcb, texts: nextTexts });
       return;
     }
 
@@ -1196,6 +1306,25 @@ export function Pcb2dEditor({
     const { mmX, mmY } = coords;
 
     if (toolMode === 'select' && !routingStartPad) {
+      if (pcb.texts && visibleLayers.silkscreen) {
+        const clickedText = pcb.texts.find((t) => {
+          const charCount = t.text.length || 1;
+          const halfW = Math.max((t.fontSizeMm || 2.0) * 0.7 * charCount, 6) / 2;
+          const halfH = Math.max((t.fontSizeMm || 2.0) * 1.2, 4) / 2;
+          return Math.abs(t.xMm - mmX) <= halfW + 1 && Math.abs(t.yMm - mmY) <= halfH + 1;
+        });
+        if (clickedText) {
+          setSelectedTextId(clickedText.id);
+          setSelectedCompId(null);
+          setSelectedTrackId(null);
+          setSelectedPadId(null);
+          setIsDraggingText(true);
+          setTextDragOffset({ x: mmX - clickedText.xMm, y: mmY - clickedText.yMm });
+          setSidebarTab('inspector');
+          return;
+        }
+      }
+
       const clickedComp = pcb.components?.find((c) => {
         if (isVirtualSchematicSymbol(c.type)) return false;
         const spec = resolvePhysicalSpec(c.type, c.footprint);
@@ -1207,6 +1336,7 @@ export function Pcb2dEditor({
         setSelectedCompId(clickedComp.componentId);
         setSelectedTrackId(null);
         setSelectedPadId(null);
+        setSelectedTextId(null);
         setIsDraggingComp(true);
         setDragOffset({ x: mmX - clickedComp.x, y: mmY - clickedComp.y });
         setSidebarTab('inspector');
@@ -1217,6 +1347,7 @@ export function Pcb2dEditor({
 
   const handleCanvasMouseUp = () => {
     setIsDraggingComp(false);
+    setIsDraggingText(false);
     setIsPanning(false);
   };
 
@@ -1323,6 +1454,7 @@ export function Pcb2dEditor({
       setSelectedTrackId(clickedTrack.id);
       setSelectedPadId(null);
       setSelectedCompId(null);
+      setSelectedTextId(null);
       setSidebarTab('inspector');
     } else {
       setSelectedTrackId(null);
@@ -1341,6 +1473,59 @@ export function Pcb2dEditor({
     const nextPads = pcb.pads.map((p) => (p.id === selectedPadId ? { ...p, holeMm: h } : p));
     onUpdatePcb({ ...pcb, pads: nextPads });
     toast.success(`Updated pad drill diameter to ${h} mm`);
+  };
+
+  const handleAddSilkscreenText = () => {
+    if (!newTextValue.trim() || !onUpdatePcb) return;
+    const newText: PcbSilkscreenText = {
+      id: `txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      text: newTextValue.trim(),
+      xMm: Math.round((pcb.widthMm / 2) * 10) / 10,
+      yMm: Math.round((pcb.heightMm / 2) * 10) / 10,
+      fontSizeMm: newTextFontSizeMm,
+      layer: newTextLayer,
+      rotation: 0,
+    };
+    const nextTexts = [...(pcb.texts || []), newText];
+    onUpdatePcb({ ...pcb, texts: nextTexts });
+    setSelectedTextId(newText.id);
+    setSelectedCompId(null);
+    setSelectedTrackId(null);
+    setSelectedPadId(null);
+    setIsAddingText(false);
+    setSidebarTab('inspector');
+    toast.success(`Added silkscreen text "${newText.text}"`);
+  };
+
+  const handleUpdateSelectedText = (updates: Partial<PcbSilkscreenText>) => {
+    if (!selectedTextId || !onUpdatePcb) return;
+    const nextTexts = (pcb.texts || []).map((t) =>
+      t.id === selectedTextId ? { ...t, ...updates } : t
+    );
+    onUpdatePcb({ ...pcb, texts: nextTexts });
+  };
+
+  const handleCopyDrcReport = () => {
+    if (drcViolations.length === 0) {
+      navigator.clipboard?.writeText('DRC CLEAN: 0 violations detected.');
+      toast.success('Copied DRC status to clipboard!');
+      return;
+    }
+    const report = drcViolations
+      .map((v) => {
+        const loc = v.location ? ` at (${v.location.x.toFixed(1)}mm, ${v.location.y.toFixed(1)}mm)` : '';
+        return `[${v.severity.toUpperCase()}][${v.rule.toUpperCase()}] ${v.message}${loc}`;
+      })
+      .join('\n');
+    navigator.clipboard?.writeText(report);
+    toast.success(`Copied ${drcViolations.length} DRC diagnostic item(s) to clipboard!`);
+  };
+
+  const handleCopySingleViolation = (v: DrcViolation) => {
+    const loc = v.location ? ` at (${v.location.x.toFixed(1)}mm, ${v.location.y.toFixed(1)}mm)` : '';
+    const text = `[${v.severity.toUpperCase()}][${v.rule.toUpperCase()}] ${v.message}${loc}`;
+    navigator.clipboard?.writeText(text);
+    toast.success('Copied DRC violation to clipboard!');
   };
 
   // Draggable Stackup Header Mouse Handlers
@@ -1379,6 +1564,7 @@ export function Pcb2dEditor({
   const selectedTrack = pcb.tracks.find((t) => t.id === selectedTrackId);
   const selectedPad = pcb.pads.find((p) => p.id === selectedPadId);
   const selectedComp = pcb.components?.find((c) => c.componentId === selectedCompId);
+  const selectedText = pcb.texts?.find((t) => t.id === selectedTextId);
 
   const hoveredPad = hoveredPadId ? pcb.pads.find((p) => p.id === hoveredPadId) : null;
   const hoveredComp = hoveredPad ? pcb.components?.find((c) => c.componentId === hoveredPad.componentId) : null;
@@ -1474,6 +1660,20 @@ export function Pcb2dEditor({
             >
               <Disc className="w-3 h-3 text-amber-400" />
               <span className="hidden md:inline">+Via (V)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAddingText(true)}
+              className={`h-7 px-2 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                isAddingText || selectedTextId
+                  ? 'bg-cyan-900 border border-cyan-500 text-cyan-200'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Place Silkscreen Text [Shortcut: T]"
+            >
+              <Type className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Text (T)</span>
             </button>
 
             <button
@@ -1619,6 +1819,15 @@ export function Pcb2dEditor({
               />
               <span>Pads</span>
             </label>
+            <label className="flex items-center gap-1 cursor-pointer select-none text-yellow-400">
+              <input
+                type="checkbox"
+                checked={visibleLayers.ratsnest}
+                onChange={(e) => setVisibleLayers({ ...visibleLayers, ratsnest: e.target.checked })}
+                className="w-3 h-3 accent-yellow-500"
+              />
+              <span>Airwires</span>
+            </label>
           </div>
         </div>
 
@@ -1649,10 +1858,13 @@ export function Pcb2dEditor({
                 setPanOffset({ x: 0, y: 0 });
               }}
               className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded"
-              title="Reset View / Fit"
+              title="Reset View / Fit (100%)"
             >
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
+            <span className="text-[10px] font-mono px-1.5 text-cyan-400 border-l border-slate-800">
+              {Math.round(zoomLevel * 100)}%
+            </span>
           </div>
 
           {/* Rotate Selected Footprint */}
@@ -1775,199 +1987,81 @@ export function Pcb2dEditor({
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Canvas Area */}
         <div className="flex-1 min-h-0 min-w-0 relative flex items-center justify-center p-2 bg-[#050D1A] overflow-hidden">
-          {/* Canvas Viewport Controls Overlay */}
-          <div className="absolute top-4 left-4 z-20 flex items-center gap-1 bg-slate-950/80 backdrop-blur border border-slate-800 rounded-lg p-1 text-slate-300">
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(3.0, z + 0.15))}
-              className="p-1 hover:bg-slate-800 rounded text-slate-300"
-              title="Zoom In"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.15))}
-              className="p-1 hover:bg-slate-800 rounded text-slate-300"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => {
-                setZoomLevel(1.0);
-                setPanOffset({ x: 0, y: 0 });
-              }}
-              className="p-1 hover:bg-slate-800 rounded text-slate-300"
-              title="Reset View"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[10px] font-mono px-1 text-cyan-400">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-          </div>
-
-          {/* PCB Layers Control Floating Panel (Toggleable so canvas is never obscured) */}
-          {showLayerPanel && (
-            <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 shadow-2xl text-[11px] font-mono text-slate-300 max-w-[260px]">
-              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
-                <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-[11px]">
-                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>PCB Layers</span>
-                </div>
+          {/* Add Silkscreen Text Dialog Popover */}
+          {isAddingText && (
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-[#0B1528]/95 backdrop-blur-md border border-cyan-500/70 rounded-xl p-4 shadow-2xl font-mono text-xs min-w-[280px] max-w-[340px] space-y-3 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-700">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                  <Type className="w-4 h-4 text-cyan-400" />
+                  Place Silkscreen Text
+                </span>
                 <button
                   type="button"
-                  onClick={() => setShowLayerPanel(false)}
-                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white cursor-pointer"
-                  title="Close Floating Panel"
+                  onClick={() => setIsAddingText(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-            {/* Active Routing Layer Toggle & +Via button */}
-            <div className="flex items-center gap-1 py-0.5">
-              <button
-                onClick={() => setActiveLayer('top_copper')}
-                className={`flex-1 py-1 px-1.5 rounded text-center font-bold text-[10px] transition-all cursor-pointer ${
-                  activeLayer === 'top_copper'
-                    ? 'bg-red-950 border border-red-500 text-red-200'
-                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-                }`}
-                title="Activate F.Cu Top Layer (Red)"
-              >
-                F.Cu (Red)
-              </button>
-              <button
-                onClick={() => setActiveLayer('bottom_copper')}
-                className={`flex-1 py-1 px-1.5 rounded text-center font-bold text-[10px] transition-all cursor-pointer ${
-                  activeLayer === 'bottom_copper'
-                    ? 'bg-blue-950 border border-blue-500 text-blue-200'
-                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-                }`}
-                title="Activate B.Cu Bottom Layer (Blue)"
-              >
-                B.Cu (Blue)
-              </button>
-              <button
-                onClick={handleInsertPlatedVia}
-                className="px-2 py-1 rounded bg-amber-950/90 hover:bg-amber-800 border border-amber-600 text-amber-300 font-bold text-[10px] transition-all flex items-center gap-0.5 cursor-pointer"
-                title="Insert Plated Via [V]"
-              >
-                <Disc className="w-2.5 h-2.5" />
-                <span>+Via</span>
-              </button>
-            </div>
-
-            {/* Ground Pour Layer Selector */}
-            <div className="flex items-center justify-between gap-1 py-0.5 text-[10px]">
-              <span className="text-slate-400 flex items-center gap-1">
-                <Shield className="w-3 h-3 text-emerald-400" />
-                GND Pour:
-              </span>
-              <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded p-0.5">
-                <button
-                  onClick={() => {
-                    setGndPourLayer('bottom_copper');
-                    setVisibleLayers((l) => ({ ...l, copperPour: true }));
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase">Text String</label>
+                <input
+                  type="text"
+                  value={newTextValue}
+                  onChange={(e) => setNewTextValue(e.target.value)}
+                  placeholder="e.g. REV 1.0 or EI HOUSE"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:border-cyan-500 focus:outline-hidden"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddSilkscreenText();
+                    if (e.key === 'Escape') setIsAddingText(false);
                   }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                    gndPourLayer === 'bottom_copper' ? 'bg-blue-900 text-blue-200 border border-blue-600' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Place GND plane on B.Cu (Recommended 2-Layer Standard)"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase">Font Size (mm)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1.0"
+                    max="10.0"
+                    value={newTextFontSizeMm}
+                    onChange={(e) => setNewTextFontSizeMm(Math.max(1, parseFloat(e.target.value) || 2.0))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase">Layer</label>
+                  <select
+                    value={newTextLayer}
+                    onChange={(e) => setNewTextLayer(e.target.value as 'F.SilkS' | 'B.SilkS')}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-cyan-300 font-mono text-xs cursor-pointer"
+                  >
+                    <option value="F.SilkS">F.SilkS (Top)</option>
+                    <option value="B.SilkS">B.SilkS (Bottom)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleAddSilkscreenText}
+                  className="flex-1 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded flex items-center justify-center gap-1 cursor-pointer shadow transition-colors"
                 >
-                  B.Cu
+                  <Type className="w-3.5 h-3.5" />
+                  <span>Place on Board</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setGndPourLayer('top_copper');
-                    setVisibleLayers((l) => ({ ...l, copperPour: true }));
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                    gndPourLayer === 'top_copper' ? 'bg-red-900 text-red-200 border border-red-600' : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Place GND plane on F.Cu"
+                  type="button"
+                  onClick={() => setIsAddingText(false)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded cursor-pointer transition-colors"
                 >
-                  F.Cu
-                </button>
-                <button
-                  onClick={() => {
-                    setGndPourLayer('off');
-                    setVisibleLayers((l) => ({ ...l, copperPour: false }));
-                  }}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                    gndPourLayer === 'off' ? 'bg-slate-800 text-slate-200' : 'text-slate-500 hover:text-white'
-                  }`}
-                  title="Turn off GND pour"
-                >
-                  Off
+                  Cancel
                 </button>
               </div>
             </div>
-
-            {/* Visibility Eye Toggles */}
-            <div className="pt-1 border-t border-slate-800/80 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
-              <label className="flex items-center gap-1.5 text-red-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.topCopper}
-                  onChange={(e) => setVisibleLayers({ ...visibleLayers, topCopper: e.target.checked })}
-                  className="rounded accent-red-500 w-3 h-3"
-                />
-                <span>F.Cu (Top)</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-blue-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.bottomCopper}
-                  onChange={(e) => setVisibleLayers({ ...visibleLayers, bottomCopper: e.target.checked })}
-                  className="rounded accent-blue-500 w-3 h-3"
-                />
-                <span>B.Cu (Bot)</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-slate-200 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.silkscreen}
-                  onChange={(e) => setVisibleLayers({ ...visibleLayers, silkscreen: e.target.checked })}
-                  className="rounded accent-slate-400 w-3 h-3"
-                />
-                <span>F.SilkS</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-amber-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.drillHoles}
-                  onChange={(e) => setVisibleLayers({ ...visibleLayers, drillHoles: e.target.checked })}
-                  className="rounded accent-amber-500 w-3 h-3"
-                />
-                <span>Pads / Vias</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-yellow-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.ratsnest}
-                  onChange={(e) => setVisibleLayers({ ...visibleLayers, ratsnest: e.target.checked })}
-                  className="rounded accent-yellow-500 w-3 h-3"
-                />
-                <span>Airwires</span>
-              </label>
-              <label className="flex items-center gap-1.5 text-emerald-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={visibleLayers.copperPour}
-                  onChange={(e) => {
-                    const next = e.target.checked;
-                    setVisibleLayers({ ...visibleLayers, copperPour: next });
-                    if (!next) setGndPourLayer('off');
-                    else if (gndPourLayer === 'off') setGndPourLayer('bottom_copper');
-                  }}
-                  className="rounded accent-emerald-500 w-3 h-3"
-                />
-                <span>GND Pour</span>
-              </label>
-            </div>
-          </div>
-        )}
+          )}
 
           {/* Routing Guide Banner */}
           {routingStartPad && (
@@ -2323,6 +2417,21 @@ export function Pcb2dEditor({
 
               {/* DRC Violation Items */}
               <div className="flex-1 space-y-2">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">
+                    {drcViolations.length} Issue(s)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyDrcReport}
+                    className="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500 text-cyan-300 rounded text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Copy DRC diagnostic report in standard AI troubleshooting format"
+                  >
+                    <Copy className="w-3 h-3 text-cyan-400" />
+                    <span>Copy All (AI Format)</span>
+                  </button>
+                </div>
+
                 {drcViolations.length === 0 ? (
                   <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded text-emerald-400 text-[11px] space-y-1">
                     <p className="font-bold">✓ Zero DRC Violations Found</p>
@@ -2334,13 +2443,7 @@ export function Pcb2dEditor({
                   drcViolations.map((v) => (
                     <div
                       key={v.id}
-                      onClick={() => {
-                        if (v.location) {
-                          setHighlightLocation(v.location);
-                          toast.info(`Focused on ${v.rule}`);
-                        }
-                      }}
-                      className="p-2 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/60 rounded text-[11px] cursor-pointer transition-colors space-y-1"
+                      className="p-2 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/60 rounded text-[11px] transition-colors space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
                         <span
@@ -2352,14 +2455,37 @@ export function Pcb2dEditor({
                         >
                           {v.rule.replace('_', ' ')}
                         </span>
-                        {v.location && (
-                          <span className="text-[9px] text-cyan-400 flex items-center gap-0.5">
-                            <Crosshair className="w-2.5 h-2.5" />
-                            {v.location.x.toFixed(1)}, {v.location.y.toFixed(1)}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {v.location && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHighlightLocation(v.location!);
+                                toast.info(`Focused on ${v.rule}`);
+                              }}
+                              className="text-[9px] text-cyan-400 hover:text-cyan-200 flex items-center gap-0.5 cursor-pointer"
+                              title="Focus view on coordinates"
+                            >
+                              <Crosshair className="w-2.5 h-2.5" />
+                              {v.location.x.toFixed(1)}, {v.location.y.toFixed(1)}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopySingleViolation(v);
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 cursor-pointer"
+                            title="Copy this DRC issue"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-slate-300 text-[10px]">{v.message}</p>
+                      <p className="text-slate-300 text-[10px] font-mono select-text cursor-text leading-relaxed">
+                        {v.message}
+                      </p>
                     </div>
                   ))
                 )}
@@ -2499,6 +2625,79 @@ export function Pcb2dEditor({
                 Selected Element Inspector
               </div>
 
+              {/* Silkscreen Text Selected */}
+              {selectedText && (
+                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200 flex items-center gap-1">
+                      <Type className="w-3.5 h-3.5 text-cyan-400" />
+                      Silkscreen Text
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">{selectedText.id}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Text String:</label>
+                    <input
+                      type="text"
+                      value={selectedText.text}
+                      onChange={(e) => handleUpdateSelectedText({ text: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono text-xs focus:border-cyan-500 focus:outline-hidden"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Font Size (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1.0"
+                      max="12.0"
+                      value={selectedText.fontSizeMm}
+                      onChange={(e) => handleUpdateSelectedText({ fontSizeMm: Math.max(1, parseFloat(e.target.value) || 2.0) })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Layer:</label>
+                    <select
+                      value={selectedText.layer}
+                      onChange={(e) => handleUpdateSelectedText({ layer: e.target.value as 'F.SilkS' | 'B.SilkS' })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 font-mono text-xs cursor-pointer"
+                    >
+                      <option value="F.SilkS">F.SilkS (Top Silkscreen)</option>
+                      <option value="B.SilkS">B.SilkS (Bottom Silkscreen)</option>
+                    </select>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Position:</span>
+                    <span className="font-mono text-cyan-400">
+                      ({selectedText.xMm.toFixed(1)}, {selectedText.yMm.toFixed(1)}) mm
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Rotation:</span>
+                    <span className="font-mono text-cyan-400">{selectedText.rotation || 0}°</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleRotateSelectedText}
+                      className="flex-1 py-1 bg-blue-950 hover:bg-blue-900 text-blue-300 border border-blue-800 rounded font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Rotate 90° [R]</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedText}
+                      className="flex-1 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 rounded font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Track Selected */}
               {selectedTrack && (
                 <div className="p-2.5 bg-slate-950 border border-slate-800 rounded space-y-2">
@@ -2614,9 +2813,9 @@ export function Pcb2dEditor({
                 </div>
               )}
 
-              {!selectedTrack && !selectedPad && !selectedComp && (
+              {!selectedTrack && !selectedPad && !selectedComp && !selectedText && (
                 <div className="p-4 text-center text-slate-500 space-y-1">
-                  <p>Click on any copper track, pad, via, or footprint on the canvas to inspect and edit its parameters.</p>
+                  <p>Click on any copper track, pad, via, footprint, or silkscreen text on the canvas to inspect and edit its parameters.</p>
                 </div>
               )}
             </div>

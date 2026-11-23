@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
   EngineeringProject,
@@ -197,7 +197,13 @@ export function EngineeringLabApp() {
         );
         const pcbComps = prev.pcb?.components || [];
         if (pcbComps.length === 0 || pcbComps.length !== schematicRealComps.length) {
-          const updatedPcb = PcbGenerator.generatePcbFromSchematic(prev.components, prev.wires);
+          const updatedPcb = PcbGenerator.generatePcbFromSchematic(
+            prev.components,
+            prev.wires,
+            prev.pcb?.widthMm || 80,
+            prev.pcb?.heightMm || 60,
+            prev.pcb
+          );
           return { ...prev, pcb: updatedPcb };
         }
         return prev;
@@ -722,14 +728,35 @@ export function EngineeringLabApp() {
     return () => cancelAnimationFrame(animId);
   }, [isSimulating, project.components, project.wires, project.instruments, handleResetFaults]);
 
-  // Sync PCB whenever components or wires change ONLY when active mode is 2D or 3D PCB
+  // Schematic topology signature to only trigger PCB re-sync when schematic netlist truly changes
+  const lastSchematicSigRef = useRef<string>('');
+  const currentSchematicSig = useMemo(() => {
+    const cSig = project.components.map((c) => `${c.id}:${c.type}:${c.x}:${c.y}`).join(';');
+    const wSig = project.wires.map((w) => `${w.id}:${w.fromCompId}:${w.fromPinId}-${w.toCompId}:${w.toPinId}`).join(';');
+    return `${cSig}#${wSig}`;
+  }, [project.components, project.wires]);
+
   useEffect(() => {
-    if (activeMode !== 'pcb2d' && activeMode !== 'pcb3d') {
+    if (lastSchematicSigRef.current === '') {
+      lastSchematicSigRef.current = currentSchematicSig;
       return;
     }
-    const updatedPcb = PcbGenerator.generatePcbFromSchematic(project.components, project.wires);
-    setProject((prev) => ({ ...prev, pcb: updatedPcb }));
-  }, [activeMode, project.components, project.wires]);
+    if (lastSchematicSigRef.current === currentSchematicSig) {
+      return;
+    }
+    lastSchematicSigRef.current = currentSchematicSig;
+
+    setProject((prev) => {
+      const updatedPcb = PcbGenerator.generatePcbFromSchematic(
+        prev.components,
+        prev.wires,
+        prev.pcb?.widthMm || 80,
+        prev.pcb?.heightMm || 60,
+        prev.pcb
+      );
+      return { ...prev, pcb: updatedPcb };
+    });
+  }, [currentSchematicSig]);
 
   // ----------------------------------------------------------------
   // Component Actions

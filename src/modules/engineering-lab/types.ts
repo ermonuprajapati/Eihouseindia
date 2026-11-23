@@ -383,6 +383,16 @@ export interface PcbComponentPlacement {
   parameters?: Record<string, unknown>;
 }
 
+export interface PcbSilkscreenText {
+  id: string;
+  text: string;
+  xMm: number;
+  yMm: number;
+  fontSizeMm: number;
+  layer: 'F.SilkS' | 'B.SilkS';
+  rotation?: number;
+}
+
 export interface PcbLayout {
   widthMm: number;
   heightMm: number;
@@ -396,6 +406,7 @@ export interface PcbLayout {
   tracks: PcbTrack[];
   pads: PcbPad[];
   components?: PcbComponentPlacement[];
+  texts?: PcbSilkscreenText[];
   drcErrors: { id: string; message: string; severity: 'error' | 'warning' }[];
 }
 
