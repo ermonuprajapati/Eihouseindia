@@ -7,6 +7,7 @@ import {
   PcbPad,
   CircuitComponent,
   CircuitWire,
+  PhysicalSpec,
 } from '@/modules/engineering-lab/types';
 import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/pcb-engine/autorouter';
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
@@ -88,6 +89,12 @@ export function Pcb2dEditor({
   // Board dimensions
   const [boardWidth, setBoardWidth] = useState(pcb.widthMm);
   const [boardHeight, setBoardHeight] = useState(pcb.heightMm);
+
+  // Synchronize board dimensions when auto-sized from schematic placement
+  useEffect(() => {
+    setBoardWidth(pcb.widthMm);
+    setBoardHeight(pcb.heightMm);
+  }, [pcb.widthMm, pcb.heightMm]);
 
   // Active routing / editing layer
   const [activeLayer, setActiveLayer] = useState<'top_copper' | 'bottom_copper'>('top_copper');
@@ -765,10 +772,51 @@ export function Pcb2dEditor({
             x: 0,
             y: 0,
             rotation: comp.rotation || 0,
+            physicalSpec: (comp as unknown as { physicalSpec?: PhysicalSpec }).physicalSpec,
           });
 
           // Draw authentic IPC-7351 EDA silkscreen symbols
-          if (layout.outlineType === 'electrolytic_cap') {
+          if (layout.outlineType === 'rgb_led') {
+            const r = 4.0 * scale;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+            const pins = [-3.81, -1.27, 1.27, 3.81];
+            const labels = ['R', 'C', 'G', 'B'];
+            pins.forEach((px, i) => {
+              const sx = (px / 2.54) * 2.5 * scale;
+              ctx.beginPath();
+              ctx.arc(sx, 0, 1.0 * scale, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.font = 'bold 7px sans-serif';
+              ctx.fillText(labels[i], sx - 2, -2.2 * scale);
+            });
+            ctx.font = 'bold 8px monospace';
+          } else if (layout.outlineType === 'dev_board' && layout.boxBounds) {
+            const bb = layout.boxBounds;
+            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            // Draw USB port indicator along left edge
+            ctx.strokeRect(bb.x * scale, -5 * scale, 8 * scale, 10 * scale);
+            // Silkscreen board label inside boundary
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText(comp.designator, (bb.x + 10) * scale, 3 * scale);
+          } else if (layout.outlineType === 'transistor_to220' && layout.boxBounds) {
+            const bb = layout.boxBounds;
+            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            // Metal heat-sink tab line and mounting hole
+            ctx.beginPath();
+            ctx.moveTo(bb.x * scale, (bb.y + 1.5) * scale);
+            ctx.lineTo((bb.x + bb.width) * scale, (bb.y + 1.5) * scale);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(0, (bb.y + 1.5) * scale, 1.4 * scale, 0, Math.PI * 2);
+            ctx.stroke();
+          } else if (layout.outlineType === 'module' && layout.boxBounds) {
+            const bb = layout.boxBounds;
+            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText(comp.designator, (bb.x + 3) * scale, 0);
+          } else if (layout.outlineType === 'electrolytic_cap') {
             const r = (layout.radius || 4.2) * scale;
             // Circular outline
             ctx.beginPath();

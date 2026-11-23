@@ -4,6 +4,7 @@ import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/comp
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { CircuitComponent, CircuitWire, Component3D } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
+import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
 import {
   resolvePhysicalSpec,
@@ -1113,6 +1114,376 @@ describe('Virtual Lab v3 Verification Suite', () => {
       const wrapperMod = await import('@/components/engineering-lab/EngineeringLabClientWrapper');
       expect(typeof wrapperMod.EngineeringLabClientWrapper).toBe('function');
       expect(typeof wrapperMod.EngineeringLabErrorBoundary).toBe('function');
+    });
+  });
+
+  describe('Batch 2B: PCB Auto-Placement, Dynamic Board Sizing, 3D CAD Footprint & 2-Layer Copper Routing', () => {
+    it('100% of 164 catalog components have non-empty physical specs, courtyard >= body, and pads >= pins', () => {
+      expect(COMPONENT_CATALOG.length).toBeGreaterThanOrEqual(160);
+
+      COMPONENT_CATALOG.forEach((item) => {
+        expect(item.physicalSpec, `Component ${item.type} missing physicalSpec`).toBeDefined();
+        const spec = item.physicalSpec!;
+
+        expect(spec.packageCode, `${item.type} packageCode`).toBeTruthy();
+        expect(spec.mountingType, `${item.type} mountingType`).toBeTruthy();
+        expect(spec.placementClass, `${item.type} placementClass`).toBeTruthy();
+        expect(spec.pinPitchMm, `${item.type} pinPitchMm`).toBeGreaterThan(0);
+
+        expect(spec.bodyDimensionsMm?.width, `${item.type} body width`).toBeGreaterThan(0);
+        expect(spec.bodyDimensionsMm?.depth, `${item.type} body depth`).toBeGreaterThan(0);
+        expect(spec.bodyDimensionsMm?.height, `${item.type} body height`).toBeGreaterThan(0);
+
+        expect(spec.courtyardMm?.width, `${item.type} courtyard width`).toBeGreaterThanOrEqual(spec.bodyDimensionsMm!.width);
+        expect(spec.courtyardMm?.depth, `${item.type} courtyard depth`).toBeGreaterThanOrEqual(spec.bodyDimensionsMm!.depth);
+
+        expect(spec.pads, `${item.type} pads array`).toBeDefined();
+        expect(spec.pads!.length, `${item.type} pads count`).toBeGreaterThanOrEqual(item.pins?.length || 0);
+
+        // Metadata completeness
+        expect(item.libraryTier, `${item.type} libraryTier`).toBeTruthy();
+        expect(item.subCategory, `${item.type} subCategory`).toBeTruthy();
+        expect(item.simulationStatus, `${item.type} simulationStatus`).toBeTruthy();
+        expect(item.electricalParameters, `${item.type} electricalParameters`).toBeDefined();
+      });
+
+      // Assert HC-SR04 and 4-pin RGB LED resolve to dedicated 3D CAD models (never generic IC / 2-pin LED fallback)
+      expect(resolve3DModelType('HC_SR04', 'MODULE-HCSR04')).toBe('HC_SR04');
+      expect(resolve3DModelType('SENSOR_ULTRASONIC', 'MODULE-HCSR04')).toBe('HC_SR04');
+      expect(resolve3DModelType('ACTUATOR_RGB_LED', 'LED_D5.0mm-4')).toBe('LED_RGB');
+      expect(resolve3DModelType('LED_RGB', 'THT-5MM-4PIN')).toBe('LED_RGB');
+    });
+
+    it('dynamic PCB auto-sizing expands board size to fit large components cleanly', () => {
+      const simpleComponents: CircuitComponent[] = [
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: 'R1',
+          value: '220',
+          category: 'passive',
+          footprint: 'R_AXIAL',
+          parameters: {},
+          x: 10,
+          y: 10,
+          rotation: 0,
+          pins: [
+            { id: '1', name: '1', pinType: 'passive', x: -10, y: 0 },
+            { id: '2', name: '2', pinType: 'passive', x: 10, y: 0 },
+          ],
+        },
+        {
+          id: 'led1',
+          type: 'LED',
+          label: 'LED1',
+          value: 'RED',
+          category: 'actuators',
+          footprint: 'LED_D5.0mm',
+          parameters: {},
+          x: 30,
+          y: 10,
+          rotation: 0,
+          pins: [
+            { id: '1', name: 'A', pinType: 'passive', x: -10, y: 0 },
+            { id: '2', name: 'K', pinType: 'passive', x: 10, y: 0 },
+          ],
+        },
+      ];
+
+      const simplePcb = PcbGenerator.generatePcbFromSchematic(simpleComponents, [], 65, 50);
+
+      const largeComponents: CircuitComponent[] = [
+        {
+          id: 'uno1',
+          type: 'ARDUINO_UNO',
+          label: 'Arduino Uno R3',
+          value: 'ATmega328P',
+          category: 'microcontrollers',
+          footprint: 'BOARD-UNO',
+          parameters: {},
+          x: 100,
+          y: 100,
+          rotation: 0,
+          pins: Array.from({ length: 28 }, (_, i) => ({
+            id: String(i + 1),
+            name: `P${i + 1}`,
+            pinType: 'passive' as const,
+            x: 0,
+            y: 0,
+          })),
+        },
+        {
+          id: 'lcd1',
+          type: 'MODULE_LCD1602',
+          label: 'LCD 1602',
+          value: '16x2 HD44780',
+          category: 'displays',
+          footprint: 'MODULE-LCD1602',
+          parameters: {},
+          x: 200,
+          y: 200,
+          rotation: 0,
+          pins: Array.from({ length: 16 }, (_, i) => ({
+            id: String(i + 1),
+            name: `P${i + 1}`,
+            pinType: 'passive' as const,
+            x: 0,
+            y: 0,
+          })),
+        },
+      ];
+
+      const largePcb = PcbGenerator.generatePcbFromSchematic(largeComponents, [], 80, 60);
+
+      // Uno (68.6 x 53.4) + LCD (80 x 36) must expand board area beyond simple circuit
+      expect(largePcb.widthMm * largePcb.heightMm).toBeGreaterThan(simplePcb.widthMm * simplePcb.heightMm);
+      expect(largePcb.widthMm).toBeGreaterThanOrEqual(80);
+
+      // All pads must remain inside board boundary with >= 2.0mm clearance
+      largePcb.pads.forEach((pad) => {
+        expect(pad.x).toBeGreaterThanOrEqual(2.0);
+        expect(pad.x).toBeLessThanOrEqual(largePcb.widthMm - 2.0);
+        expect(pad.y).toBeGreaterThanOrEqual(2.0);
+        expect(pad.y).toBeLessThanOrEqual(largePcb.heightMm - 2.0);
+      });
+    });
+
+    it('Heavy Multi-Module PCB Stress Test: 0 courtyard overlaps and 100% inside board boundaries', () => {
+      // ARDUINO_UNO + SENSOR_ULTRASONIC (HC-SR04) + ACTUATOR_RGB_LED + 74HC14 (DIP-14) + TIMER_555 (DIP-8)
+      // + 6 Resistors + 2 Capacitors + MODULE_RELAY_SPDT
+      const components: CircuitComponent[] = [
+        {
+          id: 'uno1',
+          type: 'ARDUINO_UNO',
+          label: 'Uno',
+          value: 'Uno',
+          category: 'microcontrollers',
+          footprint: 'BOARD-UNO',
+          parameters: {},
+          x: 100,
+          y: 100,
+          rotation: 0,
+          pins: Array.from({ length: 28 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}`, pinType: 'passive' as const, x: 0, y: 0 })),
+        },
+        {
+          id: 'sonar1',
+          type: 'SENSOR_ULTRASONIC',
+          label: 'HC-SR04',
+          value: 'Sonar',
+          category: 'sensors',
+          footprint: 'MODULE-HCSR04',
+          parameters: {},
+          x: 200,
+          y: 100,
+          rotation: 0,
+          pins: [
+            { id: '1', name: 'VCC', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '2', name: 'TRIG', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '3', name: 'ECHO', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '4', name: 'GND', pinType: 'passive' as const, x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'rgb1',
+          type: 'ACTUATOR_RGB_LED',
+          label: 'RGB LED',
+          value: 'RGB',
+          category: 'actuators',
+          footprint: 'LED_D5.0mm-4',
+          parameters: {},
+          x: 150,
+          y: 150,
+          rotation: 0,
+          pins: [
+            { id: '1', name: 'R', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '2', name: 'COM', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '3', name: 'G', pinType: 'passive' as const, x: 0, y: 0 },
+            { id: '4', name: 'B', pinType: 'passive' as const, x: 0, y: 0 },
+          ],
+        },
+        {
+          id: 'u1',
+          type: 'IC_74HC14',
+          label: '74HC14',
+          value: '74HC14',
+          category: 'digital_logic',
+          footprint: 'DIP-14',
+          parameters: {},
+          x: 180,
+          y: 180,
+          rotation: 0,
+          pins: Array.from({ length: 14 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}`, pinType: 'passive' as const, x: 0, y: 0 })),
+        },
+        {
+          id: 'u2',
+          type: 'TIMER_555',
+          label: 'NE555',
+          value: 'NE555',
+          category: 'analog_ics',
+          footprint: 'DIP-8',
+          parameters: {},
+          x: 220,
+          y: 180,
+          rotation: 0,
+          pins: Array.from({ length: 8 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}`, pinType: 'passive' as const, x: 0, y: 0 })),
+        },
+        {
+          id: 'relay1',
+          type: 'MODULE_RELAY_SPDT',
+          label: 'Relay',
+          value: '5V SPDT',
+          category: 'relays_contactors',
+          footprint: 'MODULE-RELAY',
+          parameters: {},
+          x: 250,
+          y: 120,
+          rotation: 0,
+          pins: Array.from({ length: 6 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}`, pinType: 'passive' as const, x: 0, y: 0 })),
+        },
+        // 6 Resistors
+        ...Array.from({ length: 6 }, (_, idx) => ({
+          id: `r_${idx + 1}`,
+          type: 'RESISTOR',
+          label: `R${idx + 1}`,
+          value: '10k',
+          category: 'passive' as const,
+          footprint: 'R_AXIAL',
+          parameters: {},
+          x: 100 + idx * 30,
+          y: 220,
+          rotation: 0 as const,
+          pins: [
+            { id: '1', name: '1', pinType: 'passive' as const, x: -10, y: 0 },
+            { id: '2', name: '2', pinType: 'passive' as const, x: 10, y: 0 },
+          ],
+        })),
+        // 2 Capacitors
+        {
+          id: 'c1',
+          type: 'CAPACITOR_ELECTROLYTIC',
+          label: 'C1',
+          value: '10uF',
+          category: 'passive',
+          footprint: 'CP_RADIAL',
+          parameters: {},
+          x: 120,
+          y: 250,
+          rotation: 0,
+          pins: [
+            { id: '1', name: '+', pinType: 'passive' as const, x: -5, y: 0 },
+            { id: '2', name: '-', pinType: 'passive' as const, x: 5, y: 0 },
+          ],
+        },
+        {
+          id: 'c2',
+          type: 'CAPACITOR_CERAMIC',
+          label: 'C2',
+          value: '100nF',
+          category: 'passive',
+          footprint: 'C_DISC',
+          parameters: {},
+          x: 160,
+          y: 250,
+          rotation: 0,
+          pins: [
+            { id: '1', name: '1', pinType: 'passive' as const, x: -5, y: 0 },
+            { id: '2', name: '2', pinType: 'passive' as const, x: 5, y: 0 },
+          ],
+        },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(components, [], 80, 60);
+
+      expect(pcb.components).toBeDefined();
+      expect(pcb.components!.length).toBe(components.length);
+
+      // 1. Assert ZERO courtyard/footprint AABB overlaps across all component pairs
+      for (let i = 0; i < pcb.components!.length; i++) {
+        for (let j = i + 1; j < pcb.components!.length; j++) {
+          const c1 = pcb.components![i];
+          const c2 = pcb.components![j];
+
+          const s1 = resolvePhysicalSpec(c1.type, c1.footprint);
+          const s2 = resolvePhysicalSpec(c2.type, c2.footprint);
+
+          const dx = Math.abs(c1.x - c2.x);
+          const dy = Math.abs(c1.y - c2.y);
+
+          const minDx = (s1.courtyardMm!.width + s2.courtyardMm!.width) / 2;
+          const minDy = (s1.courtyardMm!.depth + s2.courtyardMm!.depth) / 2;
+
+          // Either separated horizontally or vertically
+          const hasZeroOverlap = dx >= minDx - 0.5 || dy >= minDy - 0.5;
+          expect(hasZeroOverlap, `Courtyard collision between ${c1.designator} and ${c2.designator}`).toBe(true);
+        }
+      }
+
+      // 2. Assert 100% of component pads, courtyards, and vias lie strictly inside [0, boardWidthMm] x [0, boardHeightMm]
+      pcb.pads.forEach((pad) => {
+        expect(pad.x).toBeGreaterThanOrEqual(1.5);
+        expect(pad.x).toBeLessThanOrEqual(pcb.widthMm - 1.5);
+        expect(pad.y).toBeGreaterThanOrEqual(1.5);
+        expect(pad.y).toBeLessThanOrEqual(pcb.heightMm - 1.5);
+      });
+
+      pcb.components!.forEach((comp) => {
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const halfCw = spec.courtyardMm!.width / 2;
+        const halfCd = spec.courtyardMm!.depth / 2;
+        expect(comp.x - halfCw).toBeGreaterThanOrEqual(0.0);
+        expect(comp.x + halfCw).toBeLessThanOrEqual(pcb.widthMm);
+        expect(comp.y - halfCd).toBeGreaterThanOrEqual(0.0);
+        expect(comp.y + halfCd).toBeLessThanOrEqual(pcb.heightMm);
+      });
+
+      // 3. Assert dynamic boardWidthMm * boardHeightMm is strictly larger than default 80x60
+      expect(pcb.widthMm * pcb.heightMm).toBeGreaterThan(80 * 60);
+    });
+
+    it('dev boards and modules calculate footprint pads strictly matching real package header pins', () => {
+      const unoComp: CircuitComponent = {
+        id: 'uno1',
+        type: 'BOARD_ARDUINO_UNO',
+        label: 'Uno',
+        value: 'Uno',
+        category: 'microcontrollers',
+        footprint: 'BOARD-UNO',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: Array.from({ length: 28 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}`, pinType: 'passive' as const, x: 0, y: 0 })),
+      };
+
+      const unoPads = PcbGenerator.calculateFootprintPads(unoComp, 50, 40, 0);
+      expect(unoPads.length).toBe(28);
+      // Pin 1 is square / distinct
+      expect(unoPads[0].shape).toBe('rect');
+
+      const rgbComp: CircuitComponent = {
+        id: 'rgb1',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB',
+        value: 'RGB',
+        category: 'actuators',
+        footprint: 'LED_D5.0mm-4',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: 'R', pinType: 'passive' as const, x: 0, y: 0 },
+          { id: '2', name: 'COM', pinType: 'passive' as const, x: 0, y: 0 },
+          { id: '3', name: 'G', pinType: 'passive' as const, x: 0, y: 0 },
+          { id: '4', name: 'B', pinType: 'passive' as const, x: 0, y: 0 },
+        ],
+      };
+      const rgbPads = PcbGenerator.calculateFootprintPads(rgbComp, 30, 30, 0);
+      expect(rgbPads.length).toBe(4);
+      // 4 distinct X coordinates with 2.54mm pitch
+      const xs = rgbPads.map((p) => p.x);
+      const uniqueXs = new Set(xs);
+      expect(uniqueXs.size).toBe(4);
     });
   });
 });

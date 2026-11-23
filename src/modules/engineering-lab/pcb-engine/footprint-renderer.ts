@@ -27,8 +27,12 @@ export interface SilkscreenLabelLayout {
     | 'electrolytic_cap'
     | 'ceramic_cap'
     | 'led'
+    | 'rgb_led'
     | 'transistor'
-    | 'header';
+    | 'transistor_to220'
+    | 'header'
+    | 'dev_board'
+    | 'module';
   boxBounds?: { x: number; y: number; width: number; height: number };
   radius?: number;
 }
@@ -47,13 +51,57 @@ export class FootprintRenderer {
     if (spec.physicalSpec?.courtyardMm && spec.physicalSpec.courtyardMm.width > 0) {
       const cw = spec.physicalSpec.courtyardMm.width;
       const cd = spec.physicalSpec.courtyardMm.depth;
-      const isDip = upperType.includes('DIP') || upperType.includes('555') || upperType.includes('ATMEGA') || spec.physicalSpec.placementClass === 'ic-dip';
+      const isDevBoard =
+        upperType.includes('ARDUINO') ||
+        upperType.includes('ESP32') ||
+        upperType.includes('PICO') ||
+        upperType.includes('DEVBOARD') ||
+        spec.physicalSpec.placementClass === 'dev-board';
+      const isRgbLed = upperType.includes('RGB') || upperType === 'ACTUATOR_RGB_LED';
+      const isTo220 =
+        upperType.includes('7805') ||
+        upperType.includes('IRLZ44N') ||
+        upperType.includes('IRF') ||
+        spec.physicalSpec.packageCode === 'TO-220';
+      const isDip =
+        upperType.includes('DIP') ||
+        upperType.includes('555') ||
+        upperType.includes('ATMEGA') ||
+        upperType.includes('74HC') ||
+        spec.physicalSpec.placementClass === 'ic-dip';
       const isAxial = upperType.includes('RESISTOR') || upperType.includes('DIODE') || upperType.includes('INDUCTOR');
-      const isLed = upperType.includes('LED') && !upperType.includes('RGB');
-      const isTransistor = upperType.includes('TRANSISTOR') || upperType.includes('BJT') || upperType.includes('MOSFET');
-      const isHeader = upperType.includes('HEADER') || upperType.includes('TERMINAL') || upperType.includes('MODULE') || upperType.includes('RGB');
+      const isLed = upperType.includes('LED') && !isRgbLed;
+      const isTransistor =
+        (upperType.includes('TRANSISTOR') || upperType.includes('BJT') || upperType.includes('MOSFET')) && !isTo220;
+      const isModule =
+        upperType.includes('SR04') ||
+        upperType.includes('LCD') ||
+        upperType.includes('OLED') ||
+        upperType.includes('SERVO') ||
+        upperType.includes('HC05') ||
+        spec.physicalSpec.placementClass === 'module-breadboard';
+      const isHeader =
+        upperType.includes('HEADER') || upperType.includes('TERMINAL') || upperType.includes('BATTERY');
 
-      const outlineType = isDip ? 'dip' : isAxial ? 'axial_resistor' : isLed ? 'led' : isTransistor ? 'transistor' : isHeader ? 'header' : 'box';
+      const outlineType = isDevBoard
+        ? 'dev_board'
+        : isRgbLed
+        ? 'rgb_led'
+        : isTo220
+        ? 'transistor_to220'
+        : isDip
+        ? 'dip'
+        : isAxial
+        ? 'axial_resistor'
+        : isLed
+        ? 'led'
+        : isTransistor
+        ? 'transistor'
+        : isModule
+        ? 'module'
+        : isHeader
+        ? 'header'
+        : 'box';
 
       return {
         designatorText: designator,

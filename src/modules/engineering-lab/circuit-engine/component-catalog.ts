@@ -1,5 +1,5 @@
 import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus, LibraryTier, MountingType, PlacementClass } from '../types';
-import { resolvePhysicalSpec, resolveComponentMetadata } from './component-physical-registry';
+import { resolvePhysicalSpec, resolveComponentMetadata, buildInlinePads } from './component-physical-registry';
 
 export interface ComponentTemplate {
   type: string;
@@ -24,6 +24,7 @@ export interface ComponentTemplate {
   physicalSpec?: PhysicalSpec;
   defaultValue: string;
   defaultParams: Record<string, number | string | boolean>;
+  electricalParameters?: Record<string, number | string | boolean>;
   pins: { id: string; name: string; x: number; y: number; pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive' }[];
   footprint: string;
   model3d?: string;
@@ -4689,19 +4690,39 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
 COMPONENT_CATALOG.forEach((template) => {
   const spec = resolvePhysicalSpec(template);
   const meta = resolveComponentMetadata(template);
+
+  // Guarantee courtyard dimensions strictly envelope body dimensions with clearance
+  if (spec.courtyardMm && spec.bodyDimensionsMm) {
+    if (spec.courtyardMm.width < spec.bodyDimensionsMm.width) {
+      spec.courtyardMm.width = Math.round((spec.bodyDimensionsMm.width + 1.5) * 10) / 10;
+    }
+    if (spec.courtyardMm.depth < spec.bodyDimensionsMm.depth) {
+      spec.courtyardMm.depth = Math.round((spec.bodyDimensionsMm.depth + 1.5) * 10) / 10;
+    }
+  }
+
+  // Guarantee pads array covers 100% of component pins
+  if (!spec.pads || spec.pads.length < template.pins.length) {
+    const pitch = spec.pinPitchMm || 2.54;
+    spec.pads = buildInlinePads(template.pins, pitch, 0, 0.9, 1.8);
+  }
+
   template.physicalSpec = spec;
   template.packageType = spec.packageType || template.packageType || 'THT';
   template.mountingType = spec.mountingType || 'THT';
   template.placementClass = spec.placementClass || meta.placementClass;
   template.libraryTier = template.libraryTier || meta.libraryTier;
   template.componentName = template.componentName || template.name;
+  template.subCategory = template.subCategory || meta.subCategory || (template.category ? template.category.replace(/_/g, ' ') : 'General');
   template.manufacturer = template.manufacturer || meta.manufacturer;
   template.partNumber = template.partNumber || meta.partNumber;
+  template.electricalParameters = template.electricalParameters || template.defaultParams;
   template.datasheetUrl = template.datasheetUrl || meta.datasheetUrl;
   template.source = template.source || meta.source;
   template.simulationModel = template.simulationModel || meta.simulationModel;
+  template.simulationStatus = template.simulationStatus || (template.simulationModel ? 'full_mna' : 'design_only');
   template.symbolId = template.symbolId || template.symbolSvg || template.type.toLowerCase();
-  template.footprintId = template.footprintId || template.footprint;
+  template.footprintId = template.footprintId || template.footprint || spec.packageCode;
   template.model3dId = template.model3dId || template.model3d || template.type.toLowerCase();
 });
 

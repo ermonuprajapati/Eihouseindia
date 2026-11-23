@@ -9,6 +9,7 @@ import { Box, Layers, Hand } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
+import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
 
 export interface SolderMaskTheme {
   name: string;
@@ -420,6 +421,44 @@ export function Pcb3dViewer({
         ctx.fillText('1', -bLen / 2 + 1.8 * scale, -bWid / 2 + 3.4 * scale);
         ctx.fillText(comp.designator, -10, 2);
       } else if (
+        upperType.includes('UNO') ||
+        upperType.includes('NANO') ||
+        upperType.includes('MEGA') ||
+        upperType.includes('ESP32') ||
+        upperType.includes('PICO') ||
+        comp.footprint?.includes('BOARD')
+      ) {
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 68.6) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 53.4) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        // USB port indicator at top-left edge
+        ctx.strokeRect(-bw / 2, -5 * scale, 9 * scale, 10 * scale);
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(comp.designator, -bw / 2 + 12 * scale, 3 * scale);
+      } else if (
+        upperType.includes('MODULE') ||
+        upperType.includes('LCD1602') ||
+        upperType.includes('OLED') ||
+        upperType.includes('SERVO')
+      ) {
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 30) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 20) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(comp.designator, -bw / 2 + 4 * scale, 2 * scale);
+      } else if (upperType.includes('TO220') || upperType.includes('IRLZ44N') || upperType.includes('7805')) {
+        const bw = 10.4 * scale;
+        const bh = 4.6 * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.beginPath();
+        ctx.moveTo(-bw / 2, -bh / 2 + 1.2 * scale);
+        ctx.lineTo(bw / 2, -bh / 2 + 1.2 * scale);
+        ctx.stroke();
+        ctx.font = 'bold 9px monospace';
+        ctx.fillText(comp.designator, -bw / 2, bh / 2 + 7 * scale);
+      } else if (
         upperType.includes('HEADER') ||
         upperType.includes('CONNECTOR') ||
         upperType.includes('TERMINAL') ||
@@ -435,8 +474,11 @@ export function Pcb3dViewer({
         ctx.font = 'bold 13px monospace';
         ctx.fillText(comp.designator, -12, -5.5 * scale);
       } else {
-        ctx.strokeRect(-5 * scale, -5 * scale, 10 * scale, 10 * scale);
-        ctx.fillText(comp.designator, -12, -7 * scale);
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 10) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 8) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.fillText(comp.designator, -bw / 2, -bh / 2 - 2 * scale);
       }
       ctx.restore();
     });
