@@ -393,10 +393,19 @@ export function Pcb3dViewer({
         ctx.lineTo(bw / 2 + 2.8 * scale, 0);
         ctx.stroke();
         ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (upperType.includes('IC') || upperType.includes('TIMER') || comp.footprint?.includes('DIP') || upperType.includes('555')) {
+      } else if (
+        upperType.includes('IC') ||
+        upperType.includes('TIMER') ||
+        comp.footprint?.includes('DIP') ||
+        upperType.includes('555') ||
+        upperType.includes('74HC') ||
+        upperType.includes('358') ||
+        upperType.includes('324')
+      ) {
         // DIP IC with Pin 1 notch and Pin 1 dot
-        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16');
-        const bLen = (isDip14Or16 ? 19.5 : 10.0) * scale;
+        const isDip28 = comp.footprint?.includes('DIP-28') || upperType.includes('ATMEGA');
+        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16') || upperType.includes('74HC') || upperType.includes('324') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293');
+        const bLen = (isDip28 ? 35.5 : isDip14Or16 ? 19.5 : 10.0) * scale;
         const bWid = 6.8 * scale;
         ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
         // Semicircular notch on the left (-X) side

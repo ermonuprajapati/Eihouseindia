@@ -1,4 +1,4 @@
-import { PhysicalSpec, PadSpec, LibraryTier, MountingType, PlacementClass } from '../types';
+import { PhysicalSpec, PadSpec, LibraryTier, PlacementClass } from '../types';
 
 /**
  * Physical Pad Generator Helpers
@@ -269,41 +269,38 @@ export function resolvePhysicalSpec(comp: {
 
   // 1D. LM358 Dual Operational Amplifier (DIP-8, Texas Instruments)
   // Verified Pinout: 1: OUT1, 2: IN1-, 3: IN1+, 4: GND, 5: IN2+, 6: IN2-, 7: OUT2, 8: VCC
-  if (upperType.includes('LM358') || upperType.includes('LM393') || upperType.includes('LM741') || upperType.includes('OPAMP')) {
-    const opampPadMap: Record<string, { x: number; y: number; num: number }> = {
-      out: { x: -3.81, y: -3.81, num: 1 },
-      out1: { x: -3.81, y: -3.81, num: 1 },
-      '1': { x: -3.81, y: -3.81, num: 1 },
-      in_neg: { x: -1.27, y: -3.81, num: 2 },
-      in1_neg: { x: -1.27, y: -3.81, num: 2 },
-      '2': { x: -1.27, y: -3.81, num: 2 },
-      in_pos: { x: 1.27, y: -3.81, num: 3 },
-      in1_pos: { x: 1.27, y: -3.81, num: 3 },
-      '3': { x: 1.27, y: -3.81, num: 3 },
-      vee: { x: 3.81, y: -3.81, num: 4 },
-      gnd: { x: 3.81, y: -3.81, num: 4 },
-      '4': { x: 3.81, y: -3.81, num: 4 },
-      in2_pos: { x: 3.81, y: 3.81, num: 5 },
-      '5': { x: 3.81, y: 3.81, num: 5 },
-      in2_neg: { x: 1.27, y: 3.81, num: 6 },
-      '6': { x: 1.27, y: 3.81, num: 6 },
-      out2: { x: -1.27, y: 3.81, num: 7 },
-      '7': { x: -1.27, y: 3.81, num: 7 },
-      vcc: { x: -3.81, y: 3.81, num: 8 },
-      '8': { x: -3.81, y: 3.81, num: 8 },
+  if (
+    (upperType.includes('LM358') || upperType.includes('LM393') || upperType.includes('LM741') || (upperType.includes('OPAMP') && !upperType.includes('324'))) &&
+    !upperFp.includes('DIP-14') &&
+    pins.length !== 14
+  ) {
+    const opampPinMap: Record<string, number> = {
+      out: 1, out1: 1, '1': 1,
+      in_neg: 2, in1_neg: 2, '2': 2,
+      in_pos: 3, in1_pos: 3, '3': 3,
+      vee: 4, gnd: 4, '4': 4,
+      in2_pos: 5, '5': 5,
+      in2_neg: 6, '6': 6,
+      out2: 7, '7': 7,
+      vcc: 8, '8': 8,
     };
+    if (upperType.includes('741')) {
+      opampPinMap['in_neg'] = 2;
+      opampPinMap['in_pos'] = 3;
+      opampPinMap['vee'] = 4;
+      opampPinMap['out'] = 6;
+      opampPinMap['vcc'] = 7;
+    }
 
-    const pads: PadSpec[] = pins.map((p) => {
-      const lowerId = p.id.toLowerCase();
-      const pos = opampPadMap[lowerId] || { x: 0, y: 0, num: 1 };
+    const dipPins = Array.from({ length: 8 }, (_, i) => {
+      const pinNum = i + 1;
+      const matched = pins.find((p) => {
+        const idLower = p.id.toLowerCase();
+        return opampPinMap[idLower] === pinNum || idLower === String(pinNum) || parseInt(p.id, 10) === pinNum;
+      });
       return {
-        pinId: p.id,
-        pinNumber: pos.num,
-        xMm: pos.x,
-        yMm: pos.y,
-        drillMm: 0.8,
-        padDiameterMm: 1.6,
-        shape: pos.num === 1 ? 'rect' : 'circle',
+        id: matched ? matched.id : String(pinNum),
+        num: pinNum,
       };
     });
 
@@ -316,7 +313,57 @@ export function resolvePhysicalSpec(comp: {
       dimensionsMm: { width: 9.8, height: 4.5, depth: 6.35 },
       bodyDimensionsMm: { width: 9.8, depth: 6.35, height: 4.5 },
       courtyardMm: { width: 11.0, depth: 8.5, margin: 0.5 },
-      pads,
+      pads: buildDipPads(dipPins, 8, 7.62, 2.54, 0.8, 1.6),
+    };
+  }
+
+  // 1D2. Real DIP-14 Logic & Op-Amp IC Packages (74HC14 Hex Schmitt, 74HC04, 74HC00, 74HC08, 74HC32, 74HC86, LM324)
+  if (
+    upperType.includes('74HC14') ||
+    upperType.includes('74HC04') ||
+    upperType.includes('74HC00') ||
+    upperType.includes('74HC08') ||
+    upperType.includes('74HC32') ||
+    upperType.includes('74HC86') ||
+    upperType.includes('LM324') ||
+    upperType.startsWith('IC_74HC') ||
+    (upperFp.includes('DIP-14') && pins.length === 14) ||
+    pins.length === 14
+  ) {
+    const dipPins = pins.length === 14 ? pins : Array.from({ length: 14 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}` }));
+    return {
+      packageType: 'THT',
+      packageCode: 'DIP-14',
+      mountingType: 'THT',
+      placementClass: 'ic-dip',
+      pinPitchMm: 2.54,
+      dimensionsMm: { width: 19.3, height: 4.5, depth: 6.35 },
+      bodyDimensionsMm: { width: 19.3, depth: 6.35, height: 4.5 },
+      courtyardMm: { width: 21.0, depth: 8.5, margin: 0.5 },
+      pads: buildDipPads(dipPins, 14, 7.62, 2.54, 0.8, 1.6),
+    };
+  }
+
+  // 1D3. Real DIP-16 IC Packages (74HC595, CD4017, ULN2003, L293D)
+  if (
+    upperType.includes('74HC595') ||
+    upperType.includes('CD4017') ||
+    upperType.includes('ULN2003') ||
+    upperType.includes('L293D') ||
+    upperFp.includes('DIP-16') ||
+    pins.length === 16
+  ) {
+    const dipPins = pins.length === 16 ? pins : Array.from({ length: 16 }, (_, i) => ({ id: String(i + 1), name: `P${i + 1}` }));
+    return {
+      packageType: 'THT',
+      packageCode: 'DIP-16',
+      mountingType: 'THT',
+      placementClass: 'ic-dip',
+      pinPitchMm: 2.54,
+      dimensionsMm: { width: 19.3, height: 4.5, depth: 6.35 },
+      bodyDimensionsMm: { width: 19.3, depth: 6.35, height: 4.5 },
+      courtyardMm: { width: 21.0, depth: 8.5, margin: 0.5 },
+      pads: buildDipPads(dipPins, 16, 7.62, 2.54, 0.8, 1.6),
     };
   }
 
@@ -895,10 +942,20 @@ export function resolveComponentMetadata(comp: {
     t.includes('OLED') ||
     t.includes('L298N') ||
     t.includes('SERVO') ||
-    t.includes('LOGIC_') ||
+    t.includes('74HC') ||
+    t.includes('CD4017') ||
+    t.includes('ULN2003') ||
+    t.includes('L293D') ||
+    t.includes('LM324') ||
+    t.startsWith('IC_') ||
     t.includes('RGB') ||
     n.includes('NE555') ||
     n.includes('LM358') ||
+    n.includes('LM324') ||
+    n.includes('74HC') ||
+    n.includes('CD4017') ||
+    n.includes('ULN2003') ||
+    n.includes('L293D') ||
     n.includes('IRF') ||
     n.includes('IRLZ')
   ) {
@@ -938,6 +995,54 @@ export function resolveComponentMetadata(comp: {
       mfr = 'Microchip Technology';
       partNum = 'ATMEGA328P-PU';
       dsUrl = 'https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7810-Automotive-Microcontrollers-ATmega328P_Datasheet.pdf';
+    } else if (t.includes('74HC14') || n.includes('74HC14')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC14N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc14.pdf';
+    } else if (t.includes('74HC04') || n.includes('74HC04')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC04N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc04.pdf';
+    } else if (t.includes('74HC00') || n.includes('74HC00')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC00N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc00.pdf';
+    } else if (t.includes('74HC08') || n.includes('74HC08')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC08N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc08.pdf';
+    } else if (t.includes('74HC32') || n.includes('74HC32')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC32N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc32.pdf';
+    } else if (t.includes('74HC86') || n.includes('74HC86')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = 'SN74HC86N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc86.pdf';
+    } else if (t.includes('LM324') || n.includes('LM324')) {
+      mfr = 'Texas Instruments';
+      partNum = 'LM324N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/lm324.pdf';
+    } else if (t.includes('74HC595') || n.includes('74HC595')) {
+      mfr = 'Texas Instruments';
+      partNum = 'SN74HC595N';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/sn74hc595.pdf';
+    } else if (t.includes('CD4017') || n.includes('CD4017')) {
+      mfr = 'Texas Instruments';
+      partNum = 'CD4017BE';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/cd4017b.pdf';
+    } else if (t.includes('ULN2003') || n.includes('ULN2003')) {
+      mfr = 'Texas Instruments / STMicroelectronics';
+      partNum = 'ULN2003A';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/uln2003a.pdf';
+    } else if (t.includes('L293D') || n.includes('L293D')) {
+      mfr = 'Texas Instruments / STMicroelectronics';
+      partNum = 'L293D';
+      dsUrl = 'https://www.ti.com/lit/ds/symlink/l293.pdf';
+    } else if (t.includes('74HC') || t.startsWith('IC_')) {
+      mfr = 'Texas Instruments / Nexperia';
+      partNum = comp.type.replace(/^IC_/, '');
+      dsUrl = 'https://www.ti.com';
     } else if (t.includes('SR04')) {
       mfr = 'ElecFreaks / SparkFun';
       partNum = 'HC-SR04';

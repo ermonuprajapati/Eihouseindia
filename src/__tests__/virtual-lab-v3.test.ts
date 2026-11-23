@@ -6,6 +6,11 @@ import { CircuitComponent, CircuitWire, Component3D } from '@/modules/engineerin
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
 import {
+  resolvePhysicalSpec,
+  resolveComponentMetadata,
+} from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
+import { getComponentPinOffsets } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
+import {
   MASTER_25_CATEGORIES,
   getCategory25ForComponent,
   filterComponentsByTier,
@@ -499,11 +504,12 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(opamp).toBeDefined();
       expect(opamp!.physicalSpec!.packageCode).toBe('DIP-8');
       const opPads = opamp!.physicalSpec!.pads!;
-      const padOut = opPads.find((p) => p.pinId === 'out')!;
-      const padInNeg = opPads.find((p) => p.pinId === 'in_neg')!;
-      const padInPos = opPads.find((p) => p.pinId === 'in_pos')!;
-      const padGnd = opPads.find((p) => p.pinId === 'vee')!;
-      const padVcc = opPads.find((p) => p.pinId === 'vcc')!;
+      expect(opPads.length).toBe(8);
+      const padOut = opPads.find((p) => p.pinId === '1' || p.pinNumber === 1)!;
+      const padInNeg = opPads.find((p) => p.pinId === '2' || p.pinNumber === 2)!;
+      const padInPos = opPads.find((p) => p.pinId === '3' || p.pinNumber === 3)!;
+      const padGnd = opPads.find((p) => p.pinId === '4' || p.pinNumber === 4)!;
+      const padVcc = opPads.find((p) => p.pinId === '8' || p.pinNumber === 8)!;
       expect(padOut.pinNumber).toBe(1);
       expect(padInNeg.pinNumber).toBe(2);
       expect(padInPos.pinNumber).toBe(3);
@@ -715,6 +721,339 @@ describe('Virtual Lab v3 Verification Suite', () => {
         return cat.name.toLowerCase().includes('resistors');
       });
       expect(byCat.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('TASK 3: Multi-Gate Real IC Packages (74HC14 & 14-Pin ICs) & Properties Inspector', () => {
+    it('74HC14 Hex Schmitt-Trigger is cataloged with 14 pins, DIP-14, and real libraryTier', () => {
+      const ic74hc14 = COMPONENT_CATALOG.find((c) => c.type === 'IC_74HC14');
+      expect(ic74hc14).toBeDefined();
+      expect(ic74hc14!.pins.length).toBe(14);
+      expect(ic74hc14!.libraryTier).toBe('real');
+      expect(ic74hc14!.packageType).toBe('THT');
+      expect(ic74hc14!.footprint).toContain('DIP-14');
+
+      // Verify pin IDs 1..14 are all present
+      const pinIds = ic74hc14!.pins.map((p) => p.id);
+      for (let i = 1; i <= 14; i++) {
+        expect(pinIds).toContain(String(i));
+      }
+
+      // Check pin names (1A, 1Y, 2A, 2Y, 3A, 3Y, GND, 4Y, 4A, 5Y, 5A, 6Y, 6A, VCC)
+      const pin7 = ic74hc14!.pins.find((p) => p.id === '7');
+      const pin14 = ic74hc14!.pins.find((p) => p.id === '14');
+      expect(pin7?.name).toBe('GND');
+      expect(pin14?.name).toBe('VCC');
+    });
+
+    it('Circuit solver executes multi-gate inverters on 74HC14: unpowered vs powered inversion', () => {
+      const solver = new CircuitSolver();
+      const ic74: CircuitComponent = {
+        id: 'u1',
+        type: 'IC_74HC14',
+        label: '74HC14',
+        value: '74HC14',
+        category: 'digital_logic',
+        footprint: 'Package_DIP:DIP-14_W7.62mm',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1A', pinType: 'input', x: -40, y: -45 },
+          { id: '2', name: '1Y', pinType: 'output', x: -40, y: -30 },
+          { id: '3', name: '2A', pinType: 'input', x: -40, y: -15 },
+          { id: '4', name: '2Y', pinType: 'output', x: -40, y: 0 },
+          { id: '7', name: 'GND', pinType: 'power', x: -40, y: 45 },
+          { id: '14', name: 'VCC', pinType: 'power', x: 40, y: -45 },
+        ],
+      };
+
+      const vcc5V: CircuitComponent = {
+        id: 'vcc',
+        type: 'DC_VOLTAGE',
+        label: 'VCC',
+        value: '5V',
+        category: 'power',
+        footprint: '',
+        parameters: { voltage: 5.0 },
+        x: -100,
+        y: -100,
+        rotation: 0,
+        pins: [
+          { id: '+', name: '+', pinType: 'power', x: 0, y: -10 },
+          { id: '-', name: '-', pinType: 'power', x: 0, y: 10 },
+        ],
+      };
+
+      const gnd: CircuitComponent = {
+        id: 'gnd',
+        type: 'GROUND',
+        label: 'GND',
+        value: '0V',
+        category: 'power',
+        footprint: '',
+        parameters: {},
+        x: -100,
+        y: 100,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      // Case A: Unpowered 74HC14 -> Outputs must be 0V
+      const unpoweredResult = solver.step([ic74], [], 0.001);
+      expect(unpoweredResult.nodeVoltages).toBeDefined();
+
+      // Case B: Powered 74HC14 with VCC=5V, GND=0V, 1A tied to 5V (HIGH), 2A tied to GND (LOW)
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'vcc', fromPinId: '+', toCompId: 'u1', toPinId: '14' },
+        { id: 'w2', fromCompId: 'gnd', fromPinId: '1', toCompId: 'vcc', toPinId: '-' },
+        { id: 'w3', fromCompId: 'gnd', fromPinId: '1', toCompId: 'u1', toPinId: '7' },
+        // Drive 1A HIGH (connect to 5V)
+        { id: 'w4', fromCompId: 'u1', fromPinId: '14', toCompId: 'u1', toPinId: '1' },
+        // Drive 2A LOW (connect to GND)
+        { id: 'w5', fromCompId: 'u1', fromPinId: '7', toCompId: 'u1', toPinId: '3' },
+      ];
+
+      const poweredResult = solver.step([ic74, vcc5V, gnd], wires, 0.001);
+      const v1Y = poweredResult.nodeVoltages['u1:2'];
+      const v2Y = poweredResult.nodeVoltages['u1:4'];
+
+      // Gate 1: 1A is HIGH (5V) -> Inverter output 1Y MUST be LOW (0V)
+      expect(v1Y).toBeCloseTo(0.0, 1);
+      // Gate 2: 2A is LOW (0V) -> Inverter output 2Y MUST be HIGH (5V)
+      expect(v2Y).toBeCloseTo(5.0, 1);
+    });
+
+    it('3D Studio getComponentPinLabels returns all 14 pins with valid 3D positions for 74HC14', () => {
+      const comp3d: Component3D = {
+        id: 'u1_3d',
+        type: 'IC_74HC14',
+        label: '74HC14',
+        value: '74HC14',
+        parameters: {},
+        x3d: 0,
+        y3d: 8.5,
+        z3d: 0,
+        rotY: 0,
+      };
+
+      const pinLabels = getComponentPinLabels(comp3d);
+      expect(pinLabels.length).toBe(14);
+      expect(pinLabels[0].id).toBe('1');
+      expect(pinLabels[0].label).toContain('1A');
+      expect(pinLabels[6].id).toBe('7');
+      expect(pinLabels[6].label).toContain('GND');
+      expect(pinLabels[13].id).toBe('14');
+      expect(pinLabels[13].label).toContain('VCC');
+
+      // Verify all local positions are 3D coordinate tuples [x, y, z]
+      pinLabels.forEach((p) => {
+        expect(p.localPos.length).toBe(3);
+        expect(Number.isFinite(p.localPos[0])).toBe(true);
+        expect(Number.isFinite(p.localPos[1])).toBe(true);
+        expect(Number.isFinite(p.localPos[2])).toBe(true);
+      });
+    });
+
+    it('getComponentPinOffsets arranges 14 pins across breadboard Row E and Row F', () => {
+      const offsets = getComponentPinOffsets('IC_74HC14');
+      expect(offsets.length).toBe(14);
+
+      // Pins 1..7: top row (Row E, z = -3.34)
+      for (let i = 0; i < 7; i++) {
+        expect(offsets[i].z).toBeCloseTo(-3.34, 2);
+      }
+      // Pins 8..14: bottom row (Row F, z = +3.34)
+      for (let i = 7; i < 14; i++) {
+        expect(offsets[i].z).toBeCloseTo(3.34, 2);
+      }
+    });
+
+    it('resolveComponentMetadata and resolvePhysicalSpec provide accurate physical specs for 74HC14 and real parts', () => {
+      const icComp: CircuitComponent = {
+        id: 'u1',
+        type: 'IC_74HC14',
+        label: '74HC14',
+        value: '74HC14',
+        category: 'digital_logic',
+        footprint: 'Package_DIP:DIP-14_W7.62mm',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: Array.from({ length: 14 }, (_, i) => ({
+          id: String(i + 1),
+          name: `P${i + 1}`,
+          pinType: 'passive' as const,
+          x: 0,
+          y: 0,
+        })),
+      };
+
+      const meta = resolveComponentMetadata(icComp);
+      expect(meta.partNumber).toContain('74HC14');
+      expect(meta.manufacturer).toContain('Texas Instruments');
+      expect(meta.libraryTier).toBe('real');
+
+      const spec = resolvePhysicalSpec(icComp);
+      expect(spec.packageCode).toBe('DIP-14');
+      expect(spec.mountingType).toBe('THT');
+      expect(spec?.pads?.length).toBe(14);
+      expect(spec.pinPitchMm).toBeCloseTo(2.54, 2);
+    });
+
+    it('searching "74HC14" resolves to the full 14-pin DIP-14 IC package and NEVER a 2-pin single gate', () => {
+      const match = COMPONENT_CATALOG.find(
+        (c) => c.type === 'IC_74HC14' || c.defaultValue === '74HC14' || c.manufacturerPartNumber === 'SN74HC14N'
+      );
+      expect(match).toBeDefined();
+      expect(match!.pins.length).toBe(14);
+      expect(match!.physicalSpec?.packageCode).toBe('DIP-14');
+      expect(match!.physicalSpec?.pads?.length).toBe(14);
+      expect(match!.pins[0].id).toBe('1');
+      expect(match!.pins[0].name).toBe('1A');
+      expect(match!.pins[6].id).toBe('7');
+      expect(match!.pins[6].name).toBe('GND');
+      expect(match!.pins[13].id).toBe('14');
+      expect(match!.pins[13].name).toBe('VCC');
+    });
+
+    it('74HC00, 74HC04, 74HC08, 74HC32, 74HC86, LM358, LM324, NE555 all expose full datasheet pin counts matching physicalSpec.pads.length', () => {
+      const partsToCheck = [
+        { type: 'IC_74HC14', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'IC_74HC04', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'IC_74HC00', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'IC_74HC08', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'IC_74HC32', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'IC_74HC86', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'OPAMP_LM358', expectedPins: 8, expectedPkg: 'DIP-8' },
+        { type: 'OPAMP_LM324', expectedPins: 14, expectedPkg: 'DIP-14' },
+        { type: 'TIMER_555', expectedPins: 8, expectedPkg: 'DIP-8' },
+        { type: 'LOGIC_74HC595', expectedPins: 16, expectedPkg: 'DIP-16' },
+        { type: 'LOGIC_CD4017', expectedPins: 16, expectedPkg: 'DIP-16' },
+        { type: 'IC_ULN2003', expectedPins: 16, expectedPkg: 'DIP-16' },
+        { type: 'IC_L293D', expectedPins: 16, expectedPkg: 'DIP-16' },
+        { type: 'MCU_ATMEGA328P', expectedPins: 28, expectedPkg: 'DIP-28' },
+      ];
+
+      for (const p of partsToCheck) {
+        const item = COMPONENT_CATALOG.find((c) => c.type === p.type);
+        expect(item, `Component ${p.type} should exist in catalog`).toBeDefined();
+        expect(item!.pins.length, `Component ${p.type} pins count`).toBe(p.expectedPins);
+        const spec = resolvePhysicalSpec(item!);
+        expect(spec.packageCode, `Component ${p.type} package code`).toBe(p.expectedPkg);
+        expect(spec?.pads?.length, `Component ${p.type} pads count`).toBe(p.expectedPins);
+      }
+    });
+
+    it('74HC14 solver evaluates multi-channel inversion cleanly when powered and outputs 0V when unpowered', () => {
+      const solver = new CircuitSolver();
+      const ic: CircuitComponent = {
+        id: 'u1',
+        type: 'IC_74HC14',
+        label: '74HC14',
+        value: '74HC14',
+        category: 'digital_logic',
+        footprint: 'Package_DIP:DIP-14_W7.62mm',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: Array.from({ length: 14 }, (_, i) => ({
+          id: String(i + 1),
+          name: `P${i + 1}`,
+          pinType: 'passive' as const,
+          x: 0,
+          y: 0,
+        })),
+      };
+
+      const vccSupply: CircuitComponent = {
+        id: 'vcc1',
+        type: 'DC_VOLTAGE',
+        label: '5V Rail',
+        value: '5V',
+        category: 'power',
+        footprint: '',
+        parameters: { voltage: 5.0 },
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '+', name: '+', pinType: 'power', x: 0, y: -20 },
+          { id: '-', name: '-', pinType: 'power', x: 0, y: 20 },
+        ],
+      };
+
+      const gndRef: CircuitComponent = {
+        id: 'gnd1',
+        type: 'GROUND',
+        label: 'GND',
+        value: '0V',
+        category: 'power',
+        footprint: '',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      // Case A: Powered with 5V to VCC (pin 14), GND to pin 7.
+      // Drive gate 1 input (pin 1) to 5V (HIGH) -> output 1Y (pin 2) should invert to 0V.
+      // Drive gate 2 input (pin 3) to 0V (LOW) -> output 2Y (pin 4) should invert to 5V.
+      const wiresPowered: CircuitWire[] = [
+        { id: 'w-vcc', fromCompId: 'vcc1', fromPinId: '+', toCompId: 'u1', toPinId: '14' },
+        { id: 'w-gnd-src', fromCompId: 'vcc1', fromPinId: '-', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'w-gnd-ic', fromCompId: 'gnd1', fromPinId: '1', toCompId: 'u1', toPinId: '7' },
+        { id: 'w-in1', fromCompId: 'vcc1', fromPinId: '+', toCompId: 'u1', toPinId: '1' },
+        { id: 'w-in2', fromCompId: 'u1', fromPinId: '7', toCompId: 'u1', toPinId: '3' },
+      ];
+
+      const resPowered = solver.step([ic, vccSupply, gndRef], wiresPowered, 0.001);
+      expect(resPowered.nodeVoltages['u1:2']).toBeCloseTo(0.0, 1);
+      expect(resPowered.nodeVoltages['u1:4']).toBeCloseTo(5.0, 1);
+
+      // Case B: Unpowered (VCC disconnected) -> all gate outputs must solve to 0V
+      const wiresUnpowered: CircuitWire[] = [
+        { id: 'w-gnd-src', fromCompId: 'vcc1', fromPinId: '-', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'w-gnd-ic', fromCompId: 'gnd1', fromPinId: '1', toCompId: 'u1', toPinId: '7' },
+        { id: 'w-in1', fromCompId: 'vcc1', fromPinId: '+', toCompId: 'u1', toPinId: '1' },
+      ];
+      const resUnpowered = solver.step([ic, vccSupply, gndRef], wiresUnpowered, 0.001);
+      expect(resUnpowered.nodeVoltages['u1:2']).toBe(0.0);
+      expect(resUnpowered.nodeVoltages['u1:4']).toBe(0.0);
+    });
+
+    it('Shared 25-category master catalog + 3-tier filter + PhysicalSpec card data resolve identically for BOTH Schematic and 3D Studio', () => {
+      // 25 Master Categories are identical and in order
+      expect(MASTER_25_CATEGORIES.length).toBe(25);
+      expect(MASTER_25_CATEGORIES[0].id).toBe('resistors');
+      expect(MASTER_25_CATEGORIES[6].id).toBe('integrated_circuits');
+      expect(MASTER_25_CATEGORIES[7].id).toBe('microcontrollers_processors');
+
+      // Tiers filter cleanly
+      const realTier = filterComponentsByTier(COMPONENT_CATALOG, 'real');
+      expect(realTier.length).toBeGreaterThan(0);
+      expect(realTier.some((c) => c.type === 'IC_74HC14')).toBe(true);
+      expect(realTier.some((c) => c.type === 'OPAMP_LM358')).toBe(true);
+
+      // Physical spec card data resolution
+      const comp3d: Component3D = {
+        id: 'u1-3d',
+        type: 'IC_74HC14',
+        label: '74HC14',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+      };
+      const cat3d = COMPONENT_CATALOG.find((c) => c.type === comp3d.type);
+      expect(cat3d).toBeDefined();
+      expect(cat3d!.physicalSpec!.packageCode).toBe('DIP-14');
+      expect(cat3d!.physicalSpec!.pads!.length).toBe(14);
     });
   });
 });

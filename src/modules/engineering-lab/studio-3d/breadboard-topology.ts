@@ -195,6 +195,44 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
       { x: -3.81, z: 3.34 },
     ];
   }
+  if (t === 'IC_74HC14' || t.includes('74HC') || t.includes('DIP_14') || t.includes('DIP14') || t.includes('LM324')) {
+    return [
+      { x: -7.62, z: -3.34 },
+      { x: -5.08, z: -3.34 },
+      { x: -2.54, z: -3.34 },
+      { x: 0, z: -3.34 },
+      { x: 2.54, z: -3.34 },
+      { x: 5.08, z: -3.34 },
+      { x: 7.62, z: -3.34 },
+      { x: 7.62, z: 3.34 },
+      { x: 5.08, z: 3.34 },
+      { x: 2.54, z: 3.34 },
+      { x: 0, z: 3.34 },
+      { x: -2.54, z: 3.34 },
+      { x: -5.08, z: 3.34 },
+      { x: -7.62, z: 3.34 },
+    ];
+  }
+  if (t.includes('595') || t.includes('4017') || t.includes('2003') || t.includes('293') || t.includes('DIP_16') || t.includes('DIP16')) {
+    return [
+      { x: -8.89, z: -3.34 },
+      { x: -6.35, z: -3.34 },
+      { x: -3.81, z: -3.34 },
+      { x: -1.27, z: -3.34 },
+      { x: 1.27, z: -3.34 },
+      { x: 3.81, z: -3.34 },
+      { x: 6.35, z: -3.34 },
+      { x: 8.89, z: -3.34 },
+      { x: 8.89, z: 3.34 },
+      { x: 6.35, z: 3.34 },
+      { x: 3.81, z: 3.34 },
+      { x: 1.27, z: 3.34 },
+      { x: -1.27, z: 3.34 },
+      { x: -3.81, z: 3.34 },
+      { x: -6.35, z: 3.34 },
+      { x: -8.89, z: 3.34 },
+    ];
+  }
   if (t === 'ARDUINO_NANO') {
     const pins: Array<{ x: number; z: number }> = [];
     for (let i = 0; i < 15; i++) {

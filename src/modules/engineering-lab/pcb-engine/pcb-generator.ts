@@ -570,9 +570,20 @@ export class PcbGenerator {
       upperType.includes('AMPLIFIER') ||
       upperType.includes('ATMEGA')
     ) {
-      const is14or16 = upperFootprint.includes('DIP-14') || upperFootprint.includes('DIP-16');
-      const is28 = upperFootprint.includes('DIP-28') || upperType.includes('ATMEGA');
-      const pinCount = is28 ? 28 : is14or16 ? (upperFootprint.includes('DIP-16') ? 16 : 14) : Math.max(8, comp.pins.length);
+      const is14or16 =
+        upperFootprint.includes('DIP-14') ||
+        upperFootprint.includes('DIP-16') ||
+        upperType.includes('74HC') ||
+        upperType.includes('LM324') ||
+        upperType.includes('595') ||
+        upperType.includes('4017') ||
+        upperType.includes('2003') ||
+        upperType.includes('293') ||
+        comp.pins.length === 14 ||
+        comp.pins.length === 16;
+      const is28 = upperFootprint.includes('DIP-28') || upperType.includes('ATMEGA') || comp.pins.length === 28;
+      const is16 = upperFootprint.includes('DIP-16') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293') || comp.pins.length === 16;
+      const pinCount = is28 ? 28 : is14or16 ? (is16 ? 16 : 14) : Math.max(8, comp.pins.length);
       const pinsPerSide = Math.floor(pinCount / 2);
       const startX = -((pinsPerSide - 1) * 2.54) / 2;
 

@@ -349,11 +349,20 @@ export function Virtual3dStudio({
         };
       }
 
-      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
+      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555, 74HC Logic, LM358, LM324, 74HC595, CD4017, etc.):
       // Straddle breadboard center isolation trench directly seated with pin insertion clearance
-      // For DIP-8 (NE555), center is at -3.81mm (START_X + 29.5 * PITCH_X) to seat pins 1..4 in cols 29..32 (Row E) and pins 5..8 in cols 32..29 (Row F)
-      if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
-        const colX = mappedType === 'TIMER_555' ? -3.81 : -5.08;
+      if (
+        ['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType) ||
+        mappedType.includes('74HC') ||
+        mappedType.includes('DIP') ||
+        mappedType.includes('358') ||
+        mappedType.includes('324') ||
+        mappedType.includes('595') ||
+        mappedType.includes('4017') ||
+        mappedType.includes('2003') ||
+        mappedType.includes('293')
+      ) {
+        const colX = (mappedType === 'TIMER_555' || mappedType.includes('74HC') || mappedType.includes('DIP') || mappedType.includes('358') || mappedType.includes('324') || mappedType.includes('595') || mappedType.includes('4017') || mappedType.includes('2003') || mappedType.includes('293')) ? -3.81 : -5.08;
         const z3d = 0;
         return {
           id: comp.id,
@@ -397,17 +406,58 @@ export function Virtual3dStudio({
 
   // Helper: Resolve exact breadboard hole for a component's lead pin
   const getBreadboardHoleForComponentPin = useCallback((comp: Component3D, pinId: string): string | null => {
-    const isDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type.includes('DIP') || comp.type.includes('555');
+    const isDip =
+      comp.type === 'TIMER_555' ||
+      comp.type === 'DIP_IC' ||
+      comp.type.includes('DIP') ||
+      comp.type.includes('555') ||
+      comp.type.includes('74HC') ||
+      comp.type.includes('358') ||
+      comp.type.includes('324') ||
+      comp.type.includes('595') ||
+      comp.type.includes('4017') ||
+      comp.type.includes('2003') ||
+      comp.type.includes('293');
+
     if (isDip) {
-      const centerCol = Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1;
-      const pinNum = parseInt(pinId, 10);
-      if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 8) {
-        if (pinNum <= 4) {
-          const col = Math.max(1, Math.min(63, centerCol - 1 + (pinNum - 1)));
-          return `bb_col_${col}_E`;
-        } else {
-          const col = Math.max(1, Math.min(63, centerCol - 1 + (8 - pinNum)));
-          return `bb_col_${col}_F`;
+      const isDip16 = comp.type.includes('16') || comp.type.includes('595') || comp.type.includes('4017') || comp.type.includes('2003') || comp.type.includes('293');
+      const isDip14 = !isDip16 && (comp.type.includes('14') || comp.type.includes('74HC') || comp.type.includes('324'));
+
+      if (isDip16) {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 16) {
+          if (pinNum <= 8) {
+            const col = Math.max(1, Math.min(63, centerCol + (pinNum - 4)));
+            return `bb_col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol + (13 - pinNum)));
+            return `bb_col_${col}_F`;
+          }
+        }
+      } else if (isDip14) {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 14) {
+          if (pinNum <= 7) {
+            const col = Math.max(1, Math.min(63, centerCol + (pinNum - 4)));
+            return `bb_col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol + (11 - pinNum)));
+            return `bb_col_${col}_F`;
+          }
+        }
+      } else {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 8) {
+          if (pinNum <= 4) {
+            const col = Math.max(1, Math.min(63, centerCol - 1 + (pinNum - 1)));
+            return `bb_col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol - 1 + (8 - pinNum)));
+            return `bb_col_${col}_F`;
+          }
         }
       }
     }
@@ -527,7 +577,21 @@ export function Virtual3dStudio({
     for (const c3d of comps3d) {
       if (['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(c3d.type)) continue;
 
-      if (c3d.type === 'TIMER_555' || c3d.type === 'DIP_IC') {
+      if (c3d.type.includes('16') || c3d.type.includes('595') || c3d.type.includes('4017') || c3d.type.includes('2003') || c3d.type.includes('293')) {
+        for (let p = 1; p <= 16; p++) {
+          const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
+          if (holeId) {
+            occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: String(p) });
+          }
+        }
+      } else if (c3d.type.includes('74HC') || c3d.type.includes('DIP14') || c3d.type.includes('DIP_14') || c3d.type.includes('324')) {
+        for (let p = 1; p <= 14; p++) {
+          const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
+          if (holeId) {
+            occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: String(p) });
+          }
+        }
+      } else if (c3d.type === 'TIMER_555' || c3d.type === 'DIP_IC' || c3d.type.includes('358') || c3d.type.includes('DIP')) {
         for (let p = 1; p <= 8; p++) {
           const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
           if (holeId) {
@@ -1172,6 +1236,7 @@ export function Virtual3dStudio({
     else if (c3d.type === 'SLIDE_SWITCH') catalogType = 'SWITCH_SPST';
 
     const tmpl =
+      COMPONENT_CATALOG.find((t) => t.type === c3d.type) ||
       COMPONENT_CATALOG.find((t) => t.type === catalogType) ||
       (catalogType === 'RASPBERRY_PI_PICO' ? COMPONENT_CATALOG.find((t) => t.type === 'ARDUINO_UNO') : undefined) ||
       COMPONENT_CATALOG.find((t) => t.type === 'RESISTOR') ||

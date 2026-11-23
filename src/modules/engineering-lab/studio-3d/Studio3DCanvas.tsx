@@ -40,6 +40,11 @@ declare module '@/modules/engineering-lab/types' {
   }
 }
 import { COMPONENT_CATALOG } from '../circuit-engine/component-catalog';
+import {
+  MASTER_25_CATEGORIES,
+  getCategory25ForComponent,
+  getSimulationBadgeInfo,
+} from '../circuit-engine/component-categories-25';
 import { Breadboard3D } from './Breadboard3D';
 import {
   BreadboardHole3D,
@@ -297,7 +302,7 @@ interface Library3DItem {
   params: Record<string, number | string | boolean>;
 }
 
-const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
+export const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
   // Microcontrollers & Power
   {
     type: 'ARDUINO_MEGA',
@@ -756,13 +761,46 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
   if (t === 'RASPBERRY_PI_PICO' || t === 'RASPBERRY_PI_PICO2') {
     return PICO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
   }
-  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
-    const pinNames = t === 'OPAMP_LM358'
+  if (t === 'TIMER_555' || t === 'DIP_IC' || (t.includes('OPAMP') && !t.includes('324')) || t.includes('COMPARATOR')) {
+    const pinNames = t.includes('358')
       ? ['OUT1', 'IN1-', 'IN1+', 'GND', 'IN2+', 'IN2-', 'OUT2', 'VCC']
       : ['GND', 'TRIG', 'OUT', 'RESET', 'CTRL', 'THRES', 'DISCH', 'VCC'];
     return [1, 2, 3, 4, 5, 6, 7, 8].map((num, i) => {
       const lx = (i < 4) ? -3.81 + i * 2.54 : 3.81 - (i - 4) * 2.54;
       const lz = (i < 4) ? -3.34 : 3.34;
+      return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
+    });
+  }
+  if (t === 'IC_74HC14' || t.includes('74HC') || t.includes('DIP14') || t.includes('DIP_14') || t.includes('LM324')) {
+    let pinNames = ['1A', '1Y', '2A', '2Y', '3A', '3Y', 'GND', '4Y', '4A', '5Y', '5A', '6Y', '6A', 'VCC'];
+    if (t.includes('74HC00') || t.includes('74HC08') || t.includes('74HC32') || t.includes('74HC86')) {
+      pinNames = ['1A', '1B', '1Y', '2A', '2B', '2Y', 'GND', '3Y', '3A', '3B', '4Y', '4A', '4B', 'VCC'];
+    } else if (t.includes('LM324')) {
+      pinNames = ['1OUT', '1IN-', '1IN+', 'VCC', '2IN+', '2IN-', '2OUT', '3OUT', '3IN-', '3IN+', 'GND', '4IN+', '4IN-', '4OUT'];
+    }
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((num, i) => {
+      const lx = (i < 7) ? -7.62 + i * 2.54 : 7.62 - (i - 7) * 2.54;
+      const lz = (i < 7) ? -3.34 : 3.34;
+      return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
+    });
+  }
+  if (t.includes('595') || t.includes('4017') || t.includes('2003') || t.includes('293') || t.includes('DIP16') || t.includes('DIP_16')) {
+    let pinNames = [
+      '1', '2', '3', '4', '5', '6', '7', '8',
+      '9', '10', '11', '12', '13', '14', '15', '16'
+    ];
+    if (t.includes('595')) {
+      pinNames = ['QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH', 'GND', "QH'", '~SRCLR', 'SRCLK', 'RCLK', '~OE', 'SER', 'QA', 'VCC'];
+    } else if (t.includes('4017')) {
+      pinNames = ['Q5', 'Q1', 'Q0', 'Q2', 'Q6', 'Q7', 'Q3', 'GND', 'Q8', 'Q4', 'Q9', 'CO', '~EN', 'CLK', 'RST', 'VDD'];
+    } else if (t.includes('2003')) {
+      pinNames = ['1B', '2B', '3B', '4B', '5B', '6B', '7B', 'COM_E', 'COM_K', '7C', '6C', '5C', '4C', '3C', '2C', '1C'];
+    } else if (t.includes('293')) {
+      pinNames = ['1,2EN', '1A', '1Y', 'GND', 'GND', '2Y', '2A', 'VCC2', '3,4EN', '3A', '3Y', 'GND', 'GND', '4Y', '4A', 'VCC1'];
+    }
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((num, i) => {
+      const lx = (i < 8) ? -8.89 + i * 2.54 : 8.89 - (i - 8) * 2.54;
+      const lz = (i < 8) ? -3.34 : 3.34;
       return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
     });
   }
@@ -1335,7 +1373,8 @@ export function Studio3DCanvas({
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [libSearch, setLibSearch] = useState('');
-  const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
+  const [libTier, setLibTier] = useState<'all' | 'generic' | 'real' | 'industrial'>('all');
+  const [libCategory25, setLibCategory25] = useState<string>('all');
   const [libSubCategory, setLibSubCategory] = useState<string>('all');
   const [toolMode3D, setToolMode3D] = useState<'inspect' | 'wire'>('inspect');
   const [isPanMode, setIsPanMode] = useState<boolean>(false);
@@ -1411,32 +1450,44 @@ export function Studio3DCanvas({
 
   const available3DSubCategories = useMemo(() => {
     const subs = new Set<string>();
-    LIBRARY_3D_COMPONENTS.forEach((item) => {
-      const matchCat = libCategory === 'all' || item.category === libCategory;
+    COMPONENT_CATALOG.forEach((item) => {
+      const cat25 = getCategory25ForComponent(item);
+      const matchCat = libCategory25 === 'all' || cat25.id === libCategory25;
+      const matchTier = libTier === 'all' || (item.libraryTier || 'generic') === libTier;
+      const q = libSearch.toLowerCase().trim();
       const matchSearch =
-        !libSearch ||
-        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.desc.toLowerCase().includes(libSearch.toLowerCase());
-      if (matchCat && matchSearch && item.subCategory) {
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.partNumber && item.partNumber.toLowerCase().includes(q)) ||
+        (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
+        (item.physicalSpec?.packageCode && item.physicalSpec.packageCode.toLowerCase().includes(q));
+      if (matchCat && matchTier && matchSearch && item.subCategory) {
         subs.add(item.subCategory);
       }
     });
     return Array.from(subs).sort();
-  }, [libCategory, libSearch]);
+  }, [libCategory25, libTier, libSearch]);
 
   const filteredLibrary = useMemo(() => {
-    return LIBRARY_3D_COMPONENTS.filter((item) => {
-      const matchCat = libCategory === 'all' || item.category === libCategory;
+    const q = libSearch.toLowerCase().trim();
+    return COMPONENT_CATALOG.filter((item) => {
+      const cat25 = getCategory25ForComponent(item);
+      const matchCat = libCategory25 === 'all' || cat25.id === libCategory25;
+      const matchTier = libTier === 'all' || (item.libraryTier || 'generic') === libTier;
       const matchSub = libSubCategory === 'all' || item.subCategory === libSubCategory;
       const matchSearch =
-        !libSearch ||
-        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.desc.toLowerCase().includes(libSearch.toLowerCase());
-      return matchCat && matchSub && matchSearch;
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.partNumber && item.partNumber.toLowerCase().includes(q)) ||
+        (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
+        (item.physicalSpec?.packageCode && item.physicalSpec.packageCode.toLowerCase().includes(q));
+      return matchCat && matchTier && matchSub && matchSearch;
     });
-  }, [libCategory, libSubCategory, libSearch]);
+  }, [libCategory25, libTier, libSubCategory, libSearch]);
 
   // Keyboard shortcut listener (R to rotate 45°, Arrows/Page to nudge, Delete to remove, Esc to cancel wire)
   useEffect(() => {
@@ -2681,13 +2732,63 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type === 'OPAMP_LM358' || comp.type === 'OPAMP_LM741') {
-            const part = comp.type === 'OPAMP_LM358' ? 'LM358' : comp.type === 'OPAMP_LM741' ? 'LM741' : String(comp.parameters?.ic || comp.value || 'NE555P');
-            const opampPins: Record<number, string> | undefined = comp.type === 'OPAMP_LM358'
-              ? { 1: 'OUT1', 2: 'IN1-', 3: 'IN1+', 4: 'GND', 5: 'IN2+', 6: 'IN2-', 7: 'OUT2', 8: 'VCC' }
-              : comp.type === 'OPAMP_LM741'
-              ? { 1: 'OFST1', 2: 'IN-', 3: 'IN+', 4: 'V-', 5: 'OFST2', 6: 'OUT', 7: 'V+', 8: 'NC' }
-              : undefined;
+          if (
+            comp.type === 'TIMER_555' ||
+            comp.type === 'DIP_IC' ||
+            comp.type.includes('OPAMP') ||
+            comp.type.includes('74HC') ||
+            comp.type.includes('595') ||
+            comp.type.includes('4017') ||
+            comp.type.includes('2003') ||
+            comp.type.includes('293') ||
+            comp.type.includes('DIP')
+          ) {
+            const is16Pin = comp.type.includes('16') || comp.type.includes('595') || comp.type.includes('4017') || comp.type.includes('2003') || comp.type.includes('293');
+            const is14Pin = !is16Pin && (comp.type.includes('14') || comp.type.includes('74HC') || comp.type.includes('324'));
+            const is28Pin = comp.type.includes('28') || comp.type.includes('ATMEGA');
+            const pinCount = is28Pin ? 28 : is16Pin ? 16 : is14Pin ? 14 : 8;
+
+            const part =
+              comp.type.includes('555') ? 'NE555P' :
+              comp.type.includes('358') ? 'LM358' :
+              comp.type.includes('324') ? 'LM324' :
+              comp.type.includes('741') ? 'LM741' :
+              comp.type.includes('74HC14') ? '74HC14' :
+              comp.type.includes('74HC04') ? '74HC04' :
+              comp.type.includes('74HC00') ? '74HC00' :
+              comp.type.includes('74HC08') ? '74HC08' :
+              comp.type.includes('74HC32') ? '74HC32' :
+              comp.type.includes('74HC86') ? '74HC86' :
+              comp.type.includes('595') ? '74HC595' :
+              comp.type.includes('4017') ? 'CD4017' :
+              comp.type.includes('2003') ? 'ULN2003A' :
+              comp.type.includes('293') ? 'L293D' :
+              String(comp.parameters?.ic || comp.value || 'IC');
+
+            let customPins: Record<number, string> | undefined;
+            if (is16Pin) {
+              if (comp.type.includes('595')) {
+                customPins = { 1: 'QB', 2: 'QC', 3: 'QD', 4: 'QE', 5: 'QF', 6: 'QG', 7: 'QH', 8: 'GND', 9: "QH'", 10: '~SRCLR', 11: 'SRCLK', 12: 'RCLK', 13: '~OE', 14: 'SER', 15: 'QA', 16: 'VCC' };
+              } else if (comp.type.includes('4017')) {
+                customPins = { 1: 'Q5', 2: 'Q1', 3: 'Q0', 4: 'Q2', 5: 'Q6', 6: 'Q7', 7: 'Q3', 8: 'GND', 9: 'Q8', 10: 'Q4', 11: 'Q9', 12: 'CO', 13: '~EN', 14: 'CLK', 15: 'RST', 16: 'VDD' };
+              } else if (comp.type.includes('2003')) {
+                customPins = { 1: '1B', 2: '2B', 3: '3B', 4: '4B', 5: '5B', 6: '6B', 7: '7B', 8: 'COM_E', 9: 'COM_K', 10: '7C', 11: '6C', 12: '5C', 13: '4C', 14: '3C', 15: '2C', 16: '1C' };
+              } else if (comp.type.includes('293')) {
+                customPins = { 1: '1,2EN', 2: '1A', 3: '1Y', 4: 'GND', 5: 'GND', 6: '2Y', 7: '2A', 8: 'VCC2', 9: '3,4EN', 10: '3A', 11: '3Y', 12: 'GND', 13: 'GND', 14: '4Y', 15: '4A', 16: 'VCC1' };
+              }
+            } else if (is14Pin) {
+              if (comp.type.includes('74HC00') || comp.type.includes('74HC08') || comp.type.includes('74HC32') || comp.type.includes('74HC86')) {
+                customPins = { 1: '1A', 2: '1B', 3: '1Y', 4: '2A', 5: '2B', 6: '2Y', 7: 'GND', 8: '3Y', 9: '3A', 10: '3B', 11: '4Y', 12: '4A', 13: '4B', 14: 'VCC' };
+              } else if (comp.type.includes('LM324')) {
+                customPins = { 1: '1OUT', 2: '1IN-', 3: '1IN+', 4: 'VCC', 5: '2IN+', 6: '2IN-', 7: '2OUT', 8: '3OUT', 9: '3IN-', 10: '3IN+', 11: 'GND', 12: '4IN+', 13: '4IN-', 14: '4OUT' };
+              } else {
+                customPins = { 1: '1A', 2: '1Y', 3: '2A', 4: '2Y', 5: '3A', 6: '3Y', 7: 'GND', 8: '4Y', 9: '4A', 10: '5Y', 11: '5A', 12: '6Y', 13: '6A', 14: 'VCC' };
+              }
+            } else if (comp.type.includes('358')) {
+              customPins = { 1: 'OUT1', 2: 'IN1-', 3: 'IN1+', 4: 'GND', 5: 'IN2+', 6: 'IN2-', 7: 'OUT2', 8: 'VCC' };
+            } else if (comp.type.includes('741')) {
+              customPins = { 1: 'OFST1', 2: 'IN-', 3: 'IN+', 4: 'V-', 5: 'OFST2', 6: 'OUT', 7: 'V+', 8: 'NC' };
+            }
             return (
               <group
                 key={comp.id}
@@ -2701,9 +2802,9 @@ export function Studio3DCanvas({
                 <DipPackage3D
                   position={pos}
                   rotation={rot}
-                  pinCount={8}
+                  pinCount={pinCount}
                   partName={part}
-                  pinNames={opampPins}
+                  pinNames={customPins}
                   isBurned={Boolean(simState?.status === 'BURNED' || simState?.burned)}
                   isSelected={isSelected}
                   onPinClick={(pinId, wPos) => handlePinClick(comp.id, pinId, wPos)}
@@ -3755,35 +3856,61 @@ export function Studio3DCanvas({
             />
           </div>
 
-          {/* Category Filter Pills Matching Schematic Categories */}
-          <div className="flex flex-wrap gap-1 text-[10px]">
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'boards', label: 'MCUs & Power' },
-              { id: 'passive', label: 'Passives' },
-              { id: 'semiconductors', label: 'Active & ICs' },
-              { id: 'sensors', label: 'Sensors' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setLibCategory(tab.id as typeof libCategory);
-                  setLibSubCategory('all');
-                }}
-                className={`px-2 py-0.5 rounded-full transition-colors ${
-                  libCategory === tab.id
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* 3-Tier Database Filter Pills */}
+          <div className="grid grid-cols-4 gap-1 bg-slate-950/70 p-0.5 rounded border border-slate-800">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'generic', label: 'Generic' },
+                { id: 'real', label: 'Real Parts' },
+                { id: 'industrial', label: 'Industrial' },
+              ] as const
+            ).map((tier) => {
+              const active = libTier === tier.id;
+              return (
+                <button
+                  key={tier.id}
+                  onClick={() => {
+                    setLibTier(tier.id);
+                    setLibSubCategory('all');
+                  }}
+                  className={`py-0.5 px-1 rounded text-[10px] font-mono font-medium transition-all text-center truncate ${
+                    active
+                      ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/60 font-semibold shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  }`}
+                  title={`Filter by ${tier.label} library tier`}
+                >
+                  {tier.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 25 Master Engineering Categories Dropdown */}
+          <div className="relative">
+            <select
+              value={libCategory25}
+              onChange={(e) => {
+                setLibCategory25(e.target.value);
+                setLibSubCategory('all');
+              }}
+              className="w-full appearance-none bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-md px-2 py-1.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer pr-6 truncate"
+              title="Filter by 25 Master Engineering Categories"
+            >
+              <option value="all">⚡ All Categories (25)</option>
+              {MASTER_25_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
           {/* Subcategory Filter Pills when options exist */}
           {available3DSubCategories.length > 1 && (
-            <div className="flex flex-wrap gap-1 text-[9px] pt-0.5 border-t border-slate-800/60">
+            <div className="flex flex-wrap gap-1 text-[9px] pt-0.5 border-t border-slate-800/60 max-h-16 overflow-y-auto">
               <button
                 onClick={() => setLibSubCategory('all')}
                 className={`px-1.5 py-0.5 rounded transition-colors ${
@@ -3812,48 +3939,72 @@ export function Studio3DCanvas({
 
           {/* 2-Column Compact Component-Type Grid with Click-to-Place */}
           <div className="max-h-72 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
-            {filteredLibrary.map((item) => (
-              <button
-                key={item.type}
-                onClick={() => {
-                  const countOfType = components3d.filter((c) => c.type === item.type).length;
-                  const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 35 : -countOfType * 35) : 0;
-                  const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
-                  const newComp: Component3D = {
-                    id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-                    type: item.type,
-                    label: countOfType > 0 ? `${item.label} #${countOfType + 1}` : item.label,
-                    value: item.value,
-                    parameters: item.params ? { ...item.params } : {},
-                    x3d: item.defaultPos[0] + offsetX,
-                    y3d: item.defaultPos[1],
-                    z3d: item.defaultPos[2] + offsetZ,
-                    rotY: 0,
-                  };
-                  onAddComponent3D(newComp);
-                  setIsAddDrawerOpen(false);
-                  onSelectComponent(newComp.id);
-                }}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 hover:border-cyan-500/50 transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono">
-                      {item.value}
-                    </span>
-                    <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 uppercase">
-                      {item.is3DReady !== false ? '3D Ready' : 'Symbol Only'}
-                    </span>
+            {filteredLibrary.map((item) => {
+              const simInfo = getSimulationBadgeInfo(item.simulationStatus);
+              const pkgCode = item.physicalSpec?.packageCode || item.packageType || 'THT';
+              const shortName = item.name
+                .replace(/\(ATmega2560\)/gi, '')
+                .replace(/\(ATmega328P\)/gi, '')
+                .replace(/R3|V3/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+              return (
+                <button
+                  key={item.type + item.name}
+                  onClick={() => {
+                    const countOfType = components3d.filter((c) => c.type === item.type).length;
+                    const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 35 : -countOfType * 35) : 0;
+                    const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
+
+                    let defPos: [number, number, number] = [0, 8.5, 0];
+                    if (item.type.includes('MEGA') || item.type === 'ARDUINO_UNO') defPos = [0, 0, 65];
+                    else if (item.type.includes('BATTERY')) defPos = [-95, 0, 0];
+                    else if (item.type === 'TIMER_555' || item.type.includes('74HC') || item.type.includes('DIP')) defPos = [-3.81, 8.5, 0];
+                    else if (item.type.includes('PICO') || item.type.includes('NANO') || item.type.includes('ESP32')) defPos = [-5.08, 8.5, 0];
+                    else if (item.type === 'RESISTOR' || item.type === 'DIODE' || item.type === 'LED' || item.type.includes('CAPACITOR')) defPos = [10, 8.5, -3.34];
+
+                    const newComp: Component3D = {
+                      id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                      type: item.type,
+                      label: countOfType > 0 ? `${shortName.split(' ')[0]} #${countOfType + 1}` : (shortName.split(' ')[0] || item.type),
+                      value: item.defaultValue || '',
+                      parameters: item.defaultParams ? { ...item.defaultParams } : {},
+                      x3d: defPos[0] + offsetX,
+                      y3d: defPos[1],
+                      z3d: defPos[2] + offsetZ,
+                      rotY: 0,
+                    };
+                    onAddComponent3D(newComp);
+                    setIsAddDrawerOpen(false);
+                    onSelectComponent(newComp.id);
+                  }}
+                  className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 hover:border-cyan-500/50 transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono truncate max-w-[55px]" title={item.defaultValue}>
+                        {item.defaultValue}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={`text-[8px] font-mono px-1 py-0.2 rounded font-semibold uppercase ${simInfo.badgeClass}`}>
+                          {simInfo.label}
+                        </span>
+                        <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-slate-950 text-slate-400 border border-slate-800 uppercase" title={pkgCode}>
+                          {pkgCode}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight line-clamp-1" title={item.name}>
+                      {shortName}
+                    </div>
                   </div>
-                  <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight">
-                    {item.label}
+                  <div className="text-[9px] text-slate-400 mt-1 line-clamp-1" title={item.description || item.partNumber}>
+                    {item.partNumber || item.description || item.category}
                   </div>
-                </div>
-                <div className="text-[9px] text-slate-400 mt-1 line-clamp-1">
-                  {item.desc}
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
             {filteredLibrary.length === 0 && (
               <div className="col-span-2 text-center py-6 text-slate-500 text-xs">
                 No matching 3D components found.

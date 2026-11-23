@@ -1454,25 +1454,89 @@ export class CircuitSolver {
             }
           }
         } else if (comp.type.startsWith('OPAMP_')) {
-          // Operational Amplifier (Inverting / Non-inverting / Comparator)
-          const inNegPin = this.netMap.get(`${comp.id}:in_neg`);
-          const inPosPin = this.netMap.get(`${comp.id}:in_pos`);
-          const outPin = this.netMap.get(`${comp.id}:out`);
-          const vccPin = this.netMap.get(`${comp.id}:vcc`);
-          const veePin = this.netMap.get(`${comp.id}:vee`);
-
-          const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
-          const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
-          const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
-          const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
-
+          // Operational Amplifier (Single, Dual LM358, or Quad LM324)
           const openGain = Number(comp.parameters?.openLoopGain ?? 100000);
-          const vIdeal = (vPos - vNeg) * openGain;
-          const vOutClamped = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
 
-          if (outPin) {
-            nodeVoltages[outPin] = vOutClamped;
-            fixedNodes.add(outPin);
+          if (comp.type.includes('LM324')) {
+            // Quad Op-Amp (DIP-14): VCC=Pin 4, GND=Pin 11
+            const vccPin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:VCC`);
+            const veePin = this.netMap.get(`${comp.id}:11`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 0.0) : 0.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const isPowered = vcc - vee >= 2.0;
+
+            const channels = [
+              { out: '1', inNeg: '2', inPos: '3' },
+              { out: '7', inNeg: '6', inPos: '5' },
+              { out: '8', inNeg: '9', inPos: '10' },
+              { out: '14', inNeg: '13', inPos: '12' },
+            ];
+
+            for (const ch of channels) {
+              const outNet = this.netMap.get(`${comp.id}:${ch.out}`);
+              const inNegNet = this.netMap.get(`${comp.id}:${ch.inNeg}`);
+              const inPosNet = this.netMap.get(`${comp.id}:${ch.inPos}`);
+              if (!outNet) continue;
+
+              if (isPowered) {
+                const vPos = inPosNet ? (nodeVoltages[inPosNet] || 0.0) : 0.0;
+                const vNeg = inNegNet ? (nodeVoltages[inNegNet] || 0.0) : 0.0;
+                const vIdeal = (vPos - vNeg) * openGain;
+                nodeVoltages[outNet] = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+              } else {
+                nodeVoltages[outNet] = 0.0;
+              }
+              fixedNodes.add(outNet);
+            }
+          } else if (comp.type.includes('LM358')) {
+            // Dual Op-Amp (DIP-8): VCC=Pin 8, GND=Pin 4
+            const vccPin = this.netMap.get(`${comp.id}:8`) || this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:VCC`);
+            const veePin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:vee`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 0.0) : 0.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const isPowered = vcc - vee >= 2.0;
+
+            const channels = [
+              { out: '1', inNeg: '2', inPos: '3' },
+              { out: '7', inNeg: '6', inPos: '5' },
+            ];
+
+            for (const ch of channels) {
+              const outNet = this.netMap.get(`${comp.id}:${ch.out}`) || (ch.out === '1' ? this.netMap.get(`${comp.id}:out`) : undefined);
+              const inNegNet = this.netMap.get(`${comp.id}:${ch.inNeg}`) || (ch.inNeg === '2' ? this.netMap.get(`${comp.id}:in_neg`) : undefined);
+              const inPosNet = this.netMap.get(`${comp.id}:${ch.inPos}`) || (ch.inPos === '3' ? this.netMap.get(`${comp.id}:in_pos`) : undefined);
+              if (!outNet) continue;
+
+              if (isPowered) {
+                const vPos = inPosNet ? (nodeVoltages[inPosNet] || 0.0) : 0.0;
+                const vNeg = inNegNet ? (nodeVoltages[inNegNet] || 0.0) : 0.0;
+                const vIdeal = (vPos - vNeg) * openGain;
+                nodeVoltages[outNet] = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+              } else {
+                nodeVoltages[outNet] = 0.0;
+              }
+              fixedNodes.add(outNet);
+            }
+          } else {
+            // Generic / Single Op-Amp (LM741 etc.)
+            const inNegPin = this.netMap.get(`${comp.id}:in_neg`) || this.netMap.get(`${comp.id}:2`);
+            const inPosPin = this.netMap.get(`${comp.id}:in_pos`) || this.netMap.get(`${comp.id}:3`);
+            const outPin = this.netMap.get(`${comp.id}:out`) || this.netMap.get(`${comp.id}:6`);
+            const vccPin = this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:7`);
+            const veePin = this.netMap.get(`${comp.id}:vee`) || this.netMap.get(`${comp.id}:4`);
+
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
+            const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
+
+            const vIdeal = (vPos - vNeg) * openGain;
+            const vOutClamped = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+
+            if (outPin) {
+              nodeVoltages[outPin] = vOutClamped;
+              fixedNodes.add(outPin);
+            }
           }
         } else if (comp.type.startsWith('LOGIC_')) {
           // Digital Logic Gates: 74HC series
@@ -1516,6 +1580,118 @@ export class CircuitSolver {
           if (outPin) {
             nodeVoltages[outPin] = outV;
             fixedNodes.add(outPin);
+          }
+        } else if (
+          comp.type === 'IC_74HC14' ||
+          comp.type === '74HC14' ||
+          comp.type === 'IC_74HC04' ||
+          comp.type === '74HC04' ||
+          comp.type === 'IC_74HC00' ||
+          comp.type === '74HC00' ||
+          comp.type === 'IC_74HC08' ||
+          comp.type === '74HC08' ||
+          comp.type === 'IC_74HC32' ||
+          comp.type === '74HC32' ||
+          comp.type === 'IC_74HC86' ||
+          comp.type === '74HC86'
+        ) {
+          // Multi-Gate Real Digital IC Packages (DIP-14)
+          const vccPin =
+            this.netMap.get(`${comp.id}:14`) ||
+            this.netMap.get(`${comp.id}:vcc`) ||
+            this.netMap.get(`${comp.id}:VCC`);
+          const gndPin =
+            this.netMap.get(`${comp.id}:7`) ||
+            this.netMap.get(`${comp.id}:gnd`) ||
+            this.netMap.get(`${comp.id}:GND`);
+
+          const vcc = vccPin ? (nodeVoltages[vccPin] ?? 0.0) : 0.0;
+          const gnd = gndPin ? (nodeVoltages[gndPin] ?? 0.0) : 0.0;
+          const vSupply = vcc - gnd;
+          const isPowered = vSupply >= 2.0;
+
+          if (comp.type.includes('74HC14') || comp.type.includes('74HC04')) {
+            // Hex Inverter / Hex Schmitt-Trigger Inverter (6 independent gates)
+            // Gate 1: 1A (pin 1) -> 1Y (pin 2)
+            // Gate 2: 2A (pin 3) -> 2Y (pin 4)
+            // Gate 3: 3A (pin 5) -> 3Y (pin 6)
+            // Gate 4: 4A (pin 9) -> 4Y (pin 8)
+            // Gate 5: 5A (pin 11) -> 5Y (pin 10)
+            // Gate 6: 6A (pin 13) -> 6Y (pin 12)
+            const gates = [
+              { in: '1', out: '2' },
+              { in: '3', out: '4' },
+              { in: '5', out: '6' },
+              { in: '9', out: '8' },
+              { in: '11', out: '10' },
+              { in: '13', out: '12' },
+            ];
+
+            const highThresh = comp.type.includes('74HC14') ? (gnd + 0.55 * vSupply) : (gnd + 0.5 * vSupply);
+
+            for (const gate of gates) {
+              const inNet = this.netMap.get(`${comp.id}:${gate.in}`);
+              const outNet = this.netMap.get(`${comp.id}:${gate.out}`);
+              const targetNode = outNet || `${comp.id}:${gate.out}`;
+
+              if (isPowered) {
+                const vIn = inNet ? (nodeVoltages[inNet] ?? 0.0) : 0.0;
+                const isHighIn = vIn >= highThresh;
+                // Inverter: In high -> Out low (gnd); In low -> Out high (vcc)
+                nodeVoltages[targetNode] = isHighIn ? gnd : vcc;
+              } else {
+                nodeVoltages[targetNode] = 0.0;
+              }
+              if (outNet) {
+                fixedNodes.add(outNet);
+              }
+            }
+          } else {
+            // Quad 2-Input Gates (74HC00 NAND, 74HC08 AND, 74HC32 OR, 74HC86 XOR)
+            // Gate 1: 1A (1), 1B (2) -> 1Y (3)
+            // Gate 2: 2A (4), 2B (5) -> 2Y (6)
+            // Gate 3: 3A (9), 3B (10) -> 3Y (8)
+            // Gate 4: 4A (12), 4B (13) -> 4Y (11)
+            const quadGates = [
+              { inA: '1', inB: '2', out: '3' },
+              { inA: '4', inB: '5', out: '6' },
+              { inA: '9', inB: '10', out: '8' },
+              { inA: '12', inB: '13', out: '11' },
+            ];
+
+            const highThresh = gnd + 0.5 * vSupply;
+
+            for (const qg of quadGates) {
+              const inANet = this.netMap.get(`${comp.id}:${qg.inA}`);
+              const inBNet = this.netMap.get(`${comp.id}:${qg.inB}`);
+              const outNet = this.netMap.get(`${comp.id}:${qg.out}`);
+              const targetNode = outNet || `${comp.id}:${qg.out}`;
+
+              if (isPowered) {
+                const vInA = inANet ? (nodeVoltages[inANet] ?? 0.0) : 0.0;
+                const vInB = inBNet ? (nodeVoltages[inBNet] ?? 0.0) : 0.0;
+                const isHighA = vInA >= highThresh;
+                const isHighB = vInB >= highThresh;
+                let outHigh = false;
+
+                if (comp.type.includes('74HC00')) {
+                  outHigh = !(isHighA && isHighB); // NAND
+                } else if (comp.type.includes('74HC08')) {
+                  outHigh = isHighA && isHighB; // AND
+                } else if (comp.type.includes('74HC32')) {
+                  outHigh = isHighA || isHighB; // OR
+                } else if (comp.type.includes('74HC86')) {
+                  outHigh = isHighA !== isHighB; // XOR
+                }
+
+                nodeVoltages[targetNode] = outHigh ? vcc : gnd;
+              } else {
+                nodeVoltages[targetNode] = 0.0;
+              }
+              if (outNet) {
+                fixedNodes.add(outNet);
+              }
+            }
           }
         } else if (comp.type === 'TIMER_555') {
           // NE555 Timer Simulation
