@@ -48,10 +48,15 @@ export function BluetoothHC05_3D({
         color: '#18181B',
         roughness: 0.7,
       }),
-      pinGold: new THREE.MeshStandardMaterial({
+      antennaGold: new THREE.MeshStandardMaterial({
         color: '#F59E0B',
         metalness: 0.95,
         roughness: 0.2,
+      }),
+      pinSilver: new THREE.MeshStandardMaterial({
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       solderFillet: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
@@ -142,7 +147,7 @@ export function BluetoothHC05_3D({
       </mesh>
 
       {/* Gold Meander PCB Antenna at left edge */}
-      <mesh position={[-9.5, 7.8, -1.0]} material={materials.pinGold}>
+      <mesh position={[-9.5, 7.8, -1.0]} material={materials.antennaGold}>
         <boxGeometry args={[4.0, 0.2, 7.0]} />
       </mesh>
 
@@ -161,8 +166,8 @@ export function BluetoothHC05_3D({
 
       {pins.map((p) => (
         <group key={p.name}>
-          {/* Square pin extending through insulator into PCB pads */}
-          <mesh position={[p.x, -1.5, 5.0]} material={materials.pinGold}>
+          {/* Square metallic pin extending through insulator into PCB pads */}
+          <mesh position={[p.x, -1.5, 5.0]} material={materials.pinSilver}>
             <boxGeometry args={[0.64, 6.0, 0.64]} />
           </mesh>
 

@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 
 export interface HcSr04_3DProps {
   position?: [number, number, number];
@@ -54,10 +53,15 @@ export function HcSr04_3D({
         color: '#18181B',
         roughness: 0.8,
       }),
-      pinGold: new THREE.MeshStandardMaterial({
+      goldPad: new THREE.MeshStandardMaterial({
         color: '#F59E0B',
         metalness: 0.9,
-        roughness: 0.15,
+        roughness: 0.2,
+      }),
+      pinSilver: new THREE.MeshStandardMaterial({
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       solderFillet: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
@@ -176,10 +180,10 @@ export function HcSr04_3D({
           <mesh rotation={[Math.PI / 2, 0, 0]} material={materials.headerInsulator}>
             <cylinderGeometry args={[0.9, 0.9, 1.8, 16]} />
           </mesh>
-          <mesh position={[0, 0, 0.81]} material={materials.pinGold}>
+          <mesh position={[0, 0, 0.81]} material={materials.goldPad}>
             <ringGeometry args={[0.9, 1.4, 16]} />
           </mesh>
-          <mesh position={[0, 0, -0.81]} rotation={[0, Math.PI, 0]} material={materials.pinGold}>
+          <mesh position={[0, 0, -0.81]} rotation={[0, Math.PI, 0]} material={materials.goldPad}>
             <ringGeometry args={[0.9, 1.4, 16]} />
           </mesh>
         </group>
@@ -209,8 +213,8 @@ export function HcSr04_3D({
             (hoveredPin && (hoveredPin.toUpperCase() === p.name || p.aliases.includes(hoveredPin.toLowerCase())));
           return (
             <group key={p.name} position={[p.x, 0, 0]}>
-              {/* Square gold pin extending through insulator into breadboard to y = -5.5 */}
-              <mesh position={[0, -3.2, 0]} material={materials.pinGold}>
+              {/* Square metallic pin extending through insulator into breadboard to y = -5.5 */}
+              <mesh position={[0, -3.2, 0]} material={materials.pinSilver}>
                 <boxGeometry args={[0.64, 7.5, 0.64]} />
               </mesh>
 
@@ -224,7 +228,7 @@ export function HcSr04_3D({
               {/* Click target with Generous Hit-Sphere & Hover Ring */}
               <mesh
                 position={[0, 0, 0]}
-                material={isHovered ? materials.pinHover : materials.pinGold}
+                material={isHovered ? materials.pinHover : materials.pinSilver}
               >
                 <sphereGeometry args={[isHovered ? 0.9 : 0.6, 12, 12]} />
               </mesh>
@@ -233,18 +237,6 @@ export function HcSr04_3D({
                   <ringGeometry args={[0.5, 1.3, 24]} />
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
-              )}
-              {renderContext !== '3d-view' && isHovered && (
-                <Html
-                  position={[0, 2.2, 0.6]}
-                  center
-                  distanceFactor={35}
-                  style={{ pointerEvents: 'none', zIndex: 1000 }}
-                >
-                  <div className="bg-slate-950/95 border border-sky-400 text-sky-300 font-mono text-[10px] px-2 py-0.5 rounded shadow-xl whitespace-nowrap font-bold">
-                    {p.name} · {p.label}
-                  </div>
-                </Html>
               )}
               {renderContext !== '3d-view' && (
                 <mesh

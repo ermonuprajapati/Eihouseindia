@@ -94,10 +94,10 @@ export function RaspberryPiPico3D({
         color: '#1E293B',
         roughness: 0.3,
       }),
-      goldPin: new THREE.MeshStandardMaterial({
-        color: '#EAB308',
-        metalness: 0.9,
-        roughness: 0.1,
+      pinSilver: new THREE.MeshStandardMaterial({
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -323,9 +323,8 @@ export function RaspberryPiPico3D({
               </mesh>
             )}
             {/* Downward Silver Pin Leg into Breadboard Hole (extended 5.5mm length) */}
-            <mesh position={[0, -2.5, 0]}>
-              <boxGeometry args={[0.6, 5.5, 0.6]} />
-              <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+            <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
+              <boxGeometry args={[0.64, 5.5, 0.64]} />
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (

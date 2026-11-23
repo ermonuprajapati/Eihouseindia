@@ -67,9 +67,9 @@ export function ArduinoNano3D({
         roughness: 0.5,
       }),
       pinSilver: new THREE.MeshStandardMaterial({
-        color: '#E2E8F0',
-        metalness: 0.9,
-        roughness: 0.2,
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -290,7 +290,7 @@ export function ArduinoNano3D({
             )}
             {/* Downward Silver Pin Leg into Breadboard Hole (extended 5.5mm length) */}
             <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
-              <boxGeometry args={[0.6, 5.5, 0.6]} />
+              <boxGeometry args={[0.64, 5.5, 0.64]} />
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (

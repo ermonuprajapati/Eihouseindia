@@ -3498,7 +3498,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, 0, 0]}>
                       <mesh position={[0, -4.5, 0]}>
                         <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.18} />
+                        <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                       </mesh>
                       <mesh
                         position={[0, -4.5, 0]}
@@ -3531,7 +3531,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, -3.5, 0]}>
                       <mesh>
                         <boxGeometry args={[0.45, 7.0, 0.45]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.18} />
+                        <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                       </mesh>
                       <mesh
                         renderOrder={100}
@@ -3573,12 +3573,12 @@ export function Studio3DCanvas({
                         {/* Row E pin */}
                         <mesh position={[px, -2.0, -3.34]}>
                           <boxGeometry args={[0.65, 6.2, 0.45]} />
-                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Row F pin */}
                         <mesh position={[px, -2.0, 3.34]}>
                           <boxGeometry args={[0.65, 6.2, 0.45]} />
-                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                       </group>
                     );
@@ -3610,12 +3610,12 @@ export function Studio3DCanvas({
                         {/* Downward solid metallic pin into breadboard spring clips */}
                         <mesh position={[0, -2.5, 0]}>
                           <boxGeometry args={[0.64, 6.5, 0.64]} />
-                          <meshStandardMaterial color="#F59E0B" metalness={0.92} roughness={0.18} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Upward header pin terminal */}
                         <mesh position={[0, 4.0, 0]}>
                           <boxGeometry args={[0.64, 4.0, 0.64]} />
-                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#F59E0B'} metalness={0.92} roughness={0.18} />
+                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#d4dce6'} metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Solder fillet cone on carrier pad */}
                         <mesh position={[0, 0.85, 0]}>

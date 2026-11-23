@@ -42,9 +42,9 @@ export function TransistorTO220_3D({
         metalness: 0.1,
       }),
       silverLead: new THREE.MeshStandardMaterial({
-        color: '#E2E8F0',
-        metalness: 0.95,
-        roughness: 0.15,
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',

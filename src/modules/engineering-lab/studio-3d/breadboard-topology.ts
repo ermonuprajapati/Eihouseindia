@@ -49,12 +49,14 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
 
   // 1. SMD / Flat Boards / Console-mount parts (No protruding bottom pins)
   if (
-    t.includes('MEGA') ||
+    (t.includes('MEGA') && !t.includes('ATMEGA')) ||
     t === 'ARDUINO_UNO' ||
     t.includes('BATTERY') ||
     t === 'DC_VOLTAGE' ||
     t.includes('LCD') ||
-    t.includes('SERVO')
+    t.includes('SERVO') ||
+    t.includes('L298N') ||
+    t.includes('MOTOR_DRIVER')
   ) {
     return {
       isThroughHole: false,
@@ -65,8 +67,20 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     };
   }
 
-  // 2. DIP ICs & Compact MCU Breakouts (NE555, LM358, LM741, Nano, ESP32, Pico)
-  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR') || t.includes('DIP')) {
+  // 2. DIP ICs & Compact MCU Breakouts (NE555, LM358, LM741, Nano, ESP32, Pico, 74HC, CD40, ULN, L293, ATmega328P)
+  if (
+    t === 'TIMER_555' ||
+    t === 'DIP_IC' ||
+    t.includes('OPAMP') ||
+    t.includes('COMPARATOR') ||
+    t.includes('DIP') ||
+    t.includes('74HC') ||
+    t.includes('CD40') ||
+    t.includes('ULN') ||
+    t.includes('L293') ||
+    t.includes('LM324') ||
+    t.includes('ATMEGA')
+  ) {
     return {
       isThroughHole: true,
       pinLength: 5.2,
@@ -86,8 +100,18 @@ export function getComponentElevationSpec(type: string): Component3DElevationSpe
     };
   }
 
-  // 3. Sensor & Wireless Modules (HC-SR04 Ultrasonic, HC-05 Bluetooth)
-  if (t.includes('SR04') || t.includes('ULTRASONIC') || t.includes('BLUETOOTH') || t.includes('HC05') || t.includes('HC06')) {
+  // 3. Sensor & Wireless Modules (HC-SR04 Ultrasonic, HC-05 Bluetooth, OLED, DHT, PIR, MPU6050)
+  if (
+    t.includes('SR04') ||
+    t.includes('ULTRASONIC') ||
+    t.includes('BLUETOOTH') ||
+    t.includes('HC05') ||
+    t.includes('HC06') ||
+    t.includes('OLED') ||
+    t.includes('DHT') ||
+    t.includes('PIR') ||
+    t.includes('MPU6050')
+  ) {
     return {
       isThroughHole: true,
       pinLength: 6.0,
@@ -362,9 +386,10 @@ export function computeComponentGroundElevation(
   breadboardCount: number = 1
 ): number {
   const spec = getComponentElevationSpec(type);
+  const lowestLocalY = Math.min(spec.localMinY, spec.localMinBodyY);
 
   if (!spec.isThroughHole || !hasBreadboard) {
-    const benchY = WORKBENCH_TOP_Y - spec.localMinY;
+    const benchY = WORKBENCH_TOP_Y - lowestLocalY;
     return Math.round(benchY * 100) / 100;
   }
 
@@ -380,13 +405,16 @@ export function computeComponentGroundElevation(
 
   if (allPinsInHoles) {
     const insertionDepth = Math.min(BREADBOARD_INSERTION_DEPTH, spec.pinLength * 0.42);
-    const elevatedY = BREADBOARD_TOP_Y - insertionDepth - spec.localMinY;
+    // Strict Anti-Sink Rule: component PCB/housing bottom (elevatedY + spec.localMinBodyY) must NEVER sink below BREADBOARD_TOP_Y + 0.2mm
+    const minBodyAllowedElevatedY = BREADBOARD_TOP_Y + 0.2 - spec.localMinBodyY;
+    const standardElevatedY = BREADBOARD_TOP_Y - insertionDepth - spec.localMinY;
+    const elevatedY = Math.max(minBodyAllowedElevatedY, standardElevatedY);
     return Math.round(elevatedY * 100) / 100;
   }
 
-  // Off-hole placement: clamp lowest pin tip flush at surface top (BREADBOARD_TOP_Y if over board, else WORKBENCH_TOP_Y)
+  // Off-hole placement: clamp lowest mesh point strictly flush at surface top (BREADBOARD_TOP_Y if over board, else WORKBENCH_TOP_Y)
   const surfaceTopY = isOverBoard ? BREADBOARD_TOP_Y : WORKBENCH_TOP_Y;
-  const clampedY = surfaceTopY - spec.localMinY;
+  const clampedY = surfaceTopY - lowestLocalY;
   return Math.round(clampedY * 100) / 100;
 }
 

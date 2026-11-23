@@ -22,6 +22,7 @@ import {
   BREADBOARD_TOP_Y,
   START_X,
   PITCH_X,
+  ROW_Z_MAP,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import {
   MASTER_25_CATEGORIES,
@@ -1629,6 +1630,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
         label: '9V Battery',
         value: '9V',
         category: 'sources',
+        footprint: 'PAD',
+        parameters: {},
         x: 0,
         y: 0,
         rotation: 0,
@@ -1644,6 +1647,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
         label: 'Ultrasonic',
         value: 'HC-SR04',
         category: 'sensors',
+        footprint: 'MODULE_HCSR04',
+        parameters: {},
         x: 100,
         y: 100,
         rotation: 0,
@@ -1660,7 +1665,9 @@ describe('Virtual Lab v3 Verification Suite', () => {
         type: 'RESISTOR',
         label: 'R1',
         value: '1k',
-        category: 'passives',
+        category: 'passive',
+        footprint: 'RESISTOR_TH',
+        parameters: {},
         x: 200,
         y: 200,
         rotation: 0,
@@ -1676,6 +1683,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
         label: 'LED1',
         value: 'Red',
         category: 'actuators',
+        footprint: 'LED_5MM',
+        parameters: {},
         x: 300,
         y: 200,
         rotation: 0,
@@ -1790,6 +1799,7 @@ describe('Virtual Lab v3 Verification Suite', () => {
         x3d: START_X + (32 - 0.5) * PITCH_X,
         y3d: 10.0,
         z3d: 1.5, // slightly off-center near ravine
+        rotY: 0,
       };
       const snapped = snapComponentToSurface(testComp, true, 1);
       // Straddles center ravine (z = 0)
@@ -1808,10 +1818,38 @@ describe('Virtual Lab v3 Verification Suite', () => {
         x3d: 0,
         y3d: 10.0,
         z3d: 0, // Ravine has 0 holes for 2-pin LED
+        rotY: 0,
       };
       const ravineElevation = computeComponentGroundElevation('LED', 0, 0, true, 0, 1);
       // Lowest pin tip rests flush on plastic face; body sits above BREADBOARD_TOP_Y (never sinks!)
       expect(ravineElevation).toBeGreaterThanOrEqual(BREADBOARD_TOP_Y);
+
+      // 8. Body-Bottom Anti-Sink Guarantee:
+      // When validly inserted, the component's PCB/plastic body (minBodyY) NEVER drops below BREADBOARD_TOP_Y + 0.2mm!
+      const insertedConfigs: Array<{ type: string; z: number }> = [
+        { type: 'TIMER_555', z: 0 },
+        { type: 'IC_74HC14', z: 0 },
+        { type: 'ATMEGA328P', z: 0 },
+        { type: 'ARDUINO_NANO', z: 0 },
+        { type: 'ESP32_DEVKIT', z: 0 },
+        { type: 'HC_SR04', z: ROW_Z_MAP.C },
+        { type: 'RESISTOR', z: ROW_Z_MAP.C },
+      ];
+      insertedConfigs.forEach(({ type, z }) => {
+        const spec = getComponentElevationSpec(type);
+        const elev = computeComponentGroundElevation(type, 0, z, true, 0, 1);
+        const bodyBottomWorldY = elev + spec.localMinBodyY;
+        expect(bodyBottomWorldY).toBeGreaterThanOrEqual(BREADBOARD_TOP_Y + 0.2 - 0.01);
+      });
+
+      // 9. Off-board parts (Uno, Mega, L298N, Battery 9V) clamp lowest point at surface
+      const offboardTypes = ['ARDUINO_UNO', 'ARDUINO_MEGA', 'MODULE_L298N', 'BATTERY_9V'];
+      offboardTypes.forEach((t) => {
+        const spec = getComponentElevationSpec(t);
+        const elev = computeComponentGroundElevation(t, 0, 0, false, 0, 1);
+        const lowestWorldY = elev + Math.min(spec.localMinY, spec.localMinBodyY);
+        expect(lowestWorldY).toBeCloseTo(0.0, 2);
+      });
     });
 
     it('Task 4: Solid Metallic Pins - Authentically proportioned pin length and zero-sinking elevation specs', () => {
@@ -1820,24 +1858,36 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(dipSpec.isThroughHole).toBe(true);
       expect(dipSpec.pinLength).toBe(5.2);
       expect(dipSpec.localMinY).toBe(-5.0);
+      expect(dipSpec.localMinBodyY).toBe(0.2);
 
       // 2. MCU Breakouts (Nano, ESP32, Pico): 6.5mm pin length
       const mcuSpec = getComponentElevationSpec('ARDUINO_NANO');
       expect(mcuSpec.isThroughHole).toBe(true);
       expect(mcuSpec.pinLength).toBe(6.5);
       expect(mcuSpec.localMinY).toBe(-5.5);
+      expect(mcuSpec.localMinBodyY).toBe(0.8);
 
-      // 3. Sensor / Wireless Modules (HC-SR04, HC-05): 6.0mm pin length
+      // 3. Sensor / Wireless Modules (HC-SR04, HC-05, OLED, DHT, PIR, MPU-6050): 6.0mm pin length
       const sensorSpec = getComponentElevationSpec('HC_SR04');
       expect(sensorSpec.isThroughHole).toBe(true);
       expect(sensorSpec.pinLength).toBe(6.0);
       expect(sensorSpec.localMinY).toBe(-5.7);
+      expect(sensorSpec.localMinBodyY).toBe(1.0);
+
+      const hc05Spec = getComponentElevationSpec('MODULE_BLUETOOTH_HC05');
+      expect(hc05Spec.isThroughHole).toBe(true);
+      expect(hc05Spec.pinLength).toBe(6.0);
+
+      const oledSpec = getComponentElevationSpec('DISPLAY_OLED_I2C');
+      expect(oledSpec.isThroughHole).toBe(true);
+      expect(oledSpec.pinLength).toBe(6.0);
 
       // 4. Passives (Resistor, LED, Capacitor): 11.0mm pin length
       const passiveSpec = getComponentElevationSpec('RESISTOR');
       expect(passiveSpec.isThroughHole).toBe(true);
       expect(passiveSpec.pinLength).toBe(11.0);
       expect(passiveSpec.localMinY).toBe(-8.0);
+      expect(passiveSpec.localMinBodyY).toBe(2.0);
     });
   });
 });

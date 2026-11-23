@@ -133,9 +133,9 @@ export function DipPackage3D({
         depthWrite: true,
       }),
       leadSilver: new THREE.MeshStandardMaterial({
-        color: isBurned ? '#71717A' : '#E2E8F0',
-        metalness: isBurned ? 0.4 : 0.95,
-        roughness: isBurned ? 0.6 : 0.2,
+        color: isBurned ? '#71717A' : '#d4dce6',
+        metalness: isBurned ? 0.4 : 0.88,
+        roughness: isBurned ? 0.6 : 0.22,
         transparent: false,
         opacity: 1,
         depthWrite: true,
