@@ -1,12 +1,14 @@
 'use client';
 
 import React from 'react';
-import { CircuitComponent } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
 
 interface SchematicSymbolProps {
   component: CircuitComponent;
   isSelected: boolean;
   isSimulating: boolean;
+  wires?: CircuitWire[];
+  wireCurrents?: Record<string, number>;
   simState?: {
     voltage: number;
     current: number;
@@ -35,6 +37,8 @@ export function SchematicSymbol({
   component,
   isSelected,
   isSimulating,
+  wires,
+  wireCurrents,
   simState,
 }: SchematicSymbolProps) {
   const { type, value, rotation, mirrored } = component;
@@ -902,7 +906,9 @@ export function SchematicSymbol({
 
       case 'ACTUATOR_RGB_LED':
       case 'LED_RGB':
-      case 'RGB_LED': {
+      case 'RGB_LED':
+      case 'rgb-led':
+      case 'rgb_led': {
         const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
         
         // 1. Resolve multi-channel levels (rLevel, gLevel, bLevel in 0..1)
@@ -910,7 +916,7 @@ export function SchematicSymbol({
         let gLevel = 0;
         let bLevel = 0;
 
-        if (simState && typeof simState === 'object') {
+        if (isSimulating && simState && typeof simState === 'object') {
           const sAny = simState as Record<string, unknown>;
           if (sAny.onRed) rLevel = Math.max(rLevel, typeof sAny.redBrightness === 'number' ? sAny.redBrightness : 1.0);
           if (sAny.onGreen) gLevel = Math.max(gLevel, typeof sAny.greenBrightness === 'number' ? sAny.greenBrightness : 1.0);
@@ -935,24 +941,44 @@ export function SchematicSymbol({
           }
         }
 
-        // 2. Explicit component parameter overrides from Inspector
-        if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
-        if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
-        if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+        // 2. Wire conduction tracing matching Studio3DCanvas.tsx
+        if (isSimulating && wires) {
+          wires.forEach((cw) => {
+            let pin = '';
+            if (cw.fromCompId === component.id) {
+              pin = cw.fromPinId || '';
+            } else if (cw.toCompId === component.id) {
+              pin = cw.toPinId || '';
+            }
+            if (!pin) return;
 
-        // 3. Fallback for static hex color
-        if (rLevel === 0 && gLevel === 0 && bLevel === 0 && component.parameters?.color) {
-          const hex = String(component.parameters.color).replace('#', '');
-          if (hex.length === 6) {
-            rLevel = parseInt(hex.slice(0, 2), 16) / 255;
-            gLevel = parseInt(hex.slice(2, 4), 16) / 255;
-            bLevel = parseInt(hex.slice(4, 6), 16) / 255;
-          }
+            const pLower = pin.toLowerCase();
+            const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+            const hasConductingCurrent = Math.abs(currentA) > 0.0001;
+            const channelLevel = hasConductingCurrent
+              ? Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02))
+              : 1.0;
+
+            if (pLower === 'r' || pLower === '1' || pLower === 'red') {
+              rLevel = Math.max(rLevel, channelLevel);
+            } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
+              gLevel = Math.max(gLevel, channelLevel);
+            } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
+              bLevel = Math.max(bLevel, channelLevel);
+            }
+          });
         }
 
-        const rBright = isBurned ? 0 : Math.max(0, Math.min(1, rLevel));
-        const gBright = isBurned ? 0 : Math.max(0, Math.min(1, gLevel));
-        const bBright = isBurned ? 0 : Math.max(0, Math.min(1, bLevel));
+        // 3. Explicit component parameter overrides from Inspector (applied when simulating/conducting)
+        if (isSimulating) {
+          if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
+          if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
+          if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+        }
+
+        const rBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, rLevel));
+        const gBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, gLevel));
+        const bBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, bLevel));
 
         const onR = rBright > 0.02;
         const onG = gBright > 0.02;

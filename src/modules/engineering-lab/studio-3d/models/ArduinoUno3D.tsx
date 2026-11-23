@@ -271,9 +271,17 @@ export function ArduinoUno3D({
 
       {/* High-Resolution White Silkscreen Face Overlay */}
       {silkscreenTexture && (
-        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 1.63, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[68.0, 52.8]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -282,6 +290,7 @@ export function ArduinoUno3D({
         position={[-28, 5.5, -14]}
         material={materials.usbMetal}
         castShadow
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onToggleUsb?.();
@@ -299,6 +308,7 @@ export function ArduinoUno3D({
       {isUsbPlugged ? (
         <group
           position={[-28, 5.5, -14]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -328,6 +338,7 @@ export function ArduinoUno3D({
         /* Unplugged USB cable resting near socket - click to plug in */
         <group
           position={[-50, 2.5, -14]}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
@@ -467,20 +478,6 @@ export function ArduinoUno3D({
               <boxGeometry args={[2.4, 6.0, 2.4]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-
-            {/* Crisp readable pin hover flag badge */}
-            {isHovered && (
-              <Html
-                position={[0, 7.5, 0]}
-                center
-                distanceFactor={75}
-                style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
-              >
-                <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
-                  {pin.name}
-                </div>
-              </Html>
-            )}
           </group>
         );
       })}

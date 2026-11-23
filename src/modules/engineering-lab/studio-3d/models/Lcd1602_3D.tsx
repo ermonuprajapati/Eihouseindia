@@ -230,9 +230,17 @@ export function Lcd1602_3D({
 
       {/* 5. Crisp Silkscreen Pin Legend Strip Facing +Y directly in front of header */}
       {silkscreenTexture && (
-        <mesh position={[-16.0, 1.62, -11.0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[-16.0, 1.63, -11.0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[41.5, 3.0]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 

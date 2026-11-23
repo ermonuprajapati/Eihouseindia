@@ -78,12 +78,58 @@ export function BluetoothHC05_3D({
     { name: 'EN', x: 6.35 },
   ];
 
+  const silkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 1024, 512);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Branding
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText('HC-05 BLUETOOTH', 512, 120);
+
+    // Pin markings directly beside headers
+    ctx.font = 'bold 32px monospace';
+    const pinNames = ['STATE', 'RXD', 'TXD', 'GND', 'VCC', 'EN'];
+    pinNames.forEach((name, i) => {
+      const cx = 170 + i * 136;
+      ctx.fillText(name, cx, 430);
+    });
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
   return (
     <group position={position} rotation={rotation}>
       {/* Carrier PCB (27mm x 13mm x 1.6mm) elevated on header pins */}
       <mesh position={[0, 6.0, 0]} material={materials.pcbCarrier} castShadow>
         <boxGeometry args={[27.0, 1.6, 13.0]} />
       </mesh>
+
+      {/* Crisp White Silkscreen Overlay with polygonOffset to prevent z-fighting */}
+      {silkscreenTexture && (
+        <mesh position={[0, 6.82, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[26.5, 12.5]} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </mesh>
+      )}
 
       {/* Blue Daughterboard module */}
       <mesh position={[0, 7.2, -1.0]} material={materials.daughterBoard}>

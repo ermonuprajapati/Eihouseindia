@@ -122,9 +122,17 @@ export function HcSr04_3D({
 
       {/* 2. Silkscreen Legend Face on Front */}
       {silkscreenTexture && (
-        <mesh position={[0, 10.0, 0.82]}>
+        <mesh position={[0, 10.0, 0.83]}>
           <planeGeometry args={[44.0, 19.0]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -225,18 +233,6 @@ export function HcSr04_3D({
                   <ringGeometry args={[0.5, 1.3, 24]} />
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
-              )}
-              {renderContext !== '3d-view' && isHovered && (
-                <Html
-                  position={[0, 2.0, 0]}
-                  center
-                  distanceFactor={35}
-                  style={{ pointerEvents: 'none', zIndex: 1000 }}
-                >
-                  <div className="bg-slate-950/95 border border-sky-400 text-sky-300 font-mono text-[10px] px-2 py-0.5 rounded shadow-xl whitespace-nowrap font-bold">
-                    {p.name} · {p.label}
-                  </div>
-                </Html>
               )}
               {renderContext !== '3d-view' && (
                 <mesh

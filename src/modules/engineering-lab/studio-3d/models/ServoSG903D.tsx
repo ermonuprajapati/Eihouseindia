@@ -81,6 +81,34 @@ export function ServoSG903D({
     };
   }, [labelTexture]);
 
+  const dupontSilkscreenTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, 512, 128);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GND', 85, 64);
+    ctx.fillText('5V', 256, 64);
+    ctx.fillText('PWM', 427, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      dupontSilkscreenTexture?.dispose();
+    };
+  }, [dupontSilkscreenTexture]);
+
   // Convert angle (0..180) to radians
   const hornRotY = ((angle - 90) * Math.PI) / 180;
 
@@ -133,8 +161,22 @@ export function ServoSG903D({
         </mesh>
       </group>
 
-      {/* 3-Wire Ribbon Cable Header with click targets */}
+      {/* 3-Wire Ribbon Cable Header with click targets and crisp silkscreen */}
       <group position={[-16, 5, 0]}>
+        {dupontSilkscreenTexture && (
+          <mesh position={[0, 1.3, 0]} rotation={[-Math.PI / 2, 0, -Math.PI / 2]}>
+            <planeGeometry args={[7.6, 9.8]} />
+            <meshBasicMaterial
+              map={dupontSilkscreenTexture}
+              transparent
+              opacity={0.95}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
+            />
+          </mesh>
+        )}
         {[
           { name: 'GND', color: materials.pinBrown, offsetZ: -2.54 },
           { name: 'VCC', color: materials.pinRed, offsetZ: 0 },

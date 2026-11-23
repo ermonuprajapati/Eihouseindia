@@ -14,7 +14,7 @@ import {
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
-import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal } from 'lucide-react';
+import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal, Usb } from 'lucide-react';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -1106,12 +1106,15 @@ export function Virtual3dStudio({
 
     const comp = components.find((c) => c.id === compId);
     const active = activeComponents3d.find((c) => c.id === compId);
+    const label = comp?.label || targetComp?.label || 'MCU';
+
+    toast.success(
+      nextState
+        ? `🔌 Connected USB Power to ${label} (5.0V Active)`
+        : `⚡ Unplugged USB Cable from ${label} (0V)`
+    );
+
     if (comp && onUpdateComponent) {
-      toast.success(
-        nextState
-          ? `🔌 Connected USB Power to ${comp.label} (5.0V Active)`
-          : `⚡ Unplugged USB Cable from ${comp.label}`
-      );
       onUpdateComponent({
         ...comp,
         x3d: active?.x3d ?? comp.x3d,
@@ -1372,6 +1375,51 @@ export function Virtual3dStudio({
               </button>
             </div>
           )}
+
+          {/* Active MCU USB Power Cable Toggle Button */}
+          {(() => {
+            const selectedComp = activeComponents3d.find((c) => c.id === selectedCompId);
+            const isSelectedMcu = selectedComp && (
+              selectedComp.type.startsWith('ARDUINO') ||
+              selectedComp.type.startsWith('ESP32') ||
+              selectedComp.type.startsWith('RASPBERRY_PI') ||
+              selectedComp.type.startsWith('STM32') ||
+              selectedComp.type.includes('MCU')
+            );
+            const targetMcu = isSelectedMcu
+              ? selectedComp
+              : activeComponents3d.find((c) =>
+                  c.type.startsWith('ARDUINO') ||
+                  c.type.startsWith('ESP32') ||
+                  c.type.startsWith('RASPBERRY_PI') ||
+                  c.type.startsWith('STM32') ||
+                  c.type.includes('MCU')
+                );
+            if (!targetMcu) return null;
+            const isConnected = targetMcu.parameters?.usbPlugged !== false;
+            return (
+              <div className="flex items-center gap-1 border-r border-slate-700/60 pr-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleToggleMcuUsb(targetMcu.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 border rounded text-xs font-bold transition-all cursor-pointer ${
+                    isConnected
+                      ? 'bg-cyan-950/80 hover:bg-cyan-900 border-cyan-500/80 text-cyan-300 shadow-sm'
+                      : 'bg-amber-950/90 hover:bg-amber-900 border-amber-400 text-amber-300 animate-pulse shadow-lg ring-1 ring-amber-400/50'
+                  }`}
+                  title={
+                    isConnected
+                      ? `Click to Unplug USB Cable from ${targetMcu.label} (Power drops to 0V)`
+                      : `Click to Connect USB Cable to ${targetMcu.label} (5.0V Active)`
+                  }
+                >
+                  <Usb className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">{isConnected ? 'USB (5V)' : 'Connect USB'}</span>
+                  <span className="sm:hidden">{isConnected ? '5V' : 'USB'}</span>
+                </button>
+              </div>
+            );
+          })()}
 
           <button
             type="button"

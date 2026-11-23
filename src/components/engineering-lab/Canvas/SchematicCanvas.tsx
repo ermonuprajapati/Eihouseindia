@@ -1635,6 +1635,8 @@ export function SchematicCanvas({
                 component={comp}
                 isSelected={isSelected}
                 isSimulating={isSimulating}
+                wires={wires}
+                wireCurrents={wireCurrents}
                 simState={state}
               />
 
@@ -1643,6 +1645,7 @@ export function SchematicCanvas({
                 const world = getPinWorldCoord(comp, pin);
                 const localX = world.x - comp.x;
                 const localY = world.y - comp.y;
+                const pinLabel = pin.name || (pin as unknown as { label?: string }).label || pin.id;
 
                 // Check if this pin is connected to any wire
                 const isPinConnected = wires.some(
@@ -1664,10 +1667,10 @@ export function SchematicCanvas({
                       top: `calc(50% + ${localY}px)`,
                       transform: 'translate(-50%, -50%)',
                     }}
-                    title={`Pin: ${pin.name} (${pin.pinType}) ${isPinConnected ? '[Connected]' : '[Floating]'}`}
+                    title={`Pin: ${pinLabel} (${pin.pinType}) ${isPinConnected ? '[Connected]' : '[Floating]'}`}
                   >
-                    <span className="opacity-0 group-hover/pin:opacity-100 absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950 text-[9px] text-emerald-300 font-mono px-1 py-0.5 rounded pointer-events-none whitespace-nowrap border border-slate-800 z-40">
-                      {pin.name}
+                    <span className="opacity-0 group-hover/pin:opacity-100 absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-950 text-[10px] text-amber-300 font-mono font-bold px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap border border-amber-400/80 shadow-lg z-40">
+                      {pinLabel}
                     </span>
                   </div>
                 );

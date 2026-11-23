@@ -190,9 +190,17 @@ export function RaspberryPiPico3D({
 
       {/* Silkscreen Pin Labels Texture Overlay */}
       {silkscreenTexture && (
-        <mesh position={[0, 1.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 1.53, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[20.8, 50.8]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -226,7 +234,7 @@ export function RaspberryPiPico3D({
       </mesh>
 
       {/* Interactive Micro-USB Cable Plug */}
-      {isUsbPlugged && (
+      {isUsbPlugged ? (
         <group
           position={[0, 2.2, -27]}
           onPointerDown={(e) => e.stopPropagation()}
@@ -234,6 +242,11 @@ export function RaspberryPiPico3D({
             e.stopPropagation();
             onToggleUsb?.();
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
         >
           <mesh position={[0, 0, -3]} material={materials.usbMetal}>
             <boxGeometry args={[6.5, 2.2, 5]} />
@@ -244,6 +257,28 @@ export function RaspberryPiPico3D({
           <mesh position={[0, 0, -18]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[1.8, 1.8, 16, 12]} />
             <primitive object={materials.usbCablePvc} attach="material" />
+          </mesh>
+        </group>
+      ) : (
+        /* Unplugged USB cable resting near socket - click to plug in */
+        <group
+          position={[0, 1.5, -36]}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleUsb?.();
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
+        >
+          <mesh position={[0, 0, 0]} material={materials.usbMetal}>
+            <boxGeometry args={[6.5, 2.2, 5]} />
+          </mesh>
+          <mesh position={[0, 0, -5]} material={materials.usbCablePvc}>
+            <boxGeometry args={[9, 4, 8]} />
           </mesh>
         </group>
       )}
@@ -295,22 +330,10 @@ export function RaspberryPiPico3D({
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <>
-                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <ringGeometry args={[0.6, 1.4, 24]} />
-                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-                </mesh>
-                <Html
-                  position={[0, 6.0, 0]}
-                  center
-                  distanceFactor={75}
-                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
-                >
-                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
-                    {pin.name}
-                  </div>
-                </Html>
-              </>
+              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+              </mesh>
             )}
             <mesh
               position={[0, 0.5, 0]}

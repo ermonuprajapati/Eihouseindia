@@ -871,6 +871,100 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
       { id: '2', label: '2', localPos: [2.54, 0, 0] },
     ];
   }
+  if (t === 'SERVO_SG90' || t === 'ACTUATOR_SERVO_SG90' || t === 'SERVO') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-16.0, 5, -2.54] },
+      { id: 'VCC', label: '5V', localPos: [-16.0, 5, 0] },
+      { id: 'PWM', label: 'PWM', localPos: [-16.0, 5, 2.54] },
+    ];
+  }
+  if (t === 'LCD_1602' || t === 'DISPLAY_LCD1602') {
+    const LCD_PIN_NAMES = [
+      'VSS', 'VDD', 'V0', 'RS', 'RW', 'E',
+      'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7',
+      'A', 'K'
+    ];
+    return LCD_PIN_NAMES.map((name, i) => ({
+      id: name,
+      label: name,
+      localPos: [-16.0 + (-19.05 + i * 2.54), 7.8, -14.0] as [number, number, number],
+    }));
+  }
+  if (t.includes('OLED') || t === 'DISPLAY_OLED_SSD1306' || t === 'MODULE_OLED_I2C') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3.5, -12] },
+      { id: 'VCC', label: 'VCC', localPos: [-1.27, 3.5, -12] },
+      { id: 'SCL', label: 'SCL', localPos: [1.27, 3.5, -12] },
+      { id: 'SDA', label: 'SDA', localPos: [3.81, 3.5, -12] },
+    ];
+  }
+  if (t.includes('RELAY')) {
+    return [
+      { id: 'VCC', label: 'VCC', localPos: [-5.08, 3.5, 10] },
+      { id: 'GND', label: 'GND', localPos: [-2.54, 3.5, 10] },
+      { id: 'IN', label: 'IN', localPos: [0, 3.5, 10] },
+      { id: 'NO', label: 'NO', localPos: [-5.08, 5.0, -10] },
+      { id: 'COM', label: 'COM', localPos: [0, 5.0, -10] },
+      { id: 'NC', label: 'NC', localPos: [5.08, 5.0, -10] },
+    ];
+  }
+  if (t === 'MOTOR_DRIVER_L298N') {
+    return [
+      { id: '12V', label: '12V', localPos: [-14, 5, 14] },
+      { id: 'GND', label: 'GND', localPos: [-10, 5, 14] },
+      { id: '5V', label: '5V', localPos: [-6, 5, 14] },
+      { id: 'ENA', label: 'ENA', localPos: [0, 4, 14] },
+      { id: 'IN1', label: 'IN1', localPos: [2.54, 4, 14] },
+      { id: 'IN2', label: 'IN2', localPos: [5.08, 4, 14] },
+      { id: 'IN3', label: 'IN3', localPos: [7.62, 4, 14] },
+      { id: 'IN4', label: 'IN4', localPos: [10.16, 4, 14] },
+      { id: 'ENB', label: 'ENB', localPos: [12.7, 4, 14] },
+    ];
+  }
+  if (t === 'MODULE_NRF24L01') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3, 10] },
+      { id: 'VCC', label: 'VCC', localPos: [-1.27, 3, 10] },
+      { id: 'CE', label: 'CE', localPos: [1.27, 3, 10] },
+      { id: 'CSN', label: 'CSN', localPos: [3.81, 3, 10] },
+      { id: 'SCK', label: 'SCK', localPos: [-3.81, 3, 12.54] },
+      { id: 'MOSI', label: 'MOSI', localPos: [-1.27, 3, 12.54] },
+      { id: 'MISO', label: 'MISO', localPos: [1.27, 3, 12.54] },
+      { id: 'IRQ', label: 'IRQ', localPos: [3.81, 3, 12.54] },
+    ];
+  }
+  if (t === 'MODULE_ESP01') {
+    return [
+      { id: 'TXD', label: 'TXD', localPos: [-3.81, 3, 8] },
+      { id: 'CH_PD', label: 'CH_PD', localPos: [-1.27, 3, 8] },
+      { id: 'RST', label: 'RST', localPos: [1.27, 3, 8] },
+      { id: 'VCC', label: 'VCC', localPos: [3.81, 3, 8] },
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3, 10.54] },
+      { id: 'GPIO2', label: 'GPIO2', localPos: [-1.27, 3, 10.54] },
+      { id: 'GPIO0', label: 'GPIO0', localPos: [1.27, 3, 10.54] },
+      { id: 'RXD', label: 'RXD', localPos: [3.81, 3, 10.54] },
+    ];
+  }
+  if (t.includes('STM32')) {
+    const stmPins = ['B12', 'B13', 'B14', 'B15', 'A8', 'A9', 'A10', 'A11', 'A12', 'A15', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', '5V', 'GND', '3V3'];
+    return stmPins.map((p, i) => ({
+      id: p,
+      label: p,
+      localPos: [-15 + i * 1.5, 4.0, 10] as [number, number, number],
+    }));
+  }
+
+  // Universal Fallback: Check COMPONENT_CATALOG for any board / sensor / module pins!
+  const catItem = COMPONENT_CATALOG.find((c) => c.type === t);
+  if (catItem?.pins && catItem.pins.length > 0) {
+    const pinCount = catItem.pins.length;
+    const startX = -((pinCount - 1) * 2.54) / 2;
+    return catItem.pins.map((p, i) => ({
+      id: p.id,
+      label: p.name || p.id,
+      localPos: [startX + i * 2.54, 4.0, 0] as [number, number, number],
+    }));
+  }
 
   return [];
 }
@@ -887,9 +981,7 @@ export function ComponentPinLabelsOverlay({
 }) {
   const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
 
-  // Bug 3 Fix: Default to professional silkscreen on component bodies + instant, single clean tooltip badge on whichever pin is hovered.
-  // NEVER spam all permanent HTML badges when a component is selected.
-  // ONLY render multiple badges when the user explicitly enabled the "Show All Pin Labels" [L] toolbar toggle.
+  // Render tooltip badge on hovered pin or all badges when user toggles [L]
   if (!showAll && !hoveredPinName) return null;
 
   const pinsToRender = showAll
@@ -899,7 +991,13 @@ export function ComponentPinLabelsOverlay({
           p.id === hoveredPinName ||
           p.id.toLowerCase() === hoveredPinName?.toLowerCase() ||
           p.label.toLowerCase() === hoveredPinName?.toLowerCase() ||
-          (p as unknown as { name?: string }).name?.toLowerCase() === hoveredPinName?.toLowerCase()
+          (p as unknown as { name?: string }).name?.toLowerCase() === hoveredPinName?.toLowerCase() ||
+          (hoveredPinName && (
+            (p.id.startsWith('GND') && hoveredPinName.startsWith('GND')) ||
+            (p.id.startsWith('RESET') && hoveredPinName.startsWith('RESET')) ||
+            (p.id.startsWith('5V') && hoveredPinName.startsWith('5V')) ||
+            (p.id.startsWith('3V3') && (hoveredPinName.startsWith('3V3') || hoveredPinName.startsWith('3.3V')))
+          ))
       );
 
   if (pinsToRender.length === 0) return null;
@@ -918,8 +1016,8 @@ export function ComponentPinLabelsOverlay({
           hoveredPinName?.toLowerCase() === p.id.toLowerCase() ||
           hoveredPinName?.toLowerCase() === p.label.toLowerCase();
 
-        // When showAll is active, gently alternate Y elevation by 1.8mm to prevent overlap on tight 2.54mm pitch
-        const elevationY = isHovered ? 2.8 : 2.2 + (idx % 2) * 1.8;
+        // Staggered Y elevation to prevent overlap on tight header rows
+        const elevationY = isHovered ? 4.2 : 3.0 + (idx % 2) * 2.0;
         const labelText = p.label || (p as unknown as { name?: string }).name || p.id;
 
         return (
@@ -927,13 +1025,13 @@ export function ComponentPinLabelsOverlay({
             key={p.id}
             position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2]]}
             center
-            distanceFactor={90}
+            distanceFactor={85}
             style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
           >
             <div
-              className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] tracking-tight whitespace-nowrap shadow-xl border ${
+              className={`px-2 py-0.5 rounded font-mono font-bold text-[11px] tracking-wide whitespace-nowrap shadow-2xl border transition-all ${
                 isHovered
-                  ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-white shadow-amber-500/60 scale-110 z-50'
+                  ? 'bg-slate-950 text-amber-300 border-amber-400 ring-2 ring-white/90 shadow-amber-500/60 scale-110 z-50'
                   : 'bg-slate-900/95 text-cyan-300 border-cyan-500/70 shadow-black/90'
               }`}
             >
@@ -3309,15 +3407,36 @@ export function Studio3DCanvas({
                     <boxGeometry args={[Math.max(16, pinCount * 2.54), 2.5, 2.5]} />
                     <meshStandardMaterial color="#18181B" roughness={0.8} />
                   </mesh>
-                  {/* Square Pins */}
+                  {/* Square Pins with Click and Hover Targets */}
                   {Array.from({ length: Math.min(pinCount, 16) }).map((_, pi) => {
                     const startX = -((Math.min(pinCount, 16) - 1) * 2.54) / 2;
                     const px = startX + pi * 2.54;
+                    const pinItem = catalogItem?.pins?.[pi];
+                    const pinName = pinItem?.name || pinItem?.id || String(pi + 1);
+                    const isHovered = hoveredPinInfo?.compId === comp.id && (hoveredPinInfo.pinName === pinName || hoveredPinInfo.pinName === pinItem?.id);
                     return (
-                      <mesh key={pi} position={[px, 4.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
-                        <boxGeometry args={[0.64, 5.0, 0.64]} />
-                        <meshStandardMaterial color="#F59E0B" metalness={0.85} />
-                      </mesh>
+                      <group key={pi} position={[px, 4.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                        <mesh>
+                          <boxGeometry args={[0.64, 5.0, 0.64]} />
+                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#F59E0B'} metalness={0.85} />
+                        </mesh>
+                        <mesh
+                          renderOrder={100}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePinClick(comp.id, pinName, getPinWorld3D(comp.id, pinName));
+                          }}
+                          onPointerOver={(e) => {
+                            e.stopPropagation();
+                            setHoveredPinInfo({ compId: comp.id, pinName });
+                          }}
+                          onPointerOut={() => setHoveredPinInfo(null)}
+                        >
+                          <sphereGeometry args={[isHovered ? 1.2 : 0.7, 8, 8]} />
+                          <meshBasicMaterial color={isHovered ? '#FDE047' : '#38BDF8'} transparent opacity={isHovered ? 0.9 : 0} />
+                        </mesh>
+                      </group>
                     );
                   })}
                 </group>
