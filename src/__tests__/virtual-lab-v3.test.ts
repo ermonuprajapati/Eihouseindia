@@ -1056,4 +1056,63 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(cat3d!.physicalSpec!.pads!.length).toBe(14);
     });
   });
+
+  describe('Task 4: Zero Circular-Import & Initial Client Bundle Mount Smoke Verification', () => {
+    it('all core engineering lab modules import cleanly without ReferenceError or undefined circular bindings', async () => {
+      // 1. Verify circuit engine & catalog
+      const catalogMod = await import('@/modules/engineering-lab/circuit-engine/component-catalog');
+      expect(catalogMod.COMPONENT_CATALOG).toBeDefined();
+      expect(catalogMod.COMPONENT_CATALOG.length).toBeGreaterThan(100);
+
+      // 2. Verify physical registry
+      const physicalMod = await import('@/modules/engineering-lab/circuit-engine/component-physical-registry');
+      expect(typeof physicalMod.resolvePhysicalSpec).toBe('function');
+      expect(typeof physicalMod.buildDipPads).toBe('function');
+
+      // 3. Verify 25-category registry
+      const cat25Mod = await import('@/modules/engineering-lab/circuit-engine/component-categories-25');
+      expect(cat25Mod.MASTER_25_CATEGORIES.length).toBe(25);
+      expect(typeof cat25Mod.getCategory25ForComponent).toBe('function');
+
+      // 4. Verify schematic ERC and pure getPinWorldCoord geometry
+      const ercMod = await import('@/modules/engineering-lab/circuit-engine/schematic-erc');
+      expect(typeof ercMod.runElectricalRulesCheck).toBe('function');
+      expect(typeof ercMod.getPinWorldCoord).toBe('function');
+
+      // Test getPinWorldCoord
+      const mockComp: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        category: 'passive',
+        footprint: 'R_AXIAL',
+        parameters: {},
+        x: 100,
+        y: 200,
+        rotation: 90,
+        pins: [{ id: '1', name: '1', pinType: 'passive', x: -20, y: 0 }],
+      };
+      const pinPos = ercMod.getPinWorldCoord(mockComp, mockComp.pins[0]);
+      expect(pinPos.x).toBe(100);
+      expect(pinPos.y).toBe(180);
+
+      // 5. Verify SchematicCanvas exports without circular loop
+      const canvasMod = await import('@/components/engineering-lab/Canvas/SchematicCanvas');
+      expect(typeof canvasMod.SchematicCanvas).toBe('function');
+      expect(typeof canvasMod.getPinWorldCoord).toBe('function');
+
+      // 6. Verify PropertiesInspector & ComponentBrowser
+      const inspectorMod = await import('@/components/engineering-lab/Panels/PropertiesInspector');
+      expect(typeof inspectorMod.PropertiesInspector).toBe('function');
+
+      const browserMod = await import('@/components/engineering-lab/Panels/ComponentBrowser');
+      expect(typeof browserMod.ComponentBrowser).toBe('function');
+
+      // 7. Verify ClientWrapper & Error Boundary
+      const wrapperMod = await import('@/components/engineering-lab/EngineeringLabClientWrapper');
+      expect(typeof wrapperMod.EngineeringLabClientWrapper).toBe('function');
+      expect(typeof wrapperMod.EngineeringLabErrorBoundary).toBe('function');
+    });
+  });
 });

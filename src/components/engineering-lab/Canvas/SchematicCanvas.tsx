@@ -100,25 +100,8 @@ export interface SchematicCanvasProps {
   onAutoAnnotate?: () => void;
 }
 
-/**
- * Calculates rotated and mirrored world coordinates for a component's pin terminal.
- */
-export function getPinWorldCoord(
-  comp: CircuitComponent,
-  pin: { x: number; y: number }
-): { x: number; y: number } {
-  let px = pin.x;
-  const py = pin.y;
-  if (comp.mirrored) {
-    px = -px;
-  }
-  const rad = ((comp.rotation || 0) * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const rx = Math.round(px * cos - py * sin);
-  const ry = Math.round(px * sin + py * cos);
-  return { x: comp.x + rx, y: comp.y + ry };
-}
+import { getPinWorldCoord } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+export { getPinWorldCoord };
 
 /**
  * Calculates polyline SVG path with optional intermediate waypoints and routing geometry styles.

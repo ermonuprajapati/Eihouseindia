@@ -1,4 +1,5 @@
 import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus, LibraryTier, MountingType, PlacementClass } from '../types';
+import { resolvePhysicalSpec, resolveComponentMetadata } from './component-physical-registry';
 
 export interface ComponentTemplate {
   type: string;
@@ -4681,8 +4682,6 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     manufacturerPartNumber: 'E6B2-CWZ6C',
   },
 ];
-
-import { resolvePhysicalSpec, resolveComponentMetadata } from './component-physical-registry';
 
 // ============================================================================
 // ENRICH 100% OF COMPONENT_CATALOG ENTRIES WITH CANONICAL PHYSICAL SPEC & 3-TIER METADATA

@@ -1,4 +1,4 @@
-import { ComponentTemplate } from './component-catalog';
+import type { ComponentTemplate } from './component-catalog';
 
 export interface MasterCategory25 {
   id: string;
