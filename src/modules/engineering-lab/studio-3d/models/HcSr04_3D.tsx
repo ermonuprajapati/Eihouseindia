@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
+import { Html } from '@react-three/drei';
 
 export interface HcSr04_3DProps {
   position?: [number, number, number];
@@ -233,10 +234,22 @@ export function HcSr04_3D({
                   <meshBasicMaterial color="#38BDF8" side={THREE.DoubleSide} />
                 </mesh>
               )}
+              {renderContext !== '3d-view' && isHovered && (
+                <Html
+                  position={[0, 2.2, 0.6]}
+                  center
+                  distanceFactor={35}
+                  style={{ pointerEvents: 'none', zIndex: 1000 }}
+                >
+                  <div className="bg-slate-950/95 border border-sky-400 text-sky-300 font-mono text-[10px] px-2 py-0.5 rounded shadow-xl whitespace-nowrap font-bold">
+                    {p.name} · {p.label}
+                  </div>
+                </Html>
+              )}
               {renderContext !== '3d-view' && (
                 <mesh
-                  position={[0, 0, 0]}
-                  renderOrder={100}
+                  position={[0, 0, 0.4]}
+                  renderOrder={150}
                   onPointerDown={(e) => {
                     e.stopPropagation();
                   }}
@@ -252,7 +265,7 @@ export function HcSr04_3D({
                   }}
                   onPointerOut={() => onHoverPin?.(null)}
                 >
-                  <sphereGeometry args={[2.0, 12, 12]} />
+                  <sphereGeometry args={[2.4, 12, 12]} />
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
               )}

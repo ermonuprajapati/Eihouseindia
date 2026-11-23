@@ -647,6 +647,7 @@ interface DragFrameControllerProps {
   components3d: Component3D[];
   occupiedHoleIds: Set<string>;
   hasBreadboard: boolean;
+  breadboardCount?: number;
   onUpdateComponent3D: (comp: Component3D) => void;
 }
 
@@ -1107,6 +1108,7 @@ function DragFrameController({
   components3d,
   occupiedHoleIds,
   hasBreadboard,
+  breadboardCount = 1,
   onUpdateComponent3D,
 }: DragFrameControllerProps) {
   const { camera, raycaster, pointer } = useThree();
@@ -1145,6 +1147,8 @@ function DragFrameController({
         'LED',
         'LED_RGB',
         'ACTUATOR_RGB_LED',
+        'HC_SR04',
+        'SENSOR_ULTRASONIC',
         'CAPACITOR',
         'CAPACITOR_ELECTROLYTIC',
         'DIODE',
@@ -1166,29 +1170,59 @@ function DragFrameController({
         'SLIDE_SWITCH',
       ].includes(comp.type);
 
-      if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
-        // Automatic IC Snapping straddling center DIP notch (top pins in Row E, bottom pins in Row F)
-        const isEvenDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC';
-        if (isEvenDip) {
+      const isEvenPinPart = [
+        'TIMER_555',
+        'DIP_IC',
+        'LED_RGB',
+        'ACTUATOR_RGB_LED',
+        'HC_SR04',
+        'SENSOR_ULTRASONIC',
+        'OPAMP_LM358',
+      ].includes(comp.type) || (comp.type.includes('DIP') && !comp.type.includes('14') && !comp.type.includes('74HC'));
+
+      // Check which breadboard is closest
+      let bestBoard = 0;
+      let minBoardDist = Infinity;
+      for (let b = 0; b < breadboardCount; b++) {
+        const bZ = -b * 60.0;
+        const dist = Math.abs(targetZ - bZ);
+        if (dist < minBoardDist) {
+          minBoardDist = dist;
+          bestBoard = b;
+        }
+      }
+      const boardCenterZ = -bestBoard * 60.0;
+      const isOverBoard = hasBreadboard && Math.abs(targetX) <= 85 && minBoardDist <= 30;
+
+      if (isOverBoard && isDipPackage && minBoardDist <= 22) {
+        // Automatic IC Snapping straddling center DIP notch
+        if (isEvenPinPart) {
           const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
           targetX = START_X + (nearestCol - 0.5) * PITCH_X;
         } else {
           const nearestCol = Math.max(2, Math.min(62, Math.round((targetX - START_X) / PITCH_X) + 1));
           targetX = START_X + (nearestCol - 1) * PITCH_X;
         }
-        targetZ = 0;   // Straddle center DIP ravine
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
-      } else if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
-        const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
-        if (freeHole) {
-          targetX = freeHole.x;
-          targetZ = freeHole.z;
+        targetZ = boardCenterZ;   // Straddle center DIP ravine
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true, 0, breadboardCount);
+      } else if (isOverBoard && isThroughHole) {
+        if (isEvenPinPart) {
+          const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
+          targetX = START_X + (nearestCol - 0.5) * PITCH_X;
+          const relZ = targetZ - boardCenterZ;
+          targetZ = boardCenterZ + (relZ <= 0 ? -8.42 : 8.42);
+        } else {
+          const freeHole = findNearestFreeHole830(targetX, targetZ - boardCenterZ, occupiedHoleIds);
+          if (freeHole) {
+            targetX = freeHole.x;
+            targetZ = freeHole.z + boardCenterZ;
+          }
         }
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true, 0, breadboardCount);
       } else {
         targetX = Math.round(targetX / 2.54) * 2.54;
         targetZ = Math.round(targetZ / 2.54) * 2.54;
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, false);
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, false, 0, breadboardCount);
       }
 
       targetX = Math.round(targetX * 100) / 100;
@@ -1315,6 +1349,7 @@ function WebGlResourceDisposer() {
 
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
+  breadboardCount?: number;
   onToggleBreadboard?: () => void;
   onToggleMcuUsb?: (compId: string) => void;
   components3d: Component3D[];
@@ -1350,6 +1385,7 @@ export interface Studio3DCanvasProps {
 
 export function Studio3DCanvas({
   hasBreadboard = true,
+  breadboardCount = 1,
   onToggleMcuUsb,
   components3d,
   wires3d,
@@ -1687,8 +1723,17 @@ export function Studio3DCanvas({
   // Helper to compute world position for any pin
   const getPinWorld3D = useCallback((compId: string, pinId: string): THREE.Vector3 => {
     if (compId === 'breadboard') {
-      const hole = HOLE_BY_ID.get(pinId);
-      if (hole) return new THREE.Vector3(hole.x, hole.y + 0.5, hole.z);
+      let baseId = pinId;
+      let boardZ = 0;
+      if (pinId.startsWith('bb2_')) {
+        baseId = 'bb_' + pinId.slice(4);
+        boardZ = -60.0;
+      } else if (pinId.startsWith('bb3_')) {
+        baseId = 'bb_' + pinId.slice(4);
+        boardZ = -120.0;
+      }
+      const hole = HOLE_BY_ID.get(baseId);
+      if (hole) return new THREE.Vector3(hole.x, hole.y + 0.5, hole.z + boardZ);
       return new THREE.Vector3(0, 0, 0);
     }
 
@@ -2220,20 +2265,24 @@ export function Studio3DCanvas({
           components3d={components3d}
           occupiedHoleIds={occupiedHoleIds}
           hasBreadboard={hasBreadboard}
+          breadboardCount={breadboardCount}
           onUpdateComponent3D={onUpdateComponent3D}
         />
 
-        {/* 830-Point Solderless Breadboard */}
-        {hasBreadboard && (
-          <Breadboard3D
-            position={[0, 0, 0]}
-            hoveredHole={hoveredHole}
-            onHoverHole={setHoveredHole}
-            onHoleClick={(hole, wPos) => {
-              handlePinClick('breadboard', hole.id, wPos);
-            }}
-          />
-        )}
+        {/* 830-Point Solderless Breadboards */}
+        {hasBreadboard &&
+          Array.from({ length: breadboardCount }).map((_, b) => (
+            <Breadboard3D
+              key={b}
+              position={[0, 0, -b * 60.0]}
+              hoveredHole={hoveredHole}
+              onHoverHole={setHoveredHole}
+              onHoleClick={(hole, wPos) => {
+                const holeId = b === 0 ? hole.id : `bb${b + 1}_` + hole.id.replace(/^bb_/, '');
+                handlePinClick('breadboard', holeId, wPos);
+              }}
+            />
+          ))}
 
         {/* 3D Components */}
         {components3d.map((comp) => {
@@ -3598,6 +3647,40 @@ export function Studio3DCanvas({
                 (w.toPin.compId === hoveredPinInfo.compId && w.toPin.pinId === hoveredPinInfo.pinName))
           );
 
+          // Obstacle-aware clearance: detect any component body between p1 and p2
+          let maxObstacleTopY = 0;
+          const wireLineA = new THREE.Vector2(p1.x, p1.z);
+          const wireLineB = new THREE.Vector2(p2.x, p2.z);
+          const wireLineLenSq = wireLineA.distanceToSquared(wireLineB);
+
+          if (wireLineLenSq > 9.0) {
+            for (const c of components3d) {
+              // Skip the source and target components themselves
+              if (c.id === w.fromPin.compId || c.id === w.toPin.compId) continue;
+              const fp = getComponentFootprint(c.type);
+              const cPos = new THREE.Vector2(c.x3d, c.z3d);
+
+              // Distance from component center to wire line segment in 2D
+              const tVal = Math.max(0, Math.min(1, ((cPos.x - wireLineA.x) * (wireLineB.x - wireLineA.x) + (cPos.y - wireLineA.y) * (wireLineB.y - wireLineA.y)) / wireLineLenSq));
+              const proj = new THREE.Vector2(
+                wireLineA.x + tVal * (wireLineB.x - wireLineA.x),
+                wireLineA.y + tVal * (wireLineB.y - wireLineA.y)
+              );
+              const distSq = cPos.distanceToSquared(proj);
+              const collisionRadius = Math.max(fp.halfW, fp.halfD) + 1.5;
+
+              if (distSq < collisionRadius * collisionRadius) {
+                const elevSpec = getComponentElevationSpec(c.type);
+                const compTop = c.y3d + (elevSpec.packageHeight || 8.0);
+                if (compTop > maxObstacleTopY) {
+                  maxObstacleTopY = compTop;
+                }
+              }
+            }
+          }
+
+          const obstacleApexY = maxObstacleTopY > 0 ? maxObstacleTopY + 4.5 : undefined;
+
           return (
             <Wire3DTube
               key={w.id}
@@ -3609,6 +3692,7 @@ export function Studio3DCanvas({
               isHighlighted={isConnectedToHoveredPin}
               isSimulating={isSimulating}
               current={wireCurrents?.[w.id] ?? w.current}
+              obstacleApexY={obstacleApexY}
               onClick={(id) => {
                 onSelectWire(id);
                 onSelectComponent(null);

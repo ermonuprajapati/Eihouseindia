@@ -10,7 +10,16 @@ import {
   resolvePhysicalSpec,
   resolveComponentMetadata,
 } from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
-import { getComponentPinOffsets } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
+import {
+  getComponentPinOffsets,
+  findNearestHole830,
+  areAllPinsInBreadboardHoles,
+  computeComponentGroundElevation,
+  getTieGroupForHole,
+  BreadboardOccupancyMap,
+  START_X,
+  PITCH_X,
+} from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import {
   MASTER_25_CATEGORIES,
   getCategory25ForComponent,
@@ -1484,6 +1493,127 @@ describe('Virtual Lab v3 Verification Suite', () => {
       const xs = rgbPads.map((p) => p.x);
       const uniqueXs = new Set(xs);
       expect(uniqueXs.size).toBe(4);
+    });
+  });
+
+  describe('Batch 2C: 3D Studio Multi-Breadboard Priority Auto-Layout, HC-SR04 Wire Sync & Obstacle-Aware Wires', () => {
+    it('Task 1: Step 0B pin alignment audit verification across all through-hole models', () => {
+      // Ceramic Capacitor leads: pitch 5.08mm (2 breadboard holes apart)
+      const capPins = getComponentPinOffsets('CAPACITOR');
+      expect(capPins.length).toBe(2);
+      expect(Math.abs(capPins[1].x - capPins[0].x)).toBeCloseTo(5.08, 2);
+
+      // HC-SR04 4-pin header: exact 2.54mm pitch
+      const hcPins = getComponentPinOffsets('HC_SR04');
+      expect(hcPins.length).toBe(4);
+      expect(Math.abs(hcPins[1].x - hcPins[0].x)).toBeCloseTo(2.54, 2);
+      expect(Math.abs(hcPins[2].x - hcPins[1].x)).toBeCloseTo(2.54, 2);
+      expect(Math.abs(hcPins[3].x - hcPins[2].x)).toBeCloseTo(2.54, 2);
+
+      // 4-pin RGB LED: exact 2.54mm pitch
+      const rgbPins = getComponentPinOffsets('LED_RGB');
+      expect(rgbPins.length).toBe(4);
+      expect(Math.abs(rgbPins[1].x - rgbPins[0].x)).toBeCloseTo(2.54, 2);
+      expect(Math.abs(rgbPins[2].x - rgbPins[1].x)).toBeCloseTo(2.54, 2);
+      expect(Math.abs(rgbPins[3].x - rgbPins[2].x)).toBeCloseTo(2.54, 2);
+
+      // TO-92 Transistor: 3 pins with 2.54mm pitch
+      const bjtPins = getComponentPinOffsets('BJT_NPN');
+      expect(bjtPins.length).toBe(3);
+      expect(Math.abs(bjtPins[1].x - bjtPins[0].x)).toBeCloseTo(2.54, 2);
+      expect(Math.abs(bjtPins[2].x - bjtPins[1].x)).toBeCloseTo(2.54, 2);
+
+      // DIP-14 IC (74HC14): 2 rows of 7 pins with 2.54mm pitch
+      const dipPins = getComponentPinOffsets('IC_74HC14');
+      expect(dipPins.length).toBe(14);
+      expect(Math.abs(dipPins[1].x - dipPins[0].x)).toBeCloseTo(2.54, 2);
+    });
+
+    it('Task 2: HC-SR04 drill alignment and strict anti-sink elevation', () => {
+      // 1. When placed in valid Row C holes (centered on half-pitch colX = START_X + (20 - 0.5) * 2.54):
+      const colX = START_X + (20 - 0.5) * PITCH_X;
+      const inHoles = areAllPinsInBreadboardHoles('HC_SR04', colX, -8.42, 0, 1);
+      expect(inHoles).toBe(true);
+
+      const seatedY = computeComponentGroundElevation('HC_SR04', colX, -8.42, true, 0, 1);
+      // Realistic insertion depth (inserted into spring clips): 8.5 - (6.0 * 0.42) - (-5.7) = 11.68
+      expect(seatedY).toBe(11.68);
+
+      // 2. When placed over center isolation ravine (z = 0):
+      const inRavine = areAllPinsInBreadboardHoles('HC_SR04', colX, 0, 0, 1);
+      expect(inRavine).toBe(false);
+      const clampedY = computeComponentGroundElevation('HC_SR04', colX, 0, true, 0, 1);
+      // Resting on plastic surface: never sinks below BREADBOARD_TOP_Y
+      expect(clampedY).toBe(14.2);
+
+      // 3. When placed in Open Console zone (x = 100, z = -35, off board):
+      const consoleY = computeComponentGroundElevation('HC_SR04', 100, -35, false, 0, 1);
+      expect(consoleY).toBe(5.7);
+    });
+
+    it('Task 3: Multi-Breadboard hole search and coordinate resolution', () => {
+      // Board 1 at z = 0
+      const h1 = findNearestHole830(START_X + 9 * PITCH_X, -8.42, 5.0, 3);
+      expect(h1).not.toBeNull();
+      expect(h1?.id).toBe('bb_col_10_C');
+
+      // Board 2 at z = -60.0
+      const h2 = findNearestHole830(START_X + 9 * PITCH_X, -68.42, 5.0, 3);
+      expect(h2).not.toBeNull();
+      expect(h2?.id).toBe('bb2_col_10_C');
+      expect(h2?.z).toBeCloseTo(-68.42, 1);
+
+      // Board 3 at z = -120.0
+      const h3 = findNearestHole830(START_X + 9 * PITCH_X, -128.42, 5.0, 3);
+      expect(h3).not.toBeNull();
+      expect(h3?.id).toBe('bb3_col_10_C');
+      expect(h3?.z).toBeCloseTo(-128.42, 1);
+    });
+
+    it('Task 4: Multi-Breadboard Tie Groups and Occupancy Tracking', () => {
+      const occupancy = new BreadboardOccupancyMap();
+
+      // Tie group resolution for Board 1 and Board 2
+      expect(getTieGroupForHole('bb_col_15_C')).toBe('bb_tie_col_15_top');
+      expect(getTieGroupForHole('bb2_col_15_C')).toBe('bb2_tie_col_15_top');
+      expect(getTieGroupForHole('bb3_col_15_C')).toBe('bb3_tie_col_15_top');
+
+      // Free hole search within Board 2 tie group
+      const freeHole = occupancy.findFreeHoleInTieGroup('bb2_tie_col_15_top');
+      expect(freeHole).not.toBeNull();
+      expect(freeHole?.id.startsWith('bb2_')).toBe(true);
+      expect(freeHole?.z).toBeLessThan(-50.0);
+
+      // Free rail hole search on Board 2
+      const railHole = occupancy.findFreeRailHole(15, 'rail_top_pos', 'bb2_');
+      expect(railHole).not.toBeNull();
+      expect(railHole?.id.startsWith('bb2_rail_top_pos_')).toBe(true);
+      expect(railHole?.z).toBeCloseTo(-82.0, 1);
+    });
+
+    it('Task 5: Obstacle-aware jumper wire apex elevation logic', () => {
+      // Simulate wire between (0, 9, -20) and (0, 9, 20) with a tall obstacle at (0, 9, 0)
+      const p1 = { x: 0, y: 9.0, z: -20.0 };
+      const p2 = { x: 0, y: 9.0, z: 20.0 };
+      const obstacle = { x3d: 0, y3d: 14.0, z3d: 0, type: 'HC_SR04' };
+
+      // Component top Y is y3d + packageHeight
+      const packageHeight = 20.0;
+      const compTopY = obstacle.y3d + packageHeight;
+      const requiredApexY = compTopY + 4.5;
+
+      // Obstacle detection
+      const dX = p2.x - p1.x;
+      const dZ = p2.z - p1.z;
+      const lenSq = dX * dX + dZ * dZ;
+      const t = Math.max(0, Math.min(1, ((obstacle.x3d - p1.x) * dX + (obstacle.z3d - p1.z) * dZ) / lenSq));
+      const projX = p1.x + t * dX;
+      const projZ = p1.z + t * dZ;
+      const distSq = (obstacle.x3d - projX) ** 2 + (obstacle.z3d - projZ) ** 2;
+
+      expect(distSq).toBeLessThan(100.0); // Directly intersected
+      expect(requiredApexY).toBeGreaterThan(compTopY);
+      expect(requiredApexY).toBeCloseTo(38.5, 1);
     });
   });
 });

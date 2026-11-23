@@ -260,11 +260,14 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
   return [];
 }
 
+export const BREADBOARD_SPACING_Z = 60.0;
+
 export function areAllPinsInBreadboardHoles(
   type: string,
   targetX: number,
   targetZ: number,
-  rotationYRad: number = 0
+  rotationYRad: number = 0,
+  breadboardCount: number = 1
 ): boolean {
   const pinOffsets = getComponentPinOffsets(type);
   if (!pinOffsets || pinOffsets.length === 0) return false;
@@ -278,7 +281,7 @@ export function areAllPinsInBreadboardHoles(
     const wx = targetX + rx;
     const wz = targetZ + rz;
 
-    const hole = findNearestHole830(wx, wz, 1.44);
+    const hole = findNearestHole830(wx, wz, 1.44, breadboardCount);
     if (!hole) {
       return false;
     }
@@ -298,7 +301,8 @@ export function computeComponentGroundElevation(
   targetX: number,
   targetZ: number,
   hasBreadboard: boolean,
-  rotationYRad: number = 0
+  rotationYRad: number = 0,
+  breadboardCount: number = 1
 ): number {
   const spec = getComponentElevationSpec(type);
 
@@ -307,11 +311,15 @@ export function computeComponentGroundElevation(
     return Math.round(benchY * 100) / 100;
   }
 
-  const isOverBoard =
-    Math.abs(targetX) <= (BB830_WIDTH / 2) &&
-    Math.abs(targetZ) <= (BB830_DEPTH / 2);
+  const isOverBoard = Array.from({ length: breadboardCount }).some((_, b) => {
+    const bZ = -b * BREADBOARD_SPACING_Z;
+    return (
+      Math.abs(targetX) <= (BB830_WIDTH / 2) &&
+      Math.abs(targetZ - bZ) <= (BB830_DEPTH / 2)
+    );
+  });
 
-  const allPinsInHoles = areAllPinsInBreadboardHoles(type, targetX, targetZ, rotationYRad);
+  const allPinsInHoles = areAllPinsInBreadboardHoles(type, targetX, targetZ, rotationYRad, breadboardCount);
 
   if (allPinsInHoles) {
     const insertionDepth = Math.min(BREADBOARD_INSERTION_DEPTH, spec.pinLength * 0.42);
@@ -553,59 +561,75 @@ ALL_830_HOLES.forEach((h) => {
 export function findNearestHole830(
   wx: number,
   wz: number,
-  maxDistSq = 9.0 // 3.0mm radius squared
+  maxDistSq = 9.0, // 3.0mm radius squared
+  breadboardCount = 1
 ): BreadboardHole3D | null {
-  // Bounding box pre-check
-  if (
-    wx < -BB830_WIDTH / 2 - 3 ||
-    wx > BB830_WIDTH / 2 + 3 ||
-    wz < -BB830_DEPTH / 2 - 3 ||
-    wz > BB830_DEPTH / 2 + 3
-  ) {
-    return null;
-  }
-
   let nearest: BreadboardHole3D | null = null;
   let minDistSq = maxDistSq;
 
-  // Narrow down candidate column
-  const approxCol = Math.round((wx - START_X) / PITCH_X) + 1;
-  const minCol = Math.max(1, approxCol - 2);
-  const maxCol = Math.min(63, approxCol + 2);
+  for (let b = 0; b < breadboardCount; b++) {
+    const boardZ = -b * BREADBOARD_SPACING_Z;
+    if (
+      wx < -BB830_WIDTH / 2 - 3 ||
+      wx > BB830_WIDTH / 2 + 3 ||
+      wz < boardZ - BB830_DEPTH / 2 - 3 ||
+      wz > boardZ + BB830_DEPTH / 2 + 3
+    ) {
+      continue;
+    }
 
-  for (let c = minCol; c <= maxCol; c++) {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    for (const r of rows) {
-      const h = HOLE_BY_ID.get(`bb_col_${c}_${r}`);
-      if (h) {
-        const dx = h.x - wx;
-        const dz = h.z - wz;
-        const dSq = dx * dx + dz * dz;
-        if (dSq < minDistSq) {
-          minDistSq = dSq;
-          nearest = h;
+    // Narrow down candidate column
+    const approxCol = Math.round((wx - START_X) / PITCH_X) + 1;
+    const minCol = Math.max(1, approxCol - 2);
+    const maxCol = Math.min(63, approxCol + 2);
+
+    for (let c = minCol; c <= maxCol; c++) {
+      const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+      for (const r of rows) {
+        const baseH = HOLE_BY_ID.get(`bb_col_${c}_${r}`);
+        if (baseH) {
+          const actualZ = baseH.z + boardZ;
+          const dx = baseH.x - wx;
+          const dz = actualZ - wz;
+          const dSq = dx * dx + dz * dz;
+          if (dSq < minDistSq) {
+            minDistSq = dSq;
+            nearest = b === 0 ? baseH : {
+              ...baseH,
+              id: `bb${b + 1}_col_${c}_${r}`,
+              name: `Board ${b + 1} Col ${c}, Row ${r}`,
+              z: actualZ,
+              tieGroup: `bb${b + 1}_tie_col_${c}_${r <= 'E' ? 'top' : 'bottom'}`,
+            };
+          }
         }
       }
     }
-  }
 
-  // Check rails
-  for (let i = 0; i < 50; i++) {
-    const rails = [
-      `bb_rail_top_pos_${i + 1}`,
-      `bb_rail_top_neg_${i + 1}`,
-      `bb_rail_bottom_pos_${i + 1}`,
-      `bb_rail_bottom_neg_${i + 1}`,
-    ];
-    for (const rId of rails) {
-      const rh = HOLE_BY_ID.get(rId);
-      if (rh) {
-        const dx = rh.x - wx;
-        const dz = rh.z - wz;
-        const dSq = dx * dx + dz * dz;
-        if (dSq < minDistSq) {
-          minDistSq = dSq;
-          nearest = rh;
+    // Check rails on this board
+    for (let i = 0; i < 50; i++) {
+      const rails = [
+        `bb_rail_top_pos_${i + 1}`,
+        `bb_rail_top_neg_${i + 1}`,
+        `bb_rail_bottom_pos_${i + 1}`,
+        `bb_rail_bottom_neg_${i + 1}`,
+      ];
+      for (const rId of rails) {
+        const baseH = HOLE_BY_ID.get(rId);
+        if (baseH) {
+          const actualZ = baseH.z + boardZ;
+          const dx = baseH.x - wx;
+          const dz = actualZ - wz;
+          const dSq = dx * dx + dz * dz;
+          if (dSq < minDistSq) {
+            minDistSq = dSq;
+            nearest = b === 0 ? baseH : {
+              ...baseH,
+              id: `bb${b + 1}_` + rId.replace(/^bb_/, ''),
+              z: actualZ,
+              tieGroup: `bb${b + 1}_` + baseH.tieGroup.replace(/^bb_/, ''),
+            };
+          }
         }
       }
     }
@@ -709,15 +733,24 @@ export class BreadboardOccupancyMap {
   }
 
   /**
-   * Find an unoccupied hole in the given tie group (e.g. bb_tie_col_31_top).
+   * Find an unoccupied hole in the given tie group (e.g. bb_tie_col_31_top, or bb2_tie_col_31_top).
    * Preference is given to holes adjacent to the component lead to keep jumper lengths clean.
    */
   public findFreeHoleInTieGroup(tieGroup: string): BreadboardHole3D | null {
-    const holes = HOLES_BY_TIE_GROUP.get(tieGroup);
+    const isBoard2 = tieGroup.startsWith('bb2_');
+    const isBoard3 = tieGroup.startsWith('bb3_');
+    const baseGroup = (isBoard2 || isBoard3) ? 'bb_' + tieGroup.slice(4) : tieGroup;
+    const offsetZ = isBoard3 ? -120.0 : isBoard2 ? -60.0 : 0.0;
+    const idPrefix = isBoard3 ? 'bb3_' : isBoard2 ? 'bb2_' : '';
+
+    const holes = HOLES_BY_TIE_GROUP.get(baseGroup);
     if (!holes || holes.length === 0) return null;
     for (const h of holes) {
-      if (!this.occupancy.has(h.id)) {
-        return h;
+      const fullId = (isBoard2 || isBoard3) ? idPrefix + h.id.slice(3) : h.id;
+      if (!this.occupancy.has(fullId)) {
+        return (isBoard2 || isBoard3)
+          ? { ...h, id: fullId, z: h.z + offsetZ, tieGroup }
+          : h;
       }
     }
     return null;
@@ -725,14 +758,21 @@ export class BreadboardOccupancyMap {
 
   /**
    * Find an unoccupied hole in the given power/ground rail section closest to the specified column.
+   * Supports multi-breadboard search via boardPrefix ('bb_', 'bb2_', 'bb3_').
    */
   public findFreeRailHole(
     col: number,
-    railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg'
+    railType: 'rail_top_pos' | 'rail_top_neg' | 'rail_bottom_pos' | 'rail_bottom_neg',
+    boardPrefix: string = 'bb_'
   ): BreadboardHole3D | null {
     const targetX = START_X + (Math.max(1, Math.min(63, col)) - 1) * PITCH_X;
+    const isBoard2 = boardPrefix === 'bb2_';
+    const isBoard3 = boardPrefix === 'bb3_';
+    const offsetZ = isBoard3 ? -120.0 : isBoard2 ? -60.0 : 0.0;
+    const idPrefix = isBoard3 ? 'bb3_' : isBoard2 ? 'bb2_' : 'bb_';
+
     const candidates = ALL_830_HOLES.filter(
-      (h) => h.section === railType && !this.occupancy.has(h.id)
+      (h) => h.section === railType && !this.occupancy.has(idPrefix + h.id.slice(3))
     );
     if (candidates.length === 0) return null;
     let best = candidates[0];
@@ -744,15 +784,47 @@ export class BreadboardOccupancyMap {
         best = h;
       }
     }
-    return best;
+    return (isBoard2 || isBoard3)
+      ? { ...best, id: idPrefix + best.id.slice(3), z: best.z + offsetZ }
+      : best;
   }
 }
 
 export function getTieGroupForHole(holeId: string): string | undefined {
+  if (holeId.startsWith('bb2_')) {
+    const baseId = 'bb_' + holeId.slice(4);
+    const baseGroup = HOLE_BY_ID.get(baseId)?.tieGroup;
+    return baseGroup ? 'bb2_' + baseGroup.slice(3) : undefined;
+  }
+  if (holeId.startsWith('bb3_')) {
+    const baseId = 'bb_' + holeId.slice(4);
+    const baseGroup = HOLE_BY_ID.get(baseId)?.tieGroup;
+    return baseGroup ? 'bb3_' + baseGroup.slice(3) : undefined;
+  }
   return HOLE_BY_ID.get(holeId)?.tieGroup;
 }
 
 export function getAllHolesInTieGroup(tieGroup: string): BreadboardHole3D[] {
+  if (tieGroup.startsWith('bb2_')) {
+    const baseGroup = 'bb_' + tieGroup.slice(4);
+    const baseHoles = HOLES_BY_TIE_GROUP.get(baseGroup) || [];
+    return baseHoles.map((h) => ({
+      ...h,
+      id: 'bb2_' + h.id.slice(3),
+      z: h.z - 60.0,
+      tieGroup,
+    }));
+  }
+  if (tieGroup.startsWith('bb3_')) {
+    const baseGroup = 'bb_' + tieGroup.slice(4);
+    const baseHoles = HOLES_BY_TIE_GROUP.get(baseGroup) || [];
+    return baseHoles.map((h) => ({
+      ...h,
+      id: 'bb3_' + h.id.slice(3),
+      z: h.z - 120.0,
+      tieGroup,
+    }));
+  }
   return HOLES_BY_TIE_GROUP.get(tieGroup) || [];
 }
 
@@ -820,11 +892,77 @@ export function resetComponentOrientation(comp: Component3D): Component3D {
  * 1. Immediately aligns X and Z cleanly to the nearest 2.54mm breadboard/grid point.
  * 2. Snaps Y cleanly onto BREADBOARD_TOP_Y (if over breadboard) or WORKBENCH_TOP_Y (if on sheet) with zero sinking.
  */
-export function snapComponentToSurface(comp: Component3D, hasBreadboard: boolean = true): Component3D {
-  const snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
-  const snappedZ = Math.round(comp.z3d / PITCH_Z) * PITCH_Z;
+export function snapComponentToSurface(
+  comp: Component3D,
+  hasBreadboard: boolean = true,
+  breadboardCount: number = 1
+): Component3D {
+  if (!hasBreadboard) {
+    const snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
+    const snappedZ = Math.round(comp.z3d / PITCH_Z) * PITCH_Z;
+    const rotYRad = ((comp.rotY || 0) * Math.PI) / 180;
+    const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, false, rotYRad, 1);
+    return {
+      ...comp,
+      x3d: Math.round(snappedX * 100) / 100,
+      y3d: Math.round(groundY * 100) / 100,
+      z3d: Math.round(snappedZ * 100) / 100,
+    };
+  }
+
+  // Find closest breadboard index (0..breadboardCount-1)
+  let bestBoard = 0;
+  let minBoardDist = Infinity;
+  for (let b = 0; b < breadboardCount; b++) {
+    const bZ = -b * BREADBOARD_SPACING_Z;
+    const dist = Math.abs(comp.z3d - bZ);
+    if (dist < minBoardDist) {
+      minBoardDist = dist;
+      bestBoard = b;
+    }
+  }
+  const boardCenterZ = -bestBoard * BREADBOARD_SPACING_Z;
+
+  const isOverBoard =
+    Math.abs(comp.x3d) <= (BB830_WIDTH / 2) &&
+    minBoardDist <= (BB830_DEPTH / 2);
+
+  const isEvenPinPart = [
+    'LED_RGB',
+    'ACTUATOR_RGB_LED',
+    'HC_SR04',
+    'SENSOR_ULTRASONIC',
+    'TIMER_555',
+    'DIP_IC',
+    'OPAMP_LM358',
+  ].includes(comp.type) || (comp.type.includes('DIP') && !comp.type.includes('14') && !comp.type.includes('74HC'));
+
+  let snappedX: number;
+  let snappedZ: number;
+
+  if (isOverBoard) {
+    if (isEvenPinPart) {
+      const nearestCol = Math.max(2, Math.min(61, Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1));
+      snappedX = START_X + (nearestCol - 0.5) * PITCH_X;
+    } else {
+      snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
+    }
+
+    const isDip = comp.type.includes('DIP') || comp.type === 'TIMER_555' || comp.type.includes('OPAMP') || comp.type.includes('74HC');
+    const relZ = comp.z3d - boardCenterZ;
+    if (isDip && Math.abs(relZ) <= 4.0) {
+      snappedZ = boardCenterZ; // Straddle center ravine
+    } else {
+      snappedZ = boardCenterZ + Math.round(relZ / PITCH_Z) * PITCH_Z;
+    }
+  } else {
+    snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
+    snappedZ = Math.round(comp.z3d / PITCH_Z) * PITCH_Z;
+  }
+
   const rotYRad = ((comp.rotY || 0) * Math.PI) / 180;
-  const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, hasBreadboard, rotYRad);
+  const groundY = computeComponentGroundElevation(comp.type, snappedX, snappedZ, hasBreadboard, rotYRad, breadboardCount);
+
   return {
     ...comp,
     x3d: Math.round(snappedX * 100) / 100,
