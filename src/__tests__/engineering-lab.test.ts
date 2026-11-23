@@ -4726,6 +4726,308 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(contUnlit.querySelector('circle[fill^="rgb("]')).toBeNull();
     });
 
+    it('VIRTUAL-LAB-V3 (STRICT COM PHYSICS): RGB LED with COM UNCONNECTED (floating) produces 0 current and 0 glow in Solver, 3D Studio, and Schematic SVG', () => {
+      const solver = new CircuitSolver();
+      const rgbComp: CircuitComponent = {
+        id: 'rgb-floating-com',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED',
+        value: 'RGB',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', x: -15, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'Cathode', x: -5, y: 20, pinType: 'power' },
+          { id: 'g', name: 'G', x: 5, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 15, y: -20, pinType: 'passive' },
+        ],
+        parameters: { commonType: 'cathode' },
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+      };
+
+      const vcc5V: CircuitComponent = {
+        id: 'vcc1',
+        type: 'VCC',
+        label: '5V',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
+        x: 0,
+        y: -100,
+        rotation: 0,
+        pins: [{ id: 'out', name: '5V', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      const rLim: CircuitComponent = {
+        id: 'r_lim',
+        type: 'RESISTOR',
+        label: 'R1',
+        category: 'passive',
+        footprint: '',
+        value: '220',
+        x: 0,
+        y: -50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -20, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 20, y: 0 },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      // 5V applied to R, G, and B through resistor, but COM is completely unconnected (floating)!
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'vcc1', fromPinId: 'out', toCompId: 'r_lim', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r_lim', fromPinId: '2', toCompId: 'rgb-floating-com', toPinId: 'r' },
+        { id: 'w3', fromCompId: 'r_lim', fromPinId: '2', toCompId: 'rgb-floating-com', toPinId: 'g' },
+        { id: 'w4', fromCompId: 'r_lim', fromPinId: '2', toCompId: 'rgb-floating-com', toPinId: 'b' },
+      ];
+
+      // 1. Solver Assertion: Strictly 0 current, 0 brightness, and completely unlit
+      const sim = solver.step([vcc5V, rLim, rgbComp], wires, 0.001);
+      const st = sim.componentStates['rgb-floating-com'];
+      expect(st).toBeDefined();
+      expect(st.current).toBe(0);
+      expect(st.on).toBe(false);
+      expect(st.brightness).toBe(0);
+      expect(st.onRed).toBe(false);
+      expect(st.onGreen).toBe(false);
+      expect(st.onBlue).toBe(false);
+      expect(st.redBrightness).toBe(0);
+      expect(st.greenBrightness).toBe(0);
+      expect(st.blueBrightness).toBe(0);
+
+      // 2. Schematic SVG Assertion: Zero glow halo rendered when COM is unconnected
+      const { container: contSchematic } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simState: st,
+            wires,
+            wireCurrents: sim.wireCurrents,
+          })
+        )
+      );
+      expect(contSchematic.querySelector('circle[fill^="rgb("]')).toBeNull();
+    });
+
+    it('VIRTUAL-LAB-V3 (STRICT COM PHYSICS): RGB LED with COM connected to GND (CC) glows active channel(s) and blended halo cleanly', () => {
+      const solver = new CircuitSolver();
+      const rgbComp: CircuitComponent = {
+        id: 'rgb-cc',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED',
+        value: 'RGB',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', x: -15, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'Cathode', x: -5, y: 20, pinType: 'power' },
+          { id: 'g', name: 'G', x: 5, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 15, y: -20, pinType: 'passive' },
+        ],
+        parameters: { commonType: 'cathode', redVf: 2.0, greenVf: 3.0, blueVf: 3.2 },
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+      };
+
+      const vcc5V: CircuitComponent = {
+        id: 'vcc1',
+        type: 'DC_VOLTAGE',
+        label: '5V',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
+        x: 0,
+        y: -100,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '+', pinType: 'power', x: 0, y: -20 },
+          { id: '2', name: '-', pinType: 'power', x: 0, y: 20 },
+        ],
+      };
+
+      const gnd: CircuitComponent = {
+        id: 'gnd1',
+        type: 'GND',
+        label: 'GND',
+        value: '0V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 0 },
+        x: 0,
+        y: 100,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      const rLimG: CircuitComponent = {
+        id: 'r_lim_g',
+        type: 'RESISTOR',
+        label: 'R_G',
+        category: 'passive',
+        footprint: '',
+        value: '220',
+        x: 0,
+        y: -50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -20, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 20, y: 0 },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      const rLimB: CircuitComponent = {
+        id: 'r_lim_b',
+        type: 'RESISTOR',
+        label: 'R_B',
+        category: 'passive',
+        footprint: '',
+        value: '220',
+        x: 50,
+        y: -50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -20, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 20, y: 0 },
+        ],
+        parameters: { resistance: 220 },
+      };
+
+      // Connect 5V (+) -> Resistors -> G & B, COM to GND, and 5V (-) to GND
+      const wires: CircuitWire[] = [
+        { id: 'w_g_in', fromCompId: 'vcc1', fromPinId: '1', toCompId: 'r_lim_g', toPinId: '1' },
+        { id: 'w_g_out', fromCompId: 'r_lim_g', fromPinId: '2', toCompId: 'rgb-cc', toPinId: 'g' },
+        { id: 'w_b_in', fromCompId: 'vcc1', fromPinId: '1', toCompId: 'r_lim_b', toPinId: '1' },
+        { id: 'w_b_out', fromCompId: 'r_lim_b', fromPinId: '2', toCompId: 'rgb-cc', toPinId: 'b' },
+        { id: 'w_com', fromCompId: 'rgb-cc', fromPinId: 'cc', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'w_gnd', fromCompId: 'vcc1', fromPinId: '2', toCompId: 'gnd1', toPinId: '1' },
+      ];
+
+      const sim = solver.step([vcc5V, gnd, rLimG, rLimB, rgbComp], wires, 0.001);
+      const st = sim.componentStates['rgb-cc'];
+      expect(st).toBeDefined();
+      expect(st.on).toBe(true);
+      expect(st.onGreen).toBe(true);
+      expect(st.onBlue).toBe(true);
+      expect(st.onRed).toBe(false);
+      expect(st.current).toBeGreaterThan(0.005);
+
+      // Schematic SVG should render Cyan blended halo (Green + Blue conducting, Red = 0)
+      const { container: contCyan } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simState: st,
+            wires,
+            wireCurrents: sim.wireCurrents,
+          })
+        )
+      );
+      const glowCircle = contCyan.querySelector('circle[fill^="rgb(0,"]');
+      expect(glowCircle).toBeTruthy();
+      const fill = glowCircle?.getAttribute('fill') || '';
+      const match = fill.match(/rgb\(0,\s*(\d+),\s*(\d+)\)/);
+      expect(match).toBeTruthy();
+      expect(Number(match?.[1])).toBeGreaterThan(50);
+      expect(Number(match?.[2])).toBeGreaterThan(50);
+    });
+
+    it('VIRTUAL-LAB-V3 (STRICT COM PHYSICS): Reverse-biased RGB LED strictly produces 0 current and 0 glow', () => {
+      const solver = new CircuitSolver();
+      const rgbComp: CircuitComponent = {
+        id: 'rgb-reverse',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED',
+        value: 'RGB',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', x: -15, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'Cathode', x: -5, y: 20, pinType: 'power' },
+          { id: 'g', name: 'G', x: 5, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 15, y: -20, pinType: 'passive' },
+        ],
+        parameters: { commonType: 'cathode' },
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+      };
+
+      const vcc5V: CircuitComponent = {
+        id: 'vcc1',
+        type: 'VCC',
+        label: '5V',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
+        x: 0,
+        y: -100,
+        rotation: 0,
+        pins: [{ id: 'out', name: '5V', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      const gnd: CircuitComponent = {
+        id: 'gnd1',
+        type: 'GROUND',
+        label: 'GND',
+        value: '0V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 0 },
+        x: 0,
+        y: 100,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      // Reverse bias: 5V applied to CC Cathode, GND applied to R, G, B channels!
+      const reverseWires: CircuitWire[] = [
+        { id: 'rw1', fromCompId: 'vcc1', fromPinId: 'out', toCompId: 'rgb-reverse', toPinId: 'cc' },
+        { id: 'rw2', fromCompId: 'rgb-reverse', fromPinId: 'r', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'rw3', fromCompId: 'rgb-reverse', fromPinId: 'g', toCompId: 'gnd1', toPinId: '1' },
+        { id: 'rw4', fromCompId: 'rgb-reverse', fromPinId: 'b', toCompId: 'gnd1', toPinId: '1' },
+      ];
+
+      const sim = solver.step([vcc5V, gnd, rgbComp], reverseWires, 0.001);
+      const st = sim.componentStates['rgb-reverse'];
+      expect(st).toBeDefined();
+      expect(st.current).toBe(0);
+      expect(st.on).toBe(false);
+      expect(st.brightness).toBe(0);
+      expect(st.onRed).toBe(false);
+      expect(st.onGreen).toBe(false);
+      expect(st.onBlue).toBe(false);
+
+      const { container: contRev } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simState: st,
+            wires: reverseWires,
+            wireCurrents: sim.wireCurrents,
+          })
+        )
+      );
+      expect(contRev.querySelector('circle[fill^="rgb("]')).toBeNull();
+    });
+
     it('VIRTUAL-LAB-V3: 100% of pins on EVERY registered MCU, dev board, and module resolve a non-empty display label string for hover flags and silkscreen', () => {
       // 1. Audit every template in COMPONENT_CATALOG
       expect(COMPONENT_CATALOG.length).toBeGreaterThan(30);

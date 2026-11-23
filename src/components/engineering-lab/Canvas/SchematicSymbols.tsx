@@ -963,8 +963,24 @@ export function SchematicSymbol({
           }
         }
 
-        // 2. Wire conduction tracing matching Studio3DCanvas.tsx
-        if (isSimulating && wires) {
+        // Check if COM pin has a connected wire in schematic
+        const isComPin = (p: string) => {
+          const pl = (p || '').toLowerCase();
+          return pl === 'cc' || pl === 'com' || pl === 'c' || pl === '2' || pl === 'cathode' || pl === 'anode' || pl === 'gnd' || pl === '-';
+        };
+
+        const hasComWire = Boolean(
+          wires &&
+          wires.some((cw) => {
+            return (
+              (cw.fromCompId === component.id && isComPin(cw.fromPinId)) ||
+              (cw.toCompId === component.id && isComPin(cw.toPinId))
+            );
+          })
+        );
+
+        // 2. Wire conduction tracing (ONLY if COM is connected and wire carries real forward current >= 0.5mA)
+        if (isSimulating && wires && hasComWire) {
           wires.forEach((cw) => {
             let pin = '';
             if (cw.fromCompId === component.id) {
@@ -976,10 +992,10 @@ export function SchematicSymbol({
 
             const pLower = pin.toLowerCase();
             const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
-            const hasConductingCurrent = Math.abs(currentA) > 0.0001;
-            const channelLevel = hasConductingCurrent
-              ? Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02))
-              : 1.0;
+            const hasConductingCurrent = Math.abs(currentA) >= 0.0005;
+            if (!hasConductingCurrent) return;
+
+            const channelLevel = Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02));
 
             if (pLower === 'r' || pLower === '1' || pLower === 'red') {
               rLevel = Math.max(rLevel, channelLevel);
@@ -992,10 +1008,17 @@ export function SchematicSymbol({
         }
 
         // 3. Explicit component parameter overrides from Inspector (applied when simulating/conducting)
-        if (isSimulating) {
+        if (isSimulating && (hasComWire || (simState && (simState.on || ((simState as Record<string, unknown>).current as number) > 0.0005)))) {
           if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
           if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
           if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+        }
+
+        // STRICT OPEN-CIRCUIT CHECK: If wires are present but COM has no wire, and simState is unlit/0mA:
+        if (wires && wires.length > 0 && !hasComWire && (!simState || !simState.on)) {
+          rLevel = 0;
+          gLevel = 0;
+          bLevel = 0;
         }
 
         const rBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, rLevel));

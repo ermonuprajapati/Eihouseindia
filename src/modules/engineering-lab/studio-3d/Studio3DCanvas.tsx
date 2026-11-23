@@ -3031,74 +3031,95 @@ export function Studio3DCanvas({
               }
             }
 
-            // Circuit Schematic Wires conduction tracing
-            circuitWires?.forEach((cw) => {
-              let pin = '';
-              let otherCompId = '';
-              if (cw.fromCompId === comp.id) {
-                pin = cw.fromPinId || '';
-                otherCompId = cw.toCompId;
-              } else if (cw.toCompId === comp.id) {
-                pin = cw.toPinId || '';
-                otherCompId = cw.fromCompId;
-              }
-              if (!pin) return;
+            const isComPin = (p: string) => {
+              const pl = (p || '').trim().toLowerCase();
+              return pl === 'cc' || pl === 'com' || pl === 'cathode' || pl === 'anode' || pl === 'gnd' || pl === '-' || pl === '2' || pl === 'c';
+            };
 
-              const pLower = pin.toLowerCase();
-              const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
-              const otherSim = simulationStates[otherCompId];
-              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && otherSim?.on);
+            const hasComCircuitWire = Boolean(
+              circuitWires?.some(
+                (cw) =>
+                  (cw.fromCompId === comp.id && isComPin(cw.fromPinId)) ||
+                  (cw.toCompId === comp.id && isComPin(cw.toPinId))
+              )
+            );
 
-              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
-                if (hasPower && isSimulating) rLevel = Math.max(rLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
-                if (hasPower && isSimulating) gLevel = Math.max(gLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
-                if (hasPower && isSimulating) bLevel = Math.max(bLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              }
-            });
+            const hasCom3dWire = Boolean(
+              wires3d.some(
+                (w) =>
+                  (w.fromPin.compId === comp.id && isComPin(w.fromPin.pinId)) ||
+                  (w.toPin.compId === comp.id && isComPin(w.toPin.pinId))
+              )
+            );
 
-            // 3D Wire connection conduction tracing
-            wires3d.forEach((w) => {
-              let pin = '';
-              let otherCompId = '';
-              if (w.fromPin.compId === comp.id) {
-                pin = w.fromPin.pinId;
-                otherCompId = w.toPin.compId;
-              } else if (w.toPin.compId === comp.id) {
-                pin = w.toPin.pinId;
-                otherCompId = w.fromPin.compId;
-              }
-              if (!pin) return;
+            // Breadboard/return tie check: true if COM has a wire OR if solver solved a closed loop (on with current >= 0.5mA)
+            const isComConnected = hasComCircuitWire || hasCom3dWire || Boolean(simState?.on && ((simState as Record<string, unknown>).current as number) >= 0.0005);
 
-              const pLower = pin.toLowerCase();
-              const currentA = wireCurrents?.[w.id] ?? w.current ?? 0;
-              const otherSim = simulationStates[otherCompId];
-              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on));
+            // Circuit Schematic Wires conduction tracing (ONLY if COM has a closed return path)
+            if (isSimulating && isComConnected) {
+              circuitWires?.forEach((cw) => {
+                let pin = '';
+                if (cw.fromCompId === comp.id) {
+                  pin = cw.fromPinId || '';
+                } else if (cw.toCompId === comp.id) {
+                  pin = cw.toPinId || '';
+                }
+                if (!pin) return;
 
-              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
-                if (hasPower && isSimulating) rLevel = Math.max(rLevel, 1.0);
-              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
-                if (hasPower && isSimulating) gLevel = Math.max(gLevel, 1.0);
-              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
-                if (hasPower && isSimulating) bLevel = Math.max(bLevel, 1.0);
-              }
-            });
+                const pLower = pin.toLowerCase();
+                const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+                // Forward conduction current must be >= 0.5mA
+                if (Math.abs(currentA) >= 0.0005) {
+                  const channelLevel = Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02));
+                  if (pLower === 'r' || pLower === '1' || pLower === 'red') rLevel = Math.max(rLevel, channelLevel);
+                  else if (pLower === 'g' || pLower === '3' || pLower === 'green') gLevel = Math.max(gLevel, channelLevel);
+                  else if (pLower === 'b' || pLower === '4' || pLower === 'blue') bLevel = Math.max(bLevel, channelLevel);
+                }
+              });
 
-            // Inspector explicit parameters override
-            if (comp.parameters?.r !== undefined) rLevel = Number(comp.parameters.r);
-            if (comp.parameters?.g !== undefined) gLevel = Number(comp.parameters.g);
-            if (comp.parameters?.b !== undefined) bLevel = Number(comp.parameters.b);
+              // 3D Wire connection conduction tracing (ONLY if COM has a return connection)
+              wires3d.forEach((w) => {
+                let pin = '';
+                if (w.fromPin.compId === comp.id) {
+                  pin = w.fromPin.pinId;
+                } else if (w.toPin.compId === comp.id) {
+                  pin = w.toPin.pinId;
+                }
+                if (!pin) return;
 
-            // Fallback for static hex color
-            if (rLevel === 0 && gLevel === 0 && bLevel === 0 && comp.parameters?.color) {
+                const pLower = pin.toLowerCase();
+                const currentA = wireCurrents?.[w.id] ?? w.current ?? 0;
+                if (Math.abs(currentA) >= 0.0005) {
+                  if (pLower === 'r' || pLower === '1' || pLower === 'red') rLevel = Math.max(rLevel, 1.0);
+                  else if (pLower === 'g' || pLower === '3' || pLower === 'green') gLevel = Math.max(gLevel, 1.0);
+                  else if (pLower === 'b' || pLower === '4' || pLower === 'blue') bLevel = Math.max(bLevel, 1.0);
+                }
+              });
+            }
+
+            // Inspector explicit parameters override (ONLY if COM is connected)
+            if (isSimulating && isComConnected) {
+              if (comp.parameters?.r !== undefined) rLevel = Number(comp.parameters.r);
+              if (comp.parameters?.g !== undefined) gLevel = Number(comp.parameters.g);
+              if (comp.parameters?.b !== undefined) bLevel = Number(comp.parameters.b);
+            }
+
+            // STRICT OPEN-CIRCUIT ENFORCEMENT: If COM is NOT connected, clamp all channels strictly to 0
+            if (isSimulating && !isComConnected) {
+              rLevel = 0;
+              gLevel = 0;
+              bLevel = 0;
+            }
+
+            // Fallback for static hex color ONLY when NOT simulating
+            if (!isSimulating && rLevel === 0 && gLevel === 0 && bLevel === 0 && comp.parameters?.color) {
               const c = new THREE.Color(String(comp.parameters.color));
               rLevel = c.r;
               gLevel = c.g;
               bLevel = c.b;
             }
 
-            const isPowered = !isBurned && (isSimulating ? (rLevel > 0.01 || gLevel > 0.01 || bLevel > 0.01 || Boolean(simState?.on)) : true);
+            const isPowered = !isBurned && isSimulating && isComConnected && (rLevel > 0.01 || gLevel > 0.01 || bLevel > 0.01);
 
             return (
               <group

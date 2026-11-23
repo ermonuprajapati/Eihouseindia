@@ -28,6 +28,159 @@ describe('Virtual Lab v3 Verification Suite', () => {
       };
       const vcc5V: CircuitComponent = {
         id: 'vcc-1',
+        type: 'DC_VOLTAGE',
+        label: '5V Rail',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
+        x: 50,
+        y: 50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '+', pinType: 'power', x: 0, y: -20 },
+          { id: '2', name: '-', pinType: 'power', x: 0, y: 20 },
+        ],
+      };
+      const rLimR: CircuitComponent = {
+        id: 'r_r',
+        type: 'RESISTOR',
+        label: 'R_R',
+        category: 'passive',
+        footprint: '',
+        value: '220',
+        x: 0,
+        y: -50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -20, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 20, y: 0 },
+        ],
+        parameters: { resistance: 220 },
+      };
+      const rLimG: CircuitComponent = {
+        id: 'r_g',
+        type: 'RESISTOR',
+        label: 'R_G',
+        category: 'passive',
+        footprint: '',
+        value: '220',
+        x: 50,
+        y: -50,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: -20, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 20, y: 0 },
+        ],
+        parameters: { resistance: 220 },
+      };
+      const gnd: CircuitComponent = {
+        id: 'gnd-1',
+        type: 'GND',
+        label: 'GND',
+        value: '0V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 0 },
+        x: 100,
+        y: 200,
+        rotation: 0,
+        pins: [{ id: '1', name: 'GND', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      // Connect 5V (+) -> Resistors -> Red and Green pins, COM to GND, and 5V (-) to GND
+      const wires: CircuitWire[] = [
+        { id: 'w1_in', fromCompId: 'vcc-1', fromPinId: '1', toCompId: 'r_r', toPinId: '1' },
+        { id: 'w1_out', fromCompId: 'r_r', fromPinId: '2', toCompId: 'rgb-1', toPinId: 'r' },
+        { id: 'w2_in', fromCompId: 'vcc-1', fromPinId: '1', toCompId: 'r_g', toPinId: '1' },
+        { id: 'w2_out', fromCompId: 'r_g', fromPinId: '2', toCompId: 'rgb-1', toPinId: 'g' },
+        { id: 'w3', fromCompId: 'gnd-1', fromPinId: '1', toCompId: 'rgb-1', toPinId: 'cc' },
+        { id: 'w_gnd', fromCompId: 'vcc-1', fromPinId: '2', toCompId: 'gnd-1', toPinId: '1' },
+      ];
+
+      const simResult = solver.step([rgbLed, vcc5V, rLimR, rLimG, gnd], wires, 0.001);
+      expect(simResult).toBeDefined();
+      expect(simResult.componentStates['rgb-1']).toBeDefined();
+      expect(simResult.componentStates['rgb-1'].on).toBe(true);
+      expect(simResult.componentStates['rgb-1'].onRed).toBe(true);
+      expect(simResult.componentStates['rgb-1'].onGreen).toBe(true);
+      expect(simResult.componentStates['rgb-1'].onBlue).toBe(false);
+    });
+
+    it('RGB LED with COM UNCONNECTED (floating) produces strictly 0 current and 0 glow', () => {
+      const solver = new CircuitSolver();
+      const rgbLed: CircuitComponent = {
+        id: 'rgb-floating',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED Floating',
+        value: 'RGB',
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+        parameters: { commonType: 'cathode' },
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', pinType: 'passive', x: -20, y: -20 },
+          { id: 'cc', name: 'COM', pinType: 'passive', x: 0, y: 20 },
+          { id: 'g', name: 'G', pinType: 'passive', x: 0, y: -20 },
+          { id: 'b', name: 'B', pinType: 'passive', x: 20, y: -20 },
+        ],
+      };
+      const vcc5V: CircuitComponent = {
+        id: 'vcc-1',
+        type: 'VCC',
+        label: '5V Rail',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
+        x: 50,
+        y: 50,
+        rotation: 0,
+        pins: [{ id: 'out', name: '5V', pinType: 'power', x: 0, y: 0 }],
+      };
+
+      // 5V connected to R, G, and B, but COM is completely unconnected!
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-floating', toPinId: 'r' },
+        { id: 'w2', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-floating', toPinId: 'g' },
+        { id: 'w3', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-floating', toPinId: 'b' },
+      ];
+
+      const simResult = solver.step([rgbLed, vcc5V], wires, 0.001);
+      const st = simResult.componentStates['rgb-floating'];
+      expect(st).toBeDefined();
+      expect(st.current).toBe(0);
+      expect(st.on).toBe(false);
+      expect(st.brightness).toBe(0);
+      expect(st.onRed).toBe(false);
+      expect(st.onGreen).toBe(false);
+      expect(st.onBlue).toBe(false);
+    });
+
+    it('Reverse-biased RGB LED produces 0 current and 0 glow', () => {
+      const solver = new CircuitSolver();
+      const rgbLed: CircuitComponent = {
+        id: 'rgb-rev',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED Reverse',
+        value: 'RGB',
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+        parameters: { commonType: 'cathode' },
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', pinType: 'passive', x: -20, y: -20 },
+          { id: 'cc', name: 'COM', pinType: 'passive', x: 0, y: 20 },
+          { id: 'g', name: 'G', pinType: 'passive', x: 0, y: -20 },
+          { id: 'b', name: 'B', pinType: 'passive', x: 20, y: -20 },
+        ],
+      };
+      const vcc5V: CircuitComponent = {
+        id: 'vcc-1',
         type: 'VCC',
         label: '5V Rail',
         value: '5V',
@@ -53,16 +206,23 @@ describe('Virtual Lab v3 Verification Suite', () => {
         pins: [{ id: 'out', name: '0V', pinType: 'power', x: 0, y: 0 }],
       };
 
-      // Connect 5V to Red and Green pins, and GND to COM
+      // 5V connected to COM Cathode, GND connected to R, G, B channels (reverse bias)
       const wires: CircuitWire[] = [
-        { id: 'w1', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-1', toPinId: 'r' },
-        { id: 'w2', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-1', toPinId: 'g' },
-        { id: 'w3', fromCompId: 'gnd-1', fromPinId: 'out', toCompId: 'rgb-1', toPinId: 'cc' },
+        { id: 'w1', fromCompId: 'vcc-1', fromPinId: 'out', toCompId: 'rgb-rev', toPinId: 'cc' },
+        { id: 'w2', fromCompId: 'gnd-1', fromPinId: 'out', toCompId: 'rgb-rev', toPinId: 'r' },
+        { id: 'w3', fromCompId: 'gnd-1', fromPinId: 'out', toCompId: 'rgb-rev', toPinId: 'g' },
+        { id: 'w4', fromCompId: 'gnd-1', fromPinId: 'out', toCompId: 'rgb-rev', toPinId: 'b' },
       ];
 
       const simResult = solver.step([rgbLed, vcc5V, gnd], wires, 0.001);
-      expect(simResult).toBeDefined();
-      expect(simResult.componentStates['rgb-1']).toBeDefined();
+      const st = simResult.componentStates['rgb-rev'];
+      expect(st).toBeDefined();
+      expect(st.current).toBe(0);
+      expect(st.on).toBe(false);
+      expect(st.brightness).toBe(0);
+      expect(st.onRed).toBe(false);
+      expect(st.onGreen).toBe(false);
+      expect(st.onBlue).toBe(false);
     });
   });
 
