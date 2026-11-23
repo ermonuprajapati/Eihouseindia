@@ -1114,14 +1114,32 @@ export function Virtual3dStudio({
         : `⚡ Unplugged USB Cable from ${label} (0V)`
     );
 
-    if (comp && onUpdateComponent) {
+    const compToUpdate: CircuitComponent | null = comp || (targetComp ? {
+      id: targetComp.id,
+      type: targetComp.type,
+      label: targetComp.label,
+      value: ('value' in targetComp && targetComp.value) ? targetComp.value : '5V',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      pins: [],
+      category: 'microcontrollers' as const,
+      footprint: '',
+      parameters: targetComp.parameters || {},
+      x3d: targetComp.x3d,
+      y3d: targetComp.y3d,
+      z3d: targetComp.z3d,
+      rot3d: 'rotY' in targetComp ? (targetComp.rotY ?? 0) : ((targetComp as CircuitComponent).rot3d ?? (targetComp as CircuitComponent).rotation ?? 0),
+    } : null);
+
+    if (compToUpdate && onUpdateComponent) {
       onUpdateComponent({
-        ...comp,
-        x3d: active?.x3d ?? comp.x3d,
-        y3d: active?.y3d ?? comp.y3d,
-        z3d: active?.z3d ?? comp.z3d,
-        rot3d: active?.rotY ?? comp.rot3d,
-        parameters: { ...comp.parameters, usbPlugged: nextState, dcJackPlugged: false },
+        ...compToUpdate,
+        x3d: active?.x3d ?? compToUpdate.x3d,
+        y3d: active?.y3d ?? compToUpdate.y3d,
+        z3d: active?.z3d ?? compToUpdate.z3d,
+        rot3d: active?.rotY ?? compToUpdate.rot3d,
+        parameters: { ...compToUpdate.parameters, usbPlugged: nextState, dcJackPlugged: false },
       });
     }
   }, [activeComponents3d, components, onUpdateComponent]);

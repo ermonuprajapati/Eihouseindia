@@ -12,6 +12,10 @@ describe('Virtual Lab v3 Verification Suite', () => {
         id: 'rgb-1',
         type: 'ACTUATOR_RGB_LED',
         label: 'RGB LED 1',
+        value: 'RGB',
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+        parameters: {},
         x: 100,
         y: 100,
         rotation: 0,
@@ -26,19 +30,27 @@ describe('Virtual Lab v3 Verification Suite', () => {
         id: 'vcc-1',
         type: 'VCC',
         label: '5V Rail',
+        value: '5V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 5.0 },
         x: 50,
         y: 50,
         rotation: 0,
-        pins: [{ id: 'out', name: '5V', pinType: 'source', x: 0, y: 0 }],
+        pins: [{ id: 'out', name: '5V', pinType: 'power', x: 0, y: 0 }],
       };
       const gnd: CircuitComponent = {
         id: 'gnd-1',
         type: 'GROUND',
         label: 'GND',
+        value: '0V',
+        category: 'sources',
+        footprint: 'PAD',
+        parameters: { voltage: 0 },
         x: 100,
         y: 200,
         rotation: 0,
-        pins: [{ id: 'out', name: '0V', pinType: 'source', x: 0, y: 0 }],
+        pins: [{ id: 'out', name: '0V', pinType: 'power', x: 0, y: 0 }],
       };
 
       // Connect 5V to Red and Green pins, and GND to COM
@@ -76,6 +88,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
           x3d: 0,
           y3d: 0,
           z3d: 0,
+          rotY: 0,
+          parameters: {},
         };
         const labels = getComponentPinLabels(dummyComp);
         expect(labels.length).toBeGreaterThan(0);
@@ -108,6 +122,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
           x3d: 0,
           y3d: 0,
           z3d: 0,
+          rotY: 0,
+          parameters: {},
         };
         const labels = getComponentPinLabels(dummyComp);
         expect(labels.length).toBeGreaterThan(0);
@@ -127,6 +143,8 @@ describe('Virtual Lab v3 Verification Suite', () => {
           x3d: 0,
           y3d: 0,
           z3d: 0,
+          rotY: 0,
+          parameters: {},
         };
         const labels = getComponentPinLabels(dummyComp);
         if (template.pins && template.pins.length > 0) {
@@ -146,12 +164,15 @@ describe('Virtual Lab v3 Verification Suite', () => {
         id: 'uno-1',
         type: 'ARDUINO_UNO',
         label: 'Arduino Uno R3',
+        value: 'Uno',
+        category: 'microcontrollers',
+        footprint: 'Module:Arduino_Uno_R3',
         x: 0,
         y: 0,
         rotation: 0,
         pins: [
-          { id: '5V', name: '5V', pinType: 'source', x: 10, y: 10 },
-          { id: 'GND', name: 'GND', pinType: 'source', x: 10, y: 20 },
+          { id: '5V', name: '5V', pinType: 'power', x: 10, y: 10 },
+          { id: 'GND', name: 'GND', pinType: 'power', x: 10, y: 20 },
         ],
         parameters: { usbPlugged: false, dcJackPlugged: false },
       };
@@ -168,12 +189,15 @@ describe('Virtual Lab v3 Verification Suite', () => {
         id: 'uno-1',
         type: 'ARDUINO_UNO',
         label: 'Arduino Uno R3',
+        value: 'Uno',
+        category: 'microcontrollers',
+        footprint: 'Module:Arduino_Uno_R3',
         x: 0,
         y: 0,
         rotation: 0,
         pins: [
-          { id: '5V', name: '5V', pinType: 'source', x: 10, y: 10 },
-          { id: 'GND', name: 'GND', pinType: 'source', x: 10, y: 20 },
+          { id: '5V', name: '5V', pinType: 'power', x: 10, y: 10 },
+          { id: 'GND', name: 'GND', pinType: 'power', x: 10, y: 20 },
         ],
         parameters: { usbPlugged: true, dcJackPlugged: false },
       };
@@ -182,7 +206,7 @@ describe('Virtual Lab v3 Verification Suite', () => {
       const sim = res.componentStates['uno-1'];
       expect(sim.on).toBe(true);
       expect(sim.pwrLed).toBe(true);
-      expect(sim.voltage).toBeGreaterThanOrEqual(4.5);
+      expect(sim.voltage).toBe(5.0);
     });
   });
 });

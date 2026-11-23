@@ -955,13 +955,33 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
   }
 
   // Universal Fallback: Check COMPONENT_CATALOG for any board / sensor / module pins!
-  const catItem = COMPONENT_CATALOG.find((c) => c.type === t);
+  const catItem = COMPONENT_CATALOG.find((c) => {
+    const ct = (c.type || '').toUpperCase();
+    if (ct === t) return true;
+    const normCt = ct.replace(/^(MCU_|MODULE_|SENSOR_|DISPLAY_|ACTUATOR_)/, '');
+    const normT = t.replace(/^(MCU_|MODULE_|SENSOR_|DISPLAY_|ACTUATOR_)/, '');
+    if (normCt === normT) return true;
+    if (normT.includes(normCt) || normCt.includes(normT)) return true;
+    return false;
+  });
   if (catItem?.pins && catItem.pins.length > 0) {
     const pinCount = catItem.pins.length;
     const startX = -((pinCount - 1) * 2.54) / 2;
     return catItem.pins.map((p, i) => ({
       id: p.id,
-      label: p.name || p.id,
+      label: p.name || (p as unknown as { label?: string }).label || p.id,
+      localPos: [startX + i * 2.54, 4.0, 0] as [number, number, number],
+    }));
+  }
+
+  // Fallback: If component itself carries a pins array
+  if ((comp as unknown as { pins?: { id: string; name?: string; label?: string }[] }).pins?.length) {
+    const compPins = (comp as unknown as { pins: { id: string; name?: string; label?: string }[] }).pins;
+    const pinCount = compPins.length;
+    const startX = -((pinCount - 1) * 2.54) / 2;
+    return compPins.map((p, i) => ({
+      id: p.id,
+      label: p.name || p.label || p.id,
       localPos: [startX + i * 2.54, 4.0, 0] as [number, number, number],
     }));
   }

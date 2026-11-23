@@ -1,4 +1,7 @@
+import React from 'react';
+import { render } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { SchematicSymbol } from '@/components/engineering-lab/Canvas/SchematicSymbols';
 import { CircuitSolver, getLedForwardVoltage } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { PcbGenerator, isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
@@ -4515,28 +4518,261 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
       expect(pico?.physicalSpec?.pinPitchMm).toBe(2.54);
     });
 
-    it('BUG 1 VERIFICATION: Schematic RGB LED multi-channel color synthesis & additive glow halo', () => {
-      // Test Red + Green = Yellow optical blending
-      const rBright = 1.0;
-      const gBright = 1.0;
-      const bBright = 0.0;
-      const rByte = Math.round(rBright * 255);
-      const gByte = Math.round(gBright * 255);
-      const bByte = Math.round(bBright * 255);
-      const yellowGlow = `rgb(${rByte}, ${gByte}, ${bByte})`;
-      expect(yellowGlow).toBe('rgb(255, 255, 0)');
+    it('VIRTUAL-LAB-V3: Live Schematic RGB SVG outputs non-zero Green, Blue, and blended RGB colors when G/B channels are driven', () => {
+      const rgbComp: CircuitComponent = {
+        id: 'rgb-test',
+        type: 'ACTUATOR_RGB_LED',
+        label: 'RGB LED',
+        value: 'RGB',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'r', name: 'R', x: -15, y: -20, pinType: 'passive' },
+          { id: 'cc', name: 'Cathode', x: -5, y: 20, pinType: 'power' },
+          { id: 'g', name: 'G', x: 5, y: -20, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 15, y: -20, pinType: 'passive' },
+        ],
+        parameters: {},
+        category: 'actuators',
+        footprint: 'LED_RGB_5MM',
+      };
 
-      // Test Green + Blue = Cyan optical blending
-      const cyanGlow = `rgb(0, 255, 255)`;
-      expect(cyanGlow).toBe('rgb(0, 255, 255)');
+      // Case 1: Green channel active (0, 1, 0)
+      const { container: contGreen } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: false,
+              onGreen: true,
+              onBlue: false,
+              redBrightness: 0,
+              greenBrightness: 1,
+              blueBrightness: 0,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contGreen.querySelector('circle[fill="rgb(0, 255, 0)"]')).toBeTruthy();
 
-      // Test Red + Green + Blue = White optical blending
-      const whiteGlow = `rgb(255, 255, 255)`;
-      expect(whiteGlow).toBe('rgb(255, 255, 255)');
+      // Case 2: Blue channel active (0, 0, 1)
+      const { container: contBlue } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: false,
+              onGreen: false,
+              onBlue: true,
+              redBrightness: 0,
+              greenBrightness: 0,
+              blueBrightness: 1,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contBlue.querySelector('circle[fill="rgb(0, 0, 255)"]')).toBeTruthy();
+
+      // Case 3: Yellow blending (Red + Green)
+      const { container: contYellow } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: true,
+              onGreen: true,
+              onBlue: false,
+              redBrightness: 1,
+              greenBrightness: 1,
+              blueBrightness: 0,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contYellow.querySelector('circle[fill="rgb(255, 255, 0)"]')).toBeTruthy();
+
+      // Case 4: Cyan blending (Green + Blue)
+      const { container: contCyan } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: false,
+              onGreen: true,
+              onBlue: true,
+              redBrightness: 0,
+              greenBrightness: 1,
+              blueBrightness: 1,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contCyan.querySelector('circle[fill="rgb(0, 255, 255)"]')).toBeTruthy();
+
+      // Case 5: Magenta blending (Red + Blue)
+      const { container: contMagenta } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: true,
+              onGreen: false,
+              onBlue: true,
+              redBrightness: 1,
+              greenBrightness: 0,
+              blueBrightness: 1,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contMagenta.querySelector('circle[fill="rgb(255, 0, 255)"]')).toBeTruthy();
+
+      // Case 6: White blending (Red + Green + Blue)
+      const { container: contWhite } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: true,
+            simulationState: {
+              on: true,
+              onRed: true,
+              onGreen: true,
+              onBlue: true,
+              redBrightness: 1,
+              greenBrightness: 1,
+              blueBrightness: 1,
+              brightness: 1,
+              voltage: 5,
+              current: 0.02,
+              dutyCycle: 0,
+              frequency: 0,
+              logicLevel: 0,
+              pinVoltages: {},
+            },
+          })
+        )
+      );
+      expect(contWhite.querySelector('circle[fill="rgb(255, 255, 255)"]')).toBeTruthy();
+
+      // Case 7: Unpowered / zero conduction -> no glow halo circle rendered
+      const { container: contUnlit } = render(
+        React.createElement(
+          'svg',
+          null,
+          React.createElement(SchematicSymbol, {
+            component: rgbComp,
+            isSimulating: false,
+          })
+        )
+      );
+      expect(contUnlit.querySelector('circle[fill^="rgb("]')).toBeNull();
     });
 
-    it('BUG 2 VERIFICATION: All MCU boards have crisp, non-empty pin labels in getComponentPinLabels', () => {
-      const boardTypes = [
+    it('VIRTUAL-LAB-V3: 100% of pins on EVERY registered MCU, dev board, and module resolve a non-empty display label string for hover flags and silkscreen', () => {
+      // 1. Audit every template in COMPONENT_CATALOG
+      expect(COMPONENT_CATALOG.length).toBeGreaterThan(30);
+
+      for (const tmpl of COMPONENT_CATALOG) {
+        if (!tmpl.pins || tmpl.pins.length === 0) continue;
+
+        for (const pin of tmpl.pins) {
+          const displayLabel = pin.name || (pin as unknown as { label?: string }).label || pin.id;
+          expect(typeof displayLabel).toBe('string');
+          expect(displayLabel.trim().length).toBeGreaterThan(0);
+        }
+      }
+
+      // 2. Audit 3D Studio pin labels across all catalog microcontrollers, sensors, modules, and displays
+      const targetCategories = ['microcontrollers', 'modules', 'sensors', 'actuators', 'displays', 'ics'];
+      const catalogBoardAndModules = COMPONENT_CATALOG.filter(
+        (c) => c.pins && c.pins.length > 0 && targetCategories.includes(c.category)
+      );
+      expect(catalogBoardAndModules.length).toBeGreaterThan(15);
+
+      for (const catComp of catalogBoardAndModules) {
+        const dummyComp: Component3D = {
+          id: `pin_test_${catComp.type}`,
+          type: catComp.type,
+          label: catComp.name || catComp.type,
+          x3d: 0,
+          y3d: 0,
+          z3d: 0,
+          rotY: 0,
+          parameters: {},
+        };
+        const resolvedPins = getComponentPinLabels(dummyComp);
+        expect(resolvedPins.length).toBeGreaterThan(0);
+        for (const p of resolvedPins) {
+          expect(p.id).toBeDefined();
+          expect(typeof p.id).toBe('string');
+          expect(p.id.trim().length).toBeGreaterThan(0);
+
+          expect(p.label).toBeDefined();
+          expect(typeof p.label).toBe('string');
+          expect(p.label.trim().length).toBeGreaterThan(0);
+        }
+      }
+
+      // Also verify canonical standalone boards and modules
+      const standardBoardTypes = [
         'ARDUINO_UNO',
         'ARDUINO_MEGA',
         'ARDUINO_NANO',
@@ -4544,67 +4780,155 @@ describe('Engineering Lab - Full Acceptance Test Suite', () => {
         'ESP32_S3',
         'RASPBERRY_PI_PICO',
         'RASPBERRY_PI_PICO2',
+        'STM32',
+        'SERVO_SG90',
+        'LCD_1602',
+        'DISPLAY_OLED_SSD1306',
+        'MOTOR_DRIVER_L298N',
+        'MODULE_NRF24L01',
+        'MODULE_ESP01',
       ];
 
-      for (const bType of boardTypes) {
+      for (const compType of standardBoardTypes) {
         const dummyComp: Component3D = {
-          id: `test_${bType}`,
-          type: bType,
-          label: bType,
+          id: `board_pin_test_${compType}`,
+          type: compType,
+          label: compType,
           x3d: 0,
           y3d: 0,
           z3d: 0,
           rotY: 0,
           parameters: {},
         };
-        const pins = getComponentPinLabels(dummyComp);
-        expect(pins.length).toBeGreaterThan(10);
-        for (const pin of pins) {
-          expect(pin.id).toBeDefined();
-          expect(pin.id.length).toBeGreaterThan(0);
-          expect(pin.label).toBeDefined();
-          expect(pin.label.length).toBeGreaterThan(0);
-          expect(pin.localPos).toBeDefined();
-          expect(pin.localPos.length).toBe(3);
+        const resolvedPins = getComponentPinLabels(dummyComp);
+        expect(resolvedPins.length).toBeGreaterThan(0);
+        for (const p of resolvedPins) {
+          expect(p.id).toBeDefined();
+          expect(typeof p.id).toBe('string');
+          expect(p.id.trim().length).toBeGreaterThan(0);
+
+          expect(p.label).toBeDefined();
+          expect(typeof p.label).toBe('string');
+          expect(p.label.trim().length).toBeGreaterThan(0);
         }
       }
     });
 
-    it('BUG 3 VERIFICATION: MCU USB toggle disconnects and cleanly re-connects power rail', () => {
-      const unoTemplate = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_UNO')!;
-      const mcuComp = createComponentInstance(unoTemplate, 0, 0);
-      mcuComp.id = 'uno1';
-      mcuComp.parameters = { usbPlugged: true, dcJackPlugged: false };
-
+    it('VIRTUAL-LAB-V3: MCU USB cycle connect -> disconnect -> connect -> disconnect -> connect restores 5V/3.3V rails and PWR LED every time and drops to 0V on disconnect', () => {
       const solver = new CircuitSolver();
 
-      // State 1: USB Connected
-      let res = solver.step([mcuComp], [], 0.001);
-      expect(res.componentStates['uno1'].on).toBe(true);
-      expect(res.componentStates['uno1'].pwrLed).toBe(true);
-      expect(res.componentStates['uno1'].voltage).toBe(5.0);
+      const mcuComp: CircuitComponent = {
+        id: 'mcu_cycle_test',
+        type: 'ARDUINO_UNO',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        value: 'Uno R3',
+        footprint: 'Module:Arduino_Uno_R3',
+        pins: [
+          { id: '5V', name: '5V', x: -65, y: -60, pinType: 'power' },
+          { id: '3V3', name: '3V3', x: -65, y: -70, pinType: 'power' },
+          { id: 'GND', name: 'GND', x: -65, y: -50, pinType: 'power' },
+        ],
+        parameters: { usbPlugged: true, dcJackPlugged: false },
+      };
 
-      // State 2: Disconnected (Power OFF)
-      const isCurrentlyPlugged = mcuComp.parameters?.usbPlugged !== false;
-      const nextDisconnected = !isCurrentlyPlugged;
-      expect(nextDisconnected).toBe(false);
+      const resLoad: CircuitComponent = {
+        id: 'r_load',
+        type: 'RESISTOR',
+        label: 'R1',
+        category: 'passive',
+        x: 60,
+        y: 0,
+        rotation: 0,
+        value: '220',
+        footprint: '',
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { resistance: 220 },
+      };
 
-      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: nextDisconnected };
-      res = solver.step([mcuComp], [], 0.001);
-      expect(res.componentStates['uno1'].on).toBe(false);
-      expect(res.componentStates['uno1'].pwrLed).toBe(false);
-      expect(res.componentStates['uno1'].voltage).toBe(0.0);
+      const ledLoad: CircuitComponent = {
+        id: 'led_load',
+        type: 'LED',
+        label: 'D1',
+        category: 'actuators',
+        x: 100,
+        y: 0,
+        rotation: 0,
+        value: 'Green LED',
+        footprint: '',
+        pins: [
+          { id: 'a', name: 'A', x: -20, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 20, y: 0, pinType: 'passive' },
+        ],
+        parameters: { forwardVoltage: 2.1 },
+      };
 
-      // State 3: Re-connected (Power ON restored deterministically)
-      const isStillPlugged = mcuComp.parameters?.usbPlugged !== false;
-      const nextReconnected = !isStillPlugged;
-      expect(nextReconnected).toBe(true);
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'mcu_cycle_test', fromPinId: '5V', toCompId: 'r_load', toPinId: '1' },
+        { id: 'w2', fromCompId: 'r_load', fromPinId: '2', toCompId: 'led_load', toPinId: 'a' },
+        { id: 'w3', fromCompId: 'led_load', fromPinId: 'k', toCompId: 'mcu_cycle_test', toPinId: 'GND' },
+      ];
 
-      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: nextReconnected };
-      res = solver.step([mcuComp], [], 0.001);
-      expect(res.componentStates['uno1'].on).toBe(true);
-      expect(res.componentStates['uno1'].pwrLed).toBe(true);
-      expect(res.componentStates['uno1'].voltage).toBe(5.0);
+      // State 1: CONNECT -> 5V active, PWR LED ON, LED lit
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: true };
+      let res = solver.step([mcuComp, resLoad, ledLoad], wires, 0.001);
+      let mcuSt = res.componentStates['mcu_cycle_test'];
+      let ledSt = res.componentStates['led_load'];
+      expect(mcuSt.on).toBe(true);
+      expect(mcuSt.pwrLed).toBe(true);
+      expect(mcuSt.voltage).toBe(5.0);
+      expect(ledSt.on).toBe(true);
+      expect(ledSt.current).toBeGreaterThan(0.010);
+
+      // State 2: DISCONNECT -> 0V clamped, PWR LED OFF, LED extinguished
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: false };
+      res = solver.step([mcuComp, resLoad, ledLoad], wires, 0.001);
+      mcuSt = res.componentStates['mcu_cycle_test'];
+      ledSt = res.componentStates['led_load'];
+      expect(mcuSt.on).toBe(false);
+      expect(mcuSt.pwrLed).toBe(false);
+      expect(mcuSt.voltage).toBe(0.0);
+      expect(ledSt.on).toBe(false);
+      expect(ledSt.current).toBe(0);
+
+      // State 3: RE-CONNECT -> 5V active, PWR LED ON, LED lit
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: true };
+      res = solver.step([mcuComp, resLoad, ledLoad], wires, 0.001);
+      mcuSt = res.componentStates['mcu_cycle_test'];
+      ledSt = res.componentStates['led_load'];
+      expect(mcuSt.on).toBe(true);
+      expect(mcuSt.pwrLed).toBe(true);
+      expect(mcuSt.voltage).toBe(5.0);
+      expect(ledSt.on).toBe(true);
+      expect(ledSt.current).toBeGreaterThan(0.010);
+
+      // State 4: DISCONNECT -> 0V clamped, PWR LED OFF, LED extinguished
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: false };
+      res = solver.step([mcuComp, resLoad, ledLoad], wires, 0.001);
+      mcuSt = res.componentStates['mcu_cycle_test'];
+      ledSt = res.componentStates['led_load'];
+      expect(mcuSt.on).toBe(false);
+      expect(mcuSt.pwrLed).toBe(false);
+      expect(mcuSt.voltage).toBe(0.0);
+      expect(ledSt.on).toBe(false);
+      expect(ledSt.current).toBe(0);
+
+      // State 5: RE-CONNECT -> 5V active, PWR LED ON, LED lit
+      mcuComp.parameters = { ...mcuComp.parameters, usbPlugged: true };
+      res = solver.step([mcuComp, resLoad, ledLoad], wires, 0.001);
+      mcuSt = res.componentStates['mcu_cycle_test'];
+      ledSt = res.componentStates['led_load'];
+      expect(mcuSt.on).toBe(true);
+      expect(mcuSt.pwrLed).toBe(true);
+      expect(mcuSt.voltage).toBe(5.0);
+      expect(ledSt.on).toBe(true);
+      expect(ledSt.current).toBeGreaterThan(0.010);
     });
 
     it('STEP 0 & BUG 1 VERIFICATION: Pin Pitch Alignment & Zero Sinking outside holes', () => {

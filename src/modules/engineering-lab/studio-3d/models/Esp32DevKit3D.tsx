@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 
 export interface Esp32DevKit3DProps {
   position?: [number, number, number];

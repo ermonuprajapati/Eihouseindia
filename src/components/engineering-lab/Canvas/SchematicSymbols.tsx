@@ -5,8 +5,8 @@ import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
 
 interface SchematicSymbolProps {
   component: CircuitComponent;
-  isSelected: boolean;
-  isSimulating: boolean;
+  isSelected?: boolean;
+  isSimulating?: boolean;
   wires?: CircuitWire[];
   wireCurrents?: Record<string, number>;
   simState?: {
@@ -26,6 +26,26 @@ interface SchematicSymbolProps {
     redBrightness?: number;
     greenBrightness?: number;
     blueBrightness?: number;
+    [key: string]: unknown;
+  };
+  simulationState?: {
+    voltage: number;
+    current: number;
+    on?: boolean;
+    brightness?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
+    digitalOut?: number;
+    pwrLed?: boolean;
+    channels?: { r: number; g: number; b: number };
+    onRed?: boolean;
+    onGreen?: boolean;
+    onBlue?: boolean;
+    redBrightness?: number;
+    greenBrightness?: number;
+    blueBrightness?: number;
+    [key: string]: unknown;
   };
 }
 
@@ -39,8 +59,10 @@ export function SchematicSymbol({
   isSimulating,
   wires,
   wireCurrents,
-  simState,
+  simState: incomingSimState,
+  simulationState,
 }: SchematicSymbolProps) {
+  const simState = incomingSimState || simulationState;
   const { type, value, rotation, mirrored } = component;
   const designator = component.designator || component.label.split(' ')[0] || component.type.slice(0, 3);
   const strokeColor = isSelected ? '#34D399' : '#94A3B8';
