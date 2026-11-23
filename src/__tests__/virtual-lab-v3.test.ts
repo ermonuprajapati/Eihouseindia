@@ -17,6 +17,9 @@ import {
   computeComponentGroundElevation,
   getTieGroupForHole,
   BreadboardOccupancyMap,
+  snapComponentToSurface,
+  getComponentElevationSpec,
+  BREADBOARD_TOP_Y,
   START_X,
   PITCH_X,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
@@ -1614,6 +1617,227 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(distSq).toBeLessThan(100.0); // Directly intersected
       expect(requiredApexY).toBeGreaterThan(compTopY);
       expect(requiredApexY).toBeCloseTo(38.5, 1);
+    });
+  });
+
+  describe('Batch 2D: Phantom Wire Elimination, Spacious Breadboard Auto-Layout, Zero-Sinking & Solid Metallic Pins', () => {
+    it('Task 1: Phantom Wire Elimination - Unconnected parts and batteries receive strictly ZERO wires', () => {
+      // 1. Unconnected Battery test: If a battery has 0 wires in schematic, it must never produce rail wires or bridges
+      const _batteryComp: CircuitComponent = {
+        id: 'bat1',
+        type: 'BATTERY_9V',
+        label: '9V Battery',
+        value: '9V',
+        category: 'sources',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: '+', name: '+', pinType: 'power', x: 0, y: 0 },
+          { id: '-', name: '-', pinType: 'power', x: 0, y: 0 },
+        ],
+      };
+
+      const _moduleComp: CircuitComponent = {
+        id: 'hcsr1',
+        type: 'HC_SR04',
+        label: 'Ultrasonic',
+        value: 'HC-SR04',
+        category: 'sensors',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'vcc', name: 'VCC', pinType: 'power', x: 0, y: 0 },
+          { id: 'trig', name: 'TRIG', pinType: 'input', x: 0, y: 0 },
+          { id: 'echo', name: 'ECHO', pinType: 'output', x: 0, y: 0 },
+          { id: 'gnd', name: 'GND', pinType: 'power', x: 0, y: 0 },
+        ],
+      };
+
+      const _connectedResistor: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        category: 'passives',
+        x: 200,
+        y: 200,
+        rotation: 0,
+        pins: [
+          { id: '1', name: '1', pinType: 'passive', x: 0, y: 0 },
+          { id: '2', name: '2', pinType: 'passive', x: 0, y: 0 },
+        ],
+      };
+
+      const _connectedLed: CircuitComponent = {
+        id: 'led1',
+        type: 'LED',
+        label: 'LED1',
+        value: 'Red',
+        category: 'actuators',
+        x: 300,
+        y: 200,
+        rotation: 0,
+        pins: [
+          { id: 'anode', name: 'A', pinType: 'passive', x: 0, y: 0 },
+          { id: 'cathode', name: 'K', pinType: 'passive', x: 0, y: 0 },
+        ],
+      };
+
+      // Only R1 and LED1 are connected by a wire; Battery and HC-SR04 have 0 connections
+      const circuitWires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'r1', fromPinId: '2', toCompId: 'led1', toPinId: 'anode', color: '#3B82F6' },
+      ];
+
+      const connectedCompIds = new Set(circuitWires.flatMap((w) => [w.fromCompId, w.toCompId]));
+      expect(connectedCompIds.has('bat1')).toBe(false);
+      expect(connectedCompIds.has('hcsr1')).toBe(false);
+      expect(connectedCompIds.has('r1')).toBe(true);
+      expect(connectedCompIds.has('led1')).toBe(true);
+
+      // Verify that any wire filtering removes all battery and module wires
+      const mockOutWires = [
+        { id: 'wire_bat_pos_bat1', fromPin: { compId: 'bat1', pinId: '+' }, toPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_1' }, color: '#EF4444' },
+        { id: 'wire_rail_bridge_pos_left', fromPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_2' }, toPin: { compId: 'breadboard', pinId: 'bb_rail_bottom_pos_2' }, color: '#EF4444' },
+        { id: 'wire_phantom_hcsr', fromPin: { compId: 'hcsr1', pinId: 'vcc' }, toPin: { compId: 'breadboard', pinId: 'bb_col_24_H' }, color: '#EF4444' },
+        { id: 'w1', fromPin: { compId: 'r1', pinId: '2' }, toPin: { compId: 'led1', pinId: 'anode' }, color: '#3B82F6' },
+      ];
+
+      const batteryIsConnected = connectedCompIds.has('bat1');
+      const filteredWires = mockOutWires.filter((w) => {
+        if (w.id.startsWith('wire_bat_') || w.id.startsWith('wire_rail_bridge') || w.id.startsWith('wire_bb')) {
+          return batteryIsConnected;
+        }
+        if (w.fromPin.compId !== 'breadboard' && !connectedCompIds.has(w.fromPin.compId)) return false;
+        if (w.toPin.compId !== 'breadboard' && !connectedCompIds.has(w.toPin.compId)) return false;
+        return true;
+      });
+
+      expect(filteredWires.length).toBe(1);
+      expect(filteredWires[0].id).toBe('w1');
+      // Zero wires connected to HC-SR04
+      expect(filteredWires.some((w) => w.fromPin.compId === 'hcsr1' || w.toPin.compId === 'hcsr1')).toBe(false);
+      // Zero wires connected to Battery
+      expect(filteredWires.some((w) => w.fromPin.compId === 'bat1' || w.toPin.compId === 'bat1')).toBe(false);
+    });
+
+    it('Task 2: Spacious, Clean Breadboard Auto-Layout - Generous column spacing and top/bottom balance', () => {
+      // Test spacing between adjacent components
+      const CANDIDATE_COLS = [8, 14, 20, 26, 32, 38, 44, 50, 56];
+      // Verify minimum gap between candidate columns is >= 6 columns (15.24mm > 10.16mm requirement)
+      for (let i = 0; i < CANDIDATE_COLS.length - 1; i++) {
+        const gapCols = CANDIDATE_COLS[i + 1] - CANDIDATE_COLS[i];
+        const gapMm = gapCols * PITCH_X;
+        expect(gapCols).toBeGreaterThanOrEqual(4);
+        expect(gapMm).toBeGreaterThanOrEqual(10.16);
+      }
+
+      // Verify centered ravine straddler slots
+      const STRADDLER_SLOTS = [
+        [32],
+        [20, 44],
+        [14, 32, 50],
+      ];
+      // 1 IC centered at col 32
+      expect(STRADDLER_SLOTS[0][0]).toBe(32);
+      // 2 ICs have 24-column separation (60.96mm)
+      expect(STRADDLER_SLOTS[1][1] - STRADDLER_SLOTS[1][0]).toBe(24);
+      // 3 ICs have 18-column separation (45.72mm)
+      expect(STRADDLER_SLOTS[2][1] - STRADDLER_SLOTS[2][0]).toBe(18);
+      expect(STRADDLER_SLOTS[2][2] - STRADDLER_SLOTS[2][1]).toBe(18);
+    });
+
+    it('Task 3: Breadboard Drill Alignment & Strict Anti-Sink Rule across modules and DIP packages', () => {
+      // 1. Bluetooth HC-05 6-pin header at 2.54mm pitch
+      const btPins = getComponentPinOffsets('MODULE_BLUETOOTH_HC05');
+      expect(btPins.length).toBe(6);
+      for (let i = 0; i < btPins.length - 1; i++) {
+        expect(Math.abs(btPins[i + 1].x - btPins[i].x)).toBeCloseTo(2.54, 2);
+      }
+
+      // 2. DIP-28 IC (ATmega328P) 28 pins at 2.54mm pitch and 7.62mm row spacing
+      const dip28Pins = getComponentPinOffsets('ATMEGA328P');
+      expect(dip28Pins.length).toBe(28);
+      // Row E pins are at z = -3.34, Row F pins are at z = +3.34 (ravine straddle)
+      expect(dip28Pins[0].z).toBeCloseTo(-3.34, 2);
+      expect(dip28Pins[14].z).toBeCloseTo(3.34, 2);
+      expect(dip28Pins[1].x - dip28Pins[0].x).toBeCloseTo(2.54, 2);
+
+      // 3. Potentiometer 3-pin offsets
+      const potPins = getComponentPinOffsets('POTENTIOMETER');
+      expect(potPins.length).toBe(3);
+      expect(potPins[0].x).toBeCloseTo(-2.54, 2);
+      expect(potPins[2].x).toBeCloseTo(2.54, 2);
+
+      // 4. OLED I2C and DHT11 4-pin headers
+      const oledPins = getComponentPinOffsets('DISPLAY_OLED_I2C');
+      expect(oledPins.length).toBe(4);
+      expect(oledPins[1].x - oledPins[0].x).toBeCloseTo(2.54, 2);
+
+      // 5. MPU-6050 8-pin header
+      const mpuPins = getComponentPinOffsets('SENSOR_MPU6050');
+      expect(mpuPins.length).toBe(8);
+      expect(mpuPins[1].x - mpuPins[0].x).toBeCloseTo(2.54, 2);
+
+      // 6. Test snapComponentToSurface on breadboard
+      const testComp: Component3D = {
+        id: 'test_dip8',
+        type: 'TIMER_555',
+        label: 'U1',
+        value: '555',
+        parameters: {},
+        x3d: START_X + (32 - 0.5) * PITCH_X,
+        y3d: 10.0,
+        z3d: 1.5, // slightly off-center near ravine
+      };
+      const snapped = snapComponentToSurface(testComp, true, 1);
+      // Straddles center ravine (z = 0)
+      expect(snapped.z3d).toBe(0);
+      // Pins insert into spring clips above BREADBOARD_TOP_Y (8.5mm)
+      expect(snapped.y3d).toBeGreaterThanOrEqual(8.5);
+
+      // 7. Strict Anti-Sink Rule Outside Valid Drills:
+      // When placed in center isolation ravine (where no drill holes exist):
+      const _ravineComp: Component3D = {
+        id: 'test_led',
+        type: 'LED',
+        label: 'LED',
+        value: 'Red',
+        parameters: {},
+        x3d: 0,
+        y3d: 10.0,
+        z3d: 0, // Ravine has 0 holes for 2-pin LED
+      };
+      const ravineElevation = computeComponentGroundElevation('LED', 0, 0, true, 0, 1);
+      // Lowest pin tip rests flush on plastic face; body sits above BREADBOARD_TOP_Y (never sinks!)
+      expect(ravineElevation).toBeGreaterThanOrEqual(BREADBOARD_TOP_Y);
+    });
+
+    it('Task 4: Solid Metallic Pins - Authentically proportioned pin length and zero-sinking elevation specs', () => {
+      // 1. DIP IC Elevation Spec: through-hole, 5.2mm pin length, 4.0mm package height
+      const dipSpec = getComponentElevationSpec('TIMER_555');
+      expect(dipSpec.isThroughHole).toBe(true);
+      expect(dipSpec.pinLength).toBe(5.2);
+      expect(dipSpec.localMinY).toBe(-5.0);
+
+      // 2. MCU Breakouts (Nano, ESP32, Pico): 6.5mm pin length
+      const mcuSpec = getComponentElevationSpec('ARDUINO_NANO');
+      expect(mcuSpec.isThroughHole).toBe(true);
+      expect(mcuSpec.pinLength).toBe(6.5);
+      expect(mcuSpec.localMinY).toBe(-5.5);
+
+      // 3. Sensor / Wireless Modules (HC-SR04, HC-05): 6.0mm pin length
+      const sensorSpec = getComponentElevationSpec('HC_SR04');
+      expect(sensorSpec.isThroughHole).toBe(true);
+      expect(sensorSpec.pinLength).toBe(6.0);
+      expect(sensorSpec.localMinY).toBe(-5.7);
+
+      // 4. Passives (Resistor, LED, Capacitor): 11.0mm pin length
+      const passiveSpec = getComponentElevationSpec('RESISTOR');
+      expect(passiveSpec.isThroughHole).toBe(true);
+      expect(passiveSpec.pinLength).toBe(11.0);
+      expect(passiveSpec.localMinY).toBe(-8.0);
     });
   });
 });

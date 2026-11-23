@@ -156,6 +156,9 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
   if (t === 'SLIDE_SWITCH' || t === 'SWITCH_SLIDE_SPDT') {
     return [{ x: -2.54, z: 0 }, { x: 0, z: 0 }, { x: 2.54, z: 0 }];
   }
+  if (t === 'POTENTIOMETER' || t === 'POTENTIOMETER_ROTARY') {
+    return [{ x: -2.54, z: 0 }, { x: 0, z: 2.54 }, { x: 2.54, z: 0 }];
+  }
   if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET') || t.includes('TO92') || t.includes('TO220') || t.includes('REGULATOR')) {
     return [{ x: -2.54, z: 0 }, { x: 0, z: 0 }, { x: 2.54, z: 0 }];
   }
@@ -181,6 +184,49 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
       { x: -1.27, z: 0 },
       { x: 1.27, z: 0 },
       { x: 3.81, z: 0 },
+    ];
+  }
+  if (
+    t.includes('BLUETOOTH') ||
+    t === 'HC05' ||
+    t === 'HC06' ||
+    t === 'MODULE_BLUETOOTH_HC05' ||
+    t === 'RF_BLUETOOTH'
+  ) {
+    return [
+      { x: -6.35, z: 0 },
+      { x: -3.81, z: 0 },
+      { x: -1.27, z: 0 },
+      { x: 1.27, z: 0 },
+      { x: 3.81, z: 0 },
+      { x: 6.35, z: 0 },
+    ];
+  }
+  if (t.includes('OLED') || t.includes('DHT11') || t.includes('DHT22')) {
+    return [
+      { x: -3.81, z: 0 },
+      { x: -1.27, z: 0 },
+      { x: 1.27, z: 0 },
+      { x: 3.81, z: 0 },
+    ];
+  }
+  if (t.includes('PIR') || t.includes('RELAY')) {
+    return [
+      { x: -2.54, z: 0 },
+      { x: 0, z: 0 },
+      { x: 2.54, z: 0 },
+    ];
+  }
+  if (t.includes('MPU6050') || t.includes('GY521')) {
+    return [
+      { x: -8.89, z: 0 },
+      { x: -6.35, z: 0 },
+      { x: -3.81, z: 0 },
+      { x: -1.27, z: 0 },
+      { x: 1.27, z: 0 },
+      { x: 3.81, z: 0 },
+      { x: 6.35, z: 0 },
+      { x: 8.89, z: 0 },
     ];
   }
   if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
@@ -232,6 +278,17 @@ export function getComponentPinOffsets(type: string): Array<{ x: number; z: numb
       { x: -6.35, z: 3.34 },
       { x: -8.89, z: 3.34 },
     ];
+  }
+  if (t.includes('ATMEGA328P') || t.includes('DIP_28') || t.includes('DIP28')) {
+    const pins: Array<{ x: number; z: number }> = [];
+    const startX = -((14 - 1) * 2.54) / 2;
+    for (let i = 0; i < 14; i++) {
+      pins.push({ x: startX + i * 2.54, z: -3.34 });
+    }
+    for (let i = 0; i < 14; i++) {
+      pins.push({ x: startX + (13 - i) * 2.54, z: 3.34 });
+    }
+    return pins;
   }
   if (t === 'ARDUINO_NANO') {
     const pins: Array<{ x: number; z: number }> = [];
@@ -935,7 +992,13 @@ export function snapComponentToSurface(
     'TIMER_555',
     'DIP_IC',
     'OPAMP_LM358',
-  ].includes(comp.type) || (comp.type.includes('DIP') && !comp.type.includes('14') && !comp.type.includes('74HC'));
+    'MODULE_BLUETOOTH_HC05',
+    'BLUETOOTH',
+    'HC05',
+    'DHT11',
+    'DHT22',
+    'OLED',
+  ].some((k) => comp.type.toUpperCase().includes(k)) || (comp.type.includes('DIP') && !comp.type.includes('14') && !comp.type.includes('74HC'));
 
   let snappedX: number;
   let snappedZ: number;
@@ -945,10 +1008,11 @@ export function snapComponentToSurface(
       const nearestCol = Math.max(2, Math.min(61, Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1));
       snappedX = START_X + (nearestCol - 0.5) * PITCH_X;
     } else {
-      snappedX = Math.round(comp.x3d / PITCH_X) * PITCH_X;
+      const nearestCol = Math.max(1, Math.min(63, Math.round((comp.x3d - START_X) / PITCH_X) + 1));
+      snappedX = START_X + (nearestCol - 1) * PITCH_X;
     }
 
-    const isDip = comp.type.includes('DIP') || comp.type === 'TIMER_555' || comp.type.includes('OPAMP') || comp.type.includes('74HC');
+    const isDip = comp.type.includes('DIP') || comp.type === 'TIMER_555' || comp.type.includes('OPAMP') || comp.type.includes('74HC') || comp.type.includes('NANO') || comp.type.includes('ESP32') || comp.type.includes('PICO');
     const relZ = comp.z3d - boardCenterZ;
     if (isDip && Math.abs(relZ) <= 4.0) {
       snappedZ = boardCenterZ; // Straddle center ravine
@@ -965,9 +1029,9 @@ export function snapComponentToSurface(
 
   return {
     ...comp,
-    x3d: Math.round(snappedX * 100) / 100,
-    y3d: Math.round(groundY * 100) / 100,
-    z3d: Math.round(snappedZ * 100) / 100,
+    x3d: (Math.round(snappedX * 100) / 100) || 0,
+    y3d: (Math.round(groundY * 100) / 100) || 0,
+    z3d: (Math.round(snappedZ * 100) / 100) || 0,
   };
 }
 

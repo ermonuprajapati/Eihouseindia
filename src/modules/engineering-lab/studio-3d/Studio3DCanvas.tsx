@@ -3498,7 +3498,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, 0, 0]}>
                       <mesh position={[0, -4.5, 0]}>
                         <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.18} />
                       </mesh>
                       <mesh
                         position={[0, -4.5, 0]}
@@ -3531,7 +3531,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, -3.5, 0]}>
                       <mesh>
                         <boxGeometry args={[0.45, 7.0, 0.45]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.18} />
                       </mesh>
                       <mesh
                         renderOrder={100}
@@ -3564,7 +3564,7 @@ export function Studio3DCanvas({
                     <cylinderGeometry args={[0.8, 0.8, 0.4, 16, 1, false, -Math.PI / 2, Math.PI]} />
                     <meshBasicMaterial color="#09090B" />
                   </mesh>
-                  {/* Pin rows on both sides */}
+                  {/* Solid metallic pin rows on both sides with authentic DIP shank length */}
                   {Array.from({ length: Math.ceil(pinCount / 2) }).map((_, i) => {
                     const startX = -((Math.ceil(pinCount / 2) - 1) * 2.54) / 2;
                     const px = startX + i * 2.54;
@@ -3572,13 +3572,13 @@ export function Studio3DCanvas({
                       <group key={i}>
                         {/* Row E pin */}
                         <mesh position={[px, -2.0, -3.34]}>
-                          <boxGeometry args={[0.65, 4.5, 0.45]} />
-                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                          <boxGeometry args={[0.65, 6.2, 0.45]} />
+                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
                         </mesh>
                         {/* Row F pin */}
                         <mesh position={[px, -2.0, 3.34]}>
-                          <boxGeometry args={[0.65, 4.5, 0.45]} />
-                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                          <boxGeometry args={[0.65, 6.2, 0.45]} />
+                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
                         </mesh>
                       </group>
                     );
@@ -3598,7 +3598,7 @@ export function Studio3DCanvas({
                     <boxGeometry args={[Math.max(16, pinCount * 2.54), 2.5, 2.5]} />
                     <meshStandardMaterial color="#18181B" roughness={0.8} />
                   </mesh>
-                  {/* Square Pins with Click and Hover Targets */}
+                  {/* Solid Metallic Square Pins (Downward Insertion Legs + Upward Terminals) */}
                   {Array.from({ length: Math.min(pinCount, 16) }).map((_, pi) => {
                     const startX = -((Math.min(pinCount, 16) - 1) * 2.54) / 2;
                     const px = startX + pi * 2.54;
@@ -3606,12 +3606,25 @@ export function Studio3DCanvas({
                     const pinName = pinItem?.name || pinItem?.id || String(pi + 1);
                     const isHovered = hoveredPinInfo?.compId === comp.id && (hoveredPinInfo.pinName === pinName || hoveredPinInfo.pinName === pinItem?.id);
                     return (
-                      <group key={pi} position={[px, 4.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
-                        <mesh>
-                          <boxGeometry args={[0.64, 5.0, 0.64]} />
-                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#F59E0B'} metalness={0.85} />
+                      <group key={pi} position={[px, 0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                        {/* Downward solid metallic pin into breadboard spring clips */}
+                        <mesh position={[0, -2.5, 0]}>
+                          <boxGeometry args={[0.64, 6.5, 0.64]} />
+                          <meshStandardMaterial color="#F59E0B" metalness={0.92} roughness={0.18} />
                         </mesh>
+                        {/* Upward header pin terminal */}
+                        <mesh position={[0, 4.0, 0]}>
+                          <boxGeometry args={[0.64, 4.0, 0.64]} />
+                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#F59E0B'} metalness={0.92} roughness={0.18} />
+                        </mesh>
+                        {/* Solder fillet cone on carrier pad */}
+                        <mesh position={[0, 0.85, 0]}>
+                          <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
+                        </mesh>
+                        {/* Raycast hit target & hover sphere */}
                         <mesh
+                          position={[0, 2.5, 0]}
                           renderOrder={100}
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
@@ -3624,7 +3637,7 @@ export function Studio3DCanvas({
                           }}
                           onPointerOut={() => setHoveredPinInfo(null)}
                         >
-                          <sphereGeometry args={[isHovered ? 1.2 : 0.7, 8, 8]} />
+                          <sphereGeometry args={[isHovered ? 1.4 : 0.8, 8, 8]} />
                           <meshBasicMaterial color={isHovered ? '#FDE047' : '#38BDF8'} transparent opacity={isHovered ? 0.9 : 0} />
                         </mesh>
                       </group>
