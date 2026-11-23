@@ -40,6 +40,11 @@ declare module '@/modules/engineering-lab/types' {
   }
 }
 import { COMPONENT_CATALOG } from '../circuit-engine/component-catalog';
+import {
+  MASTER_25_CATEGORIES,
+  getCategory25ForComponent,
+  getSimulationBadgeInfo,
+} from '../circuit-engine/component-categories-25';
 import { Breadboard3D } from './Breadboard3D';
 import {
   BreadboardHole3D,
@@ -50,6 +55,7 @@ import {
   START_X,
   PITCH_X,
   getComponentElevationSpec,
+  getComponentFootprint,
   computeComponentGroundElevation,
   stepAngle45,
   nudgeComponent3D,
@@ -297,7 +303,7 @@ interface Library3DItem {
   params: Record<string, number | string | boolean>;
 }
 
-const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
+export const LIBRARY_3D_COMPONENTS: Library3DItem[] = [
   // Microcontrollers & Power
   {
     type: 'ARDUINO_MEGA',
@@ -642,95 +648,8 @@ interface DragFrameControllerProps {
   components3d: Component3D[];
   occupiedHoleIds: Set<string>;
   hasBreadboard: boolean;
+  breadboardCount?: number;
   onUpdateComponent3D: (comp: Component3D) => void;
-}
-
-function getComponentFootprint(type: string): { halfW: number; halfD: number } {
-  switch (type) {
-    case 'ARDUINO_UNO':
-      return { halfW: 34.0, halfD: 26.5 };
-    case 'ARDUINO_MEGA':
-      return { halfW: 50.5, halfD: 26.5 };
-    case 'ARDUINO_NANO':
-      return { halfW: 21.5, halfD: 9.0 };
-    case 'ESP32_DEVKIT':
-    case 'ESP32_S3':
-    case 'ESP32_C3':
-      return { halfW: 27.5, halfD: 14.0 };
-    case 'RASPBERRY_PI_PICO':
-    case 'RASPBERRY_PI_PICO2':
-      return { halfW: 25.5, halfD: 10.5 };
-    case 'LCD_1602':
-    case 'DISPLAY_LCD1602':
-      return { halfW: 40.0, halfD: 18.0 };
-    case 'DISPLAY_OLED_SSD1306':
-      return { halfW: 15.0, halfD: 14.0 };
-    case 'MODULE_BLUETOOTH_HC05':
-    case 'BLUETOOTH':
-    case 'HC05':
-    case 'HC06':
-    case 'RF_BLUETOOTH':
-      return { halfW: 9.0, halfD: 19.0 };
-    case 'HC_SR04':
-    case 'SENSOR_ULTRASONIC':
-      return { halfW: 22.5, halfD: 10.0 };
-    case 'SERVO_SG90':
-    case 'ACTUATOR_SERVO_SG90':
-      return { halfW: 16.0, halfD: 12.0 };
-    case 'BATTERY_9V':
-    case 'BATTERY':
-    case 'DC_VOLTAGE':
-      return { halfW: 13.0, halfD: 8.5 };
-    case 'POTENTIOMETER':
-      return { halfW: 5.0, halfD: 5.0 };
-    case 'PUSHBUTTON':
-    case 'PUSHBUTTON_NO':
-    case 'PUSHBUTTON_NC':
-    case 'EMERGENCY_STOP':
-      return { halfW: 4.0, halfD: 4.0 };
-    case 'SLIDE_SWITCH':
-    case 'SWITCH_SPST':
-      return { halfW: 4.5, halfD: 2.5 };
-    case 'BUZZER_ACTIVE':
-    case 'ACTUATOR_BUZZER_ACTIVE':
-      return { halfW: 6.0, halfD: 6.0 };
-    case 'TIMER_555':
-    case 'DIP_IC':
-    case 'ATMEGA328P':
-    case 'OPAMP_LM358':
-    case 'OPAMP_LM741':
-    case 'COMPARATOR_LM393':
-      return { halfW: 5.5, halfD: 4.0 };
-    case 'LED_RGB':
-    case 'ACTUATOR_RGB_LED':
-      return { halfW: 3.0, halfD: 3.0 };
-    case 'LED':
-      return { halfW: 2.8, halfD: 2.8 };
-    case 'RESISTOR':
-      return { halfW: 6.0, halfD: 2.0 };
-    case 'INDUCTOR':
-      return { halfW: 6.0, halfD: 2.2 };
-    case 'DIODE':
-    case 'DIODE_1N4007':
-      return { halfW: 5.5, halfD: 2.0 };
-    case 'BJT_NPN':
-    case 'BJT_PNP':
-    case 'TRANSISTOR_NPN':
-    case 'TRANSISTOR_PNP':
-      return { halfW: 3.5, halfD: 2.5 };
-    case 'MOSFET_N':
-    case 'MOSFET_P':
-    case 'REGULATOR_7805':
-    case 'REGULATOR_LM317':
-      return { halfW: 5.5, halfD: 3.0 };
-    case 'SENSOR_LDR':
-      return { halfW: 3.0, halfD: 3.0 };
-    case 'CAPACITOR':
-    case 'CAPACITOR_ELECTROLYTIC':
-      return { halfW: 3.5, halfD: 3.5 };
-    default:
-      return { halfW: 3.5, halfD: 3.5 };
-  }
 }
 
 export interface PinLabelItem {
@@ -756,13 +675,46 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
   if (t === 'RASPBERRY_PI_PICO' || t === 'RASPBERRY_PI_PICO2') {
     return PICO_PINS.map((p) => ({ id: p.name, label: p.name, localPos: p.localPos }));
   }
-  if (t === 'TIMER_555' || t === 'DIP_IC' || t.includes('OPAMP') || t.includes('COMPARATOR')) {
-    const pinNames = t === 'OPAMP_LM358'
+  if (t === 'TIMER_555' || t === 'DIP_IC' || (t.includes('OPAMP') && !t.includes('324')) || t.includes('COMPARATOR')) {
+    const pinNames = t.includes('358')
       ? ['OUT1', 'IN1-', 'IN1+', 'GND', 'IN2+', 'IN2-', 'OUT2', 'VCC']
       : ['GND', 'TRIG', 'OUT', 'RESET', 'CTRL', 'THRES', 'DISCH', 'VCC'];
     return [1, 2, 3, 4, 5, 6, 7, 8].map((num, i) => {
       const lx = (i < 4) ? -3.81 + i * 2.54 : 3.81 - (i - 4) * 2.54;
       const lz = (i < 4) ? -3.34 : 3.34;
+      return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
+    });
+  }
+  if (t === 'IC_74HC14' || t.includes('74HC') || t.includes('DIP14') || t.includes('DIP_14') || t.includes('LM324')) {
+    let pinNames = ['1A', '1Y', '2A', '2Y', '3A', '3Y', 'GND', '4Y', '4A', '5Y', '5A', '6Y', '6A', 'VCC'];
+    if (t.includes('74HC00') || t.includes('74HC08') || t.includes('74HC32') || t.includes('74HC86')) {
+      pinNames = ['1A', '1B', '1Y', '2A', '2B', '2Y', 'GND', '3Y', '3A', '3B', '4Y', '4A', '4B', 'VCC'];
+    } else if (t.includes('LM324')) {
+      pinNames = ['1OUT', '1IN-', '1IN+', 'VCC', '2IN+', '2IN-', '2OUT', '3OUT', '3IN-', '3IN+', 'GND', '4IN+', '4IN-', '4OUT'];
+    }
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((num, i) => {
+      const lx = (i < 7) ? -7.62 + i * 2.54 : 7.62 - (i - 7) * 2.54;
+      const lz = (i < 7) ? -3.34 : 3.34;
+      return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
+    });
+  }
+  if (t.includes('595') || t.includes('4017') || t.includes('2003') || t.includes('293') || t.includes('DIP16') || t.includes('DIP_16')) {
+    let pinNames = [
+      '1', '2', '3', '4', '5', '6', '7', '8',
+      '9', '10', '11', '12', '13', '14', '15', '16'
+    ];
+    if (t.includes('595')) {
+      pinNames = ['QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH', 'GND', "QH'", '~SRCLR', 'SRCLK', 'RCLK', '~OE', 'SER', 'QA', 'VCC'];
+    } else if (t.includes('4017')) {
+      pinNames = ['Q5', 'Q1', 'Q0', 'Q2', 'Q6', 'Q7', 'Q3', 'GND', 'Q8', 'Q4', 'Q9', 'CO', '~EN', 'CLK', 'RST', 'VDD'];
+    } else if (t.includes('2003')) {
+      pinNames = ['1B', '2B', '3B', '4B', '5B', '6B', '7B', 'COM_E', 'COM_K', '7C', '6C', '5C', '4C', '3C', '2C', '1C'];
+    } else if (t.includes('293')) {
+      pinNames = ['1,2EN', '1A', '1Y', 'GND', 'GND', '2Y', '2A', 'VCC2', '3,4EN', '3A', '3Y', 'GND', 'GND', '4Y', '4A', 'VCC1'];
+    }
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((num, i) => {
+      const lx = (i < 8) ? -8.89 + i * 2.54 : 8.89 - (i - 8) * 2.54;
+      const lz = (i < 8) ? -3.34 : 3.34;
       return { id: String(num), label: `${num}:${pinNames[i]}`, localPos: [lx, 0, lz] as [number, number, number] };
     });
   }
@@ -871,6 +823,120 @@ export function getComponentPinLabels(comp: Component3D): PinLabelItem[] {
       { id: '2', label: '2', localPos: [2.54, 0, 0] },
     ];
   }
+  if (t === 'SERVO_SG90' || t === 'ACTUATOR_SERVO_SG90' || t === 'SERVO') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-16.0, 5, -2.54] },
+      { id: 'VCC', label: '5V', localPos: [-16.0, 5, 0] },
+      { id: 'PWM', label: 'PWM', localPos: [-16.0, 5, 2.54] },
+    ];
+  }
+  if (t === 'LCD_1602' || t === 'DISPLAY_LCD1602') {
+    const LCD_PIN_NAMES = [
+      'VSS', 'VDD', 'V0', 'RS', 'RW', 'E',
+      'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7',
+      'A', 'K'
+    ];
+    return LCD_PIN_NAMES.map((name, i) => ({
+      id: name,
+      label: name,
+      localPos: [-16.0 + (-19.05 + i * 2.54), 7.8, -14.0] as [number, number, number],
+    }));
+  }
+  if (t.includes('OLED') || t === 'DISPLAY_OLED_SSD1306' || t === 'MODULE_OLED_I2C') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3.5, -12] },
+      { id: 'VCC', label: 'VCC', localPos: [-1.27, 3.5, -12] },
+      { id: 'SCL', label: 'SCL', localPos: [1.27, 3.5, -12] },
+      { id: 'SDA', label: 'SDA', localPos: [3.81, 3.5, -12] },
+    ];
+  }
+  if (t.includes('RELAY')) {
+    return [
+      { id: 'VCC', label: 'VCC', localPos: [-5.08, 3.5, 10] },
+      { id: 'GND', label: 'GND', localPos: [-2.54, 3.5, 10] },
+      { id: 'IN', label: 'IN', localPos: [0, 3.5, 10] },
+      { id: 'NO', label: 'NO', localPos: [-5.08, 5.0, -10] },
+      { id: 'COM', label: 'COM', localPos: [0, 5.0, -10] },
+      { id: 'NC', label: 'NC', localPos: [5.08, 5.0, -10] },
+    ];
+  }
+  if (t === 'MOTOR_DRIVER_L298N') {
+    return [
+      { id: '12V', label: '12V', localPos: [-14, 5, 14] },
+      { id: 'GND', label: 'GND', localPos: [-10, 5, 14] },
+      { id: '5V', label: '5V', localPos: [-6, 5, 14] },
+      { id: 'ENA', label: 'ENA', localPos: [0, 4, 14] },
+      { id: 'IN1', label: 'IN1', localPos: [2.54, 4, 14] },
+      { id: 'IN2', label: 'IN2', localPos: [5.08, 4, 14] },
+      { id: 'IN3', label: 'IN3', localPos: [7.62, 4, 14] },
+      { id: 'IN4', label: 'IN4', localPos: [10.16, 4, 14] },
+      { id: 'ENB', label: 'ENB', localPos: [12.7, 4, 14] },
+    ];
+  }
+  if (t === 'MODULE_NRF24L01') {
+    return [
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3, 10] },
+      { id: 'VCC', label: 'VCC', localPos: [-1.27, 3, 10] },
+      { id: 'CE', label: 'CE', localPos: [1.27, 3, 10] },
+      { id: 'CSN', label: 'CSN', localPos: [3.81, 3, 10] },
+      { id: 'SCK', label: 'SCK', localPos: [-3.81, 3, 12.54] },
+      { id: 'MOSI', label: 'MOSI', localPos: [-1.27, 3, 12.54] },
+      { id: 'MISO', label: 'MISO', localPos: [1.27, 3, 12.54] },
+      { id: 'IRQ', label: 'IRQ', localPos: [3.81, 3, 12.54] },
+    ];
+  }
+  if (t === 'MODULE_ESP01') {
+    return [
+      { id: 'TXD', label: 'TXD', localPos: [-3.81, 3, 8] },
+      { id: 'CH_PD', label: 'CH_PD', localPos: [-1.27, 3, 8] },
+      { id: 'RST', label: 'RST', localPos: [1.27, 3, 8] },
+      { id: 'VCC', label: 'VCC', localPos: [3.81, 3, 8] },
+      { id: 'GND', label: 'GND', localPos: [-3.81, 3, 10.54] },
+      { id: 'GPIO2', label: 'GPIO2', localPos: [-1.27, 3, 10.54] },
+      { id: 'GPIO0', label: 'GPIO0', localPos: [1.27, 3, 10.54] },
+      { id: 'RXD', label: 'RXD', localPos: [3.81, 3, 10.54] },
+    ];
+  }
+  if (t.includes('STM32')) {
+    const stmPins = ['B12', 'B13', 'B14', 'B15', 'A8', 'A9', 'A10', 'A11', 'A12', 'A15', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', '5V', 'GND', '3V3'];
+    return stmPins.map((p, i) => ({
+      id: p,
+      label: p,
+      localPos: [-15 + i * 1.5, 4.0, 10] as [number, number, number],
+    }));
+  }
+
+  // Universal Fallback: Check COMPONENT_CATALOG for any board / sensor / module pins!
+  const catItem = COMPONENT_CATALOG.find((c) => {
+    const ct = (c.type || '').toUpperCase();
+    if (ct === t) return true;
+    const normCt = ct.replace(/^(MCU_|MODULE_|SENSOR_|DISPLAY_|ACTUATOR_)/, '');
+    const normT = t.replace(/^(MCU_|MODULE_|SENSOR_|DISPLAY_|ACTUATOR_)/, '');
+    if (normCt === normT) return true;
+    if (normT.includes(normCt) || normCt.includes(normT)) return true;
+    return false;
+  });
+  if (catItem?.pins && catItem.pins.length > 0) {
+    const pinCount = catItem.pins.length;
+    const startX = -((pinCount - 1) * 2.54) / 2;
+    return catItem.pins.map((p, i) => ({
+      id: p.id,
+      label: p.name || (p as unknown as { label?: string }).label || p.id,
+      localPos: [startX + i * 2.54, 4.0, 0] as [number, number, number],
+    }));
+  }
+
+  // Fallback: If component itself carries a pins array
+  if ((comp as unknown as { pins?: { id: string; name?: string; label?: string }[] }).pins?.length) {
+    const compPins = (comp as unknown as { pins: { id: string; name?: string; label?: string }[] }).pins;
+    const pinCount = compPins.length;
+    const startX = -((pinCount - 1) * 2.54) / 2;
+    return compPins.map((p, i) => ({
+      id: p.id,
+      label: p.name || p.label || p.id,
+      localPos: [startX + i * 2.54, 4.0, 0] as [number, number, number],
+    }));
+  }
 
   return [];
 }
@@ -887,9 +953,7 @@ export function ComponentPinLabelsOverlay({
 }) {
   const pinLabels = useMemo(() => getComponentPinLabels(comp), [comp]);
 
-  // Bug 3 Fix: Default to professional silkscreen on component bodies + instant, single clean tooltip badge on whichever pin is hovered.
-  // NEVER spam all permanent HTML badges when a component is selected.
-  // ONLY render multiple badges when the user explicitly enabled the "Show All Pin Labels" [L] toolbar toggle.
+  // Render tooltip badge on hovered pin or all badges when user toggles [L]
   if (!showAll && !hoveredPinName) return null;
 
   const pinsToRender = showAll
@@ -899,7 +963,13 @@ export function ComponentPinLabelsOverlay({
           p.id === hoveredPinName ||
           p.id.toLowerCase() === hoveredPinName?.toLowerCase() ||
           p.label.toLowerCase() === hoveredPinName?.toLowerCase() ||
-          (p as unknown as { name?: string }).name?.toLowerCase() === hoveredPinName?.toLowerCase()
+          (p as unknown as { name?: string }).name?.toLowerCase() === hoveredPinName?.toLowerCase() ||
+          (hoveredPinName && (
+            (p.id.startsWith('GND') && hoveredPinName.startsWith('GND')) ||
+            (p.id.startsWith('RESET') && hoveredPinName.startsWith('RESET')) ||
+            (p.id.startsWith('5V') && hoveredPinName.startsWith('5V')) ||
+            (p.id.startsWith('3V3') && (hoveredPinName.startsWith('3V3') || hoveredPinName.startsWith('3.3V')))
+          ))
       );
 
   if (pinsToRender.length === 0) return null;
@@ -918,8 +988,8 @@ export function ComponentPinLabelsOverlay({
           hoveredPinName?.toLowerCase() === p.id.toLowerCase() ||
           hoveredPinName?.toLowerCase() === p.label.toLowerCase();
 
-        // When showAll is active, gently alternate Y elevation by 1.8mm to prevent overlap on tight 2.54mm pitch
-        const elevationY = isHovered ? 2.8 : 2.2 + (idx % 2) * 1.8;
+        // Staggered Y elevation to prevent overlap on tight header rows
+        const elevationY = isHovered ? 4.2 : 3.0 + (idx % 2) * 2.0;
         const labelText = p.label || (p as unknown as { name?: string }).name || p.id;
 
         return (
@@ -927,13 +997,13 @@ export function ComponentPinLabelsOverlay({
             key={p.id}
             position={[p.localPos[0], p.localPos[1] + elevationY, p.localPos[2]]}
             center
-            distanceFactor={90}
+            distanceFactor={85}
             style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
           >
             <div
-              className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] tracking-tight whitespace-nowrap shadow-xl border ${
+              className={`px-2 py-0.5 rounded font-mono font-bold text-[11px] tracking-wide whitespace-nowrap shadow-2xl border transition-all ${
                 isHovered
-                  ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-white shadow-amber-500/60 scale-110 z-50'
+                  ? 'bg-slate-950 text-amber-300 border-amber-400 ring-2 ring-white/90 shadow-amber-500/60 scale-110 z-50'
                   : 'bg-slate-900/95 text-cyan-300 border-cyan-500/70 shadow-black/90'
               }`}
             >
@@ -951,6 +1021,7 @@ function DragFrameController({
   components3d,
   occupiedHoleIds,
   hasBreadboard,
+  breadboardCount = 1,
   onUpdateComponent3D,
 }: DragFrameControllerProps) {
   const { camera, raycaster, pointer } = useThree();
@@ -989,6 +1060,8 @@ function DragFrameController({
         'LED',
         'LED_RGB',
         'ACTUATOR_RGB_LED',
+        'HC_SR04',
+        'SENSOR_ULTRASONIC',
         'CAPACITOR',
         'CAPACITOR_ELECTROLYTIC',
         'DIODE',
@@ -1010,29 +1083,59 @@ function DragFrameController({
         'SLIDE_SWITCH',
       ].includes(comp.type);
 
-      if (hasBreadboard && isDipPackage && Math.abs(targetX) <= 80 && Math.abs(targetZ) <= 22) {
-        // Automatic IC Snapping straddling center DIP notch (top pins in Row E, bottom pins in Row F)
-        const isEvenDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC';
-        if (isEvenDip) {
+      const isEvenPinPart = [
+        'TIMER_555',
+        'DIP_IC',
+        'LED_RGB',
+        'ACTUATOR_RGB_LED',
+        'HC_SR04',
+        'SENSOR_ULTRASONIC',
+        'OPAMP_LM358',
+      ].includes(comp.type) || (comp.type.includes('DIP') && !comp.type.includes('14') && !comp.type.includes('74HC'));
+
+      // Check which breadboard is closest
+      let bestBoard = 0;
+      let minBoardDist = Infinity;
+      for (let b = 0; b < breadboardCount; b++) {
+        const bZ = -b * 60.0;
+        const dist = Math.abs(targetZ - bZ);
+        if (dist < minBoardDist) {
+          minBoardDist = dist;
+          bestBoard = b;
+        }
+      }
+      const boardCenterZ = -bestBoard * 60.0;
+      const isOverBoard = hasBreadboard && Math.abs(targetX) <= 85 && minBoardDist <= 30;
+
+      if (isOverBoard && isDipPackage && minBoardDist <= 22) {
+        // Automatic IC Snapping straddling center DIP notch
+        if (isEvenPinPart) {
           const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
           targetX = START_X + (nearestCol - 0.5) * PITCH_X;
         } else {
           const nearestCol = Math.max(2, Math.min(62, Math.round((targetX - START_X) / PITCH_X) + 1));
           targetX = START_X + (nearestCol - 1) * PITCH_X;
         }
-        targetZ = 0;   // Straddle center DIP ravine
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
-      } else if (hasBreadboard && isThroughHole && Math.abs(targetX) <= 85 && Math.abs(targetZ) <= 30) {
-        const freeHole = findNearestFreeHole830(targetX, targetZ, occupiedHoleIds);
-        if (freeHole) {
-          targetX = freeHole.x;
-          targetZ = freeHole.z;
+        targetZ = boardCenterZ;   // Straddle center DIP ravine
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true, 0, breadboardCount);
+      } else if (isOverBoard && isThroughHole) {
+        if (isEvenPinPart) {
+          const nearestCol = Math.max(2, Math.min(61, Math.round((targetX - START_X) / PITCH_X - 0.5) + 1));
+          targetX = START_X + (nearestCol - 0.5) * PITCH_X;
+          const relZ = targetZ - boardCenterZ;
+          targetZ = boardCenterZ + (relZ <= 0 ? -8.42 : 8.42);
+        } else {
+          const freeHole = findNearestFreeHole830(targetX, targetZ - boardCenterZ, occupiedHoleIds);
+          if (freeHole) {
+            targetX = freeHole.x;
+            targetZ = freeHole.z + boardCenterZ;
+          }
         }
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true);
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, true, 0, breadboardCount);
       } else {
         targetX = Math.round(targetX / 2.54) * 2.54;
         targetZ = Math.round(targetZ / 2.54) * 2.54;
-        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, false);
+        targetY = computeComponentGroundElevation(comp.type, targetX, targetZ, hasBreadboard, 0, breadboardCount);
       }
 
       targetX = Math.round(targetX * 100) / 100;
@@ -1159,6 +1262,7 @@ function WebGlResourceDisposer() {
 
 export interface Studio3DCanvasProps {
   hasBreadboard?: boolean;
+  breadboardCount?: number;
   onToggleBreadboard?: () => void;
   onToggleMcuUsb?: (compId: string) => void;
   components3d: Component3D[];
@@ -1194,6 +1298,7 @@ export interface Studio3DCanvasProps {
 
 export function Studio3DCanvas({
   hasBreadboard = true,
+  breadboardCount = 1,
   onToggleMcuUsb,
   components3d,
   wires3d,
@@ -1217,7 +1322,8 @@ export function Studio3DCanvas({
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [libSearch, setLibSearch] = useState('');
-  const [libCategory, setLibCategory] = useState<'all' | 'boards' | 'passive' | 'semiconductors' | 'sensors'>('all');
+  const [libTier, setLibTier] = useState<'all' | 'generic' | 'real' | 'industrial'>('all');
+  const [libCategory25, setLibCategory25] = useState<string>('all');
   const [libSubCategory, setLibSubCategory] = useState<string>('all');
   const [toolMode3D, setToolMode3D] = useState<'inspect' | 'wire'>('inspect');
   const [isPanMode, setIsPanMode] = useState<boolean>(false);
@@ -1293,32 +1399,44 @@ export function Studio3DCanvas({
 
   const available3DSubCategories = useMemo(() => {
     const subs = new Set<string>();
-    LIBRARY_3D_COMPONENTS.forEach((item) => {
-      const matchCat = libCategory === 'all' || item.category === libCategory;
+    COMPONENT_CATALOG.forEach((item) => {
+      const cat25 = getCategory25ForComponent(item);
+      const matchCat = libCategory25 === 'all' || cat25.id === libCategory25;
+      const matchTier = libTier === 'all' || (item.libraryTier || 'generic') === libTier;
+      const q = libSearch.toLowerCase().trim();
       const matchSearch =
-        !libSearch ||
-        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.desc.toLowerCase().includes(libSearch.toLowerCase());
-      if (matchCat && matchSearch && item.subCategory) {
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.partNumber && item.partNumber.toLowerCase().includes(q)) ||
+        (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
+        (item.physicalSpec?.packageCode && item.physicalSpec.packageCode.toLowerCase().includes(q));
+      if (matchCat && matchTier && matchSearch && item.subCategory) {
         subs.add(item.subCategory);
       }
     });
     return Array.from(subs).sort();
-  }, [libCategory, libSearch]);
+  }, [libCategory25, libTier, libSearch]);
 
   const filteredLibrary = useMemo(() => {
-    return LIBRARY_3D_COMPONENTS.filter((item) => {
-      const matchCat = libCategory === 'all' || item.category === libCategory;
+    const q = libSearch.toLowerCase().trim();
+    return COMPONENT_CATALOG.filter((item) => {
+      const cat25 = getCategory25ForComponent(item);
+      const matchCat = libCategory25 === 'all' || cat25.id === libCategory25;
+      const matchTier = libTier === 'all' || (item.libraryTier || 'generic') === libTier;
       const matchSub = libSubCategory === 'all' || item.subCategory === libSubCategory;
       const matchSearch =
-        !libSearch ||
-        item.label.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.type.toLowerCase().includes(libSearch.toLowerCase()) ||
-        item.desc.toLowerCase().includes(libSearch.toLowerCase());
-      return matchCat && matchSub && matchSearch;
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.partNumber && item.partNumber.toLowerCase().includes(q)) ||
+        (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
+        (item.physicalSpec?.packageCode && item.physicalSpec.packageCode.toLowerCase().includes(q));
+      return matchCat && matchTier && matchSub && matchSearch;
     });
-  }, [libCategory, libSubCategory, libSearch]);
+  }, [libCategory25, libTier, libSubCategory, libSearch]);
 
   // Keyboard shortcut listener (R to rotate 45°, Arrows/Page to nudge, Delete to remove, Esc to cancel wire)
   useEffect(() => {
@@ -1518,8 +1636,17 @@ export function Studio3DCanvas({
   // Helper to compute world position for any pin
   const getPinWorld3D = useCallback((compId: string, pinId: string): THREE.Vector3 => {
     if (compId === 'breadboard') {
-      const hole = HOLE_BY_ID.get(pinId);
-      if (hole) return new THREE.Vector3(hole.x, hole.y + 0.5, hole.z);
+      let baseId = pinId;
+      let boardZ = 0;
+      if (pinId.startsWith('bb2_')) {
+        baseId = 'bb_' + pinId.slice(4);
+        boardZ = -60.0;
+      } else if (pinId.startsWith('bb3_')) {
+        baseId = 'bb_' + pinId.slice(4);
+        boardZ = -120.0;
+      }
+      const hole = HOLE_BY_ID.get(baseId);
+      if (hole) return new THREE.Vector3(hole.x, hole.y + 0.5, hole.z + boardZ);
       return new THREE.Vector3(0, 0, 0);
     }
 
@@ -2051,30 +2178,37 @@ export function Studio3DCanvas({
           components3d={components3d}
           occupiedHoleIds={occupiedHoleIds}
           hasBreadboard={hasBreadboard}
+          breadboardCount={breadboardCount}
           onUpdateComponent3D={onUpdateComponent3D}
         />
 
-        {/* 830-Point Solderless Breadboard */}
-        {hasBreadboard && (
-          <Breadboard3D
-            position={[0, 0, 0]}
-            hoveredHole={hoveredHole}
-            onHoverHole={setHoveredHole}
-            onHoleClick={(hole, wPos) => {
-              handlePinClick('breadboard', hole.id, wPos);
-            }}
-          />
-        )}
+        {/* 830-Point Solderless Breadboards */}
+        {hasBreadboard &&
+          Array.from({ length: breadboardCount }).map((_, b) => (
+            <Breadboard3D
+              key={b}
+              position={[0, 0, -b * 60.0]}
+              hoveredHole={hoveredHole}
+              onHoverHole={setHoveredHole}
+              onHoleClick={(hole, wPos) => {
+                const holeId = b === 0 ? hole.id : `bb${b + 1}_` + hole.id.replace(/^bb_/, '');
+                handlePinClick('breadboard', holeId, wPos);
+              }}
+            />
+          ))}
 
         {/* 3D Components */}
         {components3d.map((comp) => {
           const isSelected = selectedCompId === comp.id;
           const isDraggingThis = draggingCompId === comp.id;
-          // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release
-          const pos: [number, number, number] = [comp.x3d, isDraggingThis ? comp.y3d + 3.5 : comp.y3d, comp.z3d];
+          // Pick-and-Place dynamic elevation clearance: lifts 3.5mm while dragging, seats flush on release with strict anti-sink safety floor
+          const rotYRad = THREE.MathUtils.degToRad(comp.rotY || 0);
+          const safeGroundY = computeComponentGroundElevation(comp.type, comp.x3d, comp.z3d, hasBreadboard, rotYRad, breadboardCount);
+          const effectiveY = Math.max(comp.y3d ?? safeGroundY, safeGroundY);
+          const pos: [number, number, number] = [comp.x3d, isDraggingThis ? effectiveY + 3.5 : effectiveY, comp.z3d];
           const rot: [number, number, number] = [
             THREE.MathUtils.degToRad(comp.rotX || 0),
-            THREE.MathUtils.degToRad(comp.rotY || 0),
+            rotYRad,
             THREE.MathUtils.degToRad(comp.rotZ || 0),
           ];
           const myFp = getComponentFootprint(comp.type);
@@ -2563,13 +2697,63 @@ export function Studio3DCanvas({
             );
           }
 
-          if (comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type === 'OPAMP_LM358' || comp.type === 'OPAMP_LM741') {
-            const part = comp.type === 'OPAMP_LM358' ? 'LM358' : comp.type === 'OPAMP_LM741' ? 'LM741' : String(comp.parameters?.ic || comp.value || 'NE555P');
-            const opampPins: Record<number, string> | undefined = comp.type === 'OPAMP_LM358'
-              ? { 1: 'OUT1', 2: 'IN1-', 3: 'IN1+', 4: 'GND', 5: 'IN2+', 6: 'IN2-', 7: 'OUT2', 8: 'VCC' }
-              : comp.type === 'OPAMP_LM741'
-              ? { 1: 'OFST1', 2: 'IN-', 3: 'IN+', 4: 'V-', 5: 'OFST2', 6: 'OUT', 7: 'V+', 8: 'NC' }
-              : undefined;
+          if (
+            comp.type === 'TIMER_555' ||
+            comp.type === 'DIP_IC' ||
+            comp.type.includes('OPAMP') ||
+            comp.type.includes('74HC') ||
+            comp.type.includes('595') ||
+            comp.type.includes('4017') ||
+            comp.type.includes('2003') ||
+            comp.type.includes('293') ||
+            comp.type.includes('DIP')
+          ) {
+            const is16Pin = comp.type.includes('16') || comp.type.includes('595') || comp.type.includes('4017') || comp.type.includes('2003') || comp.type.includes('293');
+            const is14Pin = !is16Pin && (comp.type.includes('14') || comp.type.includes('74HC') || comp.type.includes('324'));
+            const is28Pin = comp.type.includes('28') || comp.type.includes('ATMEGA');
+            const pinCount = is28Pin ? 28 : is16Pin ? 16 : is14Pin ? 14 : 8;
+
+            const part =
+              comp.type.includes('555') ? 'NE555P' :
+              comp.type.includes('358') ? 'LM358' :
+              comp.type.includes('324') ? 'LM324' :
+              comp.type.includes('741') ? 'LM741' :
+              comp.type.includes('74HC14') ? '74HC14' :
+              comp.type.includes('74HC04') ? '74HC04' :
+              comp.type.includes('74HC00') ? '74HC00' :
+              comp.type.includes('74HC08') ? '74HC08' :
+              comp.type.includes('74HC32') ? '74HC32' :
+              comp.type.includes('74HC86') ? '74HC86' :
+              comp.type.includes('595') ? '74HC595' :
+              comp.type.includes('4017') ? 'CD4017' :
+              comp.type.includes('2003') ? 'ULN2003A' :
+              comp.type.includes('293') ? 'L293D' :
+              String(comp.parameters?.ic || comp.value || 'IC');
+
+            let customPins: Record<number, string> | undefined;
+            if (is16Pin) {
+              if (comp.type.includes('595')) {
+                customPins = { 1: 'QB', 2: 'QC', 3: 'QD', 4: 'QE', 5: 'QF', 6: 'QG', 7: 'QH', 8: 'GND', 9: "QH'", 10: '~SRCLR', 11: 'SRCLK', 12: 'RCLK', 13: '~OE', 14: 'SER', 15: 'QA', 16: 'VCC' };
+              } else if (comp.type.includes('4017')) {
+                customPins = { 1: 'Q5', 2: 'Q1', 3: 'Q0', 4: 'Q2', 5: 'Q6', 6: 'Q7', 7: 'Q3', 8: 'GND', 9: 'Q8', 10: 'Q4', 11: 'Q9', 12: 'CO', 13: '~EN', 14: 'CLK', 15: 'RST', 16: 'VDD' };
+              } else if (comp.type.includes('2003')) {
+                customPins = { 1: '1B', 2: '2B', 3: '3B', 4: '4B', 5: '5B', 6: '6B', 7: '7B', 8: 'COM_E', 9: 'COM_K', 10: '7C', 11: '6C', 12: '5C', 13: '4C', 14: '3C', 15: '2C', 16: '1C' };
+              } else if (comp.type.includes('293')) {
+                customPins = { 1: '1,2EN', 2: '1A', 3: '1Y', 4: 'GND', 5: 'GND', 6: '2Y', 7: '2A', 8: 'VCC2', 9: '3,4EN', 10: '3A', 11: '3Y', 12: 'GND', 13: 'GND', 14: '4Y', 15: '4A', 16: 'VCC1' };
+              }
+            } else if (is14Pin) {
+              if (comp.type.includes('74HC00') || comp.type.includes('74HC08') || comp.type.includes('74HC32') || comp.type.includes('74HC86')) {
+                customPins = { 1: '1A', 2: '1B', 3: '1Y', 4: '2A', 5: '2B', 6: '2Y', 7: 'GND', 8: '3Y', 9: '3A', 10: '3B', 11: '4Y', 12: '4A', 13: '4B', 14: 'VCC' };
+              } else if (comp.type.includes('LM324')) {
+                customPins = { 1: '1OUT', 2: '1IN-', 3: '1IN+', 4: 'VCC', 5: '2IN+', 6: '2IN-', 7: '2OUT', 8: '3OUT', 9: '3IN-', 10: '3IN+', 11: 'GND', 12: '4IN+', 13: '4IN-', 14: '4OUT' };
+              } else {
+                customPins = { 1: '1A', 2: '1Y', 3: '2A', 4: '2Y', 5: '3A', 6: '3Y', 7: 'GND', 8: '4Y', 9: '4A', 10: '5Y', 11: '5A', 12: '6Y', 13: '6A', 14: 'VCC' };
+              }
+            } else if (comp.type.includes('358')) {
+              customPins = { 1: 'OUT1', 2: 'IN1-', 3: 'IN1+', 4: 'GND', 5: 'IN2+', 6: 'IN2-', 7: 'OUT2', 8: 'VCC' };
+            } else if (comp.type.includes('741')) {
+              customPins = { 1: 'OFST1', 2: 'IN-', 3: 'IN+', 4: 'V-', 5: 'OFST2', 6: 'OUT', 7: 'V+', 8: 'NC' };
+            }
             return (
               <group
                 key={comp.id}
@@ -2583,9 +2767,9 @@ export function Studio3DCanvas({
                 <DipPackage3D
                   position={pos}
                   rotation={rot}
-                  pinCount={8}
+                  pinCount={pinCount}
                   partName={part}
-                  pinNames={opampPins}
+                  pinNames={customPins}
                   isBurned={Boolean(simState?.status === 'BURNED' || simState?.burned)}
                   isSelected={isSelected}
                   onPinClick={(pinId, wPos) => handlePinClick(comp.id, pinId, wPos)}
@@ -2913,74 +3097,95 @@ export function Studio3DCanvas({
               }
             }
 
-            // Circuit Schematic Wires conduction tracing
-            circuitWires?.forEach((cw) => {
-              let pin = '';
-              let otherCompId = '';
-              if (cw.fromCompId === comp.id) {
-                pin = cw.fromPinId || '';
-                otherCompId = cw.toCompId;
-              } else if (cw.toCompId === comp.id) {
-                pin = cw.toPinId || '';
-                otherCompId = cw.fromCompId;
-              }
-              if (!pin) return;
+            const isComPin = (p: string) => {
+              const pl = (p || '').trim().toLowerCase();
+              return pl === 'cc' || pl === 'com' || pl === 'cathode' || pl === 'anode' || pl === 'gnd' || pl === '-' || pl === '2' || pl === 'c';
+            };
 
-              const pLower = pin.toLowerCase();
-              const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
-              const otherSim = simulationStates[otherCompId];
-              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && otherSim?.on);
+            const hasComCircuitWire = Boolean(
+              circuitWires?.some(
+                (cw) =>
+                  (cw.fromCompId === comp.id && isComPin(cw.fromPinId)) ||
+                  (cw.toCompId === comp.id && isComPin(cw.toPinId))
+              )
+            );
 
-              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
-                if (hasPower && isSimulating) rLevel = Math.max(rLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
-                if (hasPower && isSimulating) gLevel = Math.max(gLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
-                if (hasPower && isSimulating) bLevel = Math.max(bLevel, Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02 || 1.0)));
-              }
-            });
+            const hasCom3dWire = Boolean(
+              wires3d.some(
+                (w) =>
+                  (w.fromPin.compId === comp.id && isComPin(w.fromPin.pinId)) ||
+                  (w.toPin.compId === comp.id && isComPin(w.toPin.pinId))
+              )
+            );
 
-            // 3D Wire connection conduction tracing
-            wires3d.forEach((w) => {
-              let pin = '';
-              let otherCompId = '';
-              if (w.fromPin.compId === comp.id) {
-                pin = w.fromPin.pinId;
-                otherCompId = w.toPin.compId;
-              } else if (w.toPin.compId === comp.id) {
-                pin = w.toPin.pinId;
-                otherCompId = w.fromPin.compId;
-              }
-              if (!pin) return;
+            // Breadboard/return tie check: true if COM has a wire OR if solver solved a closed loop (on with current >= 0.5mA)
+            const isComConnected = hasComCircuitWire || hasCom3dWire || Boolean(simState?.on && ((simState as Record<string, unknown>).current as number) >= 0.0005);
 
-              const pLower = pin.toLowerCase();
-              const currentA = wireCurrents?.[w.id] ?? w.current ?? 0;
-              const otherSim = simulationStates[otherCompId];
-              const hasPower = Math.abs(currentA) > 0.0001 || (otherSim?.voltage && otherSim.voltage > 1.8) || (isSimulating && (otherCompId === 'breadboard' || otherSim?.on));
+            // Circuit Schematic Wires conduction tracing (ONLY if COM has a closed return path)
+            if (isSimulating && isComConnected) {
+              circuitWires?.forEach((cw) => {
+                let pin = '';
+                if (cw.fromCompId === comp.id) {
+                  pin = cw.fromPinId || '';
+                } else if (cw.toCompId === comp.id) {
+                  pin = cw.toPinId || '';
+                }
+                if (!pin) return;
 
-              if (pLower === 'r' || pLower === '1' || pLower === 'red') {
-                if (hasPower && isSimulating) rLevel = Math.max(rLevel, 1.0);
-              } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
-                if (hasPower && isSimulating) gLevel = Math.max(gLevel, 1.0);
-              } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
-                if (hasPower && isSimulating) bLevel = Math.max(bLevel, 1.0);
-              }
-            });
+                const pLower = pin.toLowerCase();
+                const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+                // Forward conduction current must be >= 0.5mA
+                if (Math.abs(currentA) >= 0.0005) {
+                  const channelLevel = Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02));
+                  if (pLower === 'r' || pLower === '1' || pLower === 'red') rLevel = Math.max(rLevel, channelLevel);
+                  else if (pLower === 'g' || pLower === '3' || pLower === 'green') gLevel = Math.max(gLevel, channelLevel);
+                  else if (pLower === 'b' || pLower === '4' || pLower === 'blue') bLevel = Math.max(bLevel, channelLevel);
+                }
+              });
 
-            // Inspector explicit parameters override
-            if (comp.parameters?.r !== undefined) rLevel = Number(comp.parameters.r);
-            if (comp.parameters?.g !== undefined) gLevel = Number(comp.parameters.g);
-            if (comp.parameters?.b !== undefined) bLevel = Number(comp.parameters.b);
+              // 3D Wire connection conduction tracing (ONLY if COM has a return connection)
+              wires3d.forEach((w) => {
+                let pin = '';
+                if (w.fromPin.compId === comp.id) {
+                  pin = w.fromPin.pinId;
+                } else if (w.toPin.compId === comp.id) {
+                  pin = w.toPin.pinId;
+                }
+                if (!pin) return;
 
-            // Fallback for static hex color
-            if (rLevel === 0 && gLevel === 0 && bLevel === 0 && comp.parameters?.color) {
+                const pLower = pin.toLowerCase();
+                const currentA = wireCurrents?.[w.id] ?? w.current ?? 0;
+                if (Math.abs(currentA) >= 0.0005) {
+                  if (pLower === 'r' || pLower === '1' || pLower === 'red') rLevel = Math.max(rLevel, 1.0);
+                  else if (pLower === 'g' || pLower === '3' || pLower === 'green') gLevel = Math.max(gLevel, 1.0);
+                  else if (pLower === 'b' || pLower === '4' || pLower === 'blue') bLevel = Math.max(bLevel, 1.0);
+                }
+              });
+            }
+
+            // Inspector explicit parameters override (ONLY if COM is connected)
+            if (isSimulating && isComConnected) {
+              if (comp.parameters?.r !== undefined) rLevel = Number(comp.parameters.r);
+              if (comp.parameters?.g !== undefined) gLevel = Number(comp.parameters.g);
+              if (comp.parameters?.b !== undefined) bLevel = Number(comp.parameters.b);
+            }
+
+            // STRICT OPEN-CIRCUIT ENFORCEMENT: If COM is NOT connected, clamp all channels strictly to 0
+            if (isSimulating && !isComConnected) {
+              rLevel = 0;
+              gLevel = 0;
+              bLevel = 0;
+            }
+
+            // Fallback for static hex color ONLY when NOT simulating
+            if (!isSimulating && rLevel === 0 && gLevel === 0 && bLevel === 0 && comp.parameters?.color) {
               const c = new THREE.Color(String(comp.parameters.color));
               rLevel = c.r;
               gLevel = c.g;
               bLevel = c.b;
             }
 
-            const isPowered = !isBurned && (isSimulating ? (rLevel > 0.01 || gLevel > 0.01 || bLevel > 0.01 || Boolean(simState?.on)) : true);
+            const isPowered = !isBurned && isSimulating && isComConnected && (rLevel > 0.01 || gLevel > 0.01 || bLevel > 0.01);
 
             return (
               <group
@@ -3209,7 +3414,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, 0, 0]}>
                       <mesh position={[0, -4.5, 0]}>
                         <cylinderGeometry args={[0.35, 0.35, 9.0, 12]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                       </mesh>
                       <mesh
                         position={[0, -4.5, 0]}
@@ -3242,7 +3447,7 @@ export function Studio3DCanvas({
                     <group key={pi} position={[px, -3.5, 0]}>
                       <mesh>
                         <boxGeometry args={[0.45, 7.0, 0.45]} />
-                        <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                       </mesh>
                       <mesh
                         renderOrder={100}
@@ -3275,21 +3480,21 @@ export function Studio3DCanvas({
                     <cylinderGeometry args={[0.8, 0.8, 0.4, 16, 1, false, -Math.PI / 2, Math.PI]} />
                     <meshBasicMaterial color="#09090B" />
                   </mesh>
-                  {/* Pin rows on both sides */}
+                  {/* Solid metallic pin rows on both sides with authentic DIP shank length (7.62mm pitch across Row E & Row F) */}
                   {Array.from({ length: Math.ceil(pinCount / 2) }).map((_, i) => {
                     const startX = -((Math.ceil(pinCount / 2) - 1) * 2.54) / 2;
                     const px = startX + i * 2.54;
                     return (
                       <group key={i}>
                         {/* Row E pin */}
-                        <mesh position={[px, -2.0, -3.34]}>
-                          <boxGeometry args={[0.65, 4.5, 0.45]} />
-                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <mesh position={[px, -2.0, -3.81]}>
+                          <boxGeometry args={[0.65, 6.2, 0.45]} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                         {/* Row F pin */}
-                        <mesh position={[px, -2.0, 3.34]}>
-                          <boxGeometry args={[0.65, 4.5, 0.45]} />
-                          <meshStandardMaterial color="#CBD5E1" metalness={0.9} />
+                        <mesh position={[px, -2.0, 3.81]}>
+                          <boxGeometry args={[0.65, 6.2, 0.45]} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
                         </mesh>
                       </group>
                     );
@@ -3297,27 +3502,61 @@ export function Studio3DCanvas({
                 </group>
               )}
 
-              {/* Sub-Branch D: Module / Sensor / Breakout / Industrial Board */}
+              {/* Sub-Branch D: Module / Sensor / Breakout / Industrial Board (Pins centered on z = 0 for exact breadboard row seating) */}
               {isModulePackage && (
                 <group position={[0, 0.8, 0]}>
-                  {/* Flat FR-4 PCB */}
-                  <mesh material={new THREE.MeshStandardMaterial({ color: isSelected ? '#059669' : '#0F766E', roughness: 0.35 })}>
+                  {/* Flat FR-4 PCB extending away from header pins */}
+                  <mesh position={[0, 0, -Math.max(10, myFp.halfD)]} material={new THREE.MeshStandardMaterial({ color: isSelected ? '#059669' : '#0F766E', roughness: 0.35 })}>
                     <boxGeometry args={[Math.max(30, myFp.halfW * 2), 1.6, Math.max(20, myFp.halfD * 2)]} />
                   </mesh>
-                  {/* Black Header Strip */}
-                  <mesh position={[0, 2.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
+                  {/* Black Header Strip centered at z = 0 */}
+                  <mesh position={[0, 1.2, 0]}>
                     <boxGeometry args={[Math.max(16, pinCount * 2.54), 2.5, 2.5]} />
                     <meshStandardMaterial color="#18181B" roughness={0.8} />
                   </mesh>
-                  {/* Square Pins */}
+                  {/* Solid Metallic Square Pins seated dead-center at z = 0 */}
                   {Array.from({ length: Math.min(pinCount, 16) }).map((_, pi) => {
                     const startX = -((Math.min(pinCount, 16) - 1) * 2.54) / 2;
                     const px = startX + pi * 2.54;
+                    const pinItem = catalogItem?.pins?.[pi];
+                    const pinName = pinItem?.name || pinItem?.id || String(pi + 1);
+                    const isHovered = hoveredPinInfo?.compId === comp.id && (hoveredPinInfo.pinName === pinName || hoveredPinInfo.pinName === pinItem?.id);
                     return (
-                      <mesh key={pi} position={[px, 4.0, -Math.max(20, myFp.halfD * 2) / 2 + 2.5]}>
-                        <boxGeometry args={[0.64, 5.0, 0.64]} />
-                        <meshStandardMaterial color="#F59E0B" metalness={0.85} />
-                      </mesh>
+                      <group key={pi} position={[px, 0, 0]}>
+                        {/* Downward solid metallic pin into breadboard spring clips */}
+                        <mesh position={[0, -3.2, 0]}>
+                          <boxGeometry args={[0.64, 6.5, 0.64]} />
+                          <meshStandardMaterial color="#d4dce6" metalness={0.88} roughness={0.22} />
+                        </mesh>
+                        {/* Upward header pin terminal */}
+                        <mesh position={[0, 3.2, 0]}>
+                          <boxGeometry args={[0.64, 4.0, 0.64]} />
+                          <meshStandardMaterial color={isHovered ? '#FDE047' : '#d4dce6'} metalness={0.88} roughness={0.22} />
+                        </mesh>
+                        {/* Solder fillet cone on carrier pad */}
+                        <mesh position={[0, 0.85, 0]}>
+                          <cylinderGeometry args={[0.55, 0.85, 0.3, 12]} />
+                          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.18} />
+                        </mesh>
+                        {/* Raycast hit target & hover sphere */}
+                        <mesh
+                          position={[0, 2.5, 0]}
+                          renderOrder={100}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePinClick(comp.id, pinName, getPinWorld3D(comp.id, pinName));
+                          }}
+                          onPointerOver={(e) => {
+                            e.stopPropagation();
+                            setHoveredPinInfo({ compId: comp.id, pinName });
+                          }}
+                          onPointerOut={() => setHoveredPinInfo(null)}
+                        >
+                          <sphereGeometry args={[isHovered ? 1.4 : 0.8, 8, 8]} />
+                          <meshBasicMaterial color={isHovered ? '#FDE047' : '#38BDF8'} transparent opacity={isHovered ? 0.9 : 0} />
+                        </mesh>
+                      </group>
                     );
                   })}
                 </group>
@@ -3337,6 +3576,40 @@ export function Studio3DCanvas({
                 (w.toPin.compId === hoveredPinInfo.compId && w.toPin.pinId === hoveredPinInfo.pinName))
           );
 
+          // Obstacle-aware clearance: detect any component body between p1 and p2
+          let maxObstacleTopY = 0;
+          const wireLineA = new THREE.Vector2(p1.x, p1.z);
+          const wireLineB = new THREE.Vector2(p2.x, p2.z);
+          const wireLineLenSq = wireLineA.distanceToSquared(wireLineB);
+
+          if (wireLineLenSq > 9.0) {
+            for (const c of components3d) {
+              // Skip the source and target components themselves
+              if (c.id === w.fromPin.compId || c.id === w.toPin.compId) continue;
+              const fp = getComponentFootprint(c.type);
+              const cPos = new THREE.Vector2(c.x3d, c.z3d);
+
+              // Distance from component center to wire line segment in 2D
+              const tVal = Math.max(0, Math.min(1, ((cPos.x - wireLineA.x) * (wireLineB.x - wireLineA.x) + (cPos.y - wireLineA.y) * (wireLineB.y - wireLineA.y)) / wireLineLenSq));
+              const proj = new THREE.Vector2(
+                wireLineA.x + tVal * (wireLineB.x - wireLineA.x),
+                wireLineA.y + tVal * (wireLineB.y - wireLineA.y)
+              );
+              const distSq = cPos.distanceToSquared(proj);
+              const collisionRadius = Math.max(fp.halfW, fp.halfD) + 1.5;
+
+              if (distSq < collisionRadius * collisionRadius) {
+                const elevSpec = getComponentElevationSpec(c.type);
+                const compTop = c.y3d + (elevSpec.packageHeight || 8.0);
+                if (compTop > maxObstacleTopY) {
+                  maxObstacleTopY = compTop;
+                }
+              }
+            }
+          }
+
+          const obstacleApexY = maxObstacleTopY > 0 ? maxObstacleTopY + 4.5 : undefined;
+
           return (
             <Wire3DTube
               key={w.id}
@@ -3348,6 +3621,7 @@ export function Studio3DCanvas({
               isHighlighted={isConnectedToHoveredPin}
               isSimulating={isSimulating}
               current={wireCurrents?.[w.id] ?? w.current}
+              obstacleApexY={obstacleApexY}
               onClick={(id) => {
                 onSelectWire(id);
                 onSelectComponent(null);
@@ -3595,35 +3869,61 @@ export function Studio3DCanvas({
             />
           </div>
 
-          {/* Category Filter Pills Matching Schematic Categories */}
-          <div className="flex flex-wrap gap-1 text-[10px]">
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'boards', label: 'MCUs & Power' },
-              { id: 'passive', label: 'Passives' },
-              { id: 'semiconductors', label: 'Active & ICs' },
-              { id: 'sensors', label: 'Sensors' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setLibCategory(tab.id as typeof libCategory);
-                  setLibSubCategory('all');
-                }}
-                className={`px-2 py-0.5 rounded-full transition-colors ${
-                  libCategory === tab.id
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* 3-Tier Database Filter Pills */}
+          <div className="grid grid-cols-4 gap-1 bg-slate-950/70 p-0.5 rounded border border-slate-800">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'generic', label: 'Generic' },
+                { id: 'real', label: 'Real Parts' },
+                { id: 'industrial', label: 'Industrial' },
+              ] as const
+            ).map((tier) => {
+              const active = libTier === tier.id;
+              return (
+                <button
+                  key={tier.id}
+                  onClick={() => {
+                    setLibTier(tier.id);
+                    setLibSubCategory('all');
+                  }}
+                  className={`py-0.5 px-1 rounded text-[10px] font-mono font-medium transition-all text-center truncate ${
+                    active
+                      ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/60 font-semibold shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  }`}
+                  title={`Filter by ${tier.label} library tier`}
+                >
+                  {tier.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 25 Master Engineering Categories Dropdown */}
+          <div className="relative">
+            <select
+              value={libCategory25}
+              onChange={(e) => {
+                setLibCategory25(e.target.value);
+                setLibSubCategory('all');
+              }}
+              className="w-full appearance-none bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-md px-2 py-1.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer pr-6 truncate"
+              title="Filter by 25 Master Engineering Categories"
+            >
+              <option value="all">⚡ All Categories (25)</option>
+              {MASTER_25_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
           {/* Subcategory Filter Pills when options exist */}
           {available3DSubCategories.length > 1 && (
-            <div className="flex flex-wrap gap-1 text-[9px] pt-0.5 border-t border-slate-800/60">
+            <div className="flex flex-wrap gap-1 text-[9px] pt-0.5 border-t border-slate-800/60 max-h-16 overflow-y-auto">
               <button
                 onClick={() => setLibSubCategory('all')}
                 className={`px-1.5 py-0.5 rounded transition-colors ${
@@ -3652,48 +3952,72 @@ export function Studio3DCanvas({
 
           {/* 2-Column Compact Component-Type Grid with Click-to-Place */}
           <div className="max-h-72 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
-            {filteredLibrary.map((item) => (
-              <button
-                key={item.type}
-                onClick={() => {
-                  const countOfType = components3d.filter((c) => c.type === item.type).length;
-                  const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 35 : -countOfType * 35) : 0;
-                  const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
-                  const newComp: Component3D = {
-                    id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-                    type: item.type,
-                    label: countOfType > 0 ? `${item.label} #${countOfType + 1}` : item.label,
-                    value: item.value,
-                    parameters: item.params ? { ...item.params } : {},
-                    x3d: item.defaultPos[0] + offsetX,
-                    y3d: item.defaultPos[1],
-                    z3d: item.defaultPos[2] + offsetZ,
-                    rotY: 0,
-                  };
-                  onAddComponent3D(newComp);
-                  setIsAddDrawerOpen(false);
-                  onSelectComponent(newComp.id);
-                }}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 hover:border-cyan-500/50 transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono">
-                      {item.value}
-                    </span>
-                    <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 uppercase">
-                      {item.is3DReady !== false ? '3D Ready' : 'Symbol Only'}
-                    </span>
+            {filteredLibrary.map((item) => {
+              const simInfo = getSimulationBadgeInfo(item.simulationStatus);
+              const pkgCode = item.physicalSpec?.packageCode || item.packageType || 'THT';
+              const shortName = item.name
+                .replace(/\(ATmega2560\)/gi, '')
+                .replace(/\(ATmega328P\)/gi, '')
+                .replace(/R3|V3/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+              return (
+                <button
+                  key={item.type + item.name}
+                  onClick={() => {
+                    const countOfType = components3d.filter((c) => c.type === item.type).length;
+                    const offsetX = countOfType > 0 ? (countOfType % 2 === 1 ? countOfType * 35 : -countOfType * 35) : 0;
+                    const offsetZ = countOfType > 0 ? countOfType * 15 : 0;
+
+                    let defPos: [number, number, number] = [0, 8.5, 0];
+                    if (item.type.includes('MEGA') || item.type === 'ARDUINO_UNO') defPos = [0, 0, 65];
+                    else if (item.type.includes('BATTERY')) defPos = [-95, 0, 0];
+                    else if (item.type === 'TIMER_555' || item.type.includes('74HC') || item.type.includes('DIP')) defPos = [-3.81, 8.5, 0];
+                    else if (item.type.includes('PICO') || item.type.includes('NANO') || item.type.includes('ESP32')) defPos = [-5.08, 8.5, 0];
+                    else if (item.type === 'RESISTOR' || item.type === 'DIODE' || item.type === 'LED' || item.type.includes('CAPACITOR')) defPos = [10, 8.5, -3.34];
+
+                    const newComp: Component3D = {
+                      id: `comp3d_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                      type: item.type,
+                      label: countOfType > 0 ? `${shortName.split(' ')[0]} #${countOfType + 1}` : (shortName.split(' ')[0] || item.type),
+                      value: item.defaultValue || '',
+                      parameters: item.defaultParams ? { ...item.defaultParams } : {},
+                      x3d: defPos[0] + offsetX,
+                      y3d: defPos[1],
+                      z3d: defPos[2] + offsetZ,
+                      rotY: 0,
+                    };
+                    onAddComponent3D(newComp);
+                    setIsAddDrawerOpen(false);
+                    onSelectComponent(newComp.id);
+                  }}
+                  className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 hover:border-cyan-500/50 transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 font-mono truncate max-w-[55px]" title={item.defaultValue}>
+                        {item.defaultValue}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={`text-[8px] font-mono px-1 py-0.2 rounded font-semibold uppercase ${simInfo.badgeClass}`}>
+                          {simInfo.label}
+                        </span>
+                        <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-slate-950 text-slate-400 border border-slate-800 uppercase" title={pkgCode}>
+                          {pkgCode}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight line-clamp-1" title={item.name}>
+                      {shortName}
+                    </div>
                   </div>
-                  <div className="font-semibold text-slate-200 group-hover:text-cyan-300 text-[11px] leading-tight">
-                    {item.label}
+                  <div className="text-[9px] text-slate-400 mt-1 line-clamp-1" title={item.description || item.partNumber}>
+                    {item.partNumber || item.description || item.category}
                   </div>
-                </div>
-                <div className="text-[9px] text-slate-400 mt-1 line-clamp-1">
-                  {item.desc}
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
             {filteredLibrary.length === 0 && (
               <div className="col-span-2 text-center py-6 text-slate-500 text-xs">
                 No matching 3D components found.

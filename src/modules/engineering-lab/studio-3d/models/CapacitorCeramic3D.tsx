@@ -94,41 +94,41 @@ export function CapacitorCeramic3D({
       )}
 
       {/* Solid Angled Lead Stems with Seamless Elbow Spheres (radius 0.38mm) */}
-      {/* Pin 1 at x = -1.27 (or -2.54): angled from disc body at x = -0.8 down to x = -1.27 at y = 1.6 */}
-      <mesh position={[-1.035, 2.4, 0]} rotation={[0, 0, -Math.atan2(0.47, 1.6)]} material={materials.leadMetal}>
-        <cylinderGeometry args={[0.35, 0.35, 1.7, 10]} />
+      {/* Pin 1 at x = -2.54: angled from disc body at x = -1.0 down to x = -2.54 at y = 1.6 */}
+      <mesh position={[-1.77, 2.4, 0]} rotation={[0, 0, -Math.atan2(1.54, 1.6)]} material={materials.leadMetal}>
+        <cylinderGeometry args={[0.35, 0.35, 2.22, 10]} />
       </mesh>
-      <mesh position={[-1.27, 1.6, 0]} material={materials.leadMetal}>
+      <mesh position={[-2.54, 1.6, 0]} material={materials.leadMetal}>
         <sphereGeometry args={[0.35, 8, 8]} />
       </mesh>
-      {/* Pin 1 vertical leg extending through PCB hole down to y = -5.5mm */}
-      <mesh position={[-1.27, -1.8, 0]} material={materials.leadMetal}>
+      {/* Pin 1 vertical leg extending through PCB/breadboard hole down to y = -5.3mm */}
+      <mesh position={[-2.54, -1.8, 0]} material={materials.leadMetal}>
         <cylinderGeometry args={[0.35, 0.35, 7.0, 10]} />
       </mesh>
 
-      {/* Pin 2 at x = 1.27: angled from disc body at x = 0.8 down to x = 1.27 at y = 1.6 */}
-      <mesh position={[1.035, 2.4, 0]} rotation={[0, 0, Math.atan2(0.47, 1.6)]} material={materials.leadMetal}>
-        <cylinderGeometry args={[0.35, 0.35, 1.7, 10]} />
+      {/* Pin 2 at x = 2.54: angled from disc body at x = 1.0 down to x = 2.54 at y = 1.6 */}
+      <mesh position={[1.77, 2.4, 0]} rotation={[0, 0, Math.atan2(1.54, 1.6)]} material={materials.leadMetal}>
+        <cylinderGeometry args={[0.35, 0.35, 2.22, 10]} />
       </mesh>
-      <mesh position={[1.27, 1.6, 0]} material={materials.leadMetal}>
+      <mesh position={[2.54, 1.6, 0]} material={materials.leadMetal}>
         <sphereGeometry args={[0.35, 8, 8]} />
       </mesh>
-      {/* Pin 2 vertical leg extending through PCB hole down to y = -5.5mm */}
-      <mesh position={[1.27, -1.8, 0]} material={materials.leadMetal}>
+      {/* Pin 2 vertical leg extending through PCB/breadboard hole down to y = -5.3mm */}
+      <mesh position={[2.54, -1.8, 0]} material={materials.leadMetal}>
         <cylinderGeometry args={[0.35, 0.35, 7.0, 10]} />
       </mesh>
 
       {/* Solder Fillet Cones on PCB pads */}
-      <mesh position={[-1.27, 0.15, 0]} material={materials.solderFillet}>
+      <mesh position={[-2.54, 0.15, 0]} material={materials.solderFillet}>
         <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
       </mesh>
-      <mesh position={[1.27, 0.15, 0]} material={materials.solderFillet}>
+      <mesh position={[2.54, 0.15, 0]} material={materials.solderFillet}>
         <cylinderGeometry args={[0.5, 0.75, 0.3, 12]} />
       </mesh>
 
       {/* Interactive Hitboxes (Studio only) */}
       {renderContext === 'studio' &&
-        [-1.27, 1.27].map((px, i) => {
+        [-2.54, 2.54].map((px, i) => {
           const pinId = String(i + 1);
           const isHovered = hoveredPin === pinId;
           return (

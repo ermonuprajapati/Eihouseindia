@@ -1,16 +1,30 @@
-import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus } from '../types';
+import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus, LibraryTier, MountingType, PlacementClass } from '../types';
+import { resolvePhysicalSpec, resolveComponentMetadata, buildInlinePads } from './component-physical-registry';
 
 export interface ComponentTemplate {
   type: string;
   name: string;
+  componentName?: string;
   designatorPrefix: string;
   category: ComponentCategory;
   subCategory?: string;
+  libraryTier?: LibraryTier;
+  manufacturer?: string;
+  partNumber?: string;
+  datasheetUrl?: string;
+  source?: string;
+  simulationModel?: string;
   simulationStatus?: SimulationSupportStatus;
+  symbolId?: string;
+  footprintId?: string;
+  model3dId?: string;
+  placementClass?: PlacementClass;
+  mountingType?: MountingType;
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
   physicalSpec?: PhysicalSpec;
   defaultValue: string;
   defaultParams: Record<string, number | string | boolean>;
+  electricalParameters?: Record<string, number | string | boolean>;
   pins: { id: string; name: string; x: number; y: number; pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive' }[];
   footprint: string;
   model3d?: string;
@@ -18,7 +32,6 @@ export interface ComponentTemplate {
   height: number;
   symbolSvg: string;
   description: string;
-  datasheetUrl?: string;
   manufacturerPartNumber?: string;
 }
 
@@ -1433,7 +1446,7 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   },
   {
     type: 'OPAMP_LM358',
-    name: 'LM358 Dual Operational Amplifier',
+    name: 'LM358 Dual Operational Amplifier (DIP-8)',
     designatorPrefix: 'U',
     category: 'analog_ics',
     subCategory: 'Analog & Op-Amp',
@@ -1442,19 +1455,64 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
     defaultValue: 'LM358P',
     defaultParams: { openLoopGain: 100000 },
     pins: [
-      { id: 'in_neg', name: 'IN-', x: -35, y: -15, pinType: 'input' },
-      { id: 'in_pos', name: 'IN+', x: -35, y: 15, pinType: 'input' },
-      { id: 'vcc', name: 'VCC', x: 0, y: -35, pinType: 'power' },
-      { id: 'vee', name: 'GND', x: 0, y: 35, pinType: 'power' },
-      { id: 'out', name: 'OUT', x: 35, y: 0, pinType: 'output' },
+      { id: '1', name: '1OUT', x: -40, y: -30, pinType: 'output' },
+      { id: '2', name: '1IN-', x: -40, y: -10, pinType: 'input' },
+      { id: '3', name: '1IN+', x: -40, y: 10, pinType: 'input' },
+      { id: '4', name: 'GND', x: -40, y: 30, pinType: 'power' },
+      { id: '5', name: '2IN+', x: 40, y: 30, pinType: 'input' },
+      { id: '6', name: '2IN-', x: 40, y: 10, pinType: 'input' },
+      { id: '7', name: '2OUT', x: 40, y: -10, pinType: 'output' },
+      { id: '8', name: 'VCC', x: 40, y: -30, pinType: 'power' },
     ],
     footprint: 'Package_DIP:DIP-8_W7.62mm',
     model3d: 'dip8_integrated_circuit',
-    width: 70,
-    height: 70,
-    symbolSvg: 'opamp',
-    description: 'Dual low-power operational amplifier capable of single 3V-32V power supply operation.',
+    width: 80,
+    height: 80,
+    symbolSvg: 'ic_dip8',
+    description: 'Dual low-power operational amplifier in standard 8-pin DIP package capable of single 3V-32V power supply operation.',
     manufacturerPartNumber: 'LM358P',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments',
+    partNumber: 'LM358P',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/lm358.pdf',
+  },
+  {
+    type: 'OPAMP_LM324',
+    name: 'LM324 Quad Operational Amplifier (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'analog_ics',
+    subCategory: 'Analog & Op-Amp',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: 'LM324N',
+    defaultParams: { openLoopGain: 100000 },
+    pins: [
+      { id: '1', name: '1OUT', x: -40, y: -45, pinType: 'output' },
+      { id: '2', name: '1IN-', x: -40, y: -30, pinType: 'input' },
+      { id: '3', name: '1IN+', x: -40, y: -15, pinType: 'input' },
+      { id: '4', name: 'VCC', x: -40, y: 0, pinType: 'power' },
+      { id: '5', name: '2IN+', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '2IN-', x: -40, y: 30, pinType: 'input' },
+      { id: '7', name: '2OUT', x: -40, y: 45, pinType: 'output' },
+      { id: '8', name: '3OUT', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '3IN-', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '3IN+', x: 40, y: 15, pinType: 'input' },
+      { id: '11', name: 'GND', x: 40, y: 0, pinType: 'power' },
+      { id: '12', name: '4IN+', x: 40, y: -15, pinType: 'input' },
+      { id: '13', name: '4IN-', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: '4OUT', x: 40, y: -45, pinType: 'output' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'Quad low-power operational amplifier with four independent frequency-compensated op-amps in a 14-pin DIP package.',
+    manufacturerPartNumber: 'LM324N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments',
+    partNumber: 'LM324N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/lm324.pdf',
   },
   {
     type: 'OPAMP_LM741',
@@ -1512,169 +1570,535 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   // ==========================================================================
   {
     type: 'LOGIC_AND',
-    name: '74HC08 Quad 2-Input AND Gate',
+    name: 'Generic 2-Input AND Gate',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC08',
+    defaultValue: 'AND',
     defaultParams: { propagationDelayNs: 9 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: -15, pinType: 'input' },
       { id: 'b', name: 'B', x: -30, y: 15, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 50,
     symbolSvg: 'and_gate',
-    description: 'High-speed CMOS 2-input AND gate implementing Boolean multiplication Y = A • B.',
-    manufacturerPartNumber: 'SN74HC08N',
+    description: 'Generic 2-input AND logic gate implementing Boolean conjunction Y = A • B.',
+    manufacturerPartNumber: 'GENERIC_AND',
+    libraryTier: 'generic',
   },
   {
     type: 'LOGIC_OR',
-    name: '74HC32 Quad 2-Input OR Gate',
+    name: 'Generic 2-Input OR Gate',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC32',
+    defaultValue: 'OR',
     defaultParams: { propagationDelayNs: 9 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: -15, pinType: 'input' },
       { id: 'b', name: 'B', x: -30, y: 15, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 50,
     symbolSvg: 'or_gate',
-    description: 'High-speed CMOS 2-input OR gate implementing Boolean addition Y = A + B.',
-    manufacturerPartNumber: 'SN74HC32N',
+    description: 'Generic 2-input OR logic gate implementing Boolean disjunction Y = A + B.',
+    manufacturerPartNumber: 'GENERIC_OR',
+    libraryTier: 'generic',
   },
   {
     type: 'LOGIC_NOT',
-    name: '74HC04 Hex Inverter (NOT Gate)',
+    name: 'Generic Inverter (NOT Gate)',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC04',
+    defaultValue: 'NOT',
     defaultParams: { propagationDelayNs: 8 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: 0, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 40,
     symbolSvg: 'not_gate',
-    description: 'High-speed CMOS inverter implementing logic negation Y = ¬A.',
-    manufacturerPartNumber: 'SN74HC04N',
+    description: 'Generic single CMOS inverter implementing Boolean negation Y = ¬A.',
+    manufacturerPartNumber: 'GENERIC_NOT',
+    libraryTier: 'generic',
   },
   {
     type: 'LOGIC_NAND',
-    name: '74HC00 Quad 2-Input NAND Gate',
+    name: 'Generic 2-Input NAND Gate',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC00',
+    defaultValue: 'NAND',
     defaultParams: { propagationDelayNs: 9 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: -15, pinType: 'input' },
       { id: 'b', name: 'B', x: -30, y: 15, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 50,
     symbolSvg: 'nand_gate',
-    description: 'Universal logic building block computing inverted AND Y = ¬(A • B).',
-    manufacturerPartNumber: 'SN74HC00N',
+    description: 'Generic 2-input NAND logic gate implementing inverted AND Y = ¬(A • B).',
+    manufacturerPartNumber: 'GENERIC_NAND',
+    libraryTier: 'generic',
   },
   {
     type: 'LOGIC_NOR',
-    name: '74HC02 Quad 2-Input NOR Gate',
+    name: 'Generic 2-Input NOR Gate',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC02',
+    defaultValue: 'NOR',
     defaultParams: { propagationDelayNs: 9 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: -15, pinType: 'input' },
       { id: 'b', name: 'B', x: -30, y: 15, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 50,
     symbolSvg: 'nor_gate',
-    description: 'Universal logic building block computing inverted OR Y = ¬(A + B).',
-    manufacturerPartNumber: 'SN74HC02N',
+    description: 'Generic 2-input NOR logic gate implementing inverted OR Y = ¬(A + B).',
+    manufacturerPartNumber: 'GENERIC_NOR',
+    libraryTier: 'generic',
   },
   {
     type: 'LOGIC_XOR',
-    name: '74HC86 Quad 2-Input Exclusive-OR Gate',
+    name: 'Generic 2-Input XOR Gate',
     designatorPrefix: 'U',
     category: 'logic',
     subCategory: 'Digital Logic',
     simulationStatus: 'full_mna',
     packageType: 'THT',
-    defaultValue: '74HC86',
+    defaultValue: 'XOR',
     defaultParams: { propagationDelayNs: 11 },
     pins: [
       { id: 'a', name: 'A', x: -30, y: -15, pinType: 'input' },
       { id: 'b', name: 'B', x: -30, y: 15, pinType: 'input' },
       { id: 'out', name: 'Y', x: 30, y: 0, pinType: 'output' },
     ],
-    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    footprint: 'Package_TO_SOT_SMD:SOT-23-5',
     model3d: 'dip8_integrated_circuit',
     width: 60,
     height: 50,
     symbolSvg: 'xor_gate',
-    description: 'Modulo-2 arithmetic and parity checking logic gate Y = A ⊕ B.',
+    description: 'Generic 2-input XOR logic gate implementing exclusive OR Y = A ⊕ B.',
+    manufacturerPartNumber: 'GENERIC_XOR',
+    libraryTier: 'generic',
+  },
+  // Real Complete Multi-Unit IC Packages (Texas Instruments / Nexperia / ON Semi)
+  {
+    type: 'IC_74HC14',
+    name: '74HC14 Hex Schmitt-Trigger Inverter (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC14',
+    defaultParams: { vccNominal: 5.0, vHighThresh: 3.1, vLowThresh: 1.8 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1Y', x: -40, y: -30, pinType: 'output' },
+      { id: '3', name: '2A', x: -40, y: -15, pinType: 'input' },
+      { id: '4', name: '2Y', x: -40, y: 0, pinType: 'output' },
+      { id: '5', name: '3A', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '3Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '4Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '4A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '5Y', x: 40, y: 15, pinType: 'output' },
+      { id: '11', name: '5A', x: 40, y: 0, pinType: 'input' },
+      { id: '12', name: '6Y', x: 40, y: -15, pinType: 'output' },
+      { id: '13', name: '6A', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Hex Inverting Schmitt Trigger IC in standard 14-pin DIP package with hysteresis.',
+    manufacturerPartNumber: 'SN74HC14N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC14N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc14.pdf',
+  },
+  {
+    type: 'IC_74HC04',
+    name: '74HC04 Hex Inverter IC (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC04',
+    defaultParams: { vccNominal: 5.0, propagationDelayNs: 8 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1Y', x: -40, y: -30, pinType: 'output' },
+      { id: '3', name: '2A', x: -40, y: -15, pinType: 'input' },
+      { id: '4', name: '2Y', x: -40, y: 0, pinType: 'output' },
+      { id: '5', name: '3A', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '3Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '4Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '4A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '5Y', x: 40, y: 15, pinType: 'output' },
+      { id: '11', name: '5A', x: 40, y: 0, pinType: 'input' },
+      { id: '12', name: '6Y', x: 40, y: -15, pinType: 'output' },
+      { id: '13', name: '6A', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Hex Inverter IC with 6 independent NOT gates in standard 14-pin DIP package.',
+    manufacturerPartNumber: 'SN74HC04N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC04N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc04.pdf',
+  },
+  {
+    type: 'IC_74HC00',
+    name: '74HC00 Quad 2-Input NAND Gate (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC00',
+    defaultParams: { vccNominal: 5.0, propagationDelayNs: 9 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1B', x: -40, y: -30, pinType: 'input' },
+      { id: '3', name: '1Y', x: -40, y: -15, pinType: 'output' },
+      { id: '4', name: '2A', x: -40, y: 0, pinType: 'input' },
+      { id: '5', name: '2B', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '2Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '3Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '3A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '3B', x: 40, y: 15, pinType: 'input' },
+      { id: '11', name: '4Y', x: 40, y: 0, pinType: 'output' },
+      { id: '12', name: '4A', x: 40, y: -15, pinType: 'input' },
+      { id: '13', name: '4B', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Quad 2-Input NAND Gate IC with 4 independent NAND gates in 14-pin DIP package.',
+    manufacturerPartNumber: 'SN74HC00N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC00N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc00.pdf',
+  },
+  {
+    type: 'IC_74HC08',
+    name: '74HC08 Quad 2-Input AND Gate (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC08',
+    defaultParams: { vccNominal: 5.0, propagationDelayNs: 9 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1B', x: -40, y: -30, pinType: 'input' },
+      { id: '3', name: '1Y', x: -40, y: -15, pinType: 'output' },
+      { id: '4', name: '2A', x: -40, y: 0, pinType: 'input' },
+      { id: '5', name: '2B', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '2Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '3Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '3A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '3B', x: 40, y: 15, pinType: 'input' },
+      { id: '11', name: '4Y', x: 40, y: 0, pinType: 'output' },
+      { id: '12', name: '4A', x: 40, y: -15, pinType: 'input' },
+      { id: '13', name: '4B', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Quad 2-Input AND Gate IC with 4 independent AND gates in 14-pin DIP package.',
+    manufacturerPartNumber: 'SN74HC08N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC08N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc08.pdf',
+  },
+  {
+    type: 'IC_74HC32',
+    name: '74HC32 Quad 2-Input OR Gate (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC32',
+    defaultParams: { vccNominal: 5.0, propagationDelayNs: 9 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1B', x: -40, y: -30, pinType: 'input' },
+      { id: '3', name: '1Y', x: -40, y: -15, pinType: 'output' },
+      { id: '4', name: '2A', x: -40, y: 0, pinType: 'input' },
+      { id: '5', name: '2B', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '2Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '3Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '3A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '3B', x: 40, y: 15, pinType: 'input' },
+      { id: '11', name: '4Y', x: 40, y: 0, pinType: 'output' },
+      { id: '12', name: '4A', x: 40, y: -15, pinType: 'input' },
+      { id: '13', name: '4B', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Quad 2-Input OR Gate IC with 4 independent OR gates in 14-pin DIP package.',
+    manufacturerPartNumber: 'SN74HC32N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC32N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc32.pdf',
+  },
+  {
+    type: 'IC_74HC86',
+    name: '74HC86 Quad 2-Input XOR Gate (DIP-14)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: '74HC86',
+    defaultParams: { vccNominal: 5.0, propagationDelayNs: 11 },
+    pins: [
+      { id: '1', name: '1A', x: -40, y: -45, pinType: 'input' },
+      { id: '2', name: '1B', x: -40, y: -30, pinType: 'input' },
+      { id: '3', name: '1Y', x: -40, y: -15, pinType: 'output' },
+      { id: '4', name: '2A', x: -40, y: 0, pinType: 'input' },
+      { id: '5', name: '2B', x: -40, y: 15, pinType: 'input' },
+      { id: '6', name: '2Y', x: -40, y: 30, pinType: 'output' },
+      { id: '7', name: 'GND', x: -40, y: 45, pinType: 'power' },
+      { id: '8', name: '3Y', x: 40, y: 45, pinType: 'output' },
+      { id: '9', name: '3A', x: 40, y: 30, pinType: 'input' },
+      { id: '10', name: '3B', x: 40, y: 15, pinType: 'input' },
+      { id: '11', name: '4Y', x: 40, y: 0, pinType: 'output' },
+      { id: '12', name: '4A', x: 40, y: -15, pinType: 'input' },
+      { id: '13', name: '4B', x: 40, y: -30, pinType: 'input' },
+      { id: '14', name: 'VCC', x: 40, y: -45, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-14_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 110,
+    symbolSvg: 'ic_dip14',
+    description: 'High-speed CMOS Quad 2-Input Exclusive-OR Gate IC with 4 independent XOR gates in 14-pin DIP package.',
     manufacturerPartNumber: 'SN74HC86N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / Nexperia',
+    partNumber: 'SN74HC86N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc86.pdf',
   },
   {
     type: 'LOGIC_74HC595',
-    name: '74HC595 8-Bit Shift Register (Serial-to-Parallel)',
+    name: '74HC595 8-Bit Shift Register (DIP-16)',
     designatorPrefix: 'U',
-    category: 'logic',
-    subCategory: 'Digital Logic',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
     simulationStatus: 'behavioral',
     packageType: 'THT',
     defaultValue: '74HC595',
     defaultParams: { bits: 8 },
     pins: [
-      { id: 'ser', name: 'SER (DS)', x: -40, y: -20, pinType: 'input' },
-      { id: 'srclk', name: 'SRCLK', x: -40, y: 0, pinType: 'input' },
-      { id: 'rclk', name: 'RCLK (ST)', x: -40, y: 20, pinType: 'input' },
-      { id: 'oe', name: 'OE', x: 0, y: -35, pinType: 'input' },
-      { id: 'mr', name: 'MR', x: 0, y: 35, pinType: 'input' },
-      { id: 'q0', name: 'Q0', x: 40, y: -30, pinType: 'output' },
-      { id: 'q1', name: 'Q1', x: 40, y: -20, pinType: 'output' },
-      { id: 'q2', name: 'Q2', x: 40, y: -10, pinType: 'output' },
-      { id: 'q7', name: 'Q7', x: 40, y: 30, pinType: 'output' },
+      { id: '1', name: 'QB', x: -40, y: -52.5, pinType: 'output' },
+      { id: '2', name: 'QC', x: -40, y: -37.5, pinType: 'output' },
+      { id: '3', name: 'QD', x: -40, y: -22.5, pinType: 'output' },
+      { id: '4', name: 'QE', x: -40, y: -7.5, pinType: 'output' },
+      { id: '5', name: 'QF', x: -40, y: 7.5, pinType: 'output' },
+      { id: '6', name: 'QG', x: -40, y: 22.5, pinType: 'output' },
+      { id: '7', name: 'QH', x: -40, y: 37.5, pinType: 'output' },
+      { id: '8', name: 'GND', x: -40, y: 52.5, pinType: 'power' },
+      { id: '9', name: "QH'", x: 40, y: 52.5, pinType: 'output' },
+      { id: '10', name: '~SRCLR', x: 40, y: 37.5, pinType: 'input' },
+      { id: '11', name: 'SRCLK', x: 40, y: 22.5, pinType: 'input' },
+      { id: '12', name: 'RCLK', x: 40, y: 7.5, pinType: 'input' },
+      { id: '13', name: '~OE', x: 40, y: -7.5, pinType: 'input' },
+      { id: '14', name: 'SER', x: 40, y: -22.5, pinType: 'input' },
+      { id: '15', name: 'QA', x: 40, y: -37.5, pinType: 'output' },
+      { id: '16', name: 'VCC', x: 40, y: -52.5, pinType: 'power' },
     ],
     footprint: 'Package_DIP:DIP-16_W7.62mm',
-    model3d: 'dip8_integrated_circuit',
+    model3d: 'dip14_logic_ic',
     width: 80,
-    height: 70,
+    height: 130,
     symbolSvg: 'ic_dip16',
-    description: '8-bit serial-in, parallel-out shift register with 3-state output storage register.',
+    description: '8-bit serial-in, parallel-out shift register with storage register and 3-state outputs in DIP-16 package.',
     manufacturerPartNumber: 'SN74HC595N',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments',
+    partNumber: 'SN74HC595N',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/sn74hc595.pdf',
+  },
+  {
+    type: 'LOGIC_CD4017',
+    name: 'CD4017 Decade Counter / Divider (DIP-16)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'behavioral',
+    packageType: 'THT',
+    defaultValue: 'CD4017',
+    defaultParams: { countLimit: 10 },
+    pins: [
+      { id: '1', name: 'Q5', x: -40, y: -52.5, pinType: 'output' },
+      { id: '2', name: 'Q1', x: -40, y: -37.5, pinType: 'output' },
+      { id: '3', name: 'Q0', x: -40, y: -22.5, pinType: 'output' },
+      { id: '4', name: 'Q2', x: -40, y: -7.5, pinType: 'output' },
+      { id: '5', name: 'Q6', x: -40, y: 7.5, pinType: 'output' },
+      { id: '6', name: 'Q7', x: -40, y: 22.5, pinType: 'output' },
+      { id: '7', name: 'Q3', x: -40, y: 37.5, pinType: 'output' },
+      { id: '8', name: 'GND', x: -40, y: 52.5, pinType: 'power' },
+      { id: '9', name: 'Q8', x: 40, y: 52.5, pinType: 'output' },
+      { id: '10', name: 'Q4', x: 40, y: 37.5, pinType: 'output' },
+      { id: '11', name: 'Q9', x: 40, y: 22.5, pinType: 'output' },
+      { id: '12', name: 'CO', x: 40, y: 7.5, pinType: 'output' },
+      { id: '13', name: '~EN', x: 40, y: -7.5, pinType: 'input' },
+      { id: '14', name: 'CLK', x: 40, y: -22.5, pinType: 'input' },
+      { id: '15', name: 'RST', x: 40, y: -37.5, pinType: 'input' },
+      { id: '16', name: 'VDD', x: 40, y: -52.5, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-16_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 130,
+    symbolSvg: 'ic_dip16',
+    description: 'CMOS 5-stage Johnson decade counter with 10 decoded outputs and carry out in standard DIP-16 package.',
+    manufacturerPartNumber: 'CD4017BE',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments',
+    partNumber: 'CD4017BE',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/cd4017b.pdf',
+  },
+  {
+    type: 'IC_ULN2003',
+    name: 'ULN2003A 7-Ch Darlington Array (DIP-16)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: 'ULN2003A',
+    defaultParams: { maxCurrentA: 0.5 },
+    pins: [
+      { id: '1', name: '1B', x: -40, y: -52.5, pinType: 'input' },
+      { id: '2', name: '2B', x: -40, y: -37.5, pinType: 'input' },
+      { id: '3', name: '3B', x: -40, y: -22.5, pinType: 'input' },
+      { id: '4', name: '4B', x: -40, y: -7.5, pinType: 'input' },
+      { id: '5', name: '5B', x: -40, y: 7.5, pinType: 'input' },
+      { id: '6', name: '6B', x: -40, y: 22.5, pinType: 'input' },
+      { id: '7', name: '7B', x: -40, y: 37.5, pinType: 'input' },
+      { id: '8', name: 'COM_E', x: -40, y: 52.5, pinType: 'power' },
+      { id: '9', name: 'COM_K', x: 40, y: 52.5, pinType: 'power' },
+      { id: '10', name: '7C', x: 40, y: 37.5, pinType: 'output' },
+      { id: '11', name: '6C', x: 40, y: 22.5, pinType: 'output' },
+      { id: '12', name: '5C', x: 40, y: 7.5, pinType: 'output' },
+      { id: '13', name: '4C', x: 40, y: -7.5, pinType: 'output' },
+      { id: '14', name: '3C', x: 40, y: -22.5, pinType: 'output' },
+      { id: '15', name: '2C', x: 40, y: -37.5, pinType: 'output' },
+      { id: '16', name: '1C', x: 40, y: -52.5, pinType: 'output' },
+    ],
+    footprint: 'Package_DIP:DIP-16_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 130,
+    symbolSvg: 'ic_dip16',
+    description: 'High-voltage high-current 7-channel Darlington transistor array with common cathode clamp diodes in DIP-16 package.',
+    manufacturerPartNumber: 'ULN2003A',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / STMicroelectronics',
+    partNumber: 'ULN2003A',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/uln2003a.pdf',
+  },
+  {
+    type: 'IC_L293D',
+    name: 'L293D Dual H-Bridge Motor Driver (DIP-16)',
+    designatorPrefix: 'U',
+    category: 'digital_logic',
+    subCategory: 'Digital Logic IC',
+    simulationStatus: 'full_mna',
+    packageType: 'THT',
+    defaultValue: 'L293D',
+    defaultParams: { peakCurrentA: 1.2 },
+    pins: [
+      { id: '1', name: '1,2EN', x: -40, y: -52.5, pinType: 'input' },
+      { id: '2', name: '1A', x: -40, y: -37.5, pinType: 'input' },
+      { id: '3', name: '1Y', x: -40, y: -22.5, pinType: 'output' },
+      { id: '4', name: 'GND', x: -40, y: -7.5, pinType: 'power' },
+      { id: '5', name: 'GND', x: -40, y: 7.5, pinType: 'power' },
+      { id: '6', name: '2Y', x: -40, y: 22.5, pinType: 'output' },
+      { id: '7', name: '2A', x: -40, y: 37.5, pinType: 'input' },
+      { id: '8', name: 'VCC2', x: -40, y: 52.5, pinType: 'power' },
+      { id: '9', name: '3,4EN', x: 40, y: 52.5, pinType: 'input' },
+      { id: '10', name: '3A', x: 40, y: 37.5, pinType: 'input' },
+      { id: '11', name: '3Y', x: 40, y: 22.5, pinType: 'output' },
+      { id: '12', name: 'GND', x: 40, y: 7.5, pinType: 'power' },
+      { id: '13', name: 'GND', x: 40, y: -7.5, pinType: 'power' },
+      { id: '14', name: '4Y', x: 40, y: -22.5, pinType: 'output' },
+      { id: '15', name: '4A', x: 40, y: -37.5, pinType: 'input' },
+      { id: '16', name: 'VCC1', x: 40, y: -52.5, pinType: 'power' },
+    ],
+    footprint: 'Package_DIP:DIP-16_W7.62mm',
+    model3d: 'dip14_logic_ic',
+    width: 80,
+    height: 130,
+    symbolSvg: 'ic_dip16',
+    description: 'Quadruple high-current half-H driver designed to provide bidirectional drive currents up to 600mA in DIP-16 package.',
+    manufacturerPartNumber: 'L293D',
+    libraryTier: 'real',
+    manufacturer: 'Texas Instruments / STMicroelectronics',
+    partNumber: 'L293D',
+    datasheetUrl: 'https://www.ti.com/lit/ds/symlink/l293.pdf',
   },
   {
     type: 'LOGIC_74HC74',
@@ -4260,132 +4684,58 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   },
 ];
 
+// ============================================================================
+// ENRICH 100% OF COMPONENT_CATALOG ENTRIES WITH CANONICAL PHYSICAL SPEC & 3-TIER METADATA
+// ============================================================================
+COMPONENT_CATALOG.forEach((template) => {
+  const spec = resolvePhysicalSpec(template);
+  const meta = resolveComponentMetadata(template);
+
+  // Guarantee courtyard dimensions strictly envelope body dimensions with clearance
+  if (spec.courtyardMm && spec.bodyDimensionsMm) {
+    if (spec.courtyardMm.width < spec.bodyDimensionsMm.width) {
+      spec.courtyardMm.width = Math.round((spec.bodyDimensionsMm.width + 1.5) * 10) / 10;
+    }
+    if (spec.courtyardMm.depth < spec.bodyDimensionsMm.depth) {
+      spec.courtyardMm.depth = Math.round((spec.bodyDimensionsMm.depth + 1.5) * 10) / 10;
+    }
+  }
+
+  // Guarantee pads array covers 100% of component pins
+  if (!spec.pads || spec.pads.length < template.pins.length) {
+    const pitch = spec.pinPitchMm || 2.54;
+    spec.pads = buildInlinePads(template.pins, pitch, 0, 0.9, 1.8);
+  }
+
+  template.physicalSpec = spec;
+  template.packageType = spec.packageType || template.packageType || 'THT';
+  template.mountingType = spec.mountingType || 'THT';
+  template.placementClass = spec.placementClass || meta.placementClass;
+  template.libraryTier = template.libraryTier || meta.libraryTier;
+  template.componentName = template.componentName || template.name;
+  template.subCategory = template.subCategory || meta.subCategory || (template.category ? template.category.replace(/_/g, ' ') : 'General');
+  template.manufacturer = template.manufacturer || meta.manufacturer;
+  template.partNumber = template.partNumber || meta.partNumber;
+  template.electricalParameters = template.electricalParameters || template.defaultParams;
+  template.datasheetUrl = template.datasheetUrl || meta.datasheetUrl;
+  template.source = template.source || meta.source;
+  template.simulationModel = template.simulationModel || meta.simulationModel;
+  template.simulationStatus = template.simulationStatus || (template.simulationModel ? 'full_mna' : 'design_only');
+  template.symbolId = template.symbolId || template.symbolSvg || template.type.toLowerCase();
+  template.footprintId = template.footprintId || template.footprint || spec.packageCode;
+  template.model3dId = template.model3dId || template.model3d || template.type.toLowerCase();
+});
+
 export function getPhysicalSpecForComponent(
   type: string,
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis',
   footprint?: string
 ): PhysicalSpec {
-  const t = (type || '').toUpperCase();
-  const fp = (footprint || '').toUpperCase();
-  const pkg: 'THT' | 'SMD' | 'Module' | 'Chassis' = packageType || (fp.includes('SMD') ? 'SMD' : fp.includes('MODULE') ? 'Module' : 'THT');
-
-  if (t === 'ARDUINO_UNO') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 68.6, height: 53.4, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-35 -27 70 54"><rect x="-34.3" y="-26.7" width="68.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
-    };
+  const found = COMPONENT_CATALOG.find((c) => c.type === type);
+  if (found?.physicalSpec) {
+    return found.physicalSpec;
   }
-  if (t === 'ARDUINO_MEGA') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 101.6, height: 53.4, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-51 -27 102 54"><rect x="-50.8" y="-26.7" width="101.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
-    };
-  }
-  if (t === 'ARDUINO_NANO') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 45.0, height: 18.0, depth: 10.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-23 -9 46 18"><rect x="-22.5" y="-9" width="45" height="18" rx="2" fill="none" stroke="#00A896"/></svg>',
-    };
-  }
-  if (t === 'ESP32_DEVKIT' || t.includes('ESP32')) {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 51.5, height: 28.5, depth: 12.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-26 -15 52 30"><rect x="-25.75" y="-14.25" width="51.5" height="28.5" rx="2" fill="none" stroke="#38BDF8"/></svg>',
-    };
-  }
-  if (t === 'RASPBERRY_PI_PICO' || t.includes('PICO')) {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 51.0, height: 21.0, depth: 11.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-26 -11 52 22"><rect x="-25.5" y="-10.5" width="51" height="21" rx="2" fill="none" stroke="#10B981"/></svg>',
-    };
-  }
-  if (t === 'SENSOR_ULTRASONIC' || t === 'HC_SR04') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 45.0, height: 20.0, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-23 -10 46 20"><rect x="-22.5" y="-10" width="45" height="20" rx="2" fill="none" stroke="#0284C7"/><circle cx="-12" cy="0" r="8" fill="#CBD5E1"/><circle cx="12" cy="0" r="8" fill="#CBD5E1"/></svg>',
-    };
-  }
-  if (t === 'ACTUATOR_RGB_LED' || t === 'LED_RGB') {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -3 12 6"><circle cx="0" cy="0" r="2.5" fill="#EF4444"/><rect x="-3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="-1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('LED')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-3 -3 6 6"><circle cx="0" cy="0" r="2.5" fill="#10B981"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('RESISTOR') || t.includes('DIODE') || t.includes('INDUCTOR')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 10.16, height: 3.5, depth: 2.5 },
-      pinPitchMm: 7.62,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -2 12 4"><rect x="-3" y="-1" width="6" height="2" fill="#D4A373"/><circle cx="-3.81" cy="0" r="0.8" fill="#F59E0B"/><circle cx="3.81" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('CAPACITOR')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 6.3, height: 11.0, depth: 6.3 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-4 -4 8 8"><circle cx="0" cy="0" r="3" fill="#1E3A8A"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 4.8, height: 4.8, depth: 3.8 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-4 -3 8 6"><path d="M-2.4,-2 A2.4,2.4 0 0,1 2.4,-2 L2.4,2 L-2.4,2 Z" fill="#18181B"/><circle cx="-1.27" cy="0" r="0.7" fill="#F59E0B"/><circle cx="0" cy="0" r="0.7" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.7" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('IC') || t.includes('555') || t.includes('OPAMP') || t.includes('DIP')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 9.8, height: 6.4, depth: 3.6 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -5 12 10"><rect x="-5" y="-3.5" width="10" height="7" fill="#18181B"/></svg>',
-    };
-  }
-
-  // Generic fallback
-  return {
-    packageType: pkg,
-    dimensionsMm: { width: 10.0, height: 10.0, depth: 5.0 },
-    pinPitchMm: 2.54,
-    mountingType: pkg === 'SMD' ? 'Surface-Mount' : pkg === 'Module' ? 'Socketed' : 'Through-Hole',
-    padFootprintSvg: '<svg viewBox="-6 -6 12 12"><rect x="-5" y="-5" width="10" height="10" fill="none" stroke="#64748B"/></svg>',
-  };
+  return resolvePhysicalSpec({ type, packageType, footprint });
 }
 
 export function createComponentInstance(
@@ -4407,18 +4757,31 @@ export function createComponentInstance(
   const designator = `${prefix}${count + 1}`;
   const uniqueId = `${prefix.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+  const spec = template.physicalSpec || getPhysicalSpecForComponent(template.type, template.packageType, template.footprint);
+  const meta = resolveComponentMetadata(template);
+
   return {
     id: uniqueId,
     type: template.type,
     designator,
     label: `${template.name.split('(')[0].trim()} ${count + 1}`,
+    componentName: template.componentName || template.name,
     category: template.category,
     subCategory: template.subCategory,
+    libraryTier: template.libraryTier || meta.libraryTier,
+    manufacturer: template.manufacturer || meta.manufacturer,
+    partNumber: template.partNumber || meta.partNumber,
+    datasheetUrl: template.datasheetUrl || meta.datasheetUrl,
+    source: template.source || meta.source,
+    simulationModel: template.simulationModel || meta.simulationModel,
+    placementClass: template.placementClass || spec.placementClass,
     simulationStatus: template.simulationStatus || 'full_mna',
     packageType: template.packageType,
-    physicalSpec: template.physicalSpec || getPhysicalSpecForComponent(template.type, template.packageType, template.footprint),
-    manufacturerPartNumber: template.manufacturerPartNumber,
-    datasheetUrl: template.datasheetUrl,
+    physicalSpec: spec,
+    manufacturerPartNumber: template.manufacturerPartNumber || meta.partNumber,
+    symbolId: template.symbolId || template.symbolSvg || template.type.toLowerCase(),
+    footprintId: template.footprintId || template.footprint,
+    model3dId: template.model3dId || template.model3d || template.type.toLowerCase(),
     x,
     y,
     rotation: 0,

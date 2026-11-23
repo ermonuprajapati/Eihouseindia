@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 
 export interface RaspberryPiPico3DProps {
   position?: [number, number, number];
@@ -18,48 +17,48 @@ export interface RaspberryPiPico3DProps {
 
 export const PICO_PINS: { name: string; localPos: [number, number, number]; altNames?: string[] }[] = [
   // Left 20 pins (x = -8.89, Z from -24.13 to 24.13)
-  { name: 'GP0', localPos: [-8.89, 4.3, -24.13] },
-  { name: 'GP1', localPos: [-8.89, 4.3, -21.59] },
-  { name: 'GND_1', localPos: [-8.89, 4.3, -19.05] },
-  { name: 'GP2', localPos: [-8.89, 4.3, -16.51] },
-  { name: 'GP3', localPos: [-8.89, 4.3, -13.97] },
-  { name: 'GP4', localPos: [-8.89, 4.3, -11.43] },
-  { name: 'GP5', localPos: [-8.89, 4.3, -8.89] },
-  { name: 'GND_2', localPos: [-8.89, 4.3, -6.35] },
-  { name: 'GP6', localPos: [-8.89, 4.3, -3.81] },
-  { name: 'GP7', localPos: [-8.89, 4.3, -1.27] },
-  { name: 'GP8', localPos: [-8.89, 4.3, 1.27] },
-  { name: 'GP9', localPos: [-8.89, 4.3, 3.81] },
-  { name: 'GND_3', localPos: [-8.89, 4.3, 6.35] },
-  { name: 'GP10', localPos: [-8.89, 4.3, 8.89] },
-  { name: 'GP11', localPos: [-8.89, 4.3, 11.43] },
-  { name: 'GP12', localPos: [-8.89, 4.3, 13.97] },
-  { name: 'GP13', localPos: [-8.89, 4.3, 16.51] },
-  { name: 'GND_4', localPos: [-8.89, 4.3, 19.05] },
-  { name: 'GP14', localPos: [-8.89, 4.3, 21.59] },
-  { name: 'GP15', localPos: [-8.89, 4.3, 24.13] },
+  { name: 'GP0', localPos: [-8.89, -2.5, -24.13] },
+  { name: 'GP1', localPos: [-8.89, -2.5, -21.59] },
+  { name: 'GND_1', localPos: [-8.89, -2.5, -19.05] },
+  { name: 'GP2', localPos: [-8.89, -2.5, -16.51] },
+  { name: 'GP3', localPos: [-8.89, -2.5, -13.97] },
+  { name: 'GP4', localPos: [-8.89, -2.5, -11.43] },
+  { name: 'GP5', localPos: [-8.89, -2.5, -8.89] },
+  { name: 'GND_2', localPos: [-8.89, -2.5, -6.35] },
+  { name: 'GP6', localPos: [-8.89, -2.5, -3.81] },
+  { name: 'GP7', localPos: [-8.89, -2.5, -1.27] },
+  { name: 'GP8', localPos: [-8.89, -2.5, 1.27] },
+  { name: 'GP9', localPos: [-8.89, -2.5, 3.81] },
+  { name: 'GND_3', localPos: [-8.89, -2.5, 6.35] },
+  { name: 'GP10', localPos: [-8.89, -2.5, 8.89] },
+  { name: 'GP11', localPos: [-8.89, -2.5, 11.43] },
+  { name: 'GP12', localPos: [-8.89, -2.5, 13.97] },
+  { name: 'GP13', localPos: [-8.89, -2.5, 16.51] },
+  { name: 'GND_4', localPos: [-8.89, -2.5, 19.05] },
+  { name: 'GP14', localPos: [-8.89, -2.5, 21.59] },
+  { name: 'GP15', localPos: [-8.89, -2.5, 24.13] },
 
   // Right 20 pins (x = 8.89, Z from 24.13 to -24.13)
-  { name: 'GP16', localPos: [8.89, 4.3, 24.13] },
-  { name: 'GP17', localPos: [8.89, 4.3, 21.59] },
-  { name: 'GND_5', localPos: [8.89, 4.3, 19.05] },
-  { name: 'GP18', localPos: [8.89, 4.3, 16.51] },
-  { name: 'GP19', localPos: [8.89, 4.3, 13.97] },
-  { name: 'GP20', localPos: [8.89, 4.3, 11.43] },
-  { name: 'GP21', localPos: [8.89, 4.3, 8.89] },
-  { name: 'GND_6', localPos: [8.89, 4.3, 6.35] },
-  { name: 'GP22', localPos: [8.89, 4.3, 3.81] },
-  { name: 'RUN', localPos: [8.89, 4.3, 1.27] },
-  { name: 'GP26', localPos: [8.89, 4.3, -1.27] },
-  { name: 'GP27', localPos: [8.89, 4.3, -3.81] },
-  { name: 'GND_7', localPos: [8.89, 4.3, -6.35] },
-  { name: 'GP28', localPos: [8.89, 4.3, -8.89] },
-  { name: 'ADC_VREF', localPos: [8.89, 4.3, -11.43] },
-  { name: '3V3_OUT', localPos: [8.89, 4.3, -13.97] },
-  { name: '3V3_EN', localPos: [8.89, 4.3, -16.51] },
-  { name: 'GND_8', localPos: [8.89, 4.3, -19.05] },
-  { name: 'VSYS', localPos: [8.89, 4.3, -21.59] },
-  { name: 'VBUS', localPos: [8.89, 4.3, -24.13] },
+  { name: 'GP16', localPos: [8.89, -2.5, 24.13] },
+  { name: 'GP17', localPos: [8.89, -2.5, 21.59] },
+  { name: 'GND_5', localPos: [8.89, -2.5, 19.05] },
+  { name: 'GP18', localPos: [8.89, -2.5, 16.51] },
+  { name: 'GP19', localPos: [8.89, -2.5, 13.97] },
+  { name: 'GP20', localPos: [8.89, -2.5, 11.43] },
+  { name: 'GP21', localPos: [8.89, -2.5, 8.89] },
+  { name: 'GND_6', localPos: [8.89, -2.5, 6.35] },
+  { name: 'GP22', localPos: [8.89, -2.5, 3.81] },
+  { name: 'RUN', localPos: [8.89, -2.5, 1.27] },
+  { name: 'GP26', localPos: [8.89, -2.5, -1.27] },
+  { name: 'GP27', localPos: [8.89, -2.5, -3.81] },
+  { name: 'GND_7', localPos: [8.89, -2.5, -6.35] },
+  { name: 'GP28', localPos: [8.89, -2.5, -8.89] },
+  { name: 'ADC_VREF', localPos: [8.89, -2.5, -11.43] },
+  { name: '3V3_OUT', localPos: [8.89, -2.5, -13.97] },
+  { name: '3V3_EN', localPos: [8.89, -2.5, -16.51] },
+  { name: 'GND_8', localPos: [8.89, -2.5, -19.05] },
+  { name: 'VSYS', localPos: [8.89, -2.5, -21.59] },
+  { name: 'VBUS', localPos: [8.89, -2.5, -24.13] },
 ];
 
 export function RaspberryPiPico3D({
@@ -95,10 +94,10 @@ export function RaspberryPiPico3D({
         color: '#1E293B',
         roughness: 0.3,
       }),
-      goldPin: new THREE.MeshStandardMaterial({
-        color: '#EAB308',
-        metalness: 0.9,
-        roughness: 0.1,
+      pinSilver: new THREE.MeshStandardMaterial({
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -190,9 +189,17 @@ export function RaspberryPiPico3D({
 
       {/* Silkscreen Pin Labels Texture Overlay */}
       {silkscreenTexture && (
-        <mesh position={[0, 1.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 1.53, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[20.8, 50.8]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -226,7 +233,7 @@ export function RaspberryPiPico3D({
       </mesh>
 
       {/* Interactive Micro-USB Cable Plug */}
-      {isUsbPlugged && (
+      {isUsbPlugged ? (
         <group
           position={[0, 2.2, -27]}
           onPointerDown={(e) => e.stopPropagation()}
@@ -234,6 +241,11 @@ export function RaspberryPiPico3D({
             e.stopPropagation();
             onToggleUsb?.();
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
         >
           <mesh position={[0, 0, -3]} material={materials.usbMetal}>
             <boxGeometry args={[6.5, 2.2, 5]} />
@@ -244,6 +256,28 @@ export function RaspberryPiPico3D({
           <mesh position={[0, 0, -18]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[1.8, 1.8, 16, 12]} />
             <primitive object={materials.usbCablePvc} attach="material" />
+          </mesh>
+        </group>
+      ) : (
+        /* Unplugged USB cable resting near socket - click to plug in */
+        <group
+          position={[0, 1.5, -36]}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleUsb?.();
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
+        >
+          <mesh position={[0, 0, 0]} material={materials.usbMetal}>
+            <boxGeometry args={[6.5, 2.2, 5]} />
+          </mesh>
+          <mesh position={[0, 0, -5]} material={materials.usbCablePvc}>
+            <boxGeometry args={[9, 4, 8]} />
           </mesh>
         </group>
       )}
@@ -289,28 +323,15 @@ export function RaspberryPiPico3D({
               </mesh>
             )}
             {/* Downward Silver Pin Leg into Breadboard Hole (extended 5.5mm length) */}
-            <mesh position={[0, -2.5, 0]}>
-              <boxGeometry args={[0.6, 5.5, 0.6]} />
-              <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+            <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
+              <boxGeometry args={[0.64, 5.5, 0.64]} />
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <>
-                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <ringGeometry args={[0.6, 1.4, 24]} />
-                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-                </mesh>
-                <Html
-                  position={[0, 6.0, 0]}
-                  center
-                  distanceFactor={75}
-                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
-                >
-                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
-                    {pin.name}
-                  </div>
-                </Html>
-              </>
+              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+              </mesh>
             )}
             <mesh
               position={[0, 0.5, 0]}

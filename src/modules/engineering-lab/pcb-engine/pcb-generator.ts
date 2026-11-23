@@ -1,5 +1,6 @@
 import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
 import { PcbAutoRouter, compute45RoutePoints } from './autorouter';
+import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
 
 /**
  * Returns true if the component represents a virtual schematic symbol
@@ -213,7 +214,7 @@ function findBestSafeGndRoute(
     }
   }
 
-  // 5. Perimeter edge margin fallback (margin 3.5mm from board edges)
+  // 5. Perimeter edge margin fallback (all 4 board edges: left, right, top, bottom)
   const margin = 3.5;
   const leftPerimeter = [
     { x: p1.x, y: p1.y },
@@ -222,6 +223,8 @@ function findBestSafeGndRoute(
     { x: p2.x, y: p2.y },
   ];
   candidates.push({ waypoints: leftPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+  candidates.push({ waypoints: leftPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
+
   const rightPerimeter = [
     { x: p1.x, y: p1.y },
     { x: boardWidth - margin, y: p1.y },
@@ -229,6 +232,25 @@ function findBestSafeGndRoute(
     { x: p2.x, y: p2.y },
   ];
   candidates.push({ waypoints: rightPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+  candidates.push({ waypoints: rightPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
+
+  const topPerimeter = [
+    { x: p1.x, y: p1.y },
+    { x: p1.x, y: margin },
+    { x: p2.x, y: margin },
+    { x: p2.x, y: p2.y },
+  ];
+  candidates.push({ waypoints: topPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+  candidates.push({ waypoints: topPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
+
+  const botPerimeter = [
+    { x: p1.x, y: p1.y },
+    { x: p1.x, y: boardHeight - margin },
+    { x: p2.x, y: boardHeight - margin },
+    { x: p2.x, y: p2.y },
+  ];
+  candidates.push({ waypoints: botPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
+  candidates.push({ waypoints: botPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
 
   let bestCandidate: SafeGndRoute | null = null;
   let lowestScore = Infinity;
@@ -275,8 +297,53 @@ export class PcbGenerator {
     const physicalComponents = components.filter((c) => !isVirtualSchematicSymbol(c.type));
     const targetComps = physicalComponents.length > 0 ? physicalComponents : components;
 
-    // Scale schematic coordinates down to PCB millimeter space
-    // Center of schematic maps to center of board
+    // 1. Dynamic Board Sizing & EDA Corridor Clearance
+    const EDGE_MARGIN = 6.0; // Minimum 6mm edge keep-out margin from all 4 Edge.Cuts borders (clearing corner M3 mounting holes)
+
+    interface PlacedItem {
+      componentId: string;
+      x: number;
+      y: number;
+      cw: number;
+      cd: number;
+      clearance: number;
+    }
+
+    const compSpecs = targetComps.map((comp) => {
+      const spec = resolvePhysicalSpec({ ...comp });
+      const upperType = (comp.type || '').toUpperCase();
+      const upperFp = (comp.footprint || '').toUpperCase();
+      const bodyW = spec.bodyDimensionsMm?.width || 10;
+      const bodyD = spec.bodyDimensionsMm?.depth || 8;
+      const cw = Math.max(spec.courtyardMm?.width || bodyW + 1.5, bodyW + 1.0, 8.0);
+      const cd = Math.max(spec.courtyardMm?.depth || bodyD + 1.5, bodyD + 1.0, 6.0);
+
+      const isLarge =
+        spec.placementClass === 'dev-board' ||
+        spec.placementClass === 'module-breadboard' ||
+        spec.placementClass === 'ic-dip' ||
+        upperType.includes('BOARD') ||
+        upperType.includes('UNO') ||
+        upperType.includes('ESP32') ||
+        upperType.includes('PICO') ||
+        upperType.includes('SR04') ||
+        upperType.includes('ULTRASONIC') ||
+        upperType.includes('LCD1602') ||
+        upperType.includes('RELAY') ||
+        upperType.includes('L298') ||
+        upperFp.includes('DIP-14') ||
+        upperFp.includes('DIP-16') ||
+        upperFp.includes('DIP-28') ||
+        bodyW > 20 ||
+        bodyD > 20;
+
+      // 7mm corridor around large modules, dev boards, sensors & multi-pin ICs; 5mm for passives
+      const clearance = isLarge ? 7.0 : 5.0;
+
+      return { comp, spec, cw, cd, isLarge, clearance };
+    });
+
+    // 2. Deterministic 2D Courtyard Auto-Placer (Preserves Net Topology & Enforces EDA Corridors)
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     targetComps.forEach((c) => {
       if (c.x < minX) minX = c.x;
@@ -288,13 +355,118 @@ export class PcbGenerator {
     const spanX = Math.max(maxX - minX, 100);
     const spanY = Math.max(maxY - minY, 100);
 
+    // Place largest anchor components first, then net-connected ICs and discretes
+    const placementOrder = [...compSpecs].sort((a, b) => {
+      const orderScore = (item: typeof a) => {
+        if (item.spec.placementClass === 'dev-board' || item.comp.type.includes('UNO') || item.comp.type.includes('ESP32')) return 1;
+        if (item.spec.placementClass === 'module-breadboard' || item.isLarge) return 2;
+        if (item.spec.placementClass === 'ic-dip' || item.comp.type.includes('IC_') || item.comp.type.includes('TIMER')) return 3;
+        return 4;
+      };
+      const diff = orderScore(a) - orderScore(b);
+      if (diff !== 0) return diff;
+      return b.cw * b.cd - a.cw * a.cd; // Largest footprint first
+    });
+
+    const placedBoxes: PlacedItem[] = [];
     const padLookup: Map<string, { x: number; y: number }> = new Map();
 
-    // Map physical components to board placements & compute accurate pads
-    physicalComponents.forEach((comp) => {
-      // Normalize to 10mm margin inside PCB board boundary
-      const normX = Math.round((10 + ((comp.x - minX) / spanX) * (boardWidthMm - 20)) * 10) / 10;
-      const normY = Math.round((10 + ((comp.y - minY) / spanY) * (boardHeightMm - 20)) * 10) / 10;
+    const totalAreaWithCorridors = compSpecs.reduce(
+      (sum, c) => sum + (c.cw + c.clearance * 2) * (c.cd + c.clearance * 2),
+      0
+    );
+    const maxSingleW = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cw + c.clearance * 2)) : 40;
+    const maxSingleD = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cd + c.clearance * 2)) : 30;
+    const estSide = Math.sqrt(totalAreaWithCorridors * 1.35);
+    let availW = Math.max(boardWidthMm, Math.ceil((estSide * 1.15) / 5) * 5, maxSingleW + EDGE_MARGIN * 2, 80);
+    let availH = Math.max(boardHeightMm, Math.ceil((estSide * 0.85) / 5) * 5, maxSingleD + EDGE_MARGIN * 2, 60);
+
+    placementOrder.forEach(({ comp, cw, cd, clearance }) => {
+      // Net-aware topological initial position from schematic coordinates clamped to board margin
+      const minXBound = EDGE_MARGIN + cw / 2;
+      const minYBound = EDGE_MARGIN + cd / 2;
+      const maxXBound = Math.max(minXBound, availW - EDGE_MARGIN - cw / 2);
+      const maxYBound = Math.max(minYBound, availH - EDGE_MARGIN - cd / 2);
+
+      let targetX = minXBound + ((comp.x - minX) / spanX) * (maxXBound - minXBound);
+      let targetY = minYBound + ((comp.y - minY) / spanY) * (maxYBound - minYBound);
+
+      // Snap to 2.54mm grid within bounds
+      targetX = Math.max(minXBound, Math.min(maxXBound, Math.round(targetX / 2.54) * 2.54));
+      targetY = Math.max(minYBound, Math.min(maxYBound, Math.round(targetY / 2.54) * 2.54));
+
+      let candX = targetX;
+      let candY = targetY;
+
+      // Pairwise AABB non-overlap verification
+      const hasCollision = (tx: number, ty: number): boolean => {
+        for (const pb of placedBoxes) {
+          const minSepX = (cw + pb.cw) / 2 + Math.max(clearance, pb.clearance);
+          const minSepY = (cd + pb.cd) / 2 + Math.max(clearance, pb.clearance);
+          if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      if (hasCollision(candX, candY)) {
+        let found = false;
+        // First try within current board bounds
+        const maxSearch = Math.max(availW, availH, 120);
+        for (let r = 2.54; r <= maxSearch && !found; r += 2.54) {
+          const steps = Math.max(8, Math.round((2 * Math.PI * r) / 2.54));
+          for (let s = 0; s < steps; s++) {
+            const angle = (s * 2 * Math.PI) / steps;
+            const testX = Math.round((targetX + r * Math.cos(angle)) / 2.54) * 2.54;
+            const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
+
+            if (testX >= minXBound && testX <= maxXBound && testY >= minYBound && testY <= maxYBound) {
+              if (!hasCollision(testX, testY)) {
+                candX = testX;
+                candY = testY;
+                found = true;
+                break;
+              }
+            }
+          }
+        }
+
+        // If crowded and no spot within current bounds, search outward and expand bounds
+        if (!found) {
+          for (let r = 2.54; r <= 300 && !found; r += 2.54) {
+            const steps = Math.max(8, Math.round((2 * Math.PI * r) / 2.54));
+            for (let s = 0; s < steps; s++) {
+              const angle = (s * 2 * Math.PI) / steps;
+              const testX = Math.round((targetX + r * Math.cos(angle)) / 2.54) * 2.54;
+              const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
+
+              if (testX >= minXBound && testY >= minYBound) {
+                if (!hasCollision(testX, testY)) {
+                  candX = testX;
+                  candY = testY;
+                  found = true;
+                  availW = Math.max(availW, candX + cw / 2 + clearance + EDGE_MARGIN);
+                  availH = Math.max(availH, candY + cd / 2 + clearance + EDGE_MARGIN);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      candX = Math.round(candX * 100) / 100;
+      candY = Math.round(candY * 100) / 100;
+
+      placedBoxes.push({
+        componentId: comp.id,
+        x: candX,
+        y: candY,
+        cw,
+        cd,
+        clearance,
+      });
 
       placedComponents.push({
         componentId: comp.id,
@@ -303,19 +475,32 @@ export class PcbGenerator {
         label: comp.label,
         value: comp.value,
         footprint: comp.footprint,
-        x: normX,
-        y: normY,
+        x: candX,
+        y: candY,
         rotation: comp.rotation || 0,
         parameters: comp.parameters,
       });
 
       // Compute physical IPC-7351 footprint pads strictly aligned with package geometry
-      const footprintPads = PcbGenerator.calculateFootprintPads(comp, normX, normY, comp.rotation || 0);
+      const footprintPads = PcbGenerator.calculateFootprintPads(comp, candX, candY, comp.rotation || 0);
       footprintPads.forEach((pad) => {
         pads.push(pad);
         padLookup.set(`${comp.id}:${pad.pinId}`, { x: pad.x, y: pad.y });
       });
     });
+
+    // 3. Dynamic PCB Board Auto-Sizing (Floor 65mm x 50mm, 6mm edge margins, 5mm snap)
+    const maxBoundX = placedBoxes.length > 0 ? Math.max(...placedBoxes.map((b) => b.x + b.cw / 2)) : 50;
+    const maxBoundY = placedBoxes.length > 0 ? Math.max(...placedBoxes.map((b) => b.y + b.cd / 2)) : 38;
+
+    const padMaxX = pads.length > 0 ? Math.max(...pads.map((p) => p.x + 2.0)) : 50;
+    const padMaxY = pads.length > 0 ? Math.max(...pads.map((p) => p.y + 2.0)) : 38;
+
+    const reqWidth = Math.max(boardWidthMm, maxBoundX + EDGE_MARGIN, padMaxX + EDGE_MARGIN, 65);
+    const reqHeight = Math.max(boardHeightMm, maxBoundY + EDGE_MARGIN, padMaxY + EDGE_MARGIN, 50);
+
+    const effectiveWidth = Math.ceil(reqWidth / 5) * 5;
+    const effectiveHeight = Math.ceil(reqHeight / 5) * 5;
 
     // Net grouping via DSU: identify GND and power nets
     const parent = new Map<string, string>();
@@ -364,8 +549,8 @@ export class PcbGenerator {
     const { tracks: routedTracks, vias } = PcbAutoRouter.route(
       pads,
       routableWires,
-      boardWidthMm,
-      boardHeightMm,
+      effectiveWidth,
+      effectiveHeight,
       { defaultSignalWidthMm: 0.35, powerTrackWidthMm: 0.8 },
       physicalComponents
     );
@@ -384,8 +569,8 @@ export class PcbGenerator {
     let gndStitchVia: PcbPad | null = null;
     if (gndPads.length > 0 && !pads.some((p) => p.componentId === 'VIA' && p.netId === 'GND')) {
       const gPad = gndPads[0];
-      const vx = Math.min(boardWidthMm - 4, Math.max(4, gPad.x + 2.54));
-      const vy = Math.min(boardHeightMm - 4, Math.max(4, gPad.y + 2.54));
+      const vx = Math.min(effectiveWidth - 4, Math.max(4, gPad.x + 2.54));
+      const vy = Math.min(effectiveHeight - 4, Math.max(4, gPad.y + 2.54));
       gndStitchVia = {
         id: `via_gnd_stitch_${Date.now()}`,
         componentId: 'VIA',
@@ -428,8 +613,8 @@ export class PcbGenerator {
                 gndTrackWidth,
                 routedTracks,
                 pads,
-                boardWidthMm,
-                boardHeightMm
+                effectiveWidth,
+                effectiveHeight
               );
               if (route && route.score < bestScore) {
                 bestScore = route.score;
@@ -459,12 +644,40 @@ export class PcbGenerator {
           if (bestTo !== -1) {
             const p1 = allGndNodes[bestFrom];
             const p2 = allGndNodes[bestTo];
-            bestRoute = {
-              waypoints: compute45RoutePoints(p1, p2),
-              layer: gndLayer,
-              needsVia: false,
-              score: minEuclid,
-            };
+            const d45 = compute45RoutePoints(p1, p2);
+            const otherLayer: 'top_copper' | 'bottom_copper' = gndLayer === 'bottom_copper' ? 'top_copper' : 'bottom_copper';
+            if (isRouteClear(d45, gndLayer, gndTrackWidth, routedTracks, pads)) {
+              bestRoute = {
+                waypoints: d45,
+                layer: gndLayer,
+                needsVia: false,
+                score: minEuclid,
+              };
+            } else if (isRouteClear(d45, otherLayer, gndTrackWidth, routedTracks, pads)) {
+              bestRoute = {
+                waypoints: d45,
+                layer: otherLayer,
+                needsVia: true,
+                score: minEuclid + 15,
+              };
+            } else {
+              const inv45 = computeInverted45RoutePoints(p1, p2);
+              if (isRouteClear(inv45, otherLayer, gndTrackWidth, routedTracks, pads)) {
+                bestRoute = {
+                  waypoints: inv45,
+                  layer: otherLayer,
+                  needsVia: true,
+                  score: minEuclid + 20,
+                };
+              } else if (isRouteClear(inv45, gndLayer, gndTrackWidth, routedTracks, pads)) {
+                bestRoute = {
+                  waypoints: inv45,
+                  layer: gndLayer,
+                  needsVia: false,
+                  score: minEuclid + 10,
+                };
+              }
+            }
           }
         }
 
@@ -517,13 +730,26 @@ export class PcbGenerator {
     }
 
     // Run Design Rule Checks
-    const drcErrors = this.runDrc(pads, routedTracks, boardWidthMm, boardHeightMm);
+    const drcErrors = this.runDrc(pads, routedTracks, effectiveWidth, effectiveHeight);
+
+    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 4mm from corners
+    const cornerInset = 4.0;
+    const mountingHoles = [
+      { x: cornerInset, y: cornerInset, diameterMm: 3.2 },
+      { x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
+      { x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+      { x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+    ];
 
     return {
-      widthMm: boardWidthMm,
-      heightMm: boardHeightMm,
+      widthMm: effectiveWidth,
+      heightMm: effectiveHeight,
       boardThicknessMm: 1.6,
       copperLayers: 2,
+      units: 'mm',
+      gridSizeMm: 2.54,
+      mountingHoles,
+      edgeClearanceMm: EDGE_MARGIN,
       pads,
       tracks: routedTracks,
       components: placedComponents,
@@ -558,21 +784,71 @@ export class PcbGenerator {
       };
     };
 
+    const spec = resolvePhysicalSpec({ ...comp });
+
+    // 0. Microcontroller Dev Boards & Modules with verified multi-pin headers
+    // Checked BEFORE DIP IC check, so Arduino Uno (mentions ATmega328P) and Mega never fall into DIP-28!
+    if (
+      spec.placementClass === 'dev-board' ||
+      spec.placementClass === 'module-breadboard' ||
+      upperType.includes('BOARD') ||
+      upperType.includes('ARDUINO') ||
+      upperType.includes('UNO') ||
+      upperType.includes('MEGA') ||
+      upperType.includes('ESP32') ||
+      upperType.includes('PICO') ||
+      upperType.includes('LCD1602') ||
+      upperType.includes('OLED') ||
+      upperType.includes('SERVO')
+    ) {
+      if (spec.pads && spec.pads.length > 0) {
+        spec.pads.forEach((sp) => {
+          const pt = transformCoord(sp.xMm, sp.yMm);
+          pads.push({
+            id: `pad_${comp.id}_${sp.pinId}`,
+            componentId: comp.id,
+            pinId: String(sp.pinId),
+            x: pt.x,
+            y: pt.y,
+            shape: sp.shape === 'rect' ? 'rect' : 'round',
+            diameterMm: sp.padDiameterMm || 1.8,
+            holeMm: sp.drillMm || 0.9,
+            layer: 'all',
+          });
+        });
+        return pads;
+      }
+    }
+
     // 1. DIP ICs (NE555 Timer, LM358, LM741, ATmega, DIP-8, DIP-14, DIP-16, DIP-28)
     // Strictly adheres to JEDEC Top-View CCW Counter-Clockwise numbering
     if (
-      upperType.includes('555') ||
+      !upperType.includes('UNO') &&
+      !upperType.includes('MEGA') &&
+      spec.placementClass !== 'dev-board' &&
+      (upperType.includes('555') ||
       upperType.includes('TIMER') ||
       upperType.includes('DIP') ||
       upperFootprint.includes('DIP') ||
       ((upperType.includes('_IC') || upperType.startsWith('IC_') || upperType === 'IC' || upperType.includes('INTEGRATED_CIRCUIT')) && comp.pins.length >= 4) ||
       upperType.includes('OPAMP') ||
       upperType.includes('AMPLIFIER') ||
-      upperType.includes('ATMEGA')
+      upperType.includes('ATMEGA'))
     ) {
-      const is14or16 = upperFootprint.includes('DIP-14') || upperFootprint.includes('DIP-16');
-      const is28 = upperFootprint.includes('DIP-28') || upperType.includes('ATMEGA');
-      const pinCount = is28 ? 28 : is14or16 ? (upperFootprint.includes('DIP-16') ? 16 : 14) : Math.max(8, comp.pins.length);
+      const is14or16 =
+        upperFootprint.includes('DIP-14') ||
+        upperFootprint.includes('DIP-16') ||
+        upperType.includes('74HC') ||
+        upperType.includes('LM324') ||
+        upperType.includes('595') ||
+        upperType.includes('4017') ||
+        upperType.includes('2003') ||
+        upperType.includes('293') ||
+        comp.pins.length === 14 ||
+        comp.pins.length === 16;
+      const is28 = upperFootprint.includes('DIP-28') || upperType.includes('ATMEGA') || comp.pins.length === 28;
+      const is16 = upperFootprint.includes('DIP-16') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293') || comp.pins.length === 16;
+      const pinCount = is28 ? 28 : is14or16 ? (is16 ? 16 : 14) : Math.max(8, comp.pins.length);
       const pinsPerSide = Math.floor(pinCount / 2);
       const startX = -((pinsPerSide - 1) * 2.54) / 2;
 
@@ -764,14 +1040,14 @@ export class PcbGenerator {
       return pads;
     }
 
-    // 8. Capacitors: Polarized Electrolytic (5.08mm) vs Ceramic Disc (2.54mm)
+    // 8. Capacitors: Polarized Electrolytic (5.08mm) vs Ceramic Disc (5.08mm IPC standard / 3D model)
     if (upperType.includes('CAPACITOR')) {
       const isElectrolytic =
         upperType.includes('ELECTROLYTIC') ||
         upperType.includes('RADIAL') ||
         Boolean(comp.parameters?.polarized) ||
         (comp.value && (comp.value.includes('u') || comp.value.includes('µ') || comp.value.includes('U')));
-      const oxSpan = isElectrolytic ? 2.54 : 1.27;
+      const oxSpan = 2.54; // 5.08mm pitch (-2.54 to +2.54mm) strictly matching CapacitorCeramic3D leads and radial packages
 
       comp.pins.forEach((pin, idx) => {
         const ox = idx === 0 ? -oxSpan : oxSpan;
@@ -916,7 +1192,31 @@ export class PcbGenerator {
       return pads;
     }
 
-    // 8. Generic fallback
+    // 14. Authoritative physical spec pads fallback for all registered catalog components
+    if (spec && spec.pads && spec.pads.length >= comp.pins.length && spec.pads.length > 0) {
+      comp.pins.forEach((pin, idx) => {
+        const sp =
+          spec.pads!.find((p) => p.pinId === pin.id || p.pinId.toLowerCase() === (pin.name || '').toLowerCase()) ||
+          spec.pads![idx];
+        if (sp) {
+          const pt = transformCoord(sp.xMm, sp.yMm);
+          pads.push({
+            id: `pad_${comp.id}_${pin.id}`,
+            componentId: comp.id,
+            pinId: pin.id,
+            x: pt.x,
+            y: pt.y,
+            shape: sp.shape === 'rect' ? 'rect' : 'round',
+            diameterMm: sp.padDiameterMm || 1.8,
+            holeMm: sp.drillMm || 0.9,
+            layer: 'all',
+          });
+        }
+      });
+      return pads;
+    }
+
+    // 15. Generic fallback
     comp.pins.forEach((pin, idx) => {
       let ox = 0;
       let oy = 0;

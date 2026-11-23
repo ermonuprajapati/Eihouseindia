@@ -9,6 +9,7 @@ import { Box, Layers, Hand } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
+import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
 
 export interface SolderMaskTheme {
   name: string;
@@ -222,21 +223,24 @@ export function Pcb3dViewer({
   useEffect(() => {
     if (!cameraPreset || !controlsRef.current) return;
     const ctrl = controlsRef.current;
+    const maxDim = Math.max(pcb.widthMm, pcb.heightMm);
+    const topDist = Math.max(130, maxDim * 1.55);
+    const isoDist = Math.max(100, maxDim * 1.35);
     if (cameraPreset === 'iso' || cameraPreset === 'reset') {
-      ctrl.object.position.set(0, 80, 100);
+      ctrl.object.position.set(0, isoDist * 0.8, isoDist);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'top') {
-      ctrl.object.position.set(0, 130, 0.1);
+      ctrl.object.position.set(0, topDist, 0.1);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'bot') {
-      ctrl.object.position.set(0, -130, 0.1);
+      ctrl.object.position.set(0, -topDist, 0.1);
       ctrl.target.set(0, 0, 0);
     } else if (cameraPreset === 'front') {
-      ctrl.object.position.set(0, 0, 120);
+      ctrl.object.position.set(0, 0, topDist);
       ctrl.target.set(0, 0, 0);
     }
     ctrl.update();
-  }, [cameraPreset]);
+  }, [cameraPreset, pcb.widthMm, pcb.heightMm]);
 
   // High-Resolution Crisp Silkscreen Texture Decal
   const silkscreenTexture = useMemo(() => {
@@ -393,10 +397,19 @@ export function Pcb3dViewer({
         ctx.lineTo(bw / 2 + 2.8 * scale, 0);
         ctx.stroke();
         ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (upperType.includes('IC') || upperType.includes('TIMER') || comp.footprint?.includes('DIP') || upperType.includes('555')) {
+      } else if (
+        upperType.includes('IC') ||
+        upperType.includes('TIMER') ||
+        comp.footprint?.includes('DIP') ||
+        upperType.includes('555') ||
+        upperType.includes('74HC') ||
+        upperType.includes('358') ||
+        upperType.includes('324')
+      ) {
         // DIP IC with Pin 1 notch and Pin 1 dot
-        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16');
-        const bLen = (isDip14Or16 ? 19.5 : 10.0) * scale;
+        const isDip28 = comp.footprint?.includes('DIP-28') || upperType.includes('ATMEGA');
+        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16') || upperType.includes('74HC') || upperType.includes('324') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293');
+        const bLen = (isDip28 ? 35.5 : isDip14Or16 ? 19.5 : 10.0) * scale;
         const bWid = 6.8 * scale;
         ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
         // Semicircular notch on the left (-X) side
@@ -410,6 +423,44 @@ export function Pcb3dViewer({
         ctx.font = 'bold 8px monospace';
         ctx.fillText('1', -bLen / 2 + 1.8 * scale, -bWid / 2 + 3.4 * scale);
         ctx.fillText(comp.designator, -10, 2);
+      } else if (
+        upperType.includes('UNO') ||
+        upperType.includes('NANO') ||
+        upperType.includes('MEGA') ||
+        upperType.includes('ESP32') ||
+        upperType.includes('PICO') ||
+        comp.footprint?.includes('BOARD')
+      ) {
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 68.6) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 53.4) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        // USB port indicator at top-left edge
+        ctx.strokeRect(-bw / 2, -5 * scale, 9 * scale, 10 * scale);
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(comp.designator, -bw / 2 + 12 * scale, 3 * scale);
+      } else if (
+        upperType.includes('MODULE') ||
+        upperType.includes('LCD1602') ||
+        upperType.includes('OLED') ||
+        upperType.includes('SERVO')
+      ) {
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 30) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 20) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(comp.designator, -bw / 2 + 4 * scale, 2 * scale);
+      } else if (upperType.includes('TO220') || upperType.includes('IRLZ44N') || upperType.includes('7805')) {
+        const bw = 10.4 * scale;
+        const bh = 4.6 * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.beginPath();
+        ctx.moveTo(-bw / 2, -bh / 2 + 1.2 * scale);
+        ctx.lineTo(bw / 2, -bh / 2 + 1.2 * scale);
+        ctx.stroke();
+        ctx.font = 'bold 9px monospace';
+        ctx.fillText(comp.designator, -bw / 2, bh / 2 + 7 * scale);
       } else if (
         upperType.includes('HEADER') ||
         upperType.includes('CONNECTOR') ||
@@ -426,8 +477,11 @@ export function Pcb3dViewer({
         ctx.font = 'bold 13px monospace';
         ctx.fillText(comp.designator, -12, -5.5 * scale);
       } else {
-        ctx.strokeRect(-5 * scale, -5 * scale, 10 * scale, 10 * scale);
-        ctx.fillText(comp.designator, -12, -7 * scale);
+        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
+        const bw = (spec.bodyDimensionsMm?.width || 10) * scale;
+        const bh = (spec.bodyDimensionsMm?.depth || 8) * scale;
+        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+        ctx.fillText(comp.designator, -bw / 2, -bh / 2 - 2 * scale);
       }
       ctx.restore();
     });
@@ -778,10 +832,12 @@ export function Pcb3dViewer({
                   <cylinderGeometry args={[r, r, 0.028, 20]} />
                 )}
               </mesh>
-              {/* Silver Solder Fillet Ring around through-hole pin */}
-              <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
-                <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
-              </mesh>
+              {/* Silver Solder Fillet Ring around through-hole pin (omitted on bare vias) */}
+              {!isVia && (
+                <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
+                  <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
+                </mesh>
+              )}
               {/* Bottom Pad / Annular Ring */}
               <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
                 {isRect ? (
@@ -797,6 +853,39 @@ export function Pcb3dViewer({
               {/* Hollow Drill Hole Center */}
               <mesh position={[0, 0, 0]} material={materials.drillHole}>
                 <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.1, 16]} />
+              </mesh>
+            </group>
+          );
+        })}
+
+        {/* 5.1 Plated M3 Corner Mounting Holes (ENIG Gold Ring, Plated Barrel, Bore) */}
+        {(pcb.mountingHoles || [
+          { x: 4.0, y: 4.0, diameterMm: 3.2 },
+          { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+          { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+          { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+        ]).map((hole, hIdx) => {
+          const hx = hole.x - halfW;
+          const hz = hole.y - halfH;
+          const holeR = (hole.diameterMm || 3.2) / 2;
+          const padR = holeR + 1.4; // 6.0mm annular ring
+          return (
+            <group key={`m3_mount_${hIdx}`} position={[hx, 0, hz]}>
+              {/* Top Gold Annular Ring */}
+              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
+                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
+              </mesh>
+              {/* Bottom Gold Annular Ring */}
+              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
+                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
+              </mesh>
+              {/* Plated Through Hole Copper Inner Barrel */}
+              <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
+                <cylinderGeometry args={[holeR + 0.05, holeR + 0.05, thickness + 0.04, 20]} />
+              </mesh>
+              {/* Hollow Drill Hole Bore */}
+              <mesh position={[0, 0, 0]} material={materials.drillHole}>
+                <cylinderGeometry args={[holeR, holeR, thickness + 0.1, 20]} />
               </mesh>
             </group>
           );

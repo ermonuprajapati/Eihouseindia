@@ -4,14 +4,29 @@ import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { PcbLayout, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
 import type { Pcb3dViewerProps } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
-import { Pcb2dEditor } from './Pcb2dEditor';
 import {
   Box,
   Sliders,
   X,
   Compass,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
+
+const Pcb2dEditor = dynamic(
+  () => import('./Pcb2dEditor').then((m) => m.Pcb2dEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-[#070D18] font-mono text-xs text-emerald-400">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 animate-spin text-emerald-500" />
+          <span>LOADING 2D PCB CAD EDITOR...</span>
+        </div>
+      </div>
+    ),
+  }
+);
 
 const Pcb3dViewer = dynamic(
   () => import('@/modules/engineering-lab/pcb-engine/Pcb3dViewer').then((m) => m.Pcb3dViewer),

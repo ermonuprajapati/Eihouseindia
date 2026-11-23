@@ -3,6 +3,11 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
+import {
+  resolvePhysicalSpec,
+  resolveComponentMetadata,
+} from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
+import { getSimulationBadgeInfo } from '@/modules/engineering-lab/circuit-engine/component-categories-25';
 import { Sliders, RotateCw, Trash2, Zap, X, FlipHorizontal, ChevronLeft, ChevronRight, Copy, Cable, Check, Unplug, Cpu } from 'lucide-react';
 
 interface PropertiesInspectorProps {
@@ -675,6 +680,50 @@ export function PropertiesInspector({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3.5 space-y-4 text-xs scrollbar-thin scrollbar-thumb-slate-800">
+        {/* COMPONENT IDENTITY & PHYSICAL CLASSIFICATION CARD */}
+        {(() => {
+          const catComp = COMPONENT_CATALOG.find((c) => c.type === component.type);
+          const meta = resolveComponentMetadata(component);
+          const compName = catComp?.name || component.label || component.type.replace(/_/g, ' ');
+          const partNum = meta.partNumber || catComp?.partNumber || component.parameters?.partNumber || component.value || '-';
+          const mfr = meta.manufacturer || catComp?.manufacturer || component.parameters?.manufacturer || 'Generic Standard';
+          const tier = (component.libraryTier || catComp?.libraryTier || meta.libraryTier || 'generic').toLowerCase();
+          const simInfo = getSimulationBadgeInfo(component.simulationStatus || catComp?.simulationStatus || 'full_mna');
+
+          const tierColor =
+            tier === 'real'
+              ? 'bg-purple-950/80 text-purple-300 border-purple-700/60'
+              : tier === 'industrial'
+              ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+              : 'bg-slate-900 text-slate-300 border-slate-700/60';
+
+          return (
+            <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-white truncate" title={compName}>
+                    {compName}
+                  </h4>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                    <span>MPN: </span>
+                    <span className="text-cyan-300 font-semibold">{partNum}</span>
+                    <span className="text-slate-600 mx-1">|</span>
+                    <span className="text-slate-400">{mfr}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${tierColor}`}>
+                    {tier === 'real' ? 'Real Part' : tier === 'industrial' ? 'Industrial' : 'Generic'}
+                  </span>
+                  <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${simInfo.badgeClass}`}>
+                    {simInfo.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* SECTION 1: REFERENCE DESIGNATOR & LABEL */}
         <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
           <div className="text-[10px] uppercase font-mono text-emerald-400 font-bold tracking-wider flex items-center justify-between">
@@ -2032,130 +2081,200 @@ export function PropertiesInspector({
                 {/* 5. Physical Metadata & Accurate Footprint Preview */}
                 {(() => {
                   const catComp = COMPONENT_CATALOG.find((c) => c.type === component.type);
-                  const spec = component.physicalSpec || catComp?.physicalSpec;
+                  const spec = component.physicalSpec || catComp?.physicalSpec || resolvePhysicalSpec(component);
                   const isMcu =
                     component.type.startsWith('ARDUINO_') ||
                     component.type.startsWith('ESP32') ||
                     component.type.startsWith('RASPBERRY_PI') ||
                     component.type.includes('MCU');
 
-                  const widthMm = spec?.dimensionsMm?.width ?? (isMcu ? 68.6 : 19.0);
-                  const heightMm = spec?.dimensionsMm?.height ?? (isMcu ? 53.4 : 6.3);
-                  const depthMm = spec?.dimensionsMm?.depth ?? (isMcu ? 15.0 : 4.5);
+                  const widthMm = spec?.bodyDimensionsMm?.width ?? spec?.dimensionsMm?.width ?? (isMcu ? 68.6 : 19.0);
+                  const heightMm = spec?.bodyDimensionsMm?.height ?? spec?.dimensionsMm?.height ?? (isMcu ? 53.4 : 6.3);
+                  const depthMm = spec?.bodyDimensionsMm?.depth ?? spec?.dimensionsMm?.depth ?? (isMcu ? 15.0 : 4.5);
+                  const cwMm = spec?.courtyardMm?.width ?? (widthMm + 2.0);
+                  const cdMm = spec?.courtyardMm?.depth ?? (depthMm + 2.0);
                   const pitchMm = spec?.pinPitchMm ?? 2.54;
-                  const mountType = spec?.mountingType ?? (isMcu ? 'Socketed / THT' : 'Through-Hole');
-                  const pkgType = spec?.packageType ?? component.packageType ?? 'Module';
+                  const mountType = spec?.mountingType ?? (isMcu ? 'Socketed' : 'THT');
+                  const pkgCode = spec?.packageCode ?? spec?.packageType ?? component.packageType ?? 'Module';
+                  const tier = component.libraryTier ?? 'generic';
+                  const placementClass = spec?.placementClass ?? component.placementClass ?? 'single-passive';
+
+                  // Compute dynamic auto-scaled KiCad footprint bounding box
+                  const pads = spec?.pads || [];
+                  let minX = -cwMm / 2;
+                  let maxX = cwMm / 2;
+                  let minY = -cdMm / 2;
+                  let maxY = cdMm / 2;
+
+                  pads.forEach((p) => {
+                    const r = (p.padDiameterMm || 1.8) / 2;
+                    if (p.xMm - r < minX) minX = p.xMm - r;
+                    if (p.xMm + r > maxX) maxX = p.xMm + r;
+                    if (p.yMm - r < minY) minY = p.yMm - r;
+                    if (p.yMm + r > maxY) maxY = p.yMm + r;
+                  });
+
+                  const padMargin = 2.5;
+                  const vbX = minX - padMargin;
+                  const vbY = minY - padMargin;
+                  const vbW = Math.max(12, (maxX - minX) + 2 * padMargin);
+                  const vbH = Math.max(12, (maxY - minY) + 2 * padMargin);
 
                   return (
                     <div className="space-y-2 pt-1 border-t border-slate-800/80">
                       {/* Physical Spec Engineering Data Card */}
                       <div className="grid grid-cols-2 gap-1.5 p-2 rounded bg-slate-950 border border-slate-800/80 text-[10px] font-mono">
                         <div>
-                          <span className="text-slate-500 block">Dimensions</span>
+                          <span className="text-slate-500 block">Body Dimensions</span>
                           <span className="text-cyan-400 font-bold">
-                            {widthMm} × {heightMm} × {depthMm} mm
+                            {widthMm} × {depthMm} × {heightMm} mm
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Courtyard Envelope</span>
+                          <span className="text-emerald-400 font-bold">
+                            {cwMm.toFixed(1)} × {cdMm.toFixed(1)} mm
                           </span>
                         </div>
                         <div>
                           <span className="text-slate-500 block">Pin Pitch</span>
                           <span className="text-amber-400 font-bold">
-                            {pitchMm} mm (100 mil)
+                            {pitchMm} mm ({Math.round((pitchMm / 2.54) * 100)} mil)
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Package Tech</span>
-                          <span className="text-purple-300 font-bold">{pkgType}</span>
+                          <span className="text-slate-500 block">Package / Code</span>
+                          <span className="text-purple-300 font-bold">{pkgCode}</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Mounting Style</span>
+                          <span className="text-slate-500 block">Mounting Type</span>
                           <span className="text-emerald-400 font-bold">{mountType}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Library Tier</span>
+                          <span className="text-indigo-400 font-bold uppercase">{tier}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Placement Class</span>
+                          <span className="text-slate-300 font-bold truncate block">{placementClass}</span>
                         </div>
                       </div>
 
                       {/* Accurate KiCad-Style Footprint SVG Preview */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[9px] uppercase font-mono text-slate-400">
-                          <span>PCB Pad &amp; Header Footprint Preview</span>
-                          <span className="text-slate-600 font-bold">1:1 Scaled Vector</span>
+                          <span>KiCad PCB Vector Footprint Preview</span>
+                          <span className="text-slate-600 font-bold">IPC-7351 Auto-Scaled</span>
                         </div>
-                        <div className="relative w-full h-24 rounded bg-slate-950 border border-slate-800/80 flex items-center justify-center p-2 overflow-hidden">
+                        <div className="relative w-full h-28 rounded bg-[#07131F] border border-slate-800/80 flex items-center justify-center p-2 overflow-hidden shadow-inner">
                           <svg
-                            viewBox="-60 -35 120 70"
-                            className="w-full h-full max-h-20"
-                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}
+                            viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
+                            className="w-full h-full max-h-24"
+                            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }}
                           >
-                            {/* PCB Board Outline with Silk Border */}
+                            {/* Dark PCB Substrate */}
                             <rect
-                              x="-52"
-                              y="-28"
-                              width="104"
-                              height="56"
-                              rx="3"
-                              fill="#031E2A"
+                              x={vbX}
+                              y={vbY}
+                              width={vbW}
+                              height={vbH}
+                              rx="1"
+                              fill="#091824"
                               stroke="#00878F"
-                              strokeWidth="1.2"
+                              strokeWidth={vbW > 50 ? '0.8' : '0.4'}
                             />
+
+                            {/* Dashed Courtyard Envelope */}
                             <rect
-                              x="-50"
-                              y="-26"
-                              width="100"
-                              height="52"
-                              rx="2"
-                              fill="none"
+                              x={-cwMm / 2}
+                              y={-cdMm / 2}
+                              width={cwMm}
+                              height={cdMm}
+                              rx="0.5"
+                              fill="#031E2A"
                               stroke="#00C4CC"
-                              strokeWidth="0.5"
-                              strokeDasharray="2,2"
-                              opacity="0.6"
+                              strokeWidth={vbW > 50 ? '0.5' : '0.25'}
+                              strokeDasharray="1.5,1.5"
+                              opacity="0.8"
                             />
 
-                            {/* 4 M3 Corner Mounting Holes with Annular Copper Pads */}
-                            <circle cx="-44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="-44" cy="-20" r="1.8" fill="#0B0F19" />
-                            <circle cx="44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="44" cy="-20" r="1.8" fill="#0B0F19" />
-                            <circle cx="-44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="-44" cy="20" r="1.8" fill="#0B0F19" />
-                            <circle cx="44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="44" cy="20" r="1.8" fill="#0B0F19" />
-
-                            {/* Center IC / Module Silkscreen Box */}
+                            {/* White Silkscreen Body Outline */}
                             <rect
-                              x="-20"
-                              y="-12"
-                              width="40"
-                              height="24"
-                              rx="1.5"
-                              fill="#08101E"
-                              stroke="#334155"
-                              strokeWidth="0.8"
+                              x={-widthMm / 2}
+                              y={-depthMm / 2}
+                              width={widthMm}
+                              height={depthMm}
+                              rx="0.4"
+                              fill="none"
+                              stroke="#F8FAFC"
+                              strokeWidth={vbW > 50 ? '0.6' : '0.3'}
+                              opacity="0.9"
                             />
+
+                            {/* Silkscreen Pin-1 Notch / Dot Indicator */}
+                            <circle
+                              cx={-widthMm / 2 + Math.min(1.2, widthMm * 0.1)}
+                              cy={-depthMm / 2 + Math.min(1.2, depthMm * 0.1)}
+                              r={Math.max(0.3, Math.min(0.8, widthMm * 0.04))}
+                              fill="#F8FAFC"
+                            />
+
+                            {/* Silkscreen Component Label */}
                             <text
                               x="0"
-                              y="1.5"
+                              y={-depthMm / 2 - 0.6}
                               fill="#94A3B8"
-                              fontSize="4"
+                              fontSize={Math.max(1.5, Math.min(3.2, vbW * 0.05))}
                               fontFamily="monospace"
                               textAnchor="middle"
                               fontWeight="bold"
                             >
-                              {component.footprint.split(':').pop() || 'FOOTPRINT'}
+                              {pkgCode}
                             </text>
 
-                            {/* Top Pad Header Strip */}
-                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
-                              <g key={`top-pad-${i}`}>
-                                <circle cx={px} cy="-23" r="1.8" fill="#F59E0B" />
-                                <circle cx={px} cy="-23" r="0.9" fill="#031E2A" />
-                              </g>
-                            ))}
+                            {/* Real Plated Pads with Gold Copper Plating, Drills & Pin Numbers */}
+                            {pads.map((pad, idx) => {
+                              const dia = pad.padDiameterMm || 1.8;
+                              const hole = pad.drillMm || 0.9;
+                              const isSquare = pad.shape === 'rect' || idx === 0 || pad.pinNumber === 1 || pad.pinNumber === '1';
 
-                            {/* Bottom Pad Header Strip */}
-                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
-                              <g key={`btm-pad-${i}`}>
-                                <circle cx={px} cy="23" r="1.8" fill="#F59E0B" />
-                                <circle cx={px} cy="23" r="0.9" fill="#031E2A" />
-                              </g>
-                            ))}
+                              return (
+                                <g key={`pad-${pad.pinId}-${idx}`}>
+                                  {isSquare ? (
+                                    <rect
+                                      x={pad.xMm - dia / 2}
+                                      y={pad.yMm - dia / 2}
+                                      width={dia}
+                                      height={dia}
+                                      fill="#F59E0B"
+                                      stroke="#D97706"
+                                      strokeWidth={dia * 0.08}
+                                    />
+                                  ) : (
+                                    <circle
+                                      cx={pad.xMm}
+                                      cy={pad.yMm}
+                                      r={dia / 2}
+                                      fill="#F59E0B"
+                                      stroke="#D97706"
+                                      strokeWidth={dia * 0.08}
+                                    />
+                                  )}
+                                  <circle cx={pad.xMm} cy={pad.yMm} r={hole / 2} fill="#031E2A" />
+                                  <text
+                                    x={pad.xMm}
+                                    y={pad.yMm + dia * 0.18}
+                                    fill="#031E2A"
+                                    fontSize={Math.max(0.8, dia * 0.52)}
+                                    fontFamily="monospace"
+                                    textAnchor="middle"
+                                    fontWeight="bold"
+                                  >
+                                    {pad.pinNumber}
+                                  </text>
+                                </g>
+                              );
+                            })}
                           </svg>
                         </div>
                       </div>

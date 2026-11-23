@@ -13,6 +13,7 @@ export interface Wire3DTubeProps {
   isHighlighted?: boolean;
   isSimulating?: boolean;
   current?: number;
+  obstacleApexY?: number;
   onClick?: (id: string) => void;
   onContextMenu?: (e: THREE.Event, id: string) => void;
 }
@@ -26,6 +27,7 @@ export function Wire3DTube({
   isHighlighted = false,
   isSimulating = false,
   current,
+  obstacleApexY,
   onClick,
 }: Wire3DTubeProps) {
   // Generate realistic Dupont jumper arched CatmullRomCurve3
@@ -48,6 +50,11 @@ export function Wire3DTube({
       .multiplyScalar(0.5);
     const archHeight = Math.max(3.0, Math.min(12.0, dist * 0.18));
     mid.y += archHeight;
+
+    // Obstacle avoidance: guarantee wire apex clears all component bodies along path
+    if (obstacleApexY !== undefined && obstacleApexY > mid.y) {
+      mid.y = obstacleApexY;
+    }
 
     // Route around component bounding boxes by adding subtle lateral curvature
     const dir = new THREE.Vector3().subVectors(end, start);
@@ -78,7 +85,7 @@ export function Wire3DTube({
       dupontStartPos: start.clone().add(new THREE.Vector3(0, 3.0, 0)),
       dupontEndPos: end.clone().add(new THREE.Vector3(0, 3.0, 0)),
     };
-  }, [start, end]);
+  }, [start, end, obstacleApexY]);
 
   // Clean up geometry on unmount to prevent GPU memory leaks
   useEffect(() => {

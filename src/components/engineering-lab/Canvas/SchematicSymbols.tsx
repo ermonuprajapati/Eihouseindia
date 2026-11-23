@@ -1,12 +1,14 @@
 'use client';
 
 import React from 'react';
-import { CircuitComponent } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
 
 interface SchematicSymbolProps {
   component: CircuitComponent;
-  isSelected: boolean;
-  isSimulating: boolean;
+  isSelected?: boolean;
+  isSimulating?: boolean;
+  wires?: CircuitWire[];
+  wireCurrents?: Record<string, number>;
   simState?: {
     voltage: number;
     current: number;
@@ -24,6 +26,26 @@ interface SchematicSymbolProps {
     redBrightness?: number;
     greenBrightness?: number;
     blueBrightness?: number;
+    [key: string]: unknown;
+  };
+  simulationState?: {
+    voltage: number;
+    current: number;
+    on?: boolean;
+    brightness?: number;
+    status?: 'NORMAL' | 'WARNING' | 'BURNED';
+    burned?: boolean;
+    fault?: string;
+    digitalOut?: number;
+    pwrLed?: boolean;
+    channels?: { r: number; g: number; b: number };
+    onRed?: boolean;
+    onGreen?: boolean;
+    onBlue?: boolean;
+    redBrightness?: number;
+    greenBrightness?: number;
+    blueBrightness?: number;
+    [key: string]: unknown;
   };
 }
 
@@ -35,8 +57,12 @@ export function SchematicSymbol({
   component,
   isSelected,
   isSimulating,
-  simState,
+  wires,
+  wireCurrents,
+  simState: incomingSimState,
+  simulationState,
 }: SchematicSymbolProps) {
+  const simState = incomingSimState || simulationState;
   const { type, value, rotation, mirrored } = component;
   const designator = component.designator || component.label.split(' ')[0] || component.type.slice(0, 3);
   const strokeColor = isSelected ? '#34D399' : '#94A3B8';
@@ -387,81 +413,142 @@ export function SchematicSymbol({
           </g>
         );
 
-      case 'TIMER_555': {
+      case 'TIMER_555':
+      case 'OPAMP_LM358':
+      case 'OPAMP_LM324':
+      case 'IC_74HC14':
+      case 'IC_74HC04':
+      case 'IC_74HC00':
+      case 'IC_74HC08':
+      case 'IC_74HC32':
+      case 'IC_74HC86':
+      case 'LOGIC_74HC595':
+      case 'LOGIC_CD4017':
+      case 'IC_ULN2003':
+      case 'IC_L293D': {
         const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
+        const t = component.type;
+        const icName =
+          t === 'TIMER_555' ? 'NE555' :
+          t === 'OPAMP_LM358' ? 'LM358' :
+          t === 'OPAMP_LM324' ? 'LM324' :
+          t === 'IC_74HC14' ? '74HC14' :
+          t === 'IC_74HC04' ? '74HC04' :
+          t === 'IC_74HC00' ? '74HC00' :
+          t === 'IC_74HC08' ? '74HC08' :
+          t === 'IC_74HC32' ? '74HC32' :
+          t === 'IC_74HC86' ? '74HC86' :
+          t === 'LOGIC_74HC595' ? '74HC595' :
+          t === 'LOGIC_CD4017' ? 'CD4017' :
+          t === 'IC_ULN2003' ? 'ULN2003A' :
+          t === 'IC_L293D' ? 'L293D' :
+          component.value || component.label || 'IC';
+
+        const subtitle =
+          t === 'TIMER_555' ? 'PRECISION TIMER • DIP-8' :
+          t === 'OPAMP_LM358' ? 'DUAL OP-AMP • DIP-8' :
+          t === 'OPAMP_LM324' ? 'QUAD OP-AMP • DIP-14' :
+          t === 'IC_74HC14' ? 'HEX SCHMITT INV • DIP-14' :
+          t === 'IC_74HC04' ? 'HEX INVERTER • DIP-14' :
+          t === 'IC_74HC00' ? 'QUAD NAND • DIP-14' :
+          t === 'IC_74HC08' ? 'QUAD AND • DIP-14' :
+          t === 'IC_74HC32' ? 'QUAD OR • DIP-14' :
+          t === 'IC_74HC86' ? 'QUAD XOR • DIP-14' :
+          t === 'LOGIC_74HC595' ? '8-BIT SHIFT REG • DIP-16' :
+          t === 'LOGIC_CD4017' ? 'DECADE COUNTER • DIP-16' :
+          t === 'IC_ULN2003' ? 'DARLINGTON ARRAY • DIP-16' :
+          t === 'IC_L293D' ? 'MOTOR DRIVER • DIP-16' :
+          `DIP-${component.pins.length || 14}`;
+
+        const isDIP16 = component.pins.length >= 16 || t.includes('595') || t.includes('4017') || t.includes('2003') || t.includes('293');
+        const isDIP8 = component.pins.length <= 8 && (t.includes('555') || t.includes('358'));
+        const bodyH = isDIP16 ? 130 : isDIP8 ? 80 : 110;
+        const bodyY = isDIP16 ? -65 : isDIP8 ? -40 : -55;
+        const notchY = bodyY;
+        const dotY = isDIP16 ? -52.5 : isDIP8 ? -30 : -45;
+
         return (
           <g>
-            {/* Professional DIP-8 IC Body */}
+            {/* Professional KiCad/IEEE Dual-Inline Package IC Body */}
             <rect
-              x="-40"
-              y="-45"
-              width="80"
-              height="90"
+              x="-32"
+              y={bodyY}
+              width="64"
+              height={bodyH}
               rx="4"
               stroke={isBurned ? '#EF4444' : strokeColor}
               strokeWidth="2"
               fill={isBurned ? '#1C1917' : fillColor}
             />
-            {isBurned && (
-              <text
-                x="0"
-                y="-14"
-                fill="#EF4444"
-                fontSize="8"
-                fontWeight="bold"
-                fontFamily="monospace"
-                textAnchor="middle"
-              >
-                💥 OVERVOLT
-              </text>
-            )}
             {/* Top Alignment Notch */}
             <path
-              d="M -8,-45 A 8,8 0 0,0 8,-45"
+              d={`M -7,${notchY} A 7,7 0 0,0 7,${notchY}`}
               stroke={isBurned ? '#EF4444' : strokeColor}
               strokeWidth="1.5"
               fill="none"
             />
-            {/* IC Identifier */}
+            {/* Pin 1 White Index Indicator Dot */}
+            <circle cx="-24" cy={dotY} r="2.2" fill="#F8FAFC" />
+
+            {/* IC Center Identifier Label */}
             <text
               x="0"
-              y="-28"
+              y="-2"
               fill={isBurned ? '#EF4444' : '#F8FAFC'}
-              fontSize="11"
+              fontSize="10"
               fontWeight="bold"
               fontFamily="monospace"
               textAnchor="middle"
             >
-              NE555
+              {icName}
+            </text>
+            <text
+              x="0"
+              y="10"
+              fill="#64748B"
+              fontSize="5.5"
+              fontFamily="monospace"
+              textAnchor="middle"
+            >
+              {subtitle}
             </text>
 
-            {/* Left Pins: 1 GND, 2 TRIG, 4 RESET, 6 THRESH */}
-            <g fontSize="8" fontFamily="monospace" fontWeight="bold">
-              <text x="-34" y="-27" fill="#64748B">GND (1)</text>
-              <text x="-34" y="-7" fill="#38BDF8">TRG (2)</text>
-              <text x="-34" y="13" fill="#F59E0B">RST (4)</text>
-              <text x="-34" y="33" fill="#38BDF8">THR (6)</text>
-            </g>
+            {/* Terminal Leads and Dynamic Pin Labels */}
+            {component.pins.map((pin) => {
+              const isLeft = pin.x < 0;
+              const upperName = pin.name?.toUpperCase() || '';
+              const isVcc = upperName.includes('VCC') || upperName.includes('VDD') || upperName.includes('V+') || pin.id === '14' || pin.id === '16' || pin.id === '8';
+              const isGnd = upperName.includes('GND') || upperName.includes('VSS') || upperName.includes('V-') || upperName.includes('COM_E') || pin.id === '7' || pin.id === '4';
+              const isOut = pin.pinType === 'output' || upperName.includes('Y') || upperName.includes('OUT') || upperName.startsWith('Q');
+              const pinColor = isVcc ? '#EF4444' : isGnd ? '#64748B' : isOut ? '#10B981' : '#38BDF8';
 
-            {/* Right Pins: 7 DISCH, 3 OUT, 5 CTRL, 8 VCC */}
-            <g fontSize="8" fontFamily="monospace" fontWeight="bold" textAnchor="end">
-              <text x="34" y="-27" fill="#A855F7">DIS (7)</text>
-              <text x="34" y="-7" fill="#10B981">OUT (3)</text>
-              <text x="34" y="13" fill="#64748B">CV (5)</text>
-              <text x="34" y="33" fill="#EF4444">VCC (8)</text>
-            </g>
-
-            {/* Output State Indicator */}
-            {isSimulating && (
-              <circle
-                cx="0"
-                cy="18"
-                r="6"
-                fill={simState?.on ? '#10B981' : '#334155'}
-                stroke="#64748B"
-                strokeWidth="1"
-              />
-            )}
+              return (
+                <g key={`dip-pin-${pin.id}`}>
+                  {/* Lead Stub from Body to Component Terminal Boundary */}
+                  <line
+                    x1={isLeft ? -40 : 32}
+                    y1={pin.y}
+                    x2={isLeft ? -32 : 40}
+                    y2={pin.y}
+                    stroke={strokeColor}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  {/* Crisp Silkscreen Text */}
+                  <text
+                    x={isLeft ? -28 : 28}
+                    y={pin.y + 2.5}
+                    fill={pinColor}
+                    fontSize="6.5"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                    textAnchor={isLeft ? 'start' : 'end'}
+                  >
+                    {isLeft ? `${pin.name} (${pin.id})` : `(${pin.id}) ${pin.name}`}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         );
       }
@@ -551,27 +638,7 @@ export function SchematicSymbol({
         );
       }
 
-      case 'OPAMP_LM358':
-        return (
-          <g>
-            {/* OpAmp Triangle */}
-            <polygon points="-30,-25 25,0 -30,25" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
-            {/* Inverting (-) symbol */}
-            <line x1="-24" y1="-12" x2="-16" y2="-12" stroke="#94A3B8" strokeWidth="2" />
-            {/* Non-inverting (+) symbol */}
-            <line x1="-24" y1="12" x2="-16" y2="12" stroke="#94A3B8" strokeWidth="2" />
-            <line x1="-20" y1="8" x2="-20" y2="16" stroke="#94A3B8" strokeWidth="2" />
-            {/* Input / Output Leads */}
-            <line x1="-35" y1="-12" x2="-30" y2="-12" stroke={strokeColor} strokeWidth="2" />
-            <line x1="-35" y1="12" x2="-30" y2="12" stroke={strokeColor} strokeWidth="2" />
-            <line x1="25" y1="0" x2="35" y2="0" stroke={strokeColor} strokeWidth="2" />
-            {/* Power rails VCC & VEE */}
-            <line x1="0" y1="-30" x2="0" y2="-14" stroke={strokeColor} strokeWidth="1.5" />
-            <line x1="0" y1="14" x2="0" y2="30" stroke={strokeColor} strokeWidth="1.5" />
-            <text x="5" y="-18" fill="#10B981" fontSize="7" fontFamily="monospace">V+</text>
-            <text x="5" y="24" fill="#64748B" fontSize="7" fontFamily="monospace">V-</text>
-          </g>
-        );
+
 
       case 'LOGIC_AND':
       case 'LOGIC_OR':
@@ -902,7 +969,9 @@ export function SchematicSymbol({
 
       case 'ACTUATOR_RGB_LED':
       case 'LED_RGB':
-      case 'RGB_LED': {
+      case 'RGB_LED':
+      case 'rgb-led':
+      case 'rgb_led': {
         const isBurned = simState?.status === 'BURNED' || Boolean(simState?.burned);
         
         // 1. Resolve multi-channel levels (rLevel, gLevel, bLevel in 0..1)
@@ -910,7 +979,7 @@ export function SchematicSymbol({
         let gLevel = 0;
         let bLevel = 0;
 
-        if (simState && typeof simState === 'object') {
+        if (isSimulating && simState && typeof simState === 'object') {
           const sAny = simState as Record<string, unknown>;
           if (sAny.onRed) rLevel = Math.max(rLevel, typeof sAny.redBrightness === 'number' ? sAny.redBrightness : 1.0);
           if (sAny.onGreen) gLevel = Math.max(gLevel, typeof sAny.greenBrightness === 'number' ? sAny.greenBrightness : 1.0);
@@ -935,24 +1004,67 @@ export function SchematicSymbol({
           }
         }
 
-        // 2. Explicit component parameter overrides from Inspector
-        if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
-        if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
-        if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+        // Check if COM pin has a connected wire in schematic
+        const isComPin = (p: string) => {
+          const pl = (p || '').toLowerCase();
+          return pl === 'cc' || pl === 'com' || pl === 'c' || pl === '2' || pl === 'cathode' || pl === 'anode' || pl === 'gnd' || pl === '-';
+        };
 
-        // 3. Fallback for static hex color
-        if (rLevel === 0 && gLevel === 0 && bLevel === 0 && component.parameters?.color) {
-          const hex = String(component.parameters.color).replace('#', '');
-          if (hex.length === 6) {
-            rLevel = parseInt(hex.slice(0, 2), 16) / 255;
-            gLevel = parseInt(hex.slice(2, 4), 16) / 255;
-            bLevel = parseInt(hex.slice(4, 6), 16) / 255;
-          }
+        const hasComWire = Boolean(
+          wires &&
+          wires.some((cw) => {
+            return (
+              (cw.fromCompId === component.id && isComPin(cw.fromPinId)) ||
+              (cw.toCompId === component.id && isComPin(cw.toPinId))
+            );
+          })
+        );
+
+        // 2. Wire conduction tracing (ONLY if COM is connected and wire carries real forward current >= 0.5mA)
+        if (isSimulating && wires && hasComWire) {
+          wires.forEach((cw) => {
+            let pin = '';
+            if (cw.fromCompId === component.id) {
+              pin = cw.fromPinId || '';
+            } else if (cw.toCompId === component.id) {
+              pin = cw.toPinId || '';
+            }
+            if (!pin) return;
+
+            const pLower = pin.toLowerCase();
+            const currentA = wireCurrents?.[cw.id] ?? cw.current ?? 0;
+            const hasConductingCurrent = Math.abs(currentA) >= 0.0005;
+            if (!hasConductingCurrent) return;
+
+            const channelLevel = Math.min(1.0, Math.max(0.7, Math.abs(currentA) / 0.02));
+
+            if (pLower === 'r' || pLower === '1' || pLower === 'red') {
+              rLevel = Math.max(rLevel, channelLevel);
+            } else if (pLower === 'g' || pLower === '3' || pLower === 'green') {
+              gLevel = Math.max(gLevel, channelLevel);
+            } else if (pLower === 'b' || pLower === '4' || pLower === 'blue') {
+              bLevel = Math.max(bLevel, channelLevel);
+            }
+          });
         }
 
-        const rBright = isBurned ? 0 : Math.max(0, Math.min(1, rLevel));
-        const gBright = isBurned ? 0 : Math.max(0, Math.min(1, gLevel));
-        const bBright = isBurned ? 0 : Math.max(0, Math.min(1, bLevel));
+        // 3. Explicit component parameter overrides from Inspector (applied when simulating/conducting)
+        if (isSimulating && (hasComWire || (simState && (simState.on || ((simState as Record<string, unknown>).current as number) > 0.0005)))) {
+          if (component.parameters?.r !== undefined) rLevel = Math.max(rLevel, Number(component.parameters.r));
+          if (component.parameters?.g !== undefined) gLevel = Math.max(gLevel, Number(component.parameters.g));
+          if (component.parameters?.b !== undefined) bLevel = Math.max(bLevel, Number(component.parameters.b));
+        }
+
+        // STRICT OPEN-CIRCUIT CHECK: If wires are present but COM has no wire, and simState is unlit/0mA:
+        if (wires && wires.length > 0 && !hasComWire && (!simState || !simState.on)) {
+          rLevel = 0;
+          gLevel = 0;
+          bLevel = 0;
+        }
+
+        const rBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, rLevel));
+        const gBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, gLevel));
+        const bBright = isBurned || !isSimulating ? 0 : Math.max(0, Math.min(1, bLevel));
 
         const onR = rBright > 0.02;
         const onG = gBright > 0.02;
@@ -1863,15 +1975,7 @@ export function SchematicSymbol({
         );
       }
 
-      case 'LOGIC_74HC595':
-        return (
-          <g>
-            <rect x="-35" y="-25" width="70" height="50" rx="3" stroke={strokeColor} strokeWidth="2" fill={fillColor} />
-            <text x="0" y="-12" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">74HC595</text>
-            <text x="0" y="0" fill="#E2E8F0" fontSize="6.5" fontFamily="monospace" textAnchor="middle">8-BIT SHIFT REG</text>
-            <text x="0" y="14" fill="#94A3B8" fontSize="6" fontFamily="monospace" textAnchor="middle">SER ➔ Q0-Q7</text>
-          </g>
-        );
+
 
       case 'SENSOR_MPU6050':
         return (

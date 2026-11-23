@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 
 export interface ArduinoNano3DProps {
   position?: [number, number, number];
@@ -68,9 +67,9 @@ export function ArduinoNano3D({
         roughness: 0.5,
       }),
       pinSilver: new THREE.MeshStandardMaterial({
-        color: '#E2E8F0',
-        metalness: 0.9,
-        roughness: 0.2,
+        color: '#d4dce6',
+        metalness: 0.88,
+        roughness: 0.22,
       }),
       pinHover: new THREE.MeshBasicMaterial({
         color: '#38BDF8',
@@ -161,9 +160,17 @@ export function ArduinoNano3D({
 
       {/* Silkscreen Pin Labels Texture Overlay */}
       {silkscreenTexture && (
-        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 1.63, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[43.0, 17.6]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -214,10 +221,16 @@ export function ArduinoNano3D({
         <mesh
           position={[-32, 1.5, 0]}
           material={materials.usbCablePvc}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
         >
           <boxGeometry args={[8, 5.0, 8.0]} />
         </mesh>
@@ -277,26 +290,14 @@ export function ArduinoNano3D({
             )}
             {/* Downward Silver Pin Leg into Breadboard Hole (extended 5.5mm length) */}
             <mesh position={[0, -2.5, 0]} material={materials.pinSilver}>
-              <boxGeometry args={[0.6, 5.5, 0.6]} />
+              <boxGeometry args={[0.64, 5.5, 0.64]} />
             </mesh>
             {/* Interactive Click & Hover Target with Generous Hitbox & Hover Ring */}
             {isHovered && (
-              <>
-                <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <ringGeometry args={[0.6, 1.4, 24]} />
-                  <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
-                </mesh>
-                <Html
-                  position={[0, 6.0, 0]}
-                  center
-                  distanceFactor={75}
-                  style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
-                >
-                  <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
-                    {pin.name}
-                  </div>
-                </Html>
-              </>
+              <mesh position={[0, 2.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.6, 1.4, 24]} />
+                <meshBasicMaterial color="#00F0FF" side={THREE.DoubleSide} />
+              </mesh>
             )}
             <mesh
               position={[0, 0.5, 0]}

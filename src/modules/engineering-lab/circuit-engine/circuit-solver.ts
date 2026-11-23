@@ -451,6 +451,73 @@ export class CircuitSolver {
   }
 
   /**
+   * Helper: Check whether a component pin is actually connected to an external circuit path
+   * (via wires or breadboard tie-points) and not floating / open-circuit.
+   */
+  public isPinConnected(comp: CircuitComponent, pinId: string, wires: CircuitWire[]): boolean {
+    const pTarget = pinId.toLowerCase();
+    const hasWire = wires.some((w) => {
+      const fromMatch = w.fromCompId === comp.id && String(w.fromPinId).toLowerCase() === pTarget;
+      const toMatch = w.toCompId === comp.id && String(w.toPinId).toLowerCase() === pTarget;
+      return fromMatch || toMatch;
+    });
+    if (hasWire) return true;
+
+    // Check if this pin is connected through netlist union (e.g. breadboard tie-points) to another component
+    const pinKey = `${comp.id}:${pinId}`;
+    const root = this.netMap.get(pinKey);
+    if (!root) return false;
+
+    for (const [k, r] of this.netMap.entries()) {
+      if (r === root && k !== pinKey && !k.startsWith(`${comp.id}:`)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private getRgbComPinId(comp: CircuitComponent): string | null {
+    const p = comp.pins.find((pin) => {
+      const id = pin.id.toLowerCase();
+      const name = pin.name.toLowerCase();
+      return (
+        id === 'cc' ||
+        id === 'com' ||
+        id === 'c' ||
+        id === '2' ||
+        id === 'gnd' ||
+        id === 'cathode' ||
+        id === 'anode' ||
+        id === '-' ||
+        id === '+' ||
+        name.includes('com') ||
+        name.includes('cathode') ||
+        name.includes('anode') ||
+        name === 'gnd' ||
+        name === '-' ||
+        name === '+'
+      );
+    });
+    return p ? p.id : (comp.pins[1]?.id || 'cc');
+  }
+
+  private getRgbChannelPinId(comp: CircuitComponent, channel: 'r' | 'g' | 'b'): string | null {
+    const p = comp.pins.find((pin) => {
+      const id = pin.id.toLowerCase();
+      const name = pin.name.toLowerCase();
+      if (channel === 'r') return id === 'r' || id === '1' || id === 'red' || name === 'r' || name.includes('red');
+      if (channel === 'g') return id === 'g' || id === '3' || id === 'green' || name === 'g' || name.includes('green');
+      if (channel === 'b') return id === 'b' || id === '4' || id === 'blue' || name === 'b' || name.includes('blue');
+      return false;
+    });
+    if (p) return p.id;
+    if (channel === 'r') return comp.pins[0]?.id || 'r';
+    if (channel === 'g') return comp.pins[2]?.id || 'g';
+    if (channel === 'b') return comp.pins[3]?.id || 'b';
+    return null;
+  }
+
+  /**
    * Solve a single transient simulation timestep using Modified Nodal Analysis (MNA)
    * with exact KCL conductance matrix relaxation.
    */
@@ -1339,10 +1406,21 @@ export class CircuitSolver {
             }
           }
         } else if (comp.type === 'ACTUATOR_RGB_LED' || comp.type === 'LED_RGB') {
-          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:R`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:red`);
-          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:3`) || this.netMap.get(`${comp.id}:green`);
-          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:blue`);
-          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:COM`) || this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:anode`);
+          const comPinId = this.getRgbComPinId(comp);
+          const isComConnected = comPinId ? this.isPinConnected(comp, comPinId, wires) : false;
+          if (!isComConnected) {
+            // Unconnected / floating COM pin: Kirchhoff's Current Law prevents any conduction
+            continue;
+          }
+
+          const rPinId = this.getRgbChannelPinId(comp, 'r');
+          const gPinId = this.getRgbChannelPinId(comp, 'g');
+          const bPinId = this.getRgbChannelPinId(comp, 'b');
+
+          const rPin = rPinId && this.isPinConnected(comp, rPinId, wires) ? this.netMap.get(`${comp.id}:${rPinId}`) : undefined;
+          const gPin = gPinId && this.isPinConnected(comp, gPinId, wires) ? this.netMap.get(`${comp.id}:${gPinId}`) : undefined;
+          const bPin = bPinId && this.isPinConnected(comp, bPinId, wires) ? this.netMap.get(`${comp.id}:${bPinId}`) : undefined;
+          const comPin = comPinId ? this.netMap.get(`${comp.id}:${comPinId}`) : undefined;
           const isCommonAnode = comp.parameters?.commonType === 'anode';
 
           const channels = [
@@ -1376,25 +1454,89 @@ export class CircuitSolver {
             }
           }
         } else if (comp.type.startsWith('OPAMP_')) {
-          // Operational Amplifier (Inverting / Non-inverting / Comparator)
-          const inNegPin = this.netMap.get(`${comp.id}:in_neg`);
-          const inPosPin = this.netMap.get(`${comp.id}:in_pos`);
-          const outPin = this.netMap.get(`${comp.id}:out`);
-          const vccPin = this.netMap.get(`${comp.id}:vcc`);
-          const veePin = this.netMap.get(`${comp.id}:vee`);
-
-          const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
-          const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
-          const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
-          const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
-
+          // Operational Amplifier (Single, Dual LM358, or Quad LM324)
           const openGain = Number(comp.parameters?.openLoopGain ?? 100000);
-          const vIdeal = (vPos - vNeg) * openGain;
-          const vOutClamped = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
 
-          if (outPin) {
-            nodeVoltages[outPin] = vOutClamped;
-            fixedNodes.add(outPin);
+          if (comp.type.includes('LM324')) {
+            // Quad Op-Amp (DIP-14): VCC=Pin 4, GND=Pin 11
+            const vccPin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:VCC`);
+            const veePin = this.netMap.get(`${comp.id}:11`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 0.0) : 0.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const isPowered = vcc - vee >= 2.0;
+
+            const channels = [
+              { out: '1', inNeg: '2', inPos: '3' },
+              { out: '7', inNeg: '6', inPos: '5' },
+              { out: '8', inNeg: '9', inPos: '10' },
+              { out: '14', inNeg: '13', inPos: '12' },
+            ];
+
+            for (const ch of channels) {
+              const outNet = this.netMap.get(`${comp.id}:${ch.out}`);
+              const inNegNet = this.netMap.get(`${comp.id}:${ch.inNeg}`);
+              const inPosNet = this.netMap.get(`${comp.id}:${ch.inPos}`);
+              if (!outNet) continue;
+
+              if (isPowered) {
+                const vPos = inPosNet ? (nodeVoltages[inPosNet] || 0.0) : 0.0;
+                const vNeg = inNegNet ? (nodeVoltages[inNegNet] || 0.0) : 0.0;
+                const vIdeal = (vPos - vNeg) * openGain;
+                nodeVoltages[outNet] = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+              } else {
+                nodeVoltages[outNet] = 0.0;
+              }
+              fixedNodes.add(outNet);
+            }
+          } else if (comp.type.includes('LM358')) {
+            // Dual Op-Amp (DIP-8): VCC=Pin 8, GND=Pin 4
+            const vccPin = this.netMap.get(`${comp.id}:8`) || this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:VCC`);
+            const veePin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:vee`);
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 0.0) : 0.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const isPowered = vcc - vee >= 2.0;
+
+            const channels = [
+              { out: '1', inNeg: '2', inPos: '3' },
+              { out: '7', inNeg: '6', inPos: '5' },
+            ];
+
+            for (const ch of channels) {
+              const outNet = this.netMap.get(`${comp.id}:${ch.out}`) || (ch.out === '1' ? this.netMap.get(`${comp.id}:out`) : undefined);
+              const inNegNet = this.netMap.get(`${comp.id}:${ch.inNeg}`) || (ch.inNeg === '2' ? this.netMap.get(`${comp.id}:in_neg`) : undefined);
+              const inPosNet = this.netMap.get(`${comp.id}:${ch.inPos}`) || (ch.inPos === '3' ? this.netMap.get(`${comp.id}:in_pos`) : undefined);
+              if (!outNet) continue;
+
+              if (isPowered) {
+                const vPos = inPosNet ? (nodeVoltages[inPosNet] || 0.0) : 0.0;
+                const vNeg = inNegNet ? (nodeVoltages[inNegNet] || 0.0) : 0.0;
+                const vIdeal = (vPos - vNeg) * openGain;
+                nodeVoltages[outNet] = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+              } else {
+                nodeVoltages[outNet] = 0.0;
+              }
+              fixedNodes.add(outNet);
+            }
+          } else {
+            // Generic / Single Op-Amp (LM741 etc.)
+            const inNegPin = this.netMap.get(`${comp.id}:in_neg`) || this.netMap.get(`${comp.id}:2`);
+            const inPosPin = this.netMap.get(`${comp.id}:in_pos`) || this.netMap.get(`${comp.id}:3`);
+            const outPin = this.netMap.get(`${comp.id}:out`) || this.netMap.get(`${comp.id}:6`);
+            const vccPin = this.netMap.get(`${comp.id}:vcc`) || this.netMap.get(`${comp.id}:7`);
+            const veePin = this.netMap.get(`${comp.id}:vee`) || this.netMap.get(`${comp.id}:4`);
+
+            const vcc = vccPin ? (nodeVoltages[vccPin] || 12.0) : 12.0;
+            const vee = veePin ? (nodeVoltages[veePin] || 0.0) : 0.0;
+            const vPos = inPosPin ? (nodeVoltages[inPosPin] || 0.0) : 0.0;
+            const vNeg = inNegPin ? (nodeVoltages[inNegPin] || 0.0) : 0.0;
+
+            const vIdeal = (vPos - vNeg) * openGain;
+            const vOutClamped = Math.max(vee + 0.05, Math.min(vcc - 1.2, vIdeal));
+
+            if (outPin) {
+              nodeVoltages[outPin] = vOutClamped;
+              fixedNodes.add(outPin);
+            }
           }
         } else if (comp.type.startsWith('LOGIC_')) {
           // Digital Logic Gates: 74HC series
@@ -1438,6 +1580,118 @@ export class CircuitSolver {
           if (outPin) {
             nodeVoltages[outPin] = outV;
             fixedNodes.add(outPin);
+          }
+        } else if (
+          comp.type === 'IC_74HC14' ||
+          comp.type === '74HC14' ||
+          comp.type === 'IC_74HC04' ||
+          comp.type === '74HC04' ||
+          comp.type === 'IC_74HC00' ||
+          comp.type === '74HC00' ||
+          comp.type === 'IC_74HC08' ||
+          comp.type === '74HC08' ||
+          comp.type === 'IC_74HC32' ||
+          comp.type === '74HC32' ||
+          comp.type === 'IC_74HC86' ||
+          comp.type === '74HC86'
+        ) {
+          // Multi-Gate Real Digital IC Packages (DIP-14)
+          const vccPin =
+            this.netMap.get(`${comp.id}:14`) ||
+            this.netMap.get(`${comp.id}:vcc`) ||
+            this.netMap.get(`${comp.id}:VCC`);
+          const gndPin =
+            this.netMap.get(`${comp.id}:7`) ||
+            this.netMap.get(`${comp.id}:gnd`) ||
+            this.netMap.get(`${comp.id}:GND`);
+
+          const vcc = vccPin ? (nodeVoltages[vccPin] ?? 0.0) : 0.0;
+          const gnd = gndPin ? (nodeVoltages[gndPin] ?? 0.0) : 0.0;
+          const vSupply = vcc - gnd;
+          const isPowered = vSupply >= 2.0;
+
+          if (comp.type.includes('74HC14') || comp.type.includes('74HC04')) {
+            // Hex Inverter / Hex Schmitt-Trigger Inverter (6 independent gates)
+            // Gate 1: 1A (pin 1) -> 1Y (pin 2)
+            // Gate 2: 2A (pin 3) -> 2Y (pin 4)
+            // Gate 3: 3A (pin 5) -> 3Y (pin 6)
+            // Gate 4: 4A (pin 9) -> 4Y (pin 8)
+            // Gate 5: 5A (pin 11) -> 5Y (pin 10)
+            // Gate 6: 6A (pin 13) -> 6Y (pin 12)
+            const gates = [
+              { in: '1', out: '2' },
+              { in: '3', out: '4' },
+              { in: '5', out: '6' },
+              { in: '9', out: '8' },
+              { in: '11', out: '10' },
+              { in: '13', out: '12' },
+            ];
+
+            const highThresh = comp.type.includes('74HC14') ? (gnd + 0.55 * vSupply) : (gnd + 0.5 * vSupply);
+
+            for (const gate of gates) {
+              const inNet = this.netMap.get(`${comp.id}:${gate.in}`);
+              const outNet = this.netMap.get(`${comp.id}:${gate.out}`);
+              const targetNode = outNet || `${comp.id}:${gate.out}`;
+
+              if (isPowered) {
+                const vIn = inNet ? (nodeVoltages[inNet] ?? 0.0) : 0.0;
+                const isHighIn = vIn >= highThresh;
+                // Inverter: In high -> Out low (gnd); In low -> Out high (vcc)
+                nodeVoltages[targetNode] = isHighIn ? gnd : vcc;
+              } else {
+                nodeVoltages[targetNode] = 0.0;
+              }
+              if (outNet) {
+                fixedNodes.add(outNet);
+              }
+            }
+          } else {
+            // Quad 2-Input Gates (74HC00 NAND, 74HC08 AND, 74HC32 OR, 74HC86 XOR)
+            // Gate 1: 1A (1), 1B (2) -> 1Y (3)
+            // Gate 2: 2A (4), 2B (5) -> 2Y (6)
+            // Gate 3: 3A (9), 3B (10) -> 3Y (8)
+            // Gate 4: 4A (12), 4B (13) -> 4Y (11)
+            const quadGates = [
+              { inA: '1', inB: '2', out: '3' },
+              { inA: '4', inB: '5', out: '6' },
+              { inA: '9', inB: '10', out: '8' },
+              { inA: '12', inB: '13', out: '11' },
+            ];
+
+            const highThresh = gnd + 0.5 * vSupply;
+
+            for (const qg of quadGates) {
+              const inANet = this.netMap.get(`${comp.id}:${qg.inA}`);
+              const inBNet = this.netMap.get(`${comp.id}:${qg.inB}`);
+              const outNet = this.netMap.get(`${comp.id}:${qg.out}`);
+              const targetNode = outNet || `${comp.id}:${qg.out}`;
+
+              if (isPowered) {
+                const vInA = inANet ? (nodeVoltages[inANet] ?? 0.0) : 0.0;
+                const vInB = inBNet ? (nodeVoltages[inBNet] ?? 0.0) : 0.0;
+                const isHighA = vInA >= highThresh;
+                const isHighB = vInB >= highThresh;
+                let outHigh = false;
+
+                if (comp.type.includes('74HC00')) {
+                  outHigh = !(isHighA && isHighB); // NAND
+                } else if (comp.type.includes('74HC08')) {
+                  outHigh = isHighA && isHighB; // AND
+                } else if (comp.type.includes('74HC32')) {
+                  outHigh = isHighA || isHighB; // OR
+                } else if (comp.type.includes('74HC86')) {
+                  outHigh = isHighA !== isHighB; // XOR
+                }
+
+                nodeVoltages[targetNode] = outHigh ? vcc : gnd;
+              } else {
+                nodeVoltages[targetNode] = 0.0;
+              }
+              if (outNet) {
+                fixedNodes.add(outNet);
+              }
+            }
           }
         } else if (comp.type === 'TIMER_555') {
           // NE555 Timer Simulation
@@ -1761,14 +2015,23 @@ export class CircuitSolver {
           on = Math.abs(current) > 0.0001;
         } else if (comp.type === 'LED') {
           const vf = getLedForwardVoltage(comp);
-          const aPin = this.netMap.get(`${comp.id}:a`) || this.netMap.get(`${comp.id}:anode`) || this.netMap.get(`${comp.id}:1`) || netA;
-          const kPin = this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:2`) || netB;
-          const vAnode = aPin ? (nodeVoltages[aPin] || 0) : 0;
-          const vCathode = kPin ? (nodeVoltages[kPin] || 0) : 0;
-          const forwardDrop = vAnode - vCathode;
+          const aPinId = comp.pins.find((p) => p.id === 'a' || p.id === 'anode' || p.id === '1' || p.name === 'A')?.id || 'a';
+          const kPinId = comp.pins.find((p) => p.id === 'k' || p.id === 'cathode' || p.id === '2' || p.name === 'K')?.id || 'k';
+          const isAConnected = this.isPinConnected(comp, aPinId, wires);
+          const isKConnected = this.isPinConnected(comp, kPinId, wires);
+
+          const aPin = this.netMap.get(`${comp.id}:${aPinId}`) || netA;
+          const kPin = this.netMap.get(`${comp.id}:${kPinId}`) || netB;
+          const vAnode = aPin && isAConnected ? (nodeVoltages[aPin] || 0) : 0;
+          const vCathode = kPin && isKConnected ? (nodeVoltages[kPin] || 0) : 0;
+          const forwardDrop = isAConnected && isKConnected ? vAnode - vCathode : 0;
           vDiff = forwardDrop;
 
-          if (this.burnedComponents.has(comp.id)) {
+          if (!isAConnected || !isKConnected) {
+            current = 0;
+            on = false;
+            brightness = 0;
+          } else if (this.burnedComponents.has(comp.id)) {
             current = 0;
             on = false;
             brightness = 0;
@@ -1836,16 +2099,31 @@ export class CircuitSolver {
             }
           }
         } else if (comp.type === 'ACTUATOR_RGB_LED' || comp.type === 'LED_RGB') {
-          const rPin = this.netMap.get(`${comp.id}:r`) || this.netMap.get(`${comp.id}:R`) || this.netMap.get(`${comp.id}:1`) || this.netMap.get(`${comp.id}:red`);
-          const gPin = this.netMap.get(`${comp.id}:g`) || this.netMap.get(`${comp.id}:G`) || this.netMap.get(`${comp.id}:3`) || this.netMap.get(`${comp.id}:green`);
-          const bPin = this.netMap.get(`${comp.id}:b`) || this.netMap.get(`${comp.id}:B`) || this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:blue`);
-          const comPin = this.netMap.get(`${comp.id}:cc`) || this.netMap.get(`${comp.id}:com`) || this.netMap.get(`${comp.id}:COM`) || this.netMap.get(`${comp.id}:c`) || this.netMap.get(`${comp.id}:C`) || this.netMap.get(`${comp.id}:2`) || this.netMap.get(`${comp.id}:gnd`) || this.netMap.get(`${comp.id}:GND`) || this.netMap.get(`${comp.id}:k`) || this.netMap.get(`${comp.id}:cathode`) || this.netMap.get(`${comp.id}:anode`);
-          const isCommonAnode = comp.parameters?.commonType === 'anode';
-          const vCom = comPin ? (nodeVoltages[comPin] || 0) : 0;
-          const vR = rPin ? (nodeVoltages[rPin] || 0) : 0;
-          const vG = gPin ? (nodeVoltages[gPin] || 0) : 0;
-          const vB = bPin ? (nodeVoltages[bPin] || 0) : 0;
+          const comPinId = this.getRgbComPinId(comp);
+          const isComConnected = comPinId ? this.isPinConnected(comp, comPinId, wires) : false;
 
+          const rPinId = this.getRgbChannelPinId(comp, 'r');
+          const gPinId = this.getRgbChannelPinId(comp, 'g');
+          const bPinId = this.getRgbChannelPinId(comp, 'b');
+
+          const isRConnected = isComConnected && rPinId ? this.isPinConnected(comp, rPinId, wires) : false;
+          const isGConnected = isComConnected && gPinId ? this.isPinConnected(comp, gPinId, wires) : false;
+          const isBConnected = isComConnected && bPinId ? this.isPinConnected(comp, bPinId, wires) : false;
+
+          const rPin = rPinId ? this.netMap.get(`${comp.id}:${rPinId}`) : undefined;
+          const gPin = gPinId ? this.netMap.get(`${comp.id}:${gPinId}`) : undefined;
+          const bPin = bPinId ? this.netMap.get(`${comp.id}:${bPinId}`) : undefined;
+          const comPin = comPinId ? this.netMap.get(`${comp.id}:${comPinId}`) : undefined;
+          const isCommonAnode = comp.parameters?.commonType === 'anode';
+
+          const vCom = comPin && isComConnected ? (nodeVoltages[comPin] || 0) : 0;
+          const vR = rPin && isRConnected ? (nodeVoltages[rPin] || 0) : 0;
+          const vG = gPin && isGConnected ? (nodeVoltages[gPin] || 0) : 0;
+          const vB = bPin && isBConnected ? (nodeVoltages[bPin] || 0) : 0;
+
+          // Forward drop calculations:
+          // For CC (Common Cathode): V_drop = V_channel - V_com
+          // For CA (Common Anode): V_drop = V_com - V_channel
           const rDrop = isCommonAnode ? (vCom - vR) : (vR - vCom);
           const gDrop = isCommonAnode ? (vCom - vG) : (vG - vCom);
           const bDrop = isCommonAnode ? (vCom - vB) : (vB - vCom);
@@ -1865,11 +2143,24 @@ export class CircuitSolver {
             status = 'BURNED';
             burned = true;
             fault = this.burnFaultReasons.get(comp.id);
+          } else if (!isComConnected) {
+            // STRICT OPEN-CIRCUIT CHECK: COM is floating/open -> strictly 0 current and 0 glow across all channels
+            rCur = 0;
+            gCur = 0;
+            bCur = 0;
+            redBrightness = 0;
+            greenBrightness = 0;
+            blueBrightness = 0;
+            on = false;
+            brightness = 0;
+            current = 0;
           } else {
             const rd = 15;
-            rCur = rDrop > rVf ? (rDrop - rVf) / rd : 0;
-            gCur = gDrop > gVf ? (gDrop - gVf) / rd : 0;
-            bCur = bDrop > bVf ? (bDrop - bVf) / rd : 0;
+            // Strict forward-bias check: only conducts if forwardDrop > Vf and channel is connected.
+            // Reverse bias (rDrop <= 0) strictly yields 0 current and 0 glow.
+            rCur = isRConnected && rDrop > rVf ? (rDrop - rVf) / rd : 0;
+            gCur = isGConnected && gDrop > gVf ? (gDrop - gVf) / rd : 0;
+            bCur = isBConnected && bDrop > bVf ? (bDrop - bVf) / rd : 0;
 
             if (rCur > 0.035 || gCur > 0.035 || bCur > 0.035) {
               this.burnedComponents.add(comp.id);
@@ -1889,11 +2180,12 @@ export class CircuitSolver {
               gCur = 0;
               bCur = 0;
             } else {
+              // Minimum forward current threshold: 0.5mA (0.0005A)
               const iMin = 0.0005;
               const iNom = 0.020;
-              redBrightness = Math.max(0, Math.min(1, (rCur - iMin) / (iNom - iMin)));
-              greenBrightness = Math.max(0, Math.min(1, (gCur - iMin) / (iNom - iMin)));
-              blueBrightness = Math.max(0, Math.min(1, (bCur - iMin) / (iNom - iMin)));
+              redBrightness = rCur > iMin ? Math.max(0, Math.min(1, (rCur - iMin) / (iNom - iMin))) : 0;
+              greenBrightness = gCur > iMin ? Math.max(0, Math.min(1, (gCur - iMin) / (iNom - iMin))) : 0;
+              blueBrightness = bCur > iMin ? Math.max(0, Math.min(1, (bCur - iMin) / (iNom - iMin))) : 0;
             }
           }
 
@@ -1903,7 +2195,7 @@ export class CircuitSolver {
           on = onRed || onGreen || onBlue;
           current = rCur + gCur + bCur;
           brightness = Math.max(redBrightness, greenBrightness, blueBrightness);
-          vDiff = Math.max(rDrop, gDrop, bDrop, 0);
+          vDiff = isComConnected ? Math.max(rDrop, gDrop, bDrop, 0) : 0;
 
           componentStates[comp.id] = {
             voltage: Math.round(vDiff * 1000) / 1000,

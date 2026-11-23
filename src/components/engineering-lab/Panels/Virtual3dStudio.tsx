@@ -9,12 +9,13 @@ import {
   getTieGroupForHole,
   START_X,
   PITCH_X,
+  ROW_Z_MAP,
   computeComponentGroundElevation,
   flipComponent3D,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
-import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal } from 'lucide-react';
+import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal, Usb } from 'lucide-react';
 
 interface Virtual3dStudioProps {
   components: CircuitComponent[];
@@ -133,21 +134,31 @@ export function Virtual3dStudio({
   const [independentWires, setIndependentWires] = useState<Wire3D[] | null>(null);
   const [undoStack3D, setUndoStack3D] = useState<Studio3DHistoryState[]>([]);
   const [redoStack3D, setRedoStack3D] = useState<Studio3DHistoryState[]>([]);
-  const [hasBreadboard, setHasBreadboard] = useState<boolean>(() => {
+  const [breadboardCount, setBreadboardCount] = useState<number>(() => {
     if (typeof window !== 'undefined') {
+      const savedCount = localStorage.getItem('ei_house_virtual3d_breadboard_count');
+      if (savedCount !== null) {
+        const parsed = parseInt(savedCount, 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
+      }
       const saved = localStorage.getItem('ei_house_virtual3d_has_breadboard');
-      if (saved !== null) return saved === 'true';
+      if (saved !== null) return saved === 'true' ? 1 : 0;
     }
-    return true;
+    return 1;
   });
 
+  const hasBreadboard = breadboardCount > 0;
+
   const handleToggleBreadboard = useCallback(() => {
-    setHasBreadboard((prev) => {
-      const next = !prev;
+    setBreadboardCount((prev) => {
+      const next = prev >= 3 ? 0 : prev + 1;
       try {
-        localStorage.setItem('ei_house_virtual3d_has_breadboard', String(next));
+        localStorage.setItem('ei_house_virtual3d_breadboard_count', String(next));
+        localStorage.setItem('ei_house_virtual3d_has_breadboard', String(next > 0));
       } catch {}
-      toast.info(next ? 'Added 830-Point Solderless Breadboard.' : 'Removed Solderless Breadboard from workbench.');
+      if (next === 0) toast.info('Removed Solderless Breadboards from workbench.');
+      else if (next === 1) toast.success('Active: 1 Solderless Breadboard (830 tie-points).');
+      else toast.success(`Expanded to ${next} Interlocking Solderless Breadboards with rail jumper bridges.`);
       return next;
     });
   }, []);
@@ -168,6 +179,327 @@ export function Virtual3dStudio({
     if (mirrored !== undefined) res.mirrored = mirrored;
     return res;
   };
+
+  // Helper: Get placement priority for a component type:
+  // Priority 1: DIP ICs and single passives/discretes (Resistors, Capacitors, LEDs, Diodes, Transistors, Switches)
+  // Priority 2: Compact breadboard modules / dev boards (Nano, ESP32, Pico, HC-SR04, HC-05)
+  // Priority 3: Large off-board modules & displays (Servos, LCD1602) -> Console right (x >= 95)
+  // Priority 4: Batteries -> Console left (x <= -95, z = 0)
+  // Priority 5: Large MCU boards (Uno, Mega) -> Console front (z = 65)
+  const getComponentPriority = (type: string): number => {
+    const t = (type || '').toUpperCase();
+    if (t.includes('UNO') || t.includes('MEGA') || t.includes('STM32')) return 5;
+    if (t.includes('BATTERY') || t === 'DC_VOLTAGE') return 4;
+    if (t.includes('SERVO') || t.includes('LCD') || t.includes('OLED')) return 3;
+    if (
+      t.includes('NANO') || t.includes('ESP32') || t.includes('PICO') ||
+      t === 'HC_SR04' || t === 'SENSOR_ULTRASONIC' || t.includes('BLUETOOTH') || t.includes('HC05')
+    ) {
+      return 2;
+    }
+    return 1;
+  };
+
+  // Convert 2D schematic components to 3D representation with Priority-Based Breadboard & Multi-Breadboard Auto-Layout
+  const schematicTo3DComponents = useCallback((forceAutoLayout = false, compsList: CircuitComponent[] = components): Component3D[] => {
+    // Filter out virtual schematic rails (GND / VCC) - they are physically routed via breadboard power rails
+    const physicalComponents = compsList.filter(
+      (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd')
+    );
+
+    // If not forcing auto-layout, check if all components already have saved valid coordinates
+    if (!forceAutoLayout) {
+      const allHaveSavedPos = physicalComponents.length > 0 && physicalComponents.every(
+        (c) => c.x3d !== undefined && c.y3d !== undefined && c.z3d !== undefined
+      );
+      if (allHaveSavedPos) {
+        return physicalComponents.map((comp) => {
+          const mappedType = mapCircuitCompTo3DType(comp);
+          return {
+            id: comp.id,
+            type: mappedType,
+            label: comp.label,
+            value: comp.value,
+            parameters: comp.parameters || {},
+            x3d: comp.x3d!,
+            y3d: comp.y3d!,
+            z3d: comp.z3d!,
+            rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+            rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+            rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+          };
+        });
+      }
+    }
+
+    const posMap = new Map<string, { x3d: number; y3d: number; z3d: number; rotY: number; rotX: number; rotZ: number }>();
+
+    let mcuIdx = 0;
+    let batteryIdx = 0;
+    let offboardModuleIdx = 0;
+    let consoleOverflowIdx = 0;
+
+    // Track occupied columns per breadboard (0..breadboardCount-1)
+    const boardBlockedCols: Array<Set<number>> = Array.from({ length: 3 }, () => new Set<number>());
+    const boardTopCols: Array<Set<number>> = Array.from({ length: 3 }, () => new Set<number>());
+    const boardBottomCols: Array<Set<number>> = Array.from({ length: 3 }, () => new Set<number>());
+    const boardStraddlerCount = [0, 0, 0];
+
+    // Priority-based sorting
+    const sortedComps = [...physicalComponents].sort((a, b) => {
+      const pA = getComponentPriority(mapCircuitCompTo3DType(a));
+      const pB = getComponentPriority(mapCircuitCompTo3DType(b));
+      return pA - pB;
+    });
+
+    const isRavineStraddler = (t: string) => {
+      const upper = t.toUpperCase();
+      return (
+        upper.includes('NANO') ||
+        upper.includes('ESP32') ||
+        upper.includes('PICO') ||
+        upper.includes('TIMER_555') ||
+        upper.includes('555') ||
+        upper.includes('74HC') ||
+        upper.includes('DIP') ||
+        upper.includes('358') ||
+        upper.includes('324') ||
+        upper.includes('595') ||
+        upper.includes('4017') ||
+        upper.includes('2003') ||
+        upper.includes('293')
+      );
+    };
+
+    const getStraddlerSpan = (t: string): number => {
+      const upper = t.toUpperCase();
+      if (upper.includes('PICO')) return 20;
+      if (upper.includes('NANO') || upper.includes('ESP32')) return 15;
+      if (upper.includes('28') || upper.includes('ATMEGA328P')) return 14;
+      if (upper.includes('16') || upper.includes('595') || upper.includes('4017') || upper.includes('2003') || upper.includes('293')) return 8;
+      if (upper.includes('14') || upper.includes('74HC') || upper.includes('324')) return 7;
+      return 4; // DIP-8, NE555, LM358
+    };
+
+    // Ideal centered ravine positions across 63 columns
+    const STRADDLER_SLOTS = [
+      [32],
+      [20, 44],
+      [14, 32, 50],
+    ];
+
+    const straddlerComps = sortedComps.filter((c) => isRavineStraddler(mapCircuitCompTo3DType(c)));
+    const totalStraddlers = straddlerComps.length;
+    const straddlersPerBoard = Math.min(3, Math.ceil(totalStraddlers / Math.max(1, breadboardCount)));
+
+    for (const comp of sortedComps) {
+      if (!forceAutoLayout && comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
+        posMap.set(comp.id, {
+          x3d: comp.x3d,
+          y3d: comp.y3d,
+          z3d: comp.z3d,
+          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+        });
+        continue;
+      }
+
+      const mappedType = mapCircuitCompTo3DType(comp);
+      const priority = getComponentPriority(mappedType);
+
+      // 1. Large Microcontrollers (Priority 5) -> In front of breadboard (z = 65, y = 0)
+      if (['ARDUINO_UNO', 'ARDUINO_MEGA'].includes(mappedType) || priority === 5) {
+        const x3d = (mcuIdx % 2 === 0 ? 1 : -1) * Math.floor((mcuIdx + 1) / 2) * 85;
+        const z3d = 65;
+        mcuIdx++;
+        posMap.set(comp.id, {
+          x3d,
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
+          z3d,
+          rotY: 0,
+          rotX: 0,
+          rotZ: 0,
+        });
+        continue;
+      }
+
+      // 2. Batteries (Priority 4) -> Table surface to the left of breadboard (x <= -95, z = 0, y = 0)
+      if (mappedType === 'BATTERY_9V' || priority === 4) {
+        const x3d = -95 - batteryIdx * 40;
+        const z3d = 0;
+        batteryIdx++;
+        posMap.set(comp.id, {
+          x3d,
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
+          z3d,
+          rotY: 0,
+          rotX: 0,
+          rotZ: 0,
+        });
+        continue;
+      }
+
+      // 3. Large Off-Board Modules / Displays (Priority 3) -> Table surface to the right (x >= 95)
+      if (['SERVO_SG90', 'ACTUATOR_SERVO_SG90', 'LCD_1602', 'DISPLAY_LCD1602'].includes(mappedType) || priority === 3) {
+        const x3d = 95 + (offboardModuleIdx % 2) * 45;
+        const z3d = -35 + Math.floor(offboardModuleIdx / 2) * 45;
+        offboardModuleIdx++;
+        posMap.set(comp.id, {
+          x3d,
+          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, breadboardCount > 0, 0, breadboardCount),
+          z3d,
+          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+        });
+        continue;
+      }
+
+      // 4. Breadboard Placement (Priority 1 and Priority 2)
+      if (breadboardCount > 0) {
+        if (isRavineStraddler(mappedType)) {
+          let targetBoard = -1;
+          for (let b = 0; b < breadboardCount; b++) {
+            if (boardStraddlerCount[b] < 3) {
+              targetBoard = b;
+              break;
+            }
+          }
+
+          if (targetBoard !== -1) {
+            const slotIdx = boardStraddlerCount[targetBoard];
+            boardStraddlerCount[targetBoard]++;
+            const pattern = STRADDLER_SLOTS[Math.min(2, Math.max(0, straddlersPerBoard - 1))];
+            const assignedCol = pattern[slotIdx % pattern.length];
+            const span = getStraddlerSpan(mappedType);
+            const isDip8or16 = mappedType === 'TIMER_555' || mappedType.includes('358') || mappedType.includes('595') || mappedType.includes('4017') || mappedType.includes('2003') || mappedType.includes('293') || mappedType.includes('16') || mappedType.includes('328') || mappedType.includes('DIP_8') || mappedType.includes('DIP_16') || mappedType.includes('DIP_28');
+            const colX = isDip8or16 ? START_X + (assignedCol - 0.5) * PITCH_X : START_X + (assignedCol - 1) * PITCH_X;
+            const z3d = -targetBoard * 60.0 + (mappedType.includes('NANO') ? 1.27 : 0);
+            const y3d = computeComponentGroundElevation(mappedType, colX, z3d, true, 0, breadboardCount);
+
+            // Block columns occupied by this IC + minimum 3 empty columns margin on each side
+            const halfSpan = Math.ceil(span / 2);
+            for (let c = Math.max(1, assignedCol - halfSpan - 3); c <= Math.min(63, assignedCol + halfSpan + 3); c++) {
+              boardBlockedCols[targetBoard].add(c);
+            }
+
+            posMap.set(comp.id, {
+              x3d: colX,
+              y3d,
+              z3d,
+              rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+              rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+              rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+            });
+            continue;
+          }
+        } else {
+          // Passives & Breadboard Modules: spacious allocation with min 3-4 empty columns gap
+          let targetBoard = -1;
+          let assignedCol = -1;
+          let isTopHalf = true;
+
+          const CANDIDATE_COLS = [8, 14, 20, 26, 32, 38, 44, 50, 56];
+
+          for (let b = 0; b < breadboardCount; b++) {
+            const topCount = boardTopCols[b].size;
+            const botCount = boardBottomCols[b].size;
+            const preferTop = topCount <= botCount;
+            const halfOrder = preferTop ? [true, false] : [false, true];
+
+            for (const tryTop of halfOrder) {
+              const targetCols = tryTop ? boardTopCols[b] : boardBottomCols[b];
+              for (const col of CANDIDATE_COLS) {
+                if (boardBlockedCols[b].has(col)) continue;
+                let hasConflict = false;
+                for (let oc = col - 3; oc <= col + 3; oc++) {
+                  if (targetCols.has(oc)) {
+                    hasConflict = true;
+                    break;
+                  }
+                }
+                if (!hasConflict) {
+                  targetBoard = b;
+                  assignedCol = col;
+                  isTopHalf = tryTop;
+                  break;
+                }
+              }
+              if (targetBoard !== -1) break;
+            }
+            if (targetBoard !== -1) break;
+          }
+
+          if (targetBoard !== -1) {
+            const targetCols = isTopHalf ? boardTopCols[targetBoard] : boardBottomCols[targetBoard];
+            for (let oc = assignedCol - 2; oc <= assignedCol + 2; oc++) {
+              targetCols.add(oc);
+            }
+
+            const isEvenPin = mappedType === 'LED_RGB' || mappedType === 'ACTUATOR_RGB_LED' || mappedType === 'HC_SR04' || mappedType === 'SENSOR_ULTRASONIC' || mappedType.includes('BLUETOOTH') || mappedType.includes('HC05');
+            const colX = isEvenPin ? START_X + (assignedCol - 0.5) * PITCH_X : START_X + (assignedCol - 1) * PITCH_X;
+            const boardCenterZ = -targetBoard * 60.0;
+            const z3d = boardCenterZ + (isTopHalf ? ROW_Z_MAP.C : ROW_Z_MAP.H);
+            const y3d = computeComponentGroundElevation(mappedType, colX, z3d, true, 0, breadboardCount);
+
+            posMap.set(comp.id, {
+              x3d: colX,
+              y3d,
+              z3d,
+              rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+              rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+              rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+            });
+            continue;
+          }
+        }
+      }
+
+      // 5. Open Console Fallback (when all boards reach capacity or breadboardCount === 0)
+      const row = Math.floor(consoleOverflowIdx / 3);
+      const col = consoleOverflowIdx % 3;
+      const x3d = 95 + col * 40;
+      const z3d = -35 + row * 45;
+      consoleOverflowIdx++;
+      const y3d = computeComponentGroundElevation(mappedType, x3d, z3d, false, 0, breadboardCount);
+
+      posMap.set(comp.id, {
+        x3d,
+        y3d,
+        z3d,
+        rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
+        rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
+        rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
+      });
+    }
+
+    // Return in original component order
+    return physicalComponents.map((comp) => {
+      const mappedType = mapCircuitCompTo3DType(comp);
+      const pos = posMap.get(comp.id) || {
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        rotX: 0,
+        rotZ: 0,
+      };
+      return {
+        id: comp.id,
+        type: mappedType,
+        label: comp.label,
+        value: comp.value,
+        parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
+        x3d: pos.x3d,
+        y3d: pos.y3d,
+        z3d: pos.z3d,
+        rotY: pos.rotY,
+        rotX: pos.rotX,
+        rotZ: pos.rotZ,
+      };
+    });
+  }, [components, breadboardCount]);
 
   // Forensically synchronize changes made to components externally (e.g. Inspector MCU Physical Representation, Power switch, values, rotation, footprint)
   useEffect(() => {
@@ -222,12 +554,19 @@ export function Virtual3dStudio({
         return c3d;
       });
 
-      // Synchronize newly added components from schematic library into active 3D view
+      // Synchronize newly added components from schematic library into active 3D view with spacious collision-free auto-layout
       const existingIds = new Set(prev.map((c) => c.id));
-      const newlyAdded = components
-        .filter((c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd') && !existingIds.has(c.id))
-        .map((comp) => {
+      const newlyAddedRaw = components.filter(
+        (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd') && !existingIds.has(c.id)
+      );
+
+      if (newlyAddedRaw.length > 0) {
+        const autoAll = schematicTo3DComponents(true, components);
+        const autoPosMap = new Map(autoAll.map((c) => [c.id, c]));
+
+        const newlyAdded = newlyAddedRaw.map((comp) => {
           const mapped = mapCircuitCompTo3DType(comp);
+          const autoPos = autoPosMap.get(comp.id);
           return {
             id: comp.id,
             type: mapped,
@@ -240,204 +579,125 @@ export function Virtual3dStudio({
               ...(comp.packageType ? { packageType: comp.packageType } : {}),
               ...(comp.mirrored !== undefined ? { mirrored: comp.mirrored } : {}),
             },
-            x3d: comp.x3d ?? -20,
-            y3d: comp.y3d ?? 8.5,
-            z3d: comp.z3d ?? 8.42,
+            x3d: comp.x3d ?? autoPos?.x3d ?? 0,
+            y3d: comp.y3d ?? autoPos?.y3d ?? 8.5,
+            z3d: comp.z3d ?? autoPos?.z3d ?? 8.42,
             rotY: comp.rot3d !== undefined ? comp.rot3d : (comp.rotation ?? 0),
             rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
             rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
           };
         });
 
-      if (newlyAdded.length > 0) {
         return [...next, ...newlyAdded];
       }
       return changed ? next : prev;
     });
-  }, [components, independentComponents]);
+  }, [components, independentComponents, schematicTo3DComponents]);
 
-  // Convert 2D schematic components to 3D representation without placing any parts floating in air
-  const schematicTo3DComponents = useCallback((forceAutoLayout = false, compsList: CircuitComponent[] = components): Component3D[] => {
-    let mcuIdx = 0;
-    let batteryIdx = 0;
-    let sensorIdx = 0;
-    let passiveIdx = 0;
-
-    // Filter out virtual schematic rails (GND / VCC) - they are physically routed via breadboard power rails
-    const physicalComponents = compsList.filter(
-      (c) => c.type !== 'GROUND' && c.type !== 'VCC' && !c.id.toLowerCase().startsWith('gnd')
-    );
-
-    return physicalComponents.map((comp) => {
-      const mappedType = mapCircuitCompTo3DType(comp);
-
-      // Preserve previously saved 3D coordinates if valid (unless forceAutoLayout is true)
-      if (!forceAutoLayout && comp.x3d !== undefined && comp.y3d !== undefined && comp.z3d !== undefined) {
-        return {
-          id: comp.id,
-          type: mappedType,
-          label: comp.label,
-          value: comp.value,
-          parameters: comp.parameters || {},
-          x3d: comp.x3d,
-          y3d: comp.y3d,
-          z3d: comp.z3d,
-          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
-          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
-          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
-        };
-      }
-
-      // Grounding & Snapping Rules (Never floating in air)
-      // A. Main Microcontrollers: Place flat on workbench table (y = 0) in front of breadboard
-      if (['ARDUINO_UNO', 'ARDUINO_MEGA'].includes(mappedType)) {
-        const x3d = (mcuIdx % 2 === 0 ? 1 : -1) * Math.floor((mcuIdx + 1) / 2) * 85;
-        const z3d = 65; // In front of breadboard
-        mcuIdx++;
-        return {
-          id: comp.id,
-          type: mappedType,
-          label: comp.label,
-          value: comp.value,
-          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
-          x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
-          z3d,
-          rotY: 0,
-          rotX: 0,
-          rotZ: 0,
-        };
-      }
-
-      // B. Batteries: Place flat on workbench table to the left (y = 0)
-      if (mappedType === 'BATTERY_9V') {
-        const x3d = -95 - batteryIdx * 35;
-        const z3d = 0;
-        batteryIdx++;
-        return {
-          id: comp.id,
-          type: mappedType,
-          label: comp.label,
-          value: comp.value,
-          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
-          x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
-          z3d,
-          rotY: 0,
-          rotX: 0,
-          rotZ: 0,
-        };
-      }
-
-      // C. Heavy Modules / Displays: Place flat on workbench table to the right (y = 0)
-      if (['HC_SR04', 'SERVO_SG90', 'LCD_1602', 'MODULE_BLUETOOTH_HC05'].includes(mappedType)) {
-        const x3d = 95 + (sensorIdx % 2) * 35;
-        const z3d = -35 + Math.floor(sensorIdx / 2) * 45;
-        sensorIdx++;
-        return {
-          id: comp.id,
-          type: mappedType,
-          label: comp.label,
-          value: comp.value,
-          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
-          x3d,
-          y3d: computeComponentGroundElevation(mappedType, x3d, z3d, false),
-          z3d,
-          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
-          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
-          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
-        };
-      }
-
-      // D. Compact DIP Microcontrollers & ICs (Nano, ESP32, Pico, NE555):
-      // Straddle breadboard center isolation trench directly seated with pin insertion clearance
-      // For DIP-8 (NE555), center is at -3.81mm (START_X + 29.5 * PITCH_X) to seat pins 1..4 in cols 29..32 (Row E) and pins 5..8 in cols 32..29 (Row F)
-      if (['ARDUINO_NANO', 'ESP32_DEVKIT', 'RASPBERRY_PI_PICO', 'TIMER_555'].includes(mappedType)) {
-        const colX = mappedType === 'TIMER_555' ? -3.81 : -5.08;
-        const z3d = 0;
-        return {
-          id: comp.id,
-          type: mappedType,
-          label: comp.label,
-          value: comp.value,
-          parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
-          x3d: colX,
-          y3d: computeComponentGroundElevation(mappedType, colX, z3d, true),
-          z3d, // Straddling center isolation trench (pins in rows E and F)
-          rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
-          rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
-          rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
-        };
-      }
-
-      // E. Through-Hole Passives (Resistors, LEDs, Capacitors, Diodes, Buttons, Trimmers, LDRs, RGB LED, Buzzer):
-      // Assign non-overlapping, dedicated breadboard columns separated by multiple empty rows/cols:
-      // Left of IC: Cols 10, 16, 22. Right of IC: Cols 38, 44, 50, 56.
-      const DEDICATED_COLS = [10, 16, 22, 38, 44, 50, 56];
-      const assignedCol = DEDICATED_COLS[passiveIdx % DEDICATED_COLS.length];
-      const colX = -78.74 + (assignedCol - 1) * 2.54;
-      const isTopStrip = passiveIdx % 2 === 0;
-      const z3d = isTopStrip ? -8.42 : 8.42;
-      passiveIdx++;
-      return {
-        id: comp.id,
-        type: mappedType,
-        label: comp.label,
-        value: comp.value,
-        parameters: cleanParams(comp.parameters, comp.model3d, comp.footprint, comp.packageType, comp.mirrored),
-        x3d: colX,
-        y3d: computeComponentGroundElevation(mappedType, colX, z3d, true),
-        z3d, // Seated in terminal rows
-        rotY: typeof comp.parameters?.rotY === 'number' ? comp.parameters.rotY : (comp.rot3d !== undefined ? comp.rot3d : (comp.rotation || 0)),
-        rotX: typeof comp.parameters?.rotX === 'number' ? comp.parameters.rotX : 0,
-        rotZ: typeof comp.parameters?.rotZ === 'number' ? comp.parameters.rotZ : 0,
-      };
+  // Reconcile independent 3D wires when schematic wires change to prevent phantom lingering wires
+  useEffect(() => {
+    if (independentWires === null) return;
+    const validCompIds = new Set(components.map((c) => c.id));
+    setIndependentWires((prev) => {
+      if (!prev) return prev;
+      const valid = prev.filter(
+        (w) =>
+          (w.fromPin.compId === 'breadboard' || validCompIds.has(w.fromPin.compId)) &&
+          (w.toPin.compId === 'breadboard' || validCompIds.has(w.toPin.compId))
+      );
+      return valid.length !== prev.length ? valid : prev;
     });
-  }, [components]);
+  }, [wires, components, independentWires]);
 
-  // Helper: Resolve exact breadboard hole for a component's lead pin
+  // Helper: Resolve exact breadboard hole for a component's lead pin (supporting multi-breadboard bb_, bb2_, bb3_)
   const getBreadboardHoleForComponentPin = useCallback((comp: Component3D, pinId: string): string | null => {
-    const isDip = comp.type === 'TIMER_555' || comp.type === 'DIP_IC' || comp.type.includes('DIP') || comp.type.includes('555');
+    const isBoard3 = comp.z3d !== undefined && comp.z3d < -90;
+    const isBoard2 = comp.z3d !== undefined && comp.z3d < -30 && !isBoard3;
+    const boardPrefix = isBoard3 ? 'bb3_' : isBoard2 ? 'bb2_' : 'bb_';
+    const boardCenterZ = isBoard3 ? -120.0 : isBoard2 ? -60.0 : 0.0;
+
+    const isDip =
+      comp.type === 'TIMER_555' ||
+      comp.type === 'DIP_IC' ||
+      comp.type.includes('DIP') ||
+      comp.type.includes('555') ||
+      comp.type.includes('74HC') ||
+      comp.type.includes('358') ||
+      comp.type.includes('324') ||
+      comp.type.includes('595') ||
+      comp.type.includes('4017') ||
+      comp.type.includes('2003') ||
+      comp.type.includes('293');
+
     if (isDip) {
-      const centerCol = Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1;
-      const pinNum = parseInt(pinId, 10);
-      if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 8) {
-        if (pinNum <= 4) {
-          const col = Math.max(1, Math.min(63, centerCol - 1 + (pinNum - 1)));
-          return `bb_col_${col}_E`;
-        } else {
-          const col = Math.max(1, Math.min(63, centerCol - 1 + (8 - pinNum)));
-          return `bb_col_${col}_F`;
+      const isDip16 = comp.type.includes('16') || comp.type.includes('595') || comp.type.includes('4017') || comp.type.includes('2003') || comp.type.includes('293');
+      const isDip14 = !isDip16 && (comp.type.includes('14') || comp.type.includes('74HC') || comp.type.includes('324'));
+
+      if (isDip16) {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 16) {
+          if (pinNum <= 8) {
+            const col = Math.max(1, Math.min(63, centerCol + (pinNum - 4)));
+            return `${boardPrefix}col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol + (13 - pinNum)));
+            return `${boardPrefix}col_${col}_F`;
+          }
+        }
+      } else if (isDip14) {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 14) {
+          if (pinNum <= 7) {
+            const col = Math.max(1, Math.min(63, centerCol + (pinNum - 4)));
+            return `${boardPrefix}col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol + (11 - pinNum)));
+            return `${boardPrefix}col_${col}_F`;
+          }
+        }
+      } else {
+        const centerCol = Math.round((comp.x3d - START_X) / PITCH_X - 0.5) + 1;
+        const pinNum = parseInt(pinId, 10);
+        if (!isNaN(pinNum) && pinNum >= 1 && pinNum <= 8) {
+          if (pinNum <= 4) {
+            const col = Math.max(1, Math.min(63, centerCol - 1 + (pinNum - 1)));
+            return `${boardPrefix}col_${col}_E`;
+          } else {
+            const col = Math.max(1, Math.min(63, centerCol - 1 + (8 - pinNum)));
+            return `${boardPrefix}col_${col}_F`;
+          }
         }
       }
     }
 
     const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
-    const isTop = (comp.z3d ?? 0) <= 0;
+    const isTop = (comp.z3d ?? 0) <= boardCenterZ;
     const row = isTop ? 'C' : 'H';
 
     if (comp.type === 'RESISTOR') {
       const col = pinId === '1' ? centerCol - 2 : centerCol + 2;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
       const isPin1 = pinId === '1' || pinId === '+' || pinId.toLowerCase().includes('pos') || pinId.toLowerCase().includes('anode');
       const col = isPin1 ? centerCol - 1 : centerCol + 1;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'LED') {
       const p = pinId.toLowerCase();
       const isAnode = p === 'anode' || p === 'a' || p === '1' || p === '+';
       const col = isAnode ? centerCol - 1 : centerCol + 1;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
       const isAnode = pinId === '1' || pinId === 'anode' || pinId === 'a';
       const col = isAnode ? centerCol - 2 : centerCol + 2;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED' || comp.parameters?.model3d === 'led_rgb_5mm') {
@@ -448,7 +708,7 @@ export function Virtual3dStudio({
       else if (p === 'g' || p === '3' || p === 'green') colOffset = 1;
       else if (p === 'b' || p === '4' || p === 'blue') colOffset = 2;
       const col = centerCol + colOffset;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (
@@ -461,7 +721,7 @@ export function Virtual3dStudio({
       const p = (pinId || '').trim().toLowerCase();
       const isPos = p === '+' || p === '1' || p === 'pos' || p === 'p' || p === 'anode';
       const col = isPos ? centerCol - 1 : centerCol + 1;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'HC_SR04' || comp.type === 'SENSOR_ULTRASONIC') {
@@ -472,7 +732,7 @@ export function Virtual3dStudio({
       else if (p === 'echo' || p === '3') colOffset = 1;
       else if (p === 'gnd' || p === '4' || p === '-') colOffset = 2;
       const col = centerCol + colOffset;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (
@@ -492,7 +752,7 @@ export function Virtual3dStudio({
       else if (p === 'vcc' || p === '5v' || p === '5' || p === '+') colOffset = 2;
       else if (p === 'en' || p === 'key' || p === '6') colOffset = 3;
       const col = centerCol + colOffset;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
     if (comp.type === 'BJT_NPN' || comp.type === 'BJT_PNP' || comp.type === 'TRANSISTOR_NPN' || comp.type === 'TRANSISTOR_PNP') {
@@ -502,10 +762,10 @@ export function Virtual3dStudio({
       else if (p === 'b' || p === 'base' || p === '2') colOffset = 0;
       else if (p === 'c' || p === 'collector' || p === '3') colOffset = 1;
       const col = centerCol + colOffset;
-      return `bb_col_${Math.max(1, Math.min(63, col))}_${row}`;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
     }
 
-    return `bb_col_${Math.max(1, Math.min(63, centerCol))}_${row}`;
+    return `${boardPrefix}col_${Math.max(1, Math.min(63, centerCol))}_${row}`;
   }, []);
 
   // Authentic Breadboard Power Rail Routing & Strict Zero-Shared-Holes Allocation
@@ -527,7 +787,21 @@ export function Virtual3dStudio({
     for (const c3d of comps3d) {
       if (['ARDUINO_UNO', 'ARDUINO_MEGA', 'BATTERY_9V'].includes(c3d.type)) continue;
 
-      if (c3d.type === 'TIMER_555' || c3d.type === 'DIP_IC') {
+      if (c3d.type.includes('16') || c3d.type.includes('595') || c3d.type.includes('4017') || c3d.type.includes('2003') || c3d.type.includes('293')) {
+        for (let p = 1; p <= 16; p++) {
+          const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
+          if (holeId) {
+            occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: String(p) });
+          }
+        }
+      } else if (c3d.type.includes('74HC') || c3d.type.includes('DIP14') || c3d.type.includes('DIP_14') || c3d.type.includes('324')) {
+        for (let p = 1; p <= 14; p++) {
+          const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
+          if (holeId) {
+            occupancy.occupy(holeId, { type: 'component_pin', ownerId: c3d.id, pinId: String(p) });
+          }
+        }
+      } else if (c3d.type === 'TIMER_555' || c3d.type === 'DIP_IC' || c3d.type.includes('358') || c3d.type.includes('DIP')) {
         for (let p = 1; p <= 8; p++) {
           const holeId = getBreadboardHoleForComponentPin(c3d, String(p));
           if (holeId) {
@@ -598,8 +872,15 @@ export function Virtual3dStudio({
     const SIGNAL_COLORS = ['#3B82F6', '#10B981', '#EAB308', '#F97316'];
     let sigColorIdx = 0;
 
-    // 1. Battery Connections to Top Rails at Col 1
-    if (battery) {
+    const connectedCompIds = new Set<string>();
+    srcWires.forEach((w) => {
+      connectedCompIds.add(w.fromCompId);
+      connectedCompIds.add(w.toCompId);
+    });
+    const batteryIsConnected = Boolean(battery && connectedCompIds.has(battery.id));
+
+    // 1. Battery Connections to Top Rails at Col 1 ONLY if battery has wires in circuit
+    if (battery && batteryIsConnected) {
       const batPosHole = 'bb_rail_top_pos_1';
       const batNegHole = 'bb_rail_top_neg_1';
       occupancy.occupy(batPosHole, { type: 'wire_end', ownerId: battery.id });
@@ -666,6 +947,82 @@ export function Virtual3dStudio({
       });
     }
 
+    // Inter-Breadboard Power Rail Bridges when breadboardCount >= 2 AND battery is connected
+    if (breadboardCount >= 2 && batteryIsConnected) {
+      // Connect Board 1 Top Rails <-> Board 2 Bottom Rails
+      const b1PosLeft = 'bb_rail_top_pos_4';
+      const b2PosLeft = 'bb2_rail_bottom_pos_4';
+      const b1NegLeft = 'bb_rail_top_neg_4';
+      const b2NegLeft = 'bb2_rail_bottom_neg_4';
+
+      occupancy.occupy(b1PosLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_pos_l' });
+      occupancy.occupy(b2PosLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_pos_l' });
+      occupancy.occupy(b1NegLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_neg_l' });
+      occupancy.occupy(b2NegLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_neg_l' });
+
+      outWires.push({
+        id: 'wire_bb1_bb2_rail_pos_left',
+        fromPin: { compId: 'breadboard', pinId: b1PosLeft },
+        toPin: { compId: 'breadboard', pinId: b2PosLeft },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: 'wire_bb1_bb2_rail_neg_left',
+        fromPin: { compId: 'breadboard', pinId: b1NegLeft },
+        toPin: { compId: 'breadboard', pinId: b2NegLeft },
+        color: '#1E293B',
+      });
+
+      const b1PosRight = 'bb_rail_top_pos_48';
+      const b2PosRight = 'bb2_rail_bottom_pos_48';
+      const b1NegRight = 'bb_rail_top_neg_48';
+      const b2NegRight = 'bb2_rail_bottom_neg_48';
+
+      occupancy.occupy(b1PosRight, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_pos_r' });
+      occupancy.occupy(b2PosRight, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_pos_r' });
+      occupancy.occupy(b1NegRight, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_neg_r' });
+      occupancy.occupy(b2NegRight, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_neg_r' });
+
+      outWires.push({
+        id: 'wire_bb1_bb2_rail_pos_right',
+        fromPin: { compId: 'breadboard', pinId: b1PosRight },
+        toPin: { compId: 'breadboard', pinId: b2PosRight },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: 'wire_bb1_bb2_rail_neg_right',
+        fromPin: { compId: 'breadboard', pinId: b1NegRight },
+        toPin: { compId: 'breadboard', pinId: b2NegRight },
+        color: '#1E293B',
+      });
+    }
+
+    if (breadboardCount >= 3 && batteryIsConnected) {
+      // Connect Board 2 Top Rails <-> Board 3 Bottom Rails
+      const b2PosLeft = 'bb2_rail_top_pos_4';
+      const b3PosLeft = 'bb3_rail_bottom_pos_4';
+      const b2NegLeft = 'bb2_rail_top_neg_4';
+      const b3NegLeft = 'bb3_rail_bottom_neg_4';
+
+      occupancy.occupy(b2PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
+      occupancy.occupy(b3PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
+      occupancy.occupy(b2NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
+      occupancy.occupy(b3NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
+
+      outWires.push({
+        id: 'wire_bb2_bb3_rail_pos_left',
+        fromPin: { compId: 'breadboard', pinId: b2PosLeft },
+        toPin: { compId: 'breadboard', pinId: b3PosLeft },
+        color: '#EF4444',
+      });
+      outWires.push({
+        id: 'wire_bb2_bb3_rail_neg_left',
+        fromPin: { compId: 'breadboard', pinId: b2NegLeft },
+        toPin: { compId: 'breadboard', pinId: b3NegLeft },
+        color: '#1E293B',
+      });
+    }
+
     // Helper to determine if a component attaches wires directly to its pins rather than via breadboard spring clips
     const isDirectWireComponent = (comp?: Component3D) => {
       if (!comp) return false;
@@ -718,8 +1075,10 @@ export function Virtual3dStudio({
         const toComp = comps3d.find((c) => c.id === w.toCompId);
         if (!toComp) return;
         const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const isTop = (toComp.z3d ?? -8) <= 0;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        const toBoardPrefix = (toComp.z3d !== undefined && toComp.z3d < -90) ? 'bb3_' : (toComp.z3d !== undefined && toComp.z3d < -30) ? 'bb2_' : 'bb_';
+        const toBoardCenterZ = (toComp.z3d !== undefined && toComp.z3d < -90) ? -120.0 : (toComp.z3d !== undefined && toComp.z3d < -30) ? -60.0 : 0.0;
+        const isTop = (toComp.z3d ?? -8) <= toBoardCenterZ;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', toBoardPrefix);
 
         if (isDirectWireComponent(toComp)) {
           if (railHole) {
@@ -755,8 +1114,10 @@ export function Virtual3dStudio({
         const fromComp = comps3d.find((c) => c.id === w.fromCompId);
         if (!fromComp) return;
         const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const isTop = (fromComp.z3d ?? -8) <= 0;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos');
+        const fromBoardPrefix = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? 'bb3_' : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? 'bb2_' : 'bb_';
+        const fromBoardCenterZ = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? -120.0 : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? -60.0 : 0.0;
+        const isTop = (fromComp.z3d ?? -8) <= fromBoardCenterZ;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', fromBoardPrefix);
 
         if (isDirectWireComponent(fromComp)) {
           if (railHole) {
@@ -794,8 +1155,10 @@ export function Virtual3dStudio({
         const toComp = comps3d.find((c) => c.id === w.toCompId);
         if (!toComp) return;
         const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const isTop = (toComp.z3d ?? -8) <= 0;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        const toBoardPrefix = (toComp.z3d !== undefined && toComp.z3d < -90) ? 'bb3_' : (toComp.z3d !== undefined && toComp.z3d < -30) ? 'bb2_' : 'bb_';
+        const toBoardCenterZ = (toComp.z3d !== undefined && toComp.z3d < -90) ? -120.0 : (toComp.z3d !== undefined && toComp.z3d < -30) ? -60.0 : 0.0;
+        const isTop = (toComp.z3d ?? -8) <= toBoardCenterZ;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', toBoardPrefix);
 
         if (isDirectWireComponent(toComp)) {
           if (railHole) {
@@ -831,8 +1194,10 @@ export function Virtual3dStudio({
         const fromComp = comps3d.find((c) => c.id === w.fromCompId);
         if (!fromComp) return;
         const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const isTop = (fromComp.z3d ?? -8) <= 0;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg');
+        const fromBoardPrefix = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? 'bb3_' : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? 'bb2_' : 'bb_';
+        const fromBoardCenterZ = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? -120.0 : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? -60.0 : 0.0;
+        const isTop = (fromComp.z3d ?? -8) <= fromBoardCenterZ;
+        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', fromBoardPrefix);
 
         if (isDirectWireComponent(fromComp)) {
           if (railHole) {
@@ -932,8 +1297,16 @@ export function Virtual3dStudio({
       });
     });
 
-    return outWires;
-  }, [wires, components, independentComponents, schematicTo3DComponents, getBreadboardHoleForComponentPin]);
+    // Strict phantom wire filter: Any component with 0 connections in srcWires must have 0 wires attached
+    return outWires.filter((w) => {
+      if (w.id.startsWith('wire_bat_') || w.id.startsWith('wire_rail_bridge') || w.id.startsWith('wire_bb')) {
+        return batteryIsConnected;
+      }
+      if (w.fromPin.compId !== 'breadboard' && !connectedCompIds.has(w.fromPin.compId)) return false;
+      if (w.toPin.compId !== 'breadboard' && !connectedCompIds.has(w.toPin.compId)) return false;
+      return true;
+    });
+  }, [wires, components, independentComponents, schematicTo3DComponents, getBreadboardHoleForComponentPin, breadboardCount]);
 
   // Active 3D components and wires in the workbench
   const activeComponents3d: Component3D[] = useMemo(() => {
@@ -1106,19 +1479,40 @@ export function Virtual3dStudio({
 
     const comp = components.find((c) => c.id === compId);
     const active = activeComponents3d.find((c) => c.id === compId);
-    if (comp && onUpdateComponent) {
-      toast.success(
-        nextState
-          ? `🔌 Connected USB Power to ${comp.label} (5.0V Active)`
-          : `⚡ Unplugged USB Cable from ${comp.label}`
-      );
+    const label = comp?.label || targetComp?.label || 'MCU';
+
+    toast.success(
+      nextState
+        ? `🔌 Connected USB Power to ${label} (5.0V Active)`
+        : `⚡ Unplugged USB Cable from ${label} (0V)`
+    );
+
+    const compToUpdate: CircuitComponent | null = comp || (targetComp ? {
+      id: targetComp.id,
+      type: targetComp.type,
+      label: targetComp.label,
+      value: ('value' in targetComp && targetComp.value) ? targetComp.value : '5V',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      pins: [],
+      category: 'microcontrollers' as const,
+      footprint: '',
+      parameters: targetComp.parameters || {},
+      x3d: targetComp.x3d,
+      y3d: targetComp.y3d,
+      z3d: targetComp.z3d,
+      rot3d: 'rotY' in targetComp ? (targetComp.rotY ?? 0) : ((targetComp as CircuitComponent).rot3d ?? (targetComp as CircuitComponent).rotation ?? 0),
+    } : null);
+
+    if (compToUpdate && onUpdateComponent) {
       onUpdateComponent({
-        ...comp,
-        x3d: active?.x3d ?? comp.x3d,
-        y3d: active?.y3d ?? comp.y3d,
-        z3d: active?.z3d ?? comp.z3d,
-        rot3d: active?.rotY ?? comp.rot3d,
-        parameters: { ...comp.parameters, usbPlugged: nextState, dcJackPlugged: false },
+        ...compToUpdate,
+        x3d: active?.x3d ?? compToUpdate.x3d,
+        y3d: active?.y3d ?? compToUpdate.y3d,
+        z3d: active?.z3d ?? compToUpdate.z3d,
+        rot3d: active?.rotY ?? compToUpdate.rot3d,
+        parameters: { ...compToUpdate.parameters, usbPlugged: nextState, dcJackPlugged: false },
       });
     }
   }, [activeComponents3d, components, onUpdateComponent]);
@@ -1151,6 +1545,7 @@ export function Virtual3dStudio({
     else if (c3d.type === 'SLIDE_SWITCH') catalogType = 'SWITCH_SPST';
 
     const tmpl =
+      COMPONENT_CATALOG.find((t) => t.type === c3d.type) ||
       COMPONENT_CATALOG.find((t) => t.type === catalogType) ||
       (catalogType === 'RASPBERRY_PI_PICO' ? COMPONENT_CATALOG.find((t) => t.type === 'ARDUINO_UNO') : undefined) ||
       COMPONENT_CATALOG.find((t) => t.type === 'RESISTOR') ||
@@ -1320,9 +1715,17 @@ export function Virtual3dStudio({
                 ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-400 hover:bg-emerald-900/80'
                 : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
             }`}
-            title={hasBreadboard ? 'Click to Remove 830-Point Solderless Breadboard' : 'Click to Add 830-Point Breadboard to Workbench'}
+            title={hasBreadboard ? 'Click to expand / cycle solderless breadboards (1 -> 2 -> 3 -> 0)' : 'Click to Add 830-Point Breadboard to Workbench'}
           >
-            <span>{hasBreadboard ? '✓ 830-Pt Board' : '+ Breadboard'}</span>
+            <span>
+              {breadboardCount === 0
+                ? '+ Breadboard'
+                : breadboardCount === 1
+                ? '✓ 1 Board (+ Board 2)'
+                : breadboardCount === 2
+                ? '✓ 2 Boards (+ Board 3)'
+                : '✓ 3 Boards (Reset)'}
+            </span>
           </button>
         </div>
 
@@ -1372,6 +1775,51 @@ export function Virtual3dStudio({
               </button>
             </div>
           )}
+
+          {/* Active MCU USB Power Cable Toggle Button */}
+          {(() => {
+            const selectedComp = activeComponents3d.find((c) => c.id === selectedCompId);
+            const isSelectedMcu = selectedComp && (
+              selectedComp.type.startsWith('ARDUINO') ||
+              selectedComp.type.startsWith('ESP32') ||
+              selectedComp.type.startsWith('RASPBERRY_PI') ||
+              selectedComp.type.startsWith('STM32') ||
+              selectedComp.type.includes('MCU')
+            );
+            const targetMcu = isSelectedMcu
+              ? selectedComp
+              : activeComponents3d.find((c) =>
+                  c.type.startsWith('ARDUINO') ||
+                  c.type.startsWith('ESP32') ||
+                  c.type.startsWith('RASPBERRY_PI') ||
+                  c.type.startsWith('STM32') ||
+                  c.type.includes('MCU')
+                );
+            if (!targetMcu) return null;
+            const isConnected = targetMcu.parameters?.usbPlugged !== false;
+            return (
+              <div className="flex items-center gap-1 border-r border-slate-700/60 pr-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleToggleMcuUsb(targetMcu.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 border rounded text-xs font-bold transition-all cursor-pointer ${
+                    isConnected
+                      ? 'bg-cyan-950/80 hover:bg-cyan-900 border-cyan-500/80 text-cyan-300 shadow-sm'
+                      : 'bg-amber-950/90 hover:bg-amber-900 border-amber-400 text-amber-300 animate-pulse shadow-lg ring-1 ring-amber-400/50'
+                  }`}
+                  title={
+                    isConnected
+                      ? `Click to Unplug USB Cable from ${targetMcu.label} (Power drops to 0V)`
+                      : `Click to Connect USB Cable to ${targetMcu.label} (5.0V Active)`
+                  }
+                >
+                  <Usb className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">{isConnected ? 'USB (5V)' : 'Connect USB'}</span>
+                  <span className="sm:hidden">{isConnected ? '5V' : 'USB'}</span>
+                </button>
+              </div>
+            );
+          })()}
 
           <button
             type="button"
@@ -1427,6 +1875,7 @@ export function Virtual3dStudio({
       <div className="flex-1 relative w-full h-full overflow-hidden">
         <Studio3DCanvas
           hasBreadboard={hasBreadboard}
+          breadboardCount={breadboardCount}
           onToggleBreadboard={handleToggleBreadboard}
           onToggleMcuUsb={handleToggleMcuUsb}
           components3d={activeComponents3d}

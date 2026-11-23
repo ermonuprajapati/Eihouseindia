@@ -14,7 +14,6 @@ import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starte
 import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { VirtualMcuRuntime, GpioState } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
-import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 
 import { LabHeader, ExportFormat } from './Header/LabHeader';
@@ -32,10 +31,6 @@ import {
   exportCanvasToPng,
   exportSvgElementToPng,
 } from '@/modules/engineering-lab/utils/export-helpers';
-import {
-  generateSpiceNetlist,
-  downloadSpiceNetlist,
-} from '@/modules/engineering-lab/circuit-engine/spice-netlist-generator';
 import { useOptionalAuth } from '@/modules/auth/auth-context';
 import {
   saveUserExplicitProject,
@@ -195,6 +190,19 @@ export function EngineeringLabApp() {
   // Synchronize Tab with URL query parameter and localStorage
   const handleModeChange = useCallback((newMode: WorkspaceMode) => {
     setActiveMode(newMode);
+    if (newMode === 'pcb2d' || newMode === 'pcb3d') {
+      setProject((prev) => {
+        const schematicRealComps = prev.components.filter(
+          (c) => !c.type?.toUpperCase().includes('GND') && !c.type?.toUpperCase().includes('VCC')
+        );
+        const pcbComps = prev.pcb?.components || [];
+        if (pcbComps.length === 0 || pcbComps.length !== schematicRealComps.length) {
+          const updatedPcb = PcbGenerator.generatePcbFromSchematic(prev.components, prev.wires);
+          return { ...prev, pcb: updatedPcb };
+        }
+        return prev;
+      });
+    }
     if (typeof window !== 'undefined') {
       const slug = MODE_TO_PARAM[newMode] || newMode;
       try {
@@ -714,11 +722,14 @@ export function EngineeringLabApp() {
     return () => cancelAnimationFrame(animId);
   }, [isSimulating, project.components, project.wires, project.instruments, handleResetFaults]);
 
-  // Sync PCB whenever components or wires change
+  // Sync PCB whenever components or wires change ONLY when active mode is 2D or 3D PCB
   useEffect(() => {
+    if (activeMode !== 'pcb2d' && activeMode !== 'pcb3d') {
+      return;
+    }
     const updatedPcb = PcbGenerator.generatePcbFromSchematic(project.components, project.wires);
     setProject((prev) => ({ ...prev, pcb: updatedPcb }));
-  }, [project.components, project.wires]);
+  }, [activeMode, project.components, project.wires]);
 
   // ----------------------------------------------------------------
   // Component Actions
@@ -1000,6 +1011,7 @@ export function EngineeringLabApp() {
       downloadBlob(blob, `${slug}_BOM.csv`);
       toast.success('Bill of Materials exported (.csv)');
     } else if (format === 'gerber') {
+      const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
       GerberExporter.exportGerberZip(curProject.pcb, curProject.components, curProject.title);
       toast.success('RS-274X Gerber & Excellon Drill ZIP package generated');
     } else if (format === 'firmware') {
@@ -1011,6 +1023,9 @@ export function EngineeringLabApp() {
       downloadBlob(blob, `${slug}.cpp`);
       toast.success('C++ source file exported (.cpp)');
     } else if (format === 'netlist') {
+      const { generateSpiceNetlist, downloadSpiceNetlist } = await import(
+        '@/modules/engineering-lab/circuit-engine/spice-netlist-generator'
+      );
       const netlist = generateSpiceNetlist(curProject.title, curProject.components, curProject.wires);
       downloadSpiceNetlist(curProject.title, netlist);
       toast.success('SPICE Netlist exported (.cir)');
@@ -1038,6 +1053,7 @@ export function EngineeringLabApp() {
       toast.success('JSON Netlist exported');
     } else if (format === 'svg') {
       if (activeMode === 'pcb2d') {
+        const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
         const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
         const blob = new Blob([pcbSvg], { type: 'image/svg+xml;charset=utf-8' });
         downloadBlob(blob, `${slug}_pcb.svg`);
@@ -1078,6 +1094,7 @@ export function EngineeringLabApp() {
           toast.error('PCB 3D canvas not ready for snapshot.');
         }
       } else if (activeMode === 'pcb2d') {
+        const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
         const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = pcbSvg;

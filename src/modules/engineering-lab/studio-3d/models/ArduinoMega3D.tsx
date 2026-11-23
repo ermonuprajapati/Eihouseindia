@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { Html } from '@react-three/drei';
 
 export interface ArduinoMega3DProps {
   position?: [number, number, number];
@@ -309,9 +308,17 @@ export function ArduinoMega3D({
 
       {/* High-Resolution White Silkscreen Face Overlay */}
       {silkscreenTexture && (
-        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 1.63, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[101.0, 52.8]} />
-          <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.92} />
+          <meshBasicMaterial
+            map={silkscreenTexture}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
         </mesh>
       )}
 
@@ -364,18 +371,25 @@ export function ArduinoMega3D({
           <mesh geometry={usbCableTubeGeo} material={materials.usbCablePvc} castShadow />
         </group>
       ) : (
-        /* Unplugged Disconnected Indicator */
+        /* Unplugged Disconnected Indicator - click to plug in */
         <group
-          position={[-52, 5.5, -14]}
+          position={[-64, 5.5, -14]}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleUsb?.();
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setUsbHovered(true);
+          }}
+          onPointerOut={() => setUsbHovered(false)}
         >
-          <mesh position={[0, 0, 0]}>
-            <sphereGeometry args={[2.5, 16, 16]} />
-            <meshBasicMaterial color="#38BDF8" wireframe />
+          <mesh position={[0, 0, 0]} material={materials.usbPlugMetal}>
+            <boxGeometry args={[6, 9.5, 10.5]} />
+          </mesh>
+          <mesh position={[-9, 0, 0]} material={materials.usbCablePvc}>
+            <boxGeometry args={[12, 11, 12]} />
           </mesh>
         </group>
       )}
@@ -541,20 +555,6 @@ export function ArduinoMega3D({
               <boxGeometry args={[2.4, 6.0, 2.4]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-
-            {/* Crisp readable pin hover flag badge */}
-            {isHovered && (
-              <Html
-                position={[0, 7.5, 0]}
-                center
-                distanceFactor={75}
-                style={{ pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}
-              >
-                <div className="px-2 py-0.5 rounded bg-slate-950/95 text-amber-300 border border-amber-400 font-mono font-bold text-[11px] shadow-2xl tracking-wider uppercase ring-1 ring-white/60 backdrop-blur-sm pointer-events-none whitespace-nowrap">
-                  {pin.name}
-                </div>
-              </Html>
-            )}
           </group>
         );
       })}
