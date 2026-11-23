@@ -59,11 +59,48 @@ export interface ComponentPin {
   pinType: 'input' | 'output' | 'bidirectional' | 'power' | 'passive';
 }
 
+export type LibraryTier = 'generic' | 'real' | 'industrial';
+
+export type MountingType =
+  | 'THT'
+  | 'SMD'
+  | 'MODULE_HEADER'
+  | 'BOARD_OFFBOARD'
+  | 'PANEL_DIN'
+  | 'Through-Hole'
+  | 'Surface-Mount'
+  | 'Socketed'
+  | 'Chassis';
+
+export type PlacementClass =
+  | 'single-passive'
+  | 'single-semiconductor'
+  | 'ic-dip'
+  | 'module-breadboard'
+  | 'dev-board'
+  | 'offboard-console'
+  | 'industrial-equipment';
+
+export interface PadSpec {
+  pinId: string;
+  pinNumber: number | string;
+  xMm: number;
+  yMm: number;
+  drillMm: number;
+  padDiameterMm: number;
+  shape: 'circle' | 'rect' | 'oval';
+}
+
 export interface PhysicalSpec {
-  packageType: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
+  packageCode?: string;
+  mountingType?: MountingType;
+  placementClass?: PlacementClass;
   dimensionsMm: { width: number; height: number; depth?: number };
+  bodyDimensionsMm?: { width: number; depth: number; height: number };
+  courtyardMm?: { width: number; depth: number; margin: number };
   pinPitchMm: number;
-  mountingType?: 'Through-Hole' | 'Surface-Mount' | 'Socketed' | 'Chassis';
+  pads?: PadSpec[];
   padFootprintSvg?: string;
 }
 
@@ -74,6 +111,16 @@ export interface CircuitComponent {
   designator?: string;
   category: ComponentCategory;
   subCategory?: string;
+  componentName?: string;
+  libraryTier?: LibraryTier;
+  manufacturer?: string;
+  partNumber?: string;
+  source?: string;
+  simulationModel?: string;
+  symbolId?: string;
+  footprintId?: string;
+  model3dId?: string;
+  placementClass?: PlacementClass;
   simulationStatus?: SimulationSupportStatus;
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
   physicalSpec?: PhysicalSpec;

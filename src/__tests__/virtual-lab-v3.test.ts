@@ -3,6 +3,14 @@ import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studi
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { CircuitComponent, CircuitWire, Component3D } from '@/modules/engineering-lab/types';
+import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
+import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
+import {
+  MASTER_25_CATEGORIES,
+  getCategory25ForComponent,
+  filterComponentsByTier,
+  getSimulationBadgeInfo,
+} from '@/modules/engineering-lab/circuit-engine/component-categories-25';
 
 describe('Virtual Lab v3 Verification Suite', () => {
   describe('Task 1: RGB LED Schematic Multi-Channel Glow', () => {
@@ -367,6 +375,346 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(sim.on).toBe(true);
       expect(sim.pwrLed).toBe(true);
       expect(sim.voltage).toBe(5.0);
+    });
+  });
+
+  describe('Batch 2A: Unified Physical Representation & 3-Tier Master Component Library', () => {
+    it('100% of registered components carry complete, strongly-typed physical specifications', () => {
+      expect(COMPONENT_CATALOG.length).toBeGreaterThan(150);
+
+      const validMounting = new Set(['THT', 'SMD', 'MODULE_HEADER', 'BOARD_OFFBOARD', 'PANEL_DIN', 'Through-Hole', 'Surface-Mount', 'Socketed', 'Chassis']);
+      const validPlacement = new Set([
+        'single-passive',
+        'single-semiconductor',
+        'ic-dip',
+        'module-breadboard',
+        'dev-board',
+        'offboard-console',
+        'industrial-equipment',
+      ]);
+      const validTiers = new Set(['generic', 'real', 'industrial']);
+
+      COMPONENT_CATALOG.forEach((comp) => {
+        const spec = comp.physicalSpec;
+        expect(spec, `Component ${comp.type} must have physicalSpec`).toBeDefined();
+        if (!spec) return;
+
+        // Package Code
+        expect(spec.packageCode, `Component ${comp.type} must have non-empty packageCode`).toBeTruthy();
+        expect(typeof spec.packageCode).toBe('string');
+
+        // Mounting Type
+        expect(spec.mountingType).toBeDefined();
+        expect(validMounting.has(spec.mountingType!)).toBe(true);
+
+        // Placement Class
+        expect(spec.placementClass).toBeDefined();
+        expect(validPlacement.has(spec.placementClass!)).toBe(true);
+
+        // Library Tier
+        expect(comp.libraryTier).toBeDefined();
+        expect(validTiers.has(comp.libraryTier!)).toBe(true);
+
+        // Pin Pitch
+        expect(spec.pinPitchMm).toBeGreaterThan(0);
+
+        // Body Dimensions: strictly non-zero
+        expect(spec.bodyDimensionsMm).toBeDefined();
+        expect(spec.bodyDimensionsMm!.width, `Component ${comp.type} body width must be > 0`).toBeGreaterThan(0);
+        expect(spec.bodyDimensionsMm!.depth, `Component ${comp.type} body depth must be > 0`).toBeGreaterThan(0);
+        expect(spec.bodyDimensionsMm!.height, `Component ${comp.type} body height must be > 0`).toBeGreaterThan(0);
+
+        // Courtyard: strictly >= body dimensions
+        expect(spec.courtyardMm).toBeDefined();
+        expect(spec.courtyardMm!.width).toBeGreaterThanOrEqual(spec.bodyDimensionsMm!.width);
+        expect(spec.courtyardMm!.depth).toBeGreaterThanOrEqual(spec.bodyDimensionsMm!.depth);
+        expect(spec.courtyardMm!.margin).toBeGreaterThanOrEqual(0);
+
+        // 100% Pad Coverage: Every pin on the component MUST resolve to a pad in physicalSpec.pads
+        expect(spec.pads).toBeDefined();
+        expect(spec.pads!.length).toBeGreaterThanOrEqual(comp.pins.length);
+
+        const padIds = new Set(spec.pads!.map((p) => p.pinId));
+        comp.pins.forEach((pin) => {
+          expect(padIds.has(pin.id), `Pin ${pin.id} on component ${comp.type} must resolve to a pad`).toBe(true);
+        });
+
+        // Pad geometry integrity
+        spec.pads!.forEach((pad) => {
+          expect(pad.pinId).toBeTruthy();
+          expect(pad.drillMm).toBeGreaterThan(0);
+          expect(pad.padDiameterMm).toBeGreaterThan(pad.drillMm);
+          expect(['circle', 'rect', 'oval'].includes(pad.shape)).toBe(true);
+        });
+      });
+    });
+
+    it('enforces exact datasheet pinouts and packages for core Real Parts', () => {
+      // 1. IRLZ44N / IRF540N (TO-220, Infineon): 1: Gate (G), 2: Drain (D), 3: Source (S)
+      const mosfet = COMPONENT_CATALOG.find((c) => c.type === 'MOSFET_N');
+      expect(mosfet).toBeDefined();
+      expect(mosfet!.physicalSpec!.packageCode).toBe('TO-220');
+      expect(mosfet!.physicalSpec!.mountingType).toBe('THT');
+      expect(mosfet!.physicalSpec!.placementClass).toBe('single-semiconductor');
+      const mosPads = mosfet!.physicalSpec!.pads!;
+      expect(mosPads.length).toBe(3);
+      expect(mosPads[0].pinNumber).toBe(1);
+      expect(mosPads[0].pinId).toBe('g');
+      expect(mosPads[1].pinNumber).toBe(2);
+      expect(mosPads[1].pinId).toBe('d');
+      expect(mosPads[2].pinNumber).toBe(3);
+      expect(mosPads[2].pinId).toBe('s');
+
+      // 2. L7805CV (TO-220, ST): 1: Input (IN), 2: Ground (GND), 3: Output (OUT)
+      const reg = COMPONENT_CATALOG.find((c) => c.type === 'REGULATOR_7805');
+      expect(reg).toBeDefined();
+      expect(reg!.physicalSpec!.packageCode).toBe('TO-220');
+      const regPads = reg!.physicalSpec!.pads!;
+      expect(regPads.length).toBe(3);
+      expect(regPads[0].pinNumber).toBe(1);
+      expect(regPads[0].pinId).toBe('in');
+      expect(regPads[1].pinNumber).toBe(2);
+      expect(regPads[1].pinId).toBe('gnd');
+      expect(regPads[2].pinNumber).toBe(3);
+      expect(regPads[2].pinId).toBe('out');
+
+      // 3. NE555 (DIP-8, TI): 1: GND, 2: TRIG, 3: OUT, 4: RESET, 5: CTRL, 6: THRES, 7: DISCH, 8: VCC
+      const timer = COMPONENT_CATALOG.find((c) => c.type === 'TIMER_555');
+      expect(timer).toBeDefined();
+      expect(timer!.physicalSpec!.packageCode).toBe('DIP-8');
+      expect(timer!.physicalSpec!.placementClass).toBe('ic-dip');
+      const timerPads = timer!.physicalSpec!.pads!;
+      expect(timerPads.length).toBe(8);
+      expect(timerPads[0].pinNumber).toBe(1);
+      expect(timerPads[1].pinNumber).toBe(2);
+      expect(timerPads[2].pinNumber).toBe(3);
+      expect(timerPads[3].pinNumber).toBe(4);
+      expect(timerPads[4].pinNumber).toBe(5);
+      expect(timerPads[5].pinNumber).toBe(6);
+      expect(timerPads[6].pinNumber).toBe(7);
+      expect(timerPads[7].pinNumber).toBe(8);
+
+      // 4. LM358 (DIP-8, TI): 1: OUT1, 2: IN1-, 3: IN1+, 4: GND, 8: VCC
+      const opamp = COMPONENT_CATALOG.find((c) => c.type === 'OPAMP_LM358');
+      expect(opamp).toBeDefined();
+      expect(opamp!.physicalSpec!.packageCode).toBe('DIP-8');
+      const opPads = opamp!.physicalSpec!.pads!;
+      const padOut = opPads.find((p) => p.pinId === 'out')!;
+      const padInNeg = opPads.find((p) => p.pinId === 'in_neg')!;
+      const padInPos = opPads.find((p) => p.pinId === 'in_pos')!;
+      const padGnd = opPads.find((p) => p.pinId === 'vee')!;
+      const padVcc = opPads.find((p) => p.pinId === 'vcc')!;
+      expect(padOut.pinNumber).toBe(1);
+      expect(padInNeg.pinNumber).toBe(2);
+      expect(padInPos.pinNumber).toBe(3);
+      expect(padGnd.pinNumber).toBe(4);
+      expect(padVcc.pinNumber).toBe(8);
+
+      // 5. 1N4007 (DO-41, Vishay): 1: Anode (A), 2: Cathode (K)
+      const diode = COMPONENT_CATALOG.find((c) => c.type === 'DIODE');
+      expect(diode).toBeDefined();
+      expect(diode!.physicalSpec!.packageCode).toBe('DO-41');
+      const dPads = diode!.physicalSpec!.pads!;
+      expect(dPads[0].pinId).toBe('a');
+      expect(dPads[0].pinNumber).toBe(1);
+      expect(dPads[1].pinId).toBe('k');
+      expect(dPads[1].pinNumber).toBe(2);
+
+      // 6. ATmega328P (DIP-28, Microchip): 28 verified pads
+      const atmega = COMPONENT_CATALOG.find((c) => c.type === 'MCU_ATMEGA328P');
+      expect(atmega).toBeDefined();
+      expect(atmega!.physicalSpec!.packageCode).toBe('DIP-28');
+      expect(atmega!.physicalSpec!.pads!.length).toBe(28);
+
+      // 7. HC-SR04 (MODULE-HCSR04): 1: VCC, 2: TRIG, 3: ECHO, 4: GND
+      const sr04 = COMPONENT_CATALOG.find((c) => c.type === 'SENSOR_ULTRASONIC');
+      expect(sr04).toBeDefined();
+      expect(sr04!.physicalSpec!.packageCode).toBe('MODULE-HCSR04');
+      expect(sr04!.physicalSpec!.mountingType).toBe('MODULE_HEADER');
+      const srPads = sr04!.physicalSpec!.pads!;
+      expect(srPads.length).toBe(4);
+      expect(srPads[0].pinId).toBe('VCC');
+      expect(srPads[1].pinId).toBe('TRIG');
+      expect(srPads[2].pinId).toBe('ECHO');
+      expect(srPads[3].pinId).toBe('GND');
+
+      // 8. RGB LED 5mm (THT-5MM-4PIN): 4 pads (R, COM, G, B)
+      const rgb = COMPONENT_CATALOG.find((c) => c.type === 'ACTUATOR_RGB_LED');
+      expect(rgb).toBeDefined();
+      expect(rgb!.physicalSpec!.packageCode).toBe('THT-5MM-4PIN');
+      const rgbPads = rgb!.physicalSpec!.pads!;
+      expect(rgbPads.length).toBe(4);
+      expect(rgbPads[0].pinId).toBe('r');
+      expect(rgbPads[1].pinId).toBe('cc');
+      expect(rgbPads[2].pinId).toBe('g');
+      expect(rgbPads[3].pinId).toBe('b');
+    });
+
+    it('classifies components into 3 distinct engineering library tiers', () => {
+      // Industrial Tier
+      const mcb = COMPONENT_CATALOG.find((c) => c.type === 'PROTECTION_MCB_1P');
+      expect(mcb!.libraryTier).toBe('industrial');
+      expect(mcb!.placementClass).toBe('industrial-equipment');
+
+      const contactor = COMPONENT_CATALOG.find((c) => c.type === 'CONTACTOR_MAIN');
+      expect(contactor!.libraryTier).toBe('industrial');
+
+      const estop = COMPONENT_CATALOG.find((c) => c.type === 'EMERGENCY_STOP');
+      expect(estop!.libraryTier).toBe('industrial');
+
+      // Real Tier
+      const timer = COMPONENT_CATALOG.find((c) => c.type === 'TIMER_555');
+      expect(timer!.libraryTier).toBe('real');
+
+      const uno = COMPONENT_CATALOG.find((c) => c.type === 'ARDUINO_UNO');
+      expect(uno!.libraryTier).toBe('real');
+
+      const esp32 = COMPONENT_CATALOG.find((c) => c.type === 'ESP32_DEVKIT');
+      expect(esp32!.libraryTier).toBe('real');
+
+      // Generic Tier
+      const res = COMPONENT_CATALOG.find((c) => c.type === 'RESISTOR');
+      expect(res!.libraryTier).toBe('generic');
+    });
+
+    it('integrates footprint-renderer directly with canonical physicalSpec courtyard', () => {
+      const hcsrComp = COMPONENT_CATALOG.find((c) => c.type === 'SENSOR_ULTRASONIC')!;
+      const layout = FootprintRenderer.calculateSilkscreenLayout({
+        designator: 'U1',
+        type: hcsrComp.type,
+        value: hcsrComp.name,
+        x: 50,
+        y: 50,
+        rotation: 0,
+        physicalSpec: hcsrComp.physicalSpec,
+      });
+
+      expect(layout).toBeDefined();
+      expect(layout.boxBounds).toBeDefined();
+      expect(layout.boxBounds!.width).toBe(hcsrComp.physicalSpec!.courtyardMm!.width);
+      expect(layout.boxBounds!.height).toBe(hcsrComp.physicalSpec!.courtyardMm!.depth);
+    });
+
+    it('ensures dedicated 3D CAD mapping for all active components with zero generic DIP box fallbacks for sensors/modules', () => {
+      // RGB LED maps to LED_RGB (not single-color LED or DIP_PACKAGE)
+      expect(resolve3DModelType('ACTUATOR_RGB_LED')).toBe('LED_RGB');
+
+      // HC-SR04 maps to HC_SR04 (not DIP_PACKAGE)
+      expect(resolve3DModelType('SENSOR_ULTRASONIC')).toBe('HC_SR04');
+
+      // Servo SG90 maps to SERVO_SG90
+      expect(resolve3DModelType('ACTUATOR_SERVO_SG90')).toBe('SERVO_SG90');
+
+      // LCD 1602 maps to LCD_1602
+      expect(resolve3DModelType('DISPLAY_LCD1602')).toBe('LCD_1602');
+
+      // Bluetooth HC-05 maps to BLUETOOTH_HC05
+      expect(resolve3DModelType('MODULE_BLUETOOTH_HC05')).toBe('BLUETOOTH_HC05');
+
+      // Dev boards map to their authentic dedicated 3D models
+      expect(resolve3DModelType('ARDUINO_UNO')).toBe('ARDUINO_UNO');
+      expect(resolve3DModelType('ARDUINO_NANO')).toBe('ARDUINO_NANO');
+      expect(resolve3DModelType('ARDUINO_MEGA')).toBe('ARDUINO_MEGA');
+      expect(resolve3DModelType('ESP32_DEVKIT')).toBe('ESP32_DEVKIT');
+      expect(resolve3DModelType('RASPBERRY_PI_PICO')).toBe('RASPBERRY_PI_PICO');
+    });
+  });
+
+  describe('Task 3: EI House 25-Category Master Component Library & 3-Tier Browser UI', () => {
+    it('verifies exact 25-category engineering navigation hierarchy from 01 to 25', () => {
+      expect(MASTER_25_CATEGORIES.length).toBe(25);
+      const expectedNumbers = Array.from({ length: 25 }, (_, i) => String(i + 1).padStart(2, '0'));
+      MASTER_25_CATEGORIES.forEach((cat, idx) => {
+        expect(cat.number).toBe(expectedNumbers[idx]);
+        expect(cat.label.startsWith(`${expectedNumbers[idx]}.`)).toBe(true);
+      });
+      expect(MASTER_25_CATEGORIES[0].name).toBe('Resistors');
+      expect(MASTER_25_CATEGORIES[24].name).toBe('Mechanical & Thermal Accessories');
+    });
+
+    it('maps components into each of the 25 master categories with 100% catalog coverage', () => {
+      const counts: Record<string, number> = {};
+      MASTER_25_CATEGORIES.forEach((c) => {
+        counts[c.id] = 0;
+      });
+
+      COMPONENT_CATALOG.forEach((comp) => {
+        const cat = getCategory25ForComponent(comp);
+        expect(cat).toBeDefined();
+        expect(cat.number).toMatch(/^\d{2}$/);
+        counts[cat.id]++;
+      });
+
+      // Verify all 25 categories have at least 1 mapped component in the master catalog
+      MASTER_25_CATEGORIES.forEach((c) => {
+        expect(counts[c.id]).toBeGreaterThan(0);
+      });
+    });
+
+    it('filters components accurately across the 3 database tiers (Generic, Real Parts, Industrial)', () => {
+      const genericComps = filterComponentsByTier(COMPONENT_CATALOG, 'generic');
+      const realComps = filterComponentsByTier(COMPONENT_CATALOG, 'real');
+      const industrialComps = filterComponentsByTier(COMPONENT_CATALOG, 'industrial');
+      const allComps = filterComponentsByTier(COMPONENT_CATALOG, 'all');
+
+      expect(genericComps.length).toBeGreaterThan(0);
+      expect(realComps.length).toBeGreaterThan(0);
+      expect(industrialComps.length).toBeGreaterThan(0);
+      expect(genericComps.length + realComps.length + industrialComps.length).toBe(COMPONENT_CATALOG.length);
+      expect(allComps.length).toBe(COMPONENT_CATALOG.length);
+
+      // Verify specific real parts are in real tier
+      const real555 = realComps.find((c) => c.type === 'TIMER_555');
+      expect(real555).toBeDefined();
+      expect(real555!.libraryTier).toBe('real');
+
+      // Verify specific industrial parts are in industrial tier
+      const mcb = industrialComps.find((c) => c.type === 'PROTECTION_MCB_1P');
+      expect(mcb).toBeDefined();
+      expect(mcb!.libraryTier).toBe('industrial');
+    });
+
+    it('resolves truthful simulation status badges: Sim, Partial, and Catalog', () => {
+      const simFull = getSimulationBadgeInfo('full_mna');
+      expect(simFull.label).toBe('Sim');
+      expect(simFull.badgeClass).toContain('emerald');
+
+      const simSupp = getSimulationBadgeInfo('supported');
+      expect(simSupp.label).toBe('Sim');
+
+      const simPartial = getSimulationBadgeInfo('behavioral');
+      expect(simPartial.label).toBe('Partial');
+      expect(simPartial.badgeClass).toContain('amber');
+
+      const simMcu = getSimulationBadgeInfo('transpiled_mcu');
+      expect(simMcu.label).toBe('Partial');
+
+      const simCatalog = getSimulationBadgeInfo('catalog_only');
+      expect(simCatalog.label).toBe('Catalog');
+      expect(simCatalog.badgeClass).toContain('slate');
+    });
+
+    it('supports fast multi-field search across partNumber, manufacturer, package, and category', () => {
+      // Search by part number: 1N4007
+      const byPart = COMPONENT_CATALOG.filter((c) =>
+        (c.partNumber && c.partNumber.toLowerCase().includes('1n4007')) ||
+        (c.manufacturerPartNumber && c.manufacturerPartNumber.toLowerCase().includes('1n4007')) ||
+        c.name.toLowerCase().includes('1n4007')
+      );
+      expect(byPart.length).toBeGreaterThan(0);
+
+      // Search by package code: TO-220
+      const byPkg = COMPONENT_CATALOG.filter((c) =>
+        c.physicalSpec?.packageCode?.toLowerCase().includes('to-220')
+      );
+      expect(byPkg.length).toBeGreaterThan(0);
+
+      // Search by 25-category label: Resistors
+      const byCat = COMPONENT_CATALOG.filter((c) => {
+        const cat = getCategory25ForComponent(c);
+        return cat.name.toLowerCase().includes('resistors');
+      });
+      expect(byCat.length).toBeGreaterThan(0);
     });
   });
 });

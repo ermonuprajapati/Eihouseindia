@@ -1,12 +1,24 @@
-import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus } from '../types';
+import { CircuitComponent, ComponentCategory, PhysicalSpec, SimulationSupportStatus, LibraryTier, MountingType, PlacementClass, PadSpec } from '../types';
 
 export interface ComponentTemplate {
   type: string;
   name: string;
+  componentName?: string;
   designatorPrefix: string;
   category: ComponentCategory;
   subCategory?: string;
+  libraryTier?: LibraryTier;
+  manufacturer?: string;
+  partNumber?: string;
+  datasheetUrl?: string;
+  source?: string;
+  simulationModel?: string;
   simulationStatus?: SimulationSupportStatus;
+  symbolId?: string;
+  footprintId?: string;
+  model3dId?: string;
+  placementClass?: PlacementClass;
+  mountingType?: MountingType;
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis';
   physicalSpec?: PhysicalSpec;
   defaultValue: string;
@@ -18,7 +30,6 @@ export interface ComponentTemplate {
   height: number;
   symbolSvg: string;
   description: string;
-  datasheetUrl?: string;
   manufacturerPartNumber?: string;
 }
 
@@ -4260,132 +4271,40 @@ export const COMPONENT_CATALOG: ComponentTemplate[] = [
   },
 ];
 
+import { resolvePhysicalSpec, resolveComponentMetadata } from './component-physical-registry';
+
+// ============================================================================
+// ENRICH 100% OF COMPONENT_CATALOG ENTRIES WITH CANONICAL PHYSICAL SPEC & 3-TIER METADATA
+// ============================================================================
+COMPONENT_CATALOG.forEach((template) => {
+  const spec = resolvePhysicalSpec(template);
+  const meta = resolveComponentMetadata(template);
+  template.physicalSpec = spec;
+  template.packageType = spec.packageType || template.packageType || 'THT';
+  template.mountingType = spec.mountingType || 'THT';
+  template.placementClass = spec.placementClass || meta.placementClass;
+  template.libraryTier = template.libraryTier || meta.libraryTier;
+  template.componentName = template.componentName || template.name;
+  template.manufacturer = template.manufacturer || meta.manufacturer;
+  template.partNumber = template.partNumber || meta.partNumber;
+  template.datasheetUrl = template.datasheetUrl || meta.datasheetUrl;
+  template.source = template.source || meta.source;
+  template.simulationModel = template.simulationModel || meta.simulationModel;
+  template.symbolId = template.symbolId || template.symbolSvg || template.type.toLowerCase();
+  template.footprintId = template.footprintId || template.footprint;
+  template.model3dId = template.model3dId || template.model3d || template.type.toLowerCase();
+});
+
 export function getPhysicalSpecForComponent(
   type: string,
   packageType?: 'THT' | 'SMD' | 'Module' | 'Chassis',
   footprint?: string
 ): PhysicalSpec {
-  const t = (type || '').toUpperCase();
-  const fp = (footprint || '').toUpperCase();
-  const pkg: 'THT' | 'SMD' | 'Module' | 'Chassis' = packageType || (fp.includes('SMD') ? 'SMD' : fp.includes('MODULE') ? 'Module' : 'THT');
-
-  if (t === 'ARDUINO_UNO') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 68.6, height: 53.4, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-35 -27 70 54"><rect x="-34.3" y="-26.7" width="68.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
-    };
+  const found = COMPONENT_CATALOG.find((c) => c.type === type);
+  if (found?.physicalSpec) {
+    return found.physicalSpec;
   }
-  if (t === 'ARDUINO_MEGA') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 101.6, height: 53.4, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-51 -27 102 54"><rect x="-50.8" y="-26.7" width="101.6" height="53.4" rx="2" fill="none" stroke="#007AA6"/></svg>',
-    };
-  }
-  if (t === 'ARDUINO_NANO') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 45.0, height: 18.0, depth: 10.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-23 -9 46 18"><rect x="-22.5" y="-9" width="45" height="18" rx="2" fill="none" stroke="#00A896"/></svg>',
-    };
-  }
-  if (t === 'ESP32_DEVKIT' || t.includes('ESP32')) {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 51.5, height: 28.5, depth: 12.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-26 -15 52 30"><rect x="-25.75" y="-14.25" width="51.5" height="28.5" rx="2" fill="none" stroke="#38BDF8"/></svg>',
-    };
-  }
-  if (t === 'RASPBERRY_PI_PICO' || t.includes('PICO')) {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 51.0, height: 21.0, depth: 11.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-26 -11 52 22"><rect x="-25.5" y="-10.5" width="51" height="21" rx="2" fill="none" stroke="#10B981"/></svg>',
-    };
-  }
-  if (t === 'SENSOR_ULTRASONIC' || t === 'HC_SR04') {
-    return {
-      packageType: 'Module',
-      dimensionsMm: { width: 45.0, height: 20.0, depth: 15.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Socketed',
-      padFootprintSvg: '<svg viewBox="-23 -10 46 20"><rect x="-22.5" y="-10" width="45" height="20" rx="2" fill="none" stroke="#0284C7"/><circle cx="-12" cy="0" r="8" fill="#CBD5E1"/><circle cx="12" cy="0" r="8" fill="#CBD5E1"/></svg>',
-    };
-  }
-  if (t === 'ACTUATOR_RGB_LED' || t === 'LED_RGB') {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -3 12 6"><circle cx="0" cy="0" r="2.5" fill="#EF4444"/><rect x="-3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="-1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="1.27" y="-0.5" width="1" height="1" fill="#F59E0B"/><rect x="3.81" y="-0.5" width="1" height="1" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('LED')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 5.0, height: 8.6, depth: 5.0 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-3 -3 6 6"><circle cx="0" cy="0" r="2.5" fill="#10B981"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('RESISTOR') || t.includes('DIODE') || t.includes('INDUCTOR')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 10.16, height: 3.5, depth: 2.5 },
-      pinPitchMm: 7.62,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -2 12 4"><rect x="-3" y="-1" width="6" height="2" fill="#D4A373"/><circle cx="-3.81" cy="0" r="0.8" fill="#F59E0B"/><circle cx="3.81" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('CAPACITOR')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 6.3, height: 11.0, depth: 6.3 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-4 -4 8 8"><circle cx="0" cy="0" r="3" fill="#1E3A8A"/><circle cx="-1.27" cy="0" r="0.8" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.8" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('TRANSISTOR') || t.includes('BJT') || t.includes('MOSFET')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 4.8, height: 4.8, depth: 3.8 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-4 -3 8 6"><path d="M-2.4,-2 A2.4,2.4 0 0,1 2.4,-2 L2.4,2 L-2.4,2 Z" fill="#18181B"/><circle cx="-1.27" cy="0" r="0.7" fill="#F59E0B"/><circle cx="0" cy="0" r="0.7" fill="#F59E0B"/><circle cx="1.27" cy="0" r="0.7" fill="#F59E0B"/></svg>',
-    };
-  }
-  if (t.includes('IC') || t.includes('555') || t.includes('OPAMP') || t.includes('DIP')) {
-    return {
-      packageType: 'THT',
-      dimensionsMm: { width: 9.8, height: 6.4, depth: 3.6 },
-      pinPitchMm: 2.54,
-      mountingType: 'Through-Hole',
-      padFootprintSvg: '<svg viewBox="-6 -5 12 10"><rect x="-5" y="-3.5" width="10" height="7" fill="#18181B"/></svg>',
-    };
-  }
-
-  // Generic fallback
-  return {
-    packageType: pkg,
-    dimensionsMm: { width: 10.0, height: 10.0, depth: 5.0 },
-    pinPitchMm: 2.54,
-    mountingType: pkg === 'SMD' ? 'Surface-Mount' : pkg === 'Module' ? 'Socketed' : 'Through-Hole',
-    padFootprintSvg: '<svg viewBox="-6 -6 12 12"><rect x="-5" y="-5" width="10" height="10" fill="none" stroke="#64748B"/></svg>',
-  };
+  return resolvePhysicalSpec({ type, packageType, footprint });
 }
 
 export function createComponentInstance(
@@ -4407,18 +4326,31 @@ export function createComponentInstance(
   const designator = `${prefix}${count + 1}`;
   const uniqueId = `${prefix.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+  const spec = template.physicalSpec || getPhysicalSpecForComponent(template.type, template.packageType, template.footprint);
+  const meta = resolveComponentMetadata(template);
+
   return {
     id: uniqueId,
     type: template.type,
     designator,
     label: `${template.name.split('(')[0].trim()} ${count + 1}`,
+    componentName: template.componentName || template.name,
     category: template.category,
     subCategory: template.subCategory,
+    libraryTier: template.libraryTier || meta.libraryTier,
+    manufacturer: template.manufacturer || meta.manufacturer,
+    partNumber: template.partNumber || meta.partNumber,
+    datasheetUrl: template.datasheetUrl || meta.datasheetUrl,
+    source: template.source || meta.source,
+    simulationModel: template.simulationModel || meta.simulationModel,
+    placementClass: template.placementClass || spec.placementClass,
     simulationStatus: template.simulationStatus || 'full_mna',
     packageType: template.packageType,
-    physicalSpec: template.physicalSpec || getPhysicalSpecForComponent(template.type, template.packageType, template.footprint),
-    manufacturerPartNumber: template.manufacturerPartNumber,
-    datasheetUrl: template.datasheetUrl,
+    physicalSpec: spec,
+    manufacturerPartNumber: template.manufacturerPartNumber || meta.partNumber,
+    symbolId: template.symbolId || template.symbolSvg || template.type.toLowerCase(),
+    footprintId: template.footprintId || template.footprint,
+    model3dId: template.model3dId || template.model3d || template.type.toLowerCase(),
     x,
     y,
     rotation: 0,

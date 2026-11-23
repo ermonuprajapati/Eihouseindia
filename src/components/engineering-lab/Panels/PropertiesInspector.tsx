@@ -2039,12 +2039,14 @@ export function PropertiesInspector({
                     component.type.startsWith('RASPBERRY_PI') ||
                     component.type.includes('MCU');
 
-                  const widthMm = spec?.dimensionsMm?.width ?? (isMcu ? 68.6 : 19.0);
-                  const heightMm = spec?.dimensionsMm?.height ?? (isMcu ? 53.4 : 6.3);
-                  const depthMm = spec?.dimensionsMm?.depth ?? (isMcu ? 15.0 : 4.5);
+                  const widthMm = spec?.bodyDimensionsMm?.width ?? spec?.dimensionsMm?.width ?? (isMcu ? 68.6 : 19.0);
+                  const heightMm = spec?.bodyDimensionsMm?.height ?? spec?.dimensionsMm?.height ?? (isMcu ? 53.4 : 6.3);
+                  const depthMm = spec?.bodyDimensionsMm?.depth ?? spec?.dimensionsMm?.depth ?? (isMcu ? 15.0 : 4.5);
                   const pitchMm = spec?.pinPitchMm ?? 2.54;
-                  const mountType = spec?.mountingType ?? (isMcu ? 'Socketed / THT' : 'Through-Hole');
-                  const pkgType = spec?.packageType ?? component.packageType ?? 'Module';
+                  const mountType = spec?.mountingType ?? (isMcu ? 'Socketed' : 'THT');
+                  const pkgCode = spec?.packageCode ?? spec?.packageType ?? component.packageType ?? 'Module';
+                  const tier = component.libraryTier ?? 'generic';
+                  const placementClass = spec?.placementClass ?? component.placementClass ?? 'single-passive';
 
                   return (
                     <div className="space-y-2 pt-1 border-t border-slate-800/80">
@@ -2053,22 +2055,30 @@ export function PropertiesInspector({
                         <div>
                           <span className="text-slate-500 block">Dimensions</span>
                           <span className="text-cyan-400 font-bold">
-                            {widthMm} × {heightMm} × {depthMm} mm
+                            {widthMm} × {depthMm} × {heightMm} mm
                           </span>
                         </div>
                         <div>
                           <span className="text-slate-500 block">Pin Pitch</span>
                           <span className="text-amber-400 font-bold">
-                            {pitchMm} mm (100 mil)
+                            {pitchMm} mm ({Math.round((pitchMm / 2.54) * 100)} mil)
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Package Tech</span>
-                          <span className="text-purple-300 font-bold">{pkgType}</span>
+                          <span className="text-slate-500 block">Package / Code</span>
+                          <span className="text-purple-300 font-bold">{pkgCode}</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Mounting Style</span>
+                          <span className="text-slate-500 block">Mounting / Class</span>
                           <span className="text-emerald-400 font-bold">{mountType}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Library Tier</span>
+                          <span className="text-indigo-400 font-bold uppercase">{tier}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Placement</span>
+                          <span className="text-slate-300 font-bold truncate block">{placementClass}</span>
                         </div>
                       </div>
 
@@ -2084,78 +2094,176 @@ export function PropertiesInspector({
                             className="w-full h-full max-h-20"
                             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}
                           >
-                            {/* PCB Board Outline with Silk Border */}
-                            <rect
-                              x="-52"
-                              y="-28"
-                              width="104"
-                              height="56"
-                              rx="3"
-                              fill="#031E2A"
-                              stroke="#00878F"
-                              strokeWidth="1.2"
-                            />
-                            <rect
-                              x="-50"
-                              y="-26"
-                              width="100"
-                              height="52"
-                              rx="2"
-                              fill="none"
-                              stroke="#00C4CC"
-                              strokeWidth="0.5"
-                              strokeDasharray="2,2"
-                              opacity="0.6"
-                            />
+                            {spec?.pads && spec.pads.length > 0 ? (
+                              <g>
+                                {/* Accurate Silkscreen Courtyard */}
+                                {(() => {
+                                  const cw = Math.min(100, Math.max(20, (spec.courtyardMm?.width || widthMm + 2) * 1.8));
+                                  const cd = Math.min(50, Math.max(12, (spec.courtyardMm?.depth || depthMm + 2) * 1.8));
+                                  return (
+                                    <>
+                                      <rect
+                                        x={-cw / 2}
+                                        y={-cd / 2}
+                                        width={cw}
+                                        height={cd}
+                                        rx="2"
+                                        fill="#031E2A"
+                                        stroke="#00878F"
+                                        strokeWidth="1.0"
+                                      />
+                                      <rect
+                                        x={-cw / 2 + 1}
+                                        y={-cd / 2 + 1}
+                                        width={cw - 2}
+                                        height={cd - 2}
+                                        rx="1.5"
+                                        fill="none"
+                                        stroke="#00C4CC"
+                                        strokeWidth="0.4"
+                                        strokeDasharray="2,2"
+                                        opacity="0.6"
+                                      />
+                                    </>
+                                  );
+                                })()}
 
-                            {/* 4 M3 Corner Mounting Holes with Annular Copper Pads */}
-                            <circle cx="-44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="-44" cy="-20" r="1.8" fill="#0B0F19" />
-                            <circle cx="44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="44" cy="-20" r="1.8" fill="#0B0F19" />
-                            <circle cx="-44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="-44" cy="20" r="1.8" fill="#0B0F19" />
-                            <circle cx="44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
-                            <circle cx="44" cy="20" r="1.8" fill="#0B0F19" />
+                                {/* Silkscreen Label */}
+                                <text
+                                  x="0"
+                                  y="-14"
+                                  fill="#94A3B8"
+                                  fontSize="3.5"
+                                  fontFamily="monospace"
+                                  textAnchor="middle"
+                                  fontWeight="bold"
+                                >
+                                  {pkgCode}
+                                </text>
 
-                            {/* Center IC / Module Silkscreen Box */}
-                            <rect
-                              x="-20"
-                              y="-12"
-                              width="40"
-                              height="24"
-                              rx="1.5"
-                              fill="#08101E"
-                              stroke="#334155"
-                              strokeWidth="0.8"
-                            />
-                            <text
-                              x="0"
-                              y="1.5"
-                              fill="#94A3B8"
-                              fontSize="4"
-                              fontFamily="monospace"
-                              textAnchor="middle"
-                              fontWeight="bold"
-                            >
-                              {component.footprint.split(':').pop() || 'FOOTPRINT'}
-                            </text>
+                                {/* Real Footprint Pads */}
+                                {spec.pads.map((pad, idx) => {
+                                  const scaleFactor = 1.8;
+                                  const px = pad.xMm * scaleFactor;
+                                  const py = pad.yMm * scaleFactor;
+                                  const dia = (pad.padDiameterMm || 1.8) * scaleFactor;
+                                  const hole = (pad.drillMm || 0.9) * scaleFactor;
+                                  const isRect = pad.shape === 'rect' || idx === 0 || pad.pinNumber === 1 || pad.pinNumber === '1';
 
-                            {/* Top Pad Header Strip */}
-                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
-                              <g key={`top-pad-${i}`}>
-                                <circle cx={px} cy="-23" r="1.8" fill="#F59E0B" />
-                                <circle cx={px} cy="-23" r="0.9" fill="#031E2A" />
+                                  return (
+                                    <g key={`pad-${pad.pinId}-${idx}`}>
+                                      {isRect ? (
+                                        <rect
+                                          x={px - dia / 2}
+                                          y={py - dia / 2}
+                                          width={dia}
+                                          height={dia}
+                                          fill="#F59E0B"
+                                          stroke="#D97706"
+                                          strokeWidth="0.3"
+                                        />
+                                      ) : (
+                                        <circle
+                                          cx={px}
+                                          cy={py}
+                                          r={dia / 2}
+                                          fill="#F59E0B"
+                                          stroke="#D97706"
+                                          strokeWidth="0.3"
+                                        />
+                                      )}
+                                      <circle cx={px} cy={py} r={hole / 2} fill="#031E2A" />
+                                      <text
+                                        x={px}
+                                        y={py + 1}
+                                        fill="#031E2A"
+                                        fontSize="2"
+                                        fontFamily="monospace"
+                                        textAnchor="middle"
+                                        fontWeight="bold"
+                                      >
+                                        {pad.pinNumber}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
                               </g>
-                            ))}
+                            ) : (
+                              <g>
+                                {/* Fallback Board Outline with Silk Border */}
+                                <rect
+                                  x="-52"
+                                  y="-28"
+                                  width="104"
+                                  height="56"
+                                  rx="3"
+                                  fill="#031E2A"
+                                  stroke="#00878F"
+                                  strokeWidth="1.2"
+                                />
+                                <rect
+                                  x="-50"
+                                  y="-26"
+                                  width="100"
+                                  height="52"
+                                  rx="2"
+                                  fill="none"
+                                  stroke="#00C4CC"
+                                  strokeWidth="0.5"
+                                  strokeDasharray="2,2"
+                                  opacity="0.6"
+                                />
 
-                            {/* Bottom Pad Header Strip */}
-                            {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
-                              <g key={`btm-pad-${i}`}>
-                                <circle cx={px} cy="23" r="1.8" fill="#F59E0B" />
-                                <circle cx={px} cy="23" r="0.9" fill="#031E2A" />
+                                {/* 4 M3 Corner Mounting Holes with Annular Copper Pads */}
+                                <circle cx="-44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                                <circle cx="-44" cy="-20" r="1.8" fill="#0B0F19" />
+                                <circle cx="44" cy="-20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                                <circle cx="44" cy="-20" r="1.8" fill="#0B0F19" />
+                                <circle cx="-44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                                <circle cx="-44" cy="20" r="1.8" fill="#0B0F19" />
+                                <circle cx="44" cy="20" r="3.2" fill="none" stroke="#D97706" strokeWidth="1" />
+                                <circle cx="44" cy="20" r="1.8" fill="#0B0F19" />
+
+                                {/* Center IC / Module Silkscreen Box */}
+                                <rect
+                                  x="-20"
+                                  y="-12"
+                                  width="40"
+                                  height="24"
+                                  rx="1.5"
+                                  fill="#08101E"
+                                  stroke="#334155"
+                                  strokeWidth="0.8"
+                                />
+                                <text
+                                  x="0"
+                                  y="1.5"
+                                  fill="#94A3B8"
+                                  fontSize="4"
+                                  fontFamily="monospace"
+                                  textAnchor="middle"
+                                  fontWeight="bold"
+                                >
+                                  {component.footprint.split(':').pop() || 'FOOTPRINT'}
+                                </text>
+
+                                {/* Top Pad Header Strip */}
+                                {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
+                                  <g key={`top-pad-${i}`}>
+                                    <circle cx={px} cy="-23" r="1.8" fill="#F59E0B" />
+                                    <circle cx={px} cy="-23" r="0.9" fill="#031E2A" />
+                                  </g>
+                                ))}
+
+                                {/* Bottom Pad Header Strip */}
+                                {[-36, -28, -20, -12, -4, 4, 12, 20, 28, 36].map((px, i) => (
+                                  <g key={`btm-pad-${i}`}>
+                                    <circle cx={px} cy="23" r="1.8" fill="#F59E0B" />
+                                    <circle cx={px} cy="23" r="0.9" fill="#031E2A" />
+                                  </g>
+                                ))}
                               </g>
-                            ))}
+                            )}
                           </svg>
                         </div>
                       </div>

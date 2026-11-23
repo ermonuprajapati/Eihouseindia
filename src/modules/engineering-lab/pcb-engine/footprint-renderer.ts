@@ -1,3 +1,5 @@
+import { PhysicalSpec } from '../types';
+
 /**
  * Authentic PCB Footprint & Silkscreen Geometry Engine
  * Computes standard IPC-7351 footprint outlines, pads, and tight non-overlapping silkscreen labels
@@ -10,6 +12,7 @@ export interface ComponentFootprintSpec {
   x: number;
   y: number;
   rotation: number;
+  physicalSpec?: PhysicalSpec;
 }
 
 export interface SilkscreenLabelLayout {
@@ -39,6 +42,28 @@ export class FootprintRenderer {
     const { designator, type, value, x, y } = spec;
     const upperType = type.toUpperCase();
     const upperVal = (value || '').toUpperCase();
+
+    // 0. Use canonical PhysicalSpec courtyard when available
+    if (spec.physicalSpec?.courtyardMm && spec.physicalSpec.courtyardMm.width > 0) {
+      const cw = spec.physicalSpec.courtyardMm.width;
+      const cd = spec.physicalSpec.courtyardMm.depth;
+      const isDip = upperType.includes('DIP') || upperType.includes('555') || upperType.includes('ATMEGA') || spec.physicalSpec.placementClass === 'ic-dip';
+      const isAxial = upperType.includes('RESISTOR') || upperType.includes('DIODE') || upperType.includes('INDUCTOR');
+      const isLed = upperType.includes('LED') && !upperType.includes('RGB');
+      const isTransistor = upperType.includes('TRANSISTOR') || upperType.includes('BJT') || upperType.includes('MOSFET');
+      const isHeader = upperType.includes('HEADER') || upperType.includes('TERMINAL') || upperType.includes('MODULE') || upperType.includes('RGB');
+
+      const outlineType = isDip ? 'dip' : isAxial ? 'axial_resistor' : isLed ? 'led' : isTransistor ? 'transistor' : isHeader ? 'header' : 'box';
+
+      return {
+        designatorText: designator,
+        valueText: value || designator,
+        designatorPos: { x: x - cw / 2, y: y - cd / 2 - 1.5 },
+        valuePos: { x: x - cw / 2, y: y + cd / 2 + 2.8 },
+        outlineType,
+        boxBounds: { x: x - cw / 2, y: y - cd / 2, width: cw, height: cd },
+      };
+    }
 
     // 1. DIP ICs (NE555, ATmega328P, Op-Amps, etc.)
     if (

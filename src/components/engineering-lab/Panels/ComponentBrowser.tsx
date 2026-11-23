@@ -8,6 +8,11 @@ import {
 } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitComponent } from '@/modules/engineering-lab/types';
 import {
+  MASTER_25_CATEGORIES,
+  getCategory25ForComponent,
+  getSimulationBadgeInfo,
+} from '@/modules/engineering-lab/circuit-engine/component-categories-25';
+import {
   Search,
   Plus,
   Layers,
@@ -152,6 +157,7 @@ export function ComponentBrowser({
   onWidthChange,
 }: ComponentBrowserProps) {
   const [search, setSearch] = useState('');
+  const [selectedTier, setSelectedTier] = useState<'all' | 'generic' | 'real' | 'industrial'>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
   const [customCatalog, setCustomCatalog] = useState<ComponentTemplate[]>([]);
@@ -192,48 +198,51 @@ export function ComponentBrowser({
 
   // Intermediate category + search filtered templates for dynamic subcategory derivation
   const categoryFilteredTemplates = useMemo(() => {
-    let list = allTemplates.filter((item) => {
-      if (selectedGroup === 'all') return true;
-      if (selectedGroup === 'passives') {
-        return item.category === 'passive';
-      }
-      if (selectedGroup === 'semiconductors') {
-        return (
-          ['semiconductors', 'active'].includes(item.category) ||
-          ['DIODE', 'ZENER_DIODE', 'SCHOTTKY_DIODE', 'LED', 'LED_RGB', 'BJT_NPN', 'BJT_PNP', 'MOSFET_N', 'MOSFET_P'].includes(item.type)
-        );
-      }
-      if (selectedGroup === 'mcus') {
-        return item.category === 'microcontrollers' || item.subCategory?.includes('mcu');
-      }
-      if (selectedGroup === 'logic') {
-        return (
-          ['analog_ics', 'digital_logic', 'logic'].includes(item.category) ||
-          ['TIMER_555', 'OPAMP', 'OPAMP_DUAL', 'LOGIC_AND', 'LOGIC_OR', 'LOGIC_NOT', 'LOGIC_NAND', 'LOGIC_NOR', 'LOGIC_XOR'].includes(item.type)
-        );
-      }
-      if (selectedGroup === 'sensors') {
-        return ['sensors', 'actuators', 'displays'].includes(item.category);
-      }
-      if (selectedGroup === 'power') {
-        return ['sources', 'power', 'switches', 'connectors', 'relays_contactors', 'protection'].includes(item.category);
-      }
-      return true;
-    });
+    let list = allTemplates;
 
+    // 1. Tier filtering (All | Generic | Real Parts | Industrial)
+    if (selectedTier !== 'all') {
+      list = list.filter((item) => (item.libraryTier || 'generic') === selectedTier);
+    }
+
+    // 2. Category filtering (25-Category Master Hierarchy + Legacy Group Aliases)
+    if (selectedGroup !== 'all') {
+      list = list.filter((item) => {
+        const cat25 = getCategory25ForComponent(item);
+        if (cat25.id === selectedGroup) return true;
+        // Legacy group aliases
+        if (selectedGroup === 'passives') return ['resistors', 'capacitors', 'inductors_transformers'].includes(cat25.id);
+        if (selectedGroup === 'semiconductors') return ['diodes', 'transistors', 'thyristors_power_semis'].includes(cat25.id);
+        if (selectedGroup === 'mcus') return cat25.id === 'microcontrollers_processors';
+        if (selectedGroup === 'logic') return cat25.id === 'integrated_circuits';
+        if (selectedGroup === 'sensors') return cat25.id === 'sensors_transducers';
+        if (selectedGroup === 'power') return ['batteries_power_sources', 'generators_power_conversion', 'protection_devices'].includes(cat25.id);
+        return false;
+      });
+    }
+
+    // 3. Multi-field search across Name, Type, Value, MPN, PartNumber, Manufacturer, Package, Category
     const q = search.toLowerCase().trim();
     if (q) {
-      list = list.filter(
-        (item) =>
+      list = list.filter((item) => {
+        const cat25 = getCategory25ForComponent(item);
+        return (
           item.name.toLowerCase().includes(q) ||
           item.type.toLowerCase().includes(q) ||
           item.defaultValue.toLowerCase().includes(q) ||
           (item.description && item.description.toLowerCase().includes(q)) ||
-          (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q))
-      );
+          (item.manufacturerPartNumber && item.manufacturerPartNumber.toLowerCase().includes(q)) ||
+          (item.partNumber && item.partNumber.toLowerCase().includes(q)) ||
+          (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
+          (item.physicalSpec?.packageCode && item.physicalSpec.packageCode.toLowerCase().includes(q)) ||
+          cat25.name.toLowerCase().includes(q) ||
+          cat25.number.includes(q)
+        );
+      });
     }
+
     return list;
-  }, [allTemplates, selectedGroup, search]);
+  }, [allTemplates, selectedTier, selectedGroup, search]);
 
   // Derived available subcategories dynamically from active filtered library
   const availableSubCategories = useMemo(() => {
@@ -258,8 +267,8 @@ export function ComponentBrowser({
     const deduped: ComponentTemplate[] = [];
 
     list.forEach((item) => {
-      // If user is searching specifically for an MPN or value, don't deduplicate
-      if (q) {
+      // If user is searching specifically or viewing a tier, don't deduplicate
+      if (q || selectedTier !== 'all') {
         deduped.push(item);
         return;
       }
@@ -277,7 +286,7 @@ export function ComponentBrowser({
     });
 
     return deduped;
-  }, [categoryFilteredTemplates, selectedSubCategory, search]);
+  }, [categoryFilteredTemplates, selectedSubCategory, search, selectedTier]);
 
   const handleAdd = (template: ComponentTemplate) => {
     const randomOffset = () => Math.floor(Math.random() * 60) - 30;
@@ -323,7 +332,7 @@ export function ComponentBrowser({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search parts, type, MPN..."
+            placeholder="Search parts, MPN, package, category..."
             className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
           />
           {search && (
@@ -336,6 +345,37 @@ export function ComponentBrowser({
           )}
         </div>
 
+        {/* 3-Tier Database Filter Pills */}
+        <div className="grid grid-cols-4 gap-1 bg-slate-950/70 p-0.5 rounded border border-slate-800">
+          {(
+            [
+              { id: 'all', label: 'All' },
+              { id: 'generic', label: 'Generic' },
+              { id: 'real', label: 'Real Parts' },
+              { id: 'industrial', label: 'Industrial' },
+            ] as const
+          ).map((tier) => {
+            const active = selectedTier === tier.id;
+            return (
+              <button
+                key={tier.id}
+                onClick={() => {
+                  setSelectedTier(tier.id);
+                  setSelectedSubCategory('all');
+                }}
+                className={`py-0.5 px-1 rounded text-[10px] font-mono font-medium transition-all text-center truncate ${
+                  active
+                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/60 font-semibold shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title={`Filter by ${tier.label} library tier`}
+              >
+                {tier.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Category & SubCategory Row (Side-by-Side: No Extra Vertical Height) */}
         <div className="grid grid-cols-2 gap-1.5">
           <div className="relative">
@@ -346,15 +386,14 @@ export function ComponentBrowser({
                 setSelectedSubCategory('all');
               }}
               className="w-full appearance-none bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-md px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer pr-5 truncate"
-              title="Filter by main category"
+              title="Filter by 25 Master Engineering Categories"
             >
-              <option value="all">⚡ All Categories</option>
-              <option value="passives">📐 Passives</option>
-              <option value="semiconductors">🔬 Semiconductors</option>
-              <option value="mcus">💻 Microcontrollers</option>
-              <option value="logic">🔲 Logic &amp; ICs</option>
-              <option value="sensors">📡 Sensors</option>
-              <option value="power">⚡ Power</option>
+              <option value="all">⚡ All Categories (25)</option>
+              {MASTER_25_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
             </select>
             <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
@@ -392,6 +431,7 @@ export function ComponentBrowser({
             <button
               onClick={() => {
                 setSearch('');
+                setSelectedTier('all');
                 setSelectedGroup('all');
                 setSelectedSubCategory('all');
               }}
@@ -410,12 +450,15 @@ export function ComponentBrowser({
                 .replace(/\s+/g, ' ')
                 .trim();
 
+              const simInfo = getSimulationBadgeInfo(item.simulationStatus);
+              const pkgCode = item.physicalSpec?.packageCode || item.packageType || 'THT';
+
               return (
                 <div
                   key={item.type + item.name}
                   onClick={() => handleAdd(item)}
                   className="group bg-slate-900/70 hover:bg-slate-800/90 border border-slate-800/80 hover:border-emerald-500/70 rounded-lg p-2 transition-all flex flex-col justify-between gap-1 shadow-sm cursor-pointer select-none relative"
-                  title={`${item.name} (${item.defaultValue}) — Click to place on schematic`}
+                  title={`${item.name} (${item.defaultValue}) [${pkgCode}] — Click to place`}
                 >
                   {/* Top: IEEE Vector Symbol Glyph */}
                   <div className="h-7 w-full flex items-center justify-center bg-slate-950/60 rounded border border-slate-800/60 group-hover:border-emerald-500/40 transition-colors">
@@ -428,23 +471,24 @@ export function ComponentBrowser({
                       {shortName}
                     </h4>
                     <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 mt-0.5">
-                      <span className="text-emerald-400 font-semibold truncate max-w-[60px]">
+                      <span className="text-emerald-400 font-semibold truncate max-w-[55px]" title={item.defaultValue}>
                         {item.defaultValue}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
-                        {item.simulationStatus && item.simulationStatus !== 'full_mna' && (
-                          <span
-                            className="text-[8px] font-mono px-1 py-0 rounded bg-amber-950/90 text-amber-300 border border-amber-700/60 uppercase"
-                            title={`Simulation support: ${item.simulationStatus}`}
-                          >
-                            {item.simulationStatus === 'behavioral'
-                              ? 'Behavioral'
-                              : item.simulationStatus === 'transpiled_mcu'
-                              ? 'MCU Sim'
-                              : 'Catalog'}
-                          </span>
-                        )}
-                        <span className="text-slate-500 uppercase">{item.packageType || 'THT'}</span>
+                        {/* Simulation Status Badge */}
+                        <span
+                          className={`text-[8px] font-mono px-1 py-0 rounded font-semibold uppercase ${simInfo.badgeClass}`}
+                          title={`Simulation: ${simInfo.label} (${item.simulationStatus || 'full_mna'})`}
+                        >
+                          {simInfo.label}
+                        </span>
+                        {/* Package / Mounting Code */}
+                        <span
+                          className="text-slate-500 uppercase text-[8px] max-w-[42px] truncate"
+                          title={pkgCode}
+                        >
+                          {pkgCode}
+                        </span>
                       </div>
                     </div>
                   </div>
