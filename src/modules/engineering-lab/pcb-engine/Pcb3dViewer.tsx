@@ -9,7 +9,7 @@ import { Box, Layers, Hand } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
-import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
+import { FootprintRenderer } from './footprint-renderer';
 
 export interface SolderMaskTheme {
   name: string;
@@ -76,7 +76,7 @@ export function getSolderMaskTheme(solderMaskColor: string): SolderMaskTheme {
     name: 'FR-4 Green',
     board: '#115E32', // Deep emerald PCB green (#115e32 / #146c3a)
     trackTop: '#1F8A4C', // authentic slightly raised lighter emerald-green copper-under-mask relief
-    trackBottom: '#176B3C',
+    trackBottom: '#2EB86A', // high-contrast emerald copper relief clearly visible on bottom
     silkscreen: '#F8FAFC',
     metalness: 0.08,
     roughness: 0.36,
@@ -167,6 +167,214 @@ function WebGlResourceDisposer() {
   return null;
 }
 
+/**
+ * Precision Chamfered Square Pad with Authentic Round Inner Drill Hole (True Annular Ring)
+ */
+function SquarePadMesh({
+  position,
+  rotation,
+  size,
+  holeR,
+  material,
+  renderOrder,
+}: {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  size: number;
+  holeR: number;
+  material: THREE.Material;
+  renderOrder?: number;
+}) {
+  const geom = useMemo(() => {
+    const shape = new THREE.Shape();
+    const half = size / 2;
+    shape.moveTo(-half, -half);
+    shape.lineTo(half, -half);
+    shape.lineTo(half, half);
+    shape.lineTo(-half, half);
+    shape.closePath();
+    const safeHoleR = Math.max(0, Math.min(holeR, half - 0.1));
+    if (safeHoleR > 0) {
+      const hole = new THREE.Path();
+      hole.absarc(0, 0, safeHoleR, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    }
+    return new THREE.ShapeGeometry(shape);
+  }, [size, holeR]);
+
+  useEffect(() => {
+    return () => {
+      geom.dispose();
+    };
+  }, [geom]);
+
+  return <mesh position={position} rotation={rotation} geometry={geom} material={material} renderOrder={renderOrder} />;
+}
+
+/**
+ * Precision Circular Annular Ring with Authentic Round Inner Drill Hole
+ */
+function RoundPadMesh({
+  position,
+  rotation,
+  innerR,
+  outerR,
+  material,
+  renderOrder,
+}: {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  innerR: number;
+  outerR: number;
+  material: THREE.Material;
+  renderOrder?: number;
+}) {
+  const geom = useMemo(() => {
+    return new THREE.RingGeometry(Math.max(0.01, innerR), Math.max(innerR + 0.05, outerR), 24);
+  }, [innerR, outerR]);
+
+  useEffect(() => {
+    return () => {
+      geom.dispose();
+    };
+  }, [geom]);
+
+  return <mesh position={position} rotation={rotation} geometry={geom} material={material} renderOrder={renderOrder} />;
+}
+
+export interface HoleSpec {
+  x?: number;
+  y?: number;
+  xMm?: number;
+  yMm?: number;
+  holeMm?: number;
+  drillMm?: number;
+  diameterMm?: number;
+  outerMm?: number;
+}
+
+export interface SanitizedHole {
+  x: number;
+  z: number;
+  r: number;
+  type: 'mount' | 'pad' | 'via';
+}
+
+/**
+ * Robust hole sanitizer enforcing boundary margins and strict pairwise non-intersection
+ * to completely eliminate Earcut triangulation failures and missing triangular faces in 3D PCB meshes.
+ */
+export function sanitizePcbHoles(
+  widthMm: number,
+  heightMm: number,
+  pads: HoleSpec[] = [],
+  mountingHoles: HoleSpec[] = []
+): SanitizedHole[] {
+  const halfW = widthMm / 2;
+  const halfH = heightMm / 2;
+  const accepted: SanitizedHole[] = [];
+
+  // 1. M3 Mounting holes (priority 1)
+  const effectiveMountHoles = mountingHoles && mountingHoles.length > 0 ? mountingHoles : [
+    { x: 5.0, y: 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: widthMm - 5.0, y: 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: 5.0, y: heightMm - 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: widthMm - 5.0, y: heightMm - 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+  ];
+
+  for (const m of effectiveMountHoles) {
+    const drill = m.drillMm ?? m.diameterMm ?? m.holeMm ?? 3.2;
+    if (drill <= 0) continue;
+    const r = Math.max(0.1, drill / 2);
+    const minX = -halfW + r + 0.5;
+    const maxX = halfW - r - 0.5;
+    const minZ = -halfH + r + 0.5;
+    const maxZ = halfH - r - 0.5;
+    if (minX > maxX || minZ > maxZ) continue;
+    const rawX = m.xMm ?? m.x ?? 0;
+    const rawY = m.yMm ?? m.y ?? 0;
+    const x = Math.max(minX, Math.min(maxX, rawX - halfW));
+    const z = Math.max(minZ, Math.min(maxZ, rawY - halfH));
+    accepted.push({ x, z, r, type: 'mount' });
+  }
+
+  // 2. Component Pads (priority 2) & Vias (priority 3)
+  const sortedPads = [...pads].sort((a, b) => {
+    const aIsVia = (a as { componentId?: string; id?: string }).componentId === 'VIA' || String((a as { id?: string }).id || '').startsWith('via_');
+    const bIsVia = (b as { componentId?: string; id?: string }).componentId === 'VIA' || String((b as { id?: string }).id || '').startsWith('via_');
+    if (aIsVia && !bIsVia) return 1;
+    if (!aIsVia && bIsVia) return -1;
+    return 0;
+  });
+
+  for (const p of sortedPads) {
+    const drill = p.holeMm ?? p.drillMm ?? p.diameterMm ?? 0;
+    if (drill <= 0) continue;
+    const r = Math.max(0.1, drill / 2);
+    const minX = -halfW + r + 0.5;
+    const maxX = halfW - r - 0.5;
+    const minZ = -halfH + r + 0.5;
+    const maxZ = halfH - r - 0.5;
+    if (minX > maxX || minZ > maxZ) continue;
+    const rawPx = p.xMm ?? p.x ?? 0;
+    const rawPy = p.yMm ?? p.y ?? 0;
+    const x = rawPx - halfW;
+    const z = rawPy - halfH;
+    if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
+
+    // Strict non-intersection and tangent avoidance check (minimum 0.15mm gap)
+    let collides = false;
+    for (const ah of accepted) {
+      const dist = Math.hypot(x - ah.x, z - ah.z);
+      if (dist < r + ah.r + 0.15) {
+        collides = true;
+        break;
+      }
+    }
+    if (!collides) {
+      const isVia = (p as { componentId?: string; id?: string }).componentId === 'VIA' || String((p as { id?: string }).id || '').startsWith('via_');
+      accepted.push({ x, z, r, type: isVia ? 'via' : 'pad' });
+    }
+  }
+
+  return accepted;
+}
+
+/**
+ * Pure Factory PCB Geometry Helper:
+ * Constructs a continuous planar THREE.Shape with real see-through circular punched holes
+ * for every PTH component pad, via, and M3 mounting hole with zero Earcut triangulation errors.
+ */
+export function createPcbBoardShape(
+  widthMm: number,
+  heightMm: number,
+  pads: HoleSpec[] = [],
+  mountingHoles: HoleSpec[] = [
+    { x: 4.0, y: 4.0, diameterMm: 3.2 },
+    { x: widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+    { x: 4.0, y: heightMm - 4.0, diameterMm: 3.2 },
+    { x: widthMm - 4.0, y: heightMm - 4.0, diameterMm: 3.2 },
+  ]
+): THREE.Shape {
+  const halfW = widthMm / 2;
+  const halfH = heightMm / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfW, -halfH);
+  shape.lineTo(halfW, -halfH);
+  shape.lineTo(halfW, halfH);
+  shape.lineTo(-halfW, halfH);
+  shape.closePath();
+
+  const sanitized = sanitizePcbHoles(widthMm, heightMm, pads, mountingHoles);
+  for (const h of sanitized) {
+    const hole = new THREE.Path();
+    hole.absarc(h.x, h.z, h.r, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+  }
+
+  return shape;
+}
+
 export function Pcb3dViewer({
   pcb,
   components = [],
@@ -242,12 +450,14 @@ export function Pcb3dViewer({
     ctrl.update();
   }, [cameraPreset, pcb.widthMm, pcb.heightMm]);
 
-  // High-Resolution Crisp Silkscreen Texture Decal
+  // High-Resolution Crisp Silkscreen Texture Decal (High-DPI >= 24 px/mm)
   const silkscreenTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = Math.round((1024 * pcb.heightMm) / pcb.widthMm);
+    const dpiScale = 24; // 24 px per mm for crisp manufacturing silkscreen
+    const baseW = Math.max(2048, Math.round(pcb.widthMm * dpiScale));
+    canvas.width = Math.min(4096, baseW);
+    canvas.height = Math.min(4096, Math.max(1024, Math.round((canvas.width * pcb.heightMm) / pcb.widthMm)));
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
@@ -257,18 +467,25 @@ export function Pcb3dViewer({
 
     // Outer border silkscreen
     ctx.strokeStyle = silkColor;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(2, Math.round(0.25 * scale));
     ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
 
-    // Board branding & metadata
+    // Board branding & metadata cleanly offset from top edge, avoiding component collisions
     ctx.fillStyle = silkColor;
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText('EI HOUSE ENG LAB', 18, 28);
-    ctx.font = '13px monospace';
-    ctx.fillText(`REV 1.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 16);
+    ctx.font = `bold ${Math.max(14, Math.round(2.2 * scale))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const topCollides = pcb.components?.some((c) => Math.abs(c.x - pcb.widthMm / 2) < 25 && c.y < 12);
+    const titleY = topCollides ? canvas.height - 4 * scale : 4 * scale;
+    ctx.fillText('EI HOUSE ENG LAB', (pcb.widthMm / 2) * scale, titleY);
 
-    // Component Silkscreen reference designators & IPC-7351 outlines
+    ctx.font = `${Math.max(11, Math.round(1.6 * scale))}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 14 * scale, canvas.height - 4 * scale);
+
+    // Component Silkscreen reference designators & IPC-7351 outlines via FootprintRenderer
     pcb.components?.forEach((comp) => {
+      if (isVirtualSchematicSymbol(comp.type)) return;
       const cx = comp.x * scale;
       const cy = comp.y * scale;
 
@@ -278,211 +495,13 @@ export function Pcb3dViewer({
         ctx.rotate(((comp.rotation || 0) * Math.PI) / 180);
       }
 
-      ctx.strokeStyle = silkColor;
-      ctx.fillStyle = silkColor;
-      ctx.lineWidth = 2;
-      ctx.font = 'bold 14px monospace';
+      FootprintRenderer.renderSilkscreen(ctx, comp, {
+        scale,
+        isSelected: false,
+        silkColor,
+        is3dDecal: true,
+      });
 
-      const upperType = comp.type.toUpperCase();
-      const upperVal = (comp.value || '').toUpperCase();
-
-      if (
-        upperType.includes('RGB') ||
-        upperType === 'ACTUATOR_RGB_LED' ||
-        comp.footprint?.includes('THT-5MM-4PIN') ||
-        comp.footprint?.includes('LED_D5.0mm-4')
-      ) {
-        // RGB LED 4-pin outline with 4 pads & Pin 1 marker
-        const r = 4.0 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.stroke();
-        // 4 in-line pin pads
-        const pins = [-3.81, -1.27, 1.27, 3.81];
-        const labels = ['R', 'C', 'G', 'B'];
-        pins.forEach((px, i) => {
-          const sx = (px / 2.54) * 2.5 * scale;
-          ctx.beginPath();
-          ctx.arc(sx, 0, 1.0 * scale, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillText(labels[i], sx - 3, -2.5 * scale);
-        });
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(comp.designator, -12, 6 * scale);
-      } else if (
-        upperType.includes('SR04') ||
-        upperType.includes('ULTRASONIC') ||
-        comp.footprint?.includes('MODULE-HCSR04') ||
-        comp.footprint?.includes('HCSR04')
-      ) {
-        // HC-SR04 Ultrasonic Module outline (45mm x 20mm)
-        const mw = 26.0 * scale;
-        const mh = 14.0 * scale;
-        ctx.strokeRect(-mw / 2, -mh / 2, mw, mh);
-        // Transducers T and R
-        ctx.beginPath();
-        ctx.arc(-7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillText('T', -7.0 * scale - 3, 3);
-        ctx.fillText('R', 7.0 * scale - 3, 3);
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText('HC-SR04', -18, -mh / 2 - 2);
-        ctx.fillText(comp.designator, -12, mh / 2 + 8 * scale);
-      } else if (upperType.includes('LED')) {
-        // LED circular rim with cathode flat bar & 'K' marker
-        const r = 4.0 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, -0.6 * Math.PI, 0.6 * Math.PI);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(r * Math.cos(0.6 * Math.PI), r * Math.sin(0.6 * Math.PI));
-        ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
-        ctx.stroke();
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('K', r - 2, 2.5 * scale);
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, 6 * scale);
-      } else if (upperType.includes('DIODE')) {
-        // Rectifier diode body with cathode bar
-        ctx.strokeRect(-4.0 * scale, -2.0 * scale, 8.0 * scale, 4.0 * scale);
-        ctx.fillRect(2.0 * scale, -2.0 * scale, 1.6 * scale, 4.0 * scale);
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (
-        upperType.includes('ELECTROLYTIC') ||
-        upperType.includes('RADIAL') ||
-        (upperType.includes('CAPACITOR') && (upperVal.includes('UF') || upperVal.includes('µF') || upperVal.includes('MF')))
-      ) {
-        // Polarized electrolytic capacitor circle with + mark & shaded crescent
-        const r = 4.2 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.font = 'bold 15px sans-serif';
-        ctx.fillText('+', -r + 2, -r / 2 + 1);
-        ctx.beginPath();
-        ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
-        ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
-        ctx.fillStyle = silkColor === '#FFFFFF' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(30, 41, 59, 0.35)';
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = silkColor;
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, 7 * scale);
-      } else if (upperType.includes('CAPACITOR')) {
-        // Ceramic disc / SMD capacitor rounded pill
-        const pw = 7.0 * scale;
-        const ph = 3.6 * scale;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 1.8 * scale);
-        } else {
-          ctx.strokeRect(-pw / 2, -ph / 2, pw, ph);
-        }
-        ctx.stroke();
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (upperType.includes('RESISTOR') || upperType.includes('DIODE') || upperType.includes('INDUCTOR')) {
-        // Axial resistor/diode body with lead lines (10.16mm pitch)
-        const bw = 10.16 * scale;
-        const bh = 3.8 * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.beginPath();
-        ctx.moveTo(-bw / 2, 0);
-        ctx.lineTo(-bw / 2 - 2.8 * scale, 0);
-        ctx.moveTo(bw / 2, 0);
-        ctx.lineTo(bw / 2 + 2.8 * scale, 0);
-        ctx.stroke();
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (
-        upperType.includes('IC') ||
-        upperType.includes('TIMER') ||
-        comp.footprint?.includes('DIP') ||
-        upperType.includes('555') ||
-        upperType.includes('74HC') ||
-        upperType.includes('358') ||
-        upperType.includes('324')
-      ) {
-        // DIP IC with Pin 1 notch and Pin 1 dot
-        const isDip28 = comp.footprint?.includes('DIP-28') || upperType.includes('ATMEGA');
-        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16') || upperType.includes('74HC') || upperType.includes('324') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293');
-        const bLen = (isDip28 ? 35.5 : isDip14Or16 ? 19.5 : 10.0) * scale;
-        const bWid = 6.8 * scale;
-        ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
-        // Semicircular notch on the left (-X) side
-        ctx.beginPath();
-        ctx.arc(-bLen / 2, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
-        ctx.stroke();
-        // Pin 1 dot at top-left
-        ctx.beginPath();
-        ctx.arc(-bLen / 2 + 1.8 * scale, -bWid / 2 + 1.6 * scale, 1.0 * scale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.font = 'bold 8px monospace';
-        ctx.fillText('1', -bLen / 2 + 1.8 * scale, -bWid / 2 + 3.4 * scale);
-        ctx.fillText(comp.designator, -10, 2);
-      } else if (
-        upperType.includes('UNO') ||
-        upperType.includes('NANO') ||
-        upperType.includes('MEGA') ||
-        upperType.includes('ESP32') ||
-        upperType.includes('PICO') ||
-        comp.footprint?.includes('BOARD')
-      ) {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 68.6) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 53.4) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        // USB port indicator at top-left edge
-        ctx.strokeRect(-bw / 2, -5 * scale, 9 * scale, 10 * scale);
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText(comp.designator, -bw / 2 + 12 * scale, 3 * scale);
-      } else if (
-        upperType.includes('MODULE') ||
-        upperType.includes('LCD1602') ||
-        upperType.includes('OLED') ||
-        upperType.includes('SERVO')
-      ) {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 30) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 20) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(comp.designator, -bw / 2 + 4 * scale, 2 * scale);
-      } else if (upperType.includes('TO220') || upperType.includes('IRLZ44N') || upperType.includes('7805')) {
-        const bw = 10.4 * scale;
-        const bh = 4.6 * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.beginPath();
-        ctx.moveTo(-bw / 2, -bh / 2 + 1.2 * scale);
-        ctx.lineTo(bw / 2, -bh / 2 + 1.2 * scale);
-        ctx.stroke();
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(comp.designator, -bw / 2, bh / 2 + 7 * scale);
-      } else if (
-        upperType.includes('HEADER') ||
-        upperType.includes('CONNECTOR') ||
-        upperType.includes('TERMINAL') ||
-        upperType.includes('BATTERY')
-      ) {
-        const hw = 12.0 * scale;
-        const hh = 7.0 * scale;
-        ctx.strokeRect(-hw / 2, -hh / 2, hw, hh);
-        ctx.strokeRect(-hw / 2 + 1.0 * scale, -hh / 2 + 1.0 * scale, 2.2 * scale, 2.2 * scale);
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('+', -hw / 2 + 1.2 * scale, hh / 2 - 1.2 * scale);
-        ctx.fillText('-', hw / 2 - 3.5 * scale, hh / 2 - 1.2 * scale);
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, -5.5 * scale);
-      } else {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 10) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 8) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.fillText(comp.designator, -bw / 2, -bh / 2 - 2 * scale);
-      }
       ctx.restore();
     });
 
@@ -508,7 +527,29 @@ export function Pcb3dViewer({
       });
     }
 
+    // Real punched-out transparent holes on silkscreen decal matching physical drill holes
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const decalHoles = sanitizePcbHoles(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+    for (const h of decalHoles) {
+      const cx = (h.x + halfW) * scale;
+      const cy = (h.z + halfH) * scale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, h.r * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
     const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipMapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 16;
     texture.needsUpdate = true;
     return texture;
   }, [pcb, theme]);
@@ -518,6 +559,196 @@ export function Pcb3dViewer({
       silkscreenTexture?.dispose();
     };
   }, [silkscreenTexture]);
+
+  // High-Resolution Top Copper + Solder Mask Relief Texture (F.Cu)
+  const topCopperTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    const dpiScale = 24; // 24 px per mm for high-DPI crisp manufacturing copper
+    canvas.width = Math.min(4096, Math.max(1024, Math.round(pcb.widthMm * dpiScale)));
+    canvas.height = Math.min(4096, Math.max(1024, Math.round((canvas.width * pcb.heightMm) / pcb.widthMm)));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = canvas.width / pcb.widthMm;
+
+    // Draw all Top Copper Tracks (F.Cu) with smooth rounded caps and joins
+    ctx.strokeStyle = theme.trackTop;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    pcb.tracks?.forEach((track) => {
+      if (track.layer !== 'top_copper') return;
+      ctx.lineWidth = Math.max(2, (track.widthMm || 0.35) * scale);
+      ctx.beginPath();
+      ctx.moveTo(track.from.x * scale, track.from.y * scale);
+      ctx.lineTo(track.to.x * scale, track.to.y * scale);
+      ctx.stroke();
+    });
+
+    // Draw copper annular base rings under solder mask for all top pads & vias
+    ctx.fillStyle = theme.trackTop;
+    pcb.pads?.forEach((pad) => {
+      if (pad.layer === 'bottom') return;
+      const r = ((pad.diameterMm || 1.8) / 2) * scale;
+      ctx.beginPath();
+      if (pad.shape === 'rect') {
+        ctx.fillRect(pad.x * scale - r, pad.y * scale - r, r * 2, r * 2);
+      } else {
+        ctx.arc(pad.x * scale, pad.y * scale, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // CRITICAL: PUNCH EVERY DRILL HOLE OUT OF TOP COPPER TEXTURE (ZERO HANGING COPPER!)
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const decalHoles = sanitizePcbHoles(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+    for (const h of decalHoles) {
+      const cx = (h.x + halfW) * scale;
+      const cy = (h.z + halfH) * scale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, h.r * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipMapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 16;
+    texture.needsUpdate = true;
+    return texture;
+  }, [pcb.tracks, pcb.pads, pcb.mountingHoles, pcb.widthMm, pcb.heightMm, theme.trackTop, halfW, halfH]);
+
+  useEffect(() => {
+    return () => {
+      topCopperTexture?.dispose();
+    };
+  }, [topCopperTexture]);
+
+  // High-Resolution Bottom Copper + Solder Mask Relief Texture (B.Cu)
+  const bottomCopperTexture = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    const dpiScale = 24; // 24 px per mm for high-DPI crisp manufacturing copper
+    canvas.width = Math.min(4096, Math.max(1024, Math.round(pcb.widthMm * dpiScale)));
+    canvas.height = Math.min(4096, Math.max(1024, Math.round((canvas.width * pcb.heightMm) / pcb.widthMm)));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = canvas.width / pcb.widthMm;
+
+    // Optional Bottom Ground Pour Plane
+    const gndPourActive = (pcb as { gndPourLayer?: string }).gndPourLayer === 'bottom_copper';
+    if (gndPourActive) {
+      const margin = 1.5 * scale;
+      ctx.fillStyle = '#166639';
+      ctx.fillRect(margin, margin, canvas.width - margin * 2, canvas.height - margin * 2);
+
+      // Clearances around non-GND tracks on bottom copper pour
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      pcb.tracks?.forEach((track) => {
+        if (track.layer !== 'bottom_copper' || track.netId === 'GND') return;
+        ctx.lineWidth = ((track.widthMm || 0.35) + 0.40) * scale;
+        ctx.beginPath();
+        ctx.moveTo(track.from.x * scale, track.from.y * scale);
+        ctx.lineTo(track.to.x * scale, track.to.y * scale);
+        ctx.stroke();
+      });
+
+      // Clearances around non-GND through-hole pads on ground pour
+      pcb.pads?.forEach((pad) => {
+        if (pad.netId !== 'GND' && (pad.holeMm ?? 0) > 0) {
+          const clearR = ((pad.diameterMm || 1.8) / 2 + 0.35) * scale;
+          ctx.beginPath();
+          ctx.arc(pad.x * scale, pad.y * scale, clearR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      // Clearances around mounting holes
+      pcb.mountingHoles?.forEach((h) => {
+        const hx = (h.xMm ?? 5.0) * scale;
+        const hy = (h.yMm ?? 5.0) * scale;
+        const hr = ((h.outerMm || 6.0) / 2 + 0.40) * scale;
+        ctx.beginPath();
+        ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    // Draw all Bottom Copper Tracks (B.Cu) with smooth rounded caps and joins
+    ctx.strokeStyle = theme.trackBottom;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    pcb.tracks?.forEach((track) => {
+      if (track.layer !== 'bottom_copper') return;
+      ctx.lineWidth = Math.max(2, (track.widthMm || 0.35) * scale);
+      ctx.beginPath();
+      ctx.moveTo(track.from.x * scale, track.from.y * scale);
+      ctx.lineTo(track.to.x * scale, track.to.y * scale);
+      ctx.stroke();
+    });
+
+    // Draw copper annular base rings under solder mask for all bottom pads & vias
+    ctx.fillStyle = theme.trackBottom;
+    pcb.pads?.forEach((pad) => {
+      if (pad.layer === 'top') return;
+      const r = ((pad.diameterMm || 1.8) / 2) * scale;
+      ctx.beginPath();
+      if (pad.shape === 'rect') {
+        ctx.fillRect(pad.x * scale - r, pad.y * scale - r, r * 2, r * 2);
+      } else {
+        ctx.arc(pad.x * scale, pad.y * scale, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // CRITICAL: PUNCH EVERY DRILL HOLE OUT OF BOTTOM COPPER TEXTURE (ZERO HANGING COPPER!)
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const decalHoles = sanitizePcbHoles(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+    for (const h of decalHoles) {
+      const cx = (h.x + halfW) * scale;
+      const cy = (h.z + halfH) * scale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, h.r * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.repeat.y = -1;
+    texture.offset.y = 1;
+    texture.minFilter = THREE.LinearMipMapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 16;
+    texture.needsUpdate = true;
+    return texture;
+  }, [pcb.tracks, pcb.pads, pcb.mountingHoles, pcb.widthMm, pcb.heightMm, theme.trackBottom, halfW, halfH, (pcb as { gndPourLayer?: string }).gndPourLayer]);
+
+  useEffect(() => {
+    return () => {
+      bottomCopperTexture?.dispose();
+    };
+  }, [bottomCopperTexture]);
 
   const materials = useMemo(() => {
     return {
@@ -563,21 +794,28 @@ export function Pcb3dViewer({
         color: '#135831', // bottom copper-under-green-mask relief
         metalness: 0.2,
         roughness: 0.34,
+        side: THREE.DoubleSide,
       }),
       copperPour: new THREE.MeshStandardMaterial({
         color: '#135831',
         metalness: 0.2,
         roughness: 0.34,
+        side: THREE.DoubleSide,
       }),
       goldPad: new THREE.MeshStandardMaterial({
         color: '#D4AF37', // Official ENIG Gold (Electroless Nickel Immersion Gold)
         metalness: 0.85,
         roughness: 0.2,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       }),
       copperBarrel: new THREE.MeshStandardMaterial({
         color: '#C87D55', // Authentic Copper Barrel Plating
         metalness: 0.88,
         roughness: 0.25,
+        side: THREE.DoubleSide,
       }),
       drillHole: new THREE.MeshBasicMaterial({
         color: '#020617',
@@ -657,6 +895,35 @@ export function Pcb3dViewer({
     };
   }, [theme]);
 
+  // 1. Punched FR-4 Substrate with Real See-Through Factory Drill Holes
+  const boardGeometry = useMemo(() => {
+    const shape = createPcbBoardShape(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+
+    const extrudeSettings: THREE.ExtrudeGeometryOptions = {
+      depth: thickness,
+      bevelEnabled: false,
+      curveSegments: 20,
+    };
+    const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geom.translate(0, 0, -thickness / 2);
+    geom.rotateX(Math.PI / 2);
+    geom.computeVertexNormals();
+    return geom;
+  }, [pcb.widthMm, pcb.heightMm, pcb.pads, pcb.mountingHoles, thickness]);
+
+  useEffect(() => {
+    return () => {
+      boardGeometry.dispose();
+    };
+  }, [boardGeometry]);
+
+
+
   return (
     <div className={`relative w-full h-full bg-[#070D18] select-none overflow-hidden touch-none ${isPanMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       {/* Three.js Canvas */}
@@ -682,8 +949,7 @@ export function Pcb3dViewer({
           position={[60, 150, 80]}
           intensity={2.2}
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize={[2048, 2048]}
           shadow-bias={-0.0001}
         />
         <directionalLight position={[-80, 80, -60]} intensity={0.9} color="#94A3B8" />
@@ -725,72 +991,56 @@ export function Pcb3dViewer({
           }
         />
 
-        {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Emerald Green Faces */}
+        {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Real Punched Through-Holes */}
         <mesh
-          position={[0, 0, 0]}
-          material={[
-            materials.fr4Edge,
-            materials.fr4Edge,
-            materials.solderMaskTop,
-            materials.solderMaskBottom,
-            materials.fr4Edge,
-            materials.fr4Edge,
-          ]}
+          geometry={boardGeometry}
+          material={[materials.solderMaskTop, materials.fr4Edge]}
           castShadow
           receiveShadow
-        >
-          <boxGeometry args={[pcb.widthMm, thickness, pcb.heightMm]} />
-        </mesh>
+        />
 
-        {/* 2. Bottom Face (B.Cu) Ground Pour & Ground Plane (Top Face stays clean emerald-green FR-4) */}
-        <mesh position={[0, -thickness / 2 - 0.008, 0]} material={materials.bottomGroundPour} receiveShadow>
-          <boxGeometry args={[pcb.widthMm - 3, 0.008, pcb.heightMm - 3]} />
-        </mesh>
+        {/* 2. Top (F.Cu) Solder Mask Relief & Smooth Copper Tracks */}
+        {topCopperTexture && (
+          <mesh position={[0, thickness / 2 + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+            <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
+            <meshPhysicalMaterial
+              map={topCopperTexture}
+              transparent
+              opacity={0.96}
+              metalness={0.25}
+              roughness={0.32}
+              clearcoat={0.35}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
+            />
+          </mesh>
+        )}
 
-        {/* 3. Top (F.Cu) & Bottom (B.Cu) Copper Traces with Rounded Joint Caps */}
-        {pcb.tracks.map((track) => {
-          const x1 = track.from.x - halfW;
-          const z1 = track.from.y - halfH;
-          const x2 = track.to.x - halfW;
-          const z2 = track.to.y - halfH;
-
-          const dx = x2 - x1;
-          const dz = z2 - z1;
-          const len = Math.hypot(dx, dz);
-          const angle = Math.atan2(dz, dx);
-          const midX = (x1 + x2) / 2;
-          const midZ = (z1 + z2) / 2;
-          const isTop = track.layer === 'top_copper';
-          // Top traces are slightly raised lighter emerald-green copper-under-mask relief (#1F8A4C)
-          const yPos = isTop ? thickness / 2 + 0.012 : -thickness / 2 - 0.014;
-          const trackWidth = track.widthMm || 0.35;
-          const trackRadius = trackWidth / 2;
-          const trackMat = isTop ? materials.copperTop : materials.copperBottom;
-
-          return (
-            <group key={track.id}>
-              {/* Main trace segment */}
-              <mesh
-                position={[midX, yPos, midZ]}
-                rotation={[0, -angle, 0]}
-                material={trackMat}
-              >
-                <boxGeometry args={[len, 0.016, trackWidth]} />
-              </mesh>
-              {/* Rounded vertex joint cylinders at endpoints to eliminate 45°/90° gaps */}
-              <mesh position={[x1, yPos, z1]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
-              </mesh>
-              <mesh position={[x2, yPos, z2]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
-              </mesh>
-            </group>
-          );
-        })}
+        {/* 3. Bottom (B.Cu) Solder Mask Relief, Ground Pour & Smooth Copper Tracks */}
+        {bottomCopperTexture && (
+          <mesh position={[0, -thickness / 2 - 0.014, 0]} rotation={[Math.PI / 2, 0, 0]} renderOrder={3}>
+            <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
+            <meshPhysicalMaterial
+              map={bottomCopperTexture}
+              transparent
+              opacity={0.96}
+              metalness={0.25}
+              roughness={0.32}
+              clearcoat={0.35}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
+            />
+          </mesh>
+        )}
 
         {/* 4. Crisp White Silkscreen Layer (F.SilkS) strictly ABOVE top copper tracks & solder mask */}
         {silkscreenTexture && (
-          <mesh position={[0, thickness / 2 + 0.030, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
+          <mesh position={[0, thickness / 2 + 0.024, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
             <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
             <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.98} depthWrite={false} polygonOffset polygonOffsetFactor={-1} />
           </mesh>
@@ -801,10 +1051,23 @@ export function Pcb3dViewer({
           const px = pad.x - halfW;
           const pz = pad.y - halfH;
           const r = pad.diameterMm / 2;
-          const isRect = pad.shape === 'rect';
           const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
-          const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
           const matchingComp = pcb.components?.find((c) => c.componentId === pad.componentId);
+          const upperType = matchingComp ? (matchingComp.type || '').toUpperCase() : '';
+          const upperVal = matchingComp ? (matchingComp.value || '').toUpperCase() : '';
+          const isCeramicCap =
+            upperType.includes('CAPACITOR') &&
+            !upperType.includes('ELECTROLYTIC') &&
+            !upperType.includes('RADIAL') &&
+            !upperType.includes('TANTALUM') &&
+            !upperVal.includes('UF') &&
+            !upperVal.includes('µF');
+          const isPlainResistor = upperType.includes('RESISTOR') && !upperType.includes('POT') && !upperType.includes('TRIMMER');
+          const isNonPolarizedPassive = isCeramicCap || isPlainResistor;
+          const isPin1 =
+            !isNonPolarizedPassive &&
+            (pad.pinId === '1' || pad.pinId.toLowerCase() === 'k' || pad.pinId.toLowerCase() === 'c' || pad.shape === 'rect');
+          const isRect = !isVia && (pad.shape === 'rect' || isPin1);
 
           return (
             <group
@@ -832,82 +1095,114 @@ export function Pcb3dViewer({
               }}
               onPointerOut={() => setHoveredItem(null)}
             >
-              {/* Bottom Thermal Relief 4-Spoke Cross for GND Pads connecting to B.Cu Ground Pour */}
-              {isGnd && (
-                <group position={[0, -thickness / 2 - 0.016, 0]}>
-                  {/* Horizontal spoke */}
-                  <mesh material={materials.copperBottom}>
-                    <boxGeometry args={[pad.diameterMm + 1.8, 0.016, 0.45]} />
-                  </mesh>
-                  {/* Vertical spoke */}
-                  <mesh material={materials.copperBottom}>
-                    <boxGeometry args={[0.45, 0.016, pad.diameterMm + 1.8]} />
-                  </mesh>
-                </group>
+              {/* Top Pad / Annular Ring */}
+              {isRect ? (
+                <SquarePadMesh
+                  position={[0, thickness / 2 + 0.036, 0]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  size={pad.diameterMm}
+                  holeR={pad.holeMm / 2}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              ) : (
+                <RoundPadMesh
+                  position={[0, thickness / 2 + 0.036, 0]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  innerR={pad.holeMm / 2}
+                  outerR={r}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
               )}
 
-              {/* Top Pad / Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
-                {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
-                ) : (
-                  <cylinderGeometry args={[r, r, 0.028, 20]} />
-                )}
-              </mesh>
-              {/* Silver Solder Fillet Ring around through-hole pin (omitted on bare vias) */}
-              {!isVia && (
-                <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
-                  <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
-                </mesh>
-              )}
               {/* Bottom Pad / Annular Ring */}
-              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
-                {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
-                ) : (
-                  <cylinderGeometry args={[r, r, 0.028, 20]} />
-                )}
-              </mesh>
-              {/* Plated Through Hole Copper Inner Barrel */}
+              {isRect ? (
+                <SquarePadMesh
+                  position={[0, -thickness / 2 - 0.036, 0]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  size={pad.diameterMm}
+                  holeR={pad.holeMm / 2}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              ) : (
+                <RoundPadMesh
+                  position={[0, -thickness / 2 - 0.036, 0]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  innerR={pad.holeMm / 2}
+                  outerR={r}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              )}
+
+              {/* Plated Through Hole Copper Inner Barrel (hollow cylinder with open ends) */}
               <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
-                <cylinderGeometry args={[pad.holeMm / 2 + 0.04, pad.holeMm / 2 + 0.04, thickness + 0.04, 16]} />
-              </mesh>
-              {/* Hollow Drill Hole Center */}
-              <mesh position={[0, 0, 0]} material={materials.drillHole}>
-                <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.1, 16]} />
+                <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.02, 20, 1, true]} />
               </mesh>
             </group>
           );
         })}
 
         {/* 5.1 Plated M3 Corner Mounting Holes (ENIG Gold Ring, Plated Barrel, Bore) */}
-        {(pcb.mountingHoles || [
-          { x: 4.0, y: 4.0, diameterMm: 3.2 },
-          { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
-          { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-          { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-        ]).map((hole, hIdx) => {
-          const hx = hole.x - halfW;
-          const hz = hole.y - halfH;
-          const holeR = (hole.diameterMm || 3.2) / 2;
-          const padR = holeR + 1.4; // 6.0mm annular ring
+        {(pcb.mountingHoles && pcb.mountingHoles.length > 0
+          ? pcb.mountingHoles
+          : [
+              { id: 'm3_tl', x: 5.0, y: 5.0, xMm: 5.0, yMm: 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_tr', x: pcb.widthMm - 5.0, y: 5.0, xMm: pcb.widthMm - 5.0, yMm: 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_bl', x: 5.0, y: pcb.heightMm - 5.0, xMm: 5.0, yMm: pcb.heightMm - 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_br', x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+            ]
+        ).map((hole, hIdx) => {
+          const posX = hole.xMm ?? hole.x ?? 0;
+          const posY = hole.yMm ?? hole.y ?? 0;
+          const hx = posX - halfW;
+          const hz = posY - halfH;
+          const drill = hole.drillMm ?? hole.diameterMm ?? 3.2;
+          const holeR = drill / 2;
+          const padR = hole.outerMm ? hole.outerMm / 2 : holeR + 1.4; // 6.0mm annular ring
           return (
-            <group key={`m3_mount_${hIdx}`} position={[hx, 0, hz]}>
+            <group
+              key={hole.id || `m3_mount_${hIdx}`}
+              position={[hx, 0, hz]}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                setHoveredItem({
+                  designator: 'M3 Mounting Hole',
+                  pin: 'CHASSIS_GND',
+                  name: 'M3 Screw Hole',
+                  net: 'Chassis Ground / Mechanical',
+                  x: posX,
+                  y: posY,
+                  layer: 'Through-Hole (All Layers)',
+                  drill,
+                  diameter: hole.outerMm || drill + 2.8,
+                });
+              }}
+              onPointerOut={() => setHoveredItem(null)}
+            >
               {/* Top Gold Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
-                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
-              </mesh>
+              <RoundPadMesh
+                position={[0, thickness / 2 + 0.036, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                innerR={holeR}
+                outerR={padR}
+                material={materials.goldPad}
+                renderOrder={10}
+              />
               {/* Bottom Gold Annular Ring */}
-              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
-                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
-              </mesh>
-              {/* Plated Through Hole Copper Inner Barrel */}
+              <RoundPadMesh
+                position={[0, -thickness / 2 - 0.036, 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+                innerR={holeR}
+                outerR={padR}
+                material={materials.goldPad}
+                renderOrder={10}
+              />
+              {/* Plated Through Hole Copper Inner Barrel (hollow cylinder with open ends) */}
               <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
-                <cylinderGeometry args={[holeR + 0.05, holeR + 0.05, thickness + 0.04, 20]} />
-              </mesh>
-              {/* Hollow Drill Hole Bore */}
-              <mesh position={[0, 0, 0]} material={materials.drillHole}>
-                <cylinderGeometry args={[holeR, holeR, thickness + 0.1, 20]} />
+                <cylinderGeometry args={[holeR, holeR, thickness + 0.02, 24, 1, true]} />
               </mesh>
             </group>
           );
@@ -942,6 +1237,8 @@ export function Pcb3dViewer({
               parameters={{
                 ...circuitComp?.parameters,
                 ...pComp.parameters,
+                usbPlugged: false,
+                isUsbPlugged: false,
                 rLevel: 0,
                 gLevel: 0,
                 bLevel: 0,
@@ -950,8 +1247,11 @@ export function Pcb3dViewer({
                 b: 0,
               }}
               renderContext="3d-view"
+              isPcbAssemblyMode={true}
+              hideExternalCables={true}
+              usbConnected={false}
               isSelected={false}
-              isSimulating={true}
+              isSimulating={false}
               simState={{
                 on: false,
                 brightness: 0,

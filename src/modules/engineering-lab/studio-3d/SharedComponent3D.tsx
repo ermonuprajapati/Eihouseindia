@@ -283,6 +283,9 @@ export interface SharedComponent3DProps {
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 /**
@@ -304,7 +307,13 @@ export function SharedComponent3D({
   hoveredPin,
   onHoverPin,
   onPinClick,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: SharedComponent3DProps) {
+  const isPcbMode = isPcbAssemblyMode || renderContext === '3d-view';
+  const suppressCables = hideExternalCables || isPcbMode || usbConnected === false;
+
   const modelType = useMemo(
     () => resolve3DModelType(type, footprint, parameters),
     [type, footprint, parameters]
@@ -327,9 +336,9 @@ export function SharedComponent3D({
         if (typeof simState.bLevel === 'number') bLevel = Math.max(bLevel ?? 0, simState.bLevel);
       }
 
-      const isPowered = isSimulating
+      const isPowered = !isPcbMode && (isSimulating
         ? Boolean(simState?.on || (rLevel && rLevel > 0) || (gLevel && gLevel > 0) || (bLevel && bLevel > 0))
-        : true;
+        : true);
 
       return (
         <RgbLed3D
@@ -372,6 +381,9 @@ export function SharedComponent3D({
           isPowered={!isBurned}
           isUsbPlugged={parameters.usbPlugged !== false}
           isDcJackPlugged={parameters.dcJackPlugged === true}
+          hideExternalCables={suppressCables}
+          isPcbAssemblyMode={isPcbMode}
+          usbConnected={suppressCables ? false : usbConnected}
           hoveredPin={hoveredPin}
           onHoverPin={onHoverPin}
           onPinClick={onPinClick}
@@ -388,6 +400,9 @@ export function SharedComponent3D({
           isPowered={!isBurned}
           isUsbPlugged={parameters.usbPlugged !== false}
           isDcJackPlugged={parameters.dcJackPlugged === true}
+          hideExternalCables={suppressCables}
+          isPcbAssemblyMode={isPcbMode}
+          usbConnected={suppressCables ? false : usbConnected}
           hoveredPin={hoveredPin}
           onHoverPin={onHoverPin}
           onPinClick={onPinClick}
@@ -403,6 +418,9 @@ export function SharedComponent3D({
           isSelected={isSelected}
           isPowered={!isBurned}
           isUsbPlugged={parameters.usbPlugged !== false}
+          hideExternalCables={suppressCables}
+          isPcbAssemblyMode={isPcbMode}
+          usbConnected={suppressCables ? false : usbConnected}
           hoveredPin={hoveredPin}
           onHoverPin={onHoverPin}
           onPinClick={onPinClick}
@@ -418,6 +436,9 @@ export function SharedComponent3D({
           isSelected={isSelected}
           isPowered={!isBurned}
           isUsbPlugged={parameters.usbPlugged !== false}
+          hideExternalCables={suppressCables}
+          isPcbAssemblyMode={isPcbMode}
+          usbConnected={suppressCables ? false : usbConnected}
           hoveredPin={hoveredPin}
           onHoverPin={onHoverPin}
           onPinClick={onPinClick}
@@ -433,6 +454,9 @@ export function SharedComponent3D({
           isSelected={isSelected}
           isPowered={!isBurned}
           isUsbPlugged={parameters.usbPlugged !== false}
+          hideExternalCables={suppressCables}
+          isPcbAssemblyMode={isPcbMode}
+          usbConnected={suppressCables ? false : usbConnected}
           hoveredPin={hoveredPin}
           onHoverPin={onHoverPin}
           onPinClick={onPinClick}
@@ -458,7 +482,7 @@ export function SharedComponent3D({
 
     case 'LED': {
       const isPowered = Boolean(
-        isSimulating && (simState?.on || (simState?.current && Math.abs(simState.current) > 0.001))
+        !isPcbMode && isSimulating && (simState?.on || (simState?.current && Math.abs(simState.current) > 0.001))
       );
       const brightness = isSimulating && isPowered ? (simState?.brightness ?? 1.0) : 0;
       const ledColor = String(parameters.color || value || (label.toLowerCase().includes('green') ? '#10B981' : '#EF4444'));

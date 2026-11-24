@@ -192,16 +192,32 @@ export function EngineeringLabApp() {
     setActiveMode(newMode);
     if (newMode === 'pcb2d' || newMode === 'pcb3d') {
       setProject((prev) => {
-        const schematicRealComps = prev.components.filter(
-          (c) => !c.type?.toUpperCase().includes('GND') && !c.type?.toUpperCase().includes('VCC')
-        );
-        const pcbComps = prev.pcb?.components || [];
-        if (pcbComps.length === 0 || pcbComps.length !== schematicRealComps.length) {
+        if (!prev.pcb) {
           const updatedPcb = PcbGenerator.generatePcbFromSchematic(
             prev.components,
             prev.wires,
-            prev.pcb?.widthMm || 80,
-            prev.pcb?.heightMm || 60,
+            80,
+            60
+          );
+          return { ...prev, pcb: updatedPcb };
+        }
+        // Preserve 2D edits: only regenerate if schematic components genuinely changed
+        const schematicRealCompIds = new Set(
+          prev.components
+            .filter((c) => !c.type?.toUpperCase().includes('GND') && !c.type?.toUpperCase().includes('VCC'))
+            .map((c) => c.id)
+        );
+        const pcbCompIds = new Set((prev.pcb.components || []).map((c) => c.componentId));
+        const idsMatch =
+          schematicRealCompIds.size === pcbCompIds.size &&
+          [...schematicRealCompIds].every((id) => pcbCompIds.has(id));
+
+        if (!idsMatch) {
+          const updatedPcb = PcbGenerator.generatePcbFromSchematic(
+            prev.components,
+            prev.wires,
+            prev.pcb.widthMm || 80,
+            prev.pcb.heightMm || 60,
             prev.pcb
           );
           return { ...prev, pcb: updatedPcb };
@@ -1593,6 +1609,7 @@ export function EngineeringLabApp() {
             projectTitle={project.title}
             onExportGerber={() => handleExportProject('gerber')}
             onUpdateDimensions={(widthMm, heightMm) => {
+              recordHistory();
               setProject((p) => ({
                 ...p,
                 pcb: { ...p.pcb, widthMm, heightMm },
@@ -1600,6 +1617,7 @@ export function EngineeringLabApp() {
               toast.info(`Updated PCB dimensions to ${widthMm}x${heightMm} mm`);
             }}
             onUpdatePcb={(updatedPcb) => {
+              recordHistory();
               setProject((p) => ({ ...p, pcb: updatedPcb }));
             }}
             is3DMode={false}
@@ -1615,12 +1633,14 @@ export function EngineeringLabApp() {
             projectTitle={project.title}
             onExportGerber={() => handleExportProject('gerber')}
             onUpdateDimensions={(widthMm, heightMm) => {
+              recordHistory();
               setProject((p) => ({
                 ...p,
                 pcb: { ...p.pcb, widthMm, heightMm },
               }));
             }}
             onUpdatePcb={(updatedPcb) => {
+              recordHistory();
               setProject((p) => ({ ...p, pcb: updatedPcb }));
             }}
             is3DMode={true}

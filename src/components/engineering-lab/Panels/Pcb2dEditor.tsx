@@ -6,6 +6,7 @@ import {
   PcbTrack,
   PcbPad,
   PcbSilkscreenText,
+  PcbMountingHole,
   CircuitComponent,
   CircuitWire,
   PhysicalSpec,
@@ -25,12 +26,14 @@ import {
   Trash2,
   Sliders,
   RotateCw,
+  RotateCcw,
   ZoomIn,
   ZoomOut,
   Maximize2,
   Crosshair,
   Wand2,
   Disc,
+  CircleDot,
   Grid,
   Shield,
   Settings,
@@ -123,6 +126,9 @@ export function Pcb2dEditor({
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
   const [isDraggingComp, setIsDraggingComp] = useState<boolean>(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedHoleId, setSelectedHoleId] = useState<string | null>(null);
+  const [isDraggingHole, setIsDraggingHole] = useState<boolean>(false);
+  const [holeDragOffset, setHoleDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Canvas mouse coordinates
   const [mouseCoord, setMouseCoord] = useState<{
@@ -186,6 +192,46 @@ export function Pcb2dEditor({
     GND: 'bottom_copper',
     SIGNALS: 'auto',
   });
+
+  // 2D PCB Dedicated Undo / Redo Stacks (Capped at 50 states)
+  const [undoStack, setUndoStack] = useState<PcbLayout[]>([]);
+  const [redoStack, setRedoStack] = useState<PcbLayout[]>([]);
+  const isUndoRedoRef = useRef(false);
+  const lastPcbRef = useRef<PcbLayout>(pcb);
+
+  useEffect(() => {
+    if (!isUndoRedoRef.current && lastPcbRef.current !== pcb) {
+      setUndoStack((prev) => [...prev.slice(-49), lastPcbRef.current]);
+      setRedoStack([]);
+    }
+    lastPcbRef.current = pcb;
+  }, [pcb]);
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, s.length - 1));
+    setRedoStack((s) => [...s.slice(-49), JSON.parse(JSON.stringify(pcb))]);
+    isUndoRedoRef.current = true;
+    if (onUpdatePcb) onUpdatePcb(prev);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
+    toast.info('Reverted 2D PCB change (Undo)');
+  }, [undoStack, pcb, onUpdatePcb]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((s) => s.slice(0, s.length - 1));
+    setUndoStack((s) => [...s.slice(-49), JSON.parse(JSON.stringify(pcb))]);
+    isUndoRedoRef.current = true;
+    if (onUpdatePcb) onUpdatePcb(next);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
+    toast.info('Re-applied 2D PCB change (Redo)');
+  }, [redoStack, pcb, onUpdatePcb]);
 
   // Run initial and reactive DRC
   useEffect(() => {
@@ -266,6 +312,7 @@ export function Pcb2dEditor({
       shape: 'round',
       layer: 'all',
       netId: routingStartPad ? (pcb.pads.find((p) => p.id === routingStartPad.id)?.netId || undefined) : undefined,
+      isManual: true,
     };
 
     if (routingStartPad && onUpdatePcb) {
@@ -279,6 +326,7 @@ export function Pcb2dEditor({
           to: pts[i + 1],
           widthMm: traceWidth,
           netId: viaPad.netId,
+          isManual: true,
         });
       }
 
@@ -320,10 +368,89 @@ export function Pcb2dEditor({
     toast.info('Rotated silkscreen text 90°');
   }, [selectedTextId, pcb, onUpdatePcb]);
 
+  const handleDeleteSelectedHole = useCallback(() => {
+    if (!selectedHoleId || !onUpdatePcb) return;
+    const baseHoles: PcbMountingHole[] = pcb.mountingHoles && pcb.mountingHoles.length > 0
+      ? pcb.mountingHoles
+      : [
+          { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+        ];
+    const nextHoles = baseHoles.filter((h, idx) => (h.id || `m3_${idx}`) !== selectedHoleId);
+    onUpdatePcb({ ...pcb, mountingHoles: nextHoles });
+    setSelectedHoleId(null);
+    toast.success('Mounting hole deleted');
+  }, [selectedHoleId, pcb, onUpdatePcb]);
+
+  const handleAddMountingHole = useCallback(() => {
+    if (!onUpdatePcb) return;
+    const baseHoles: PcbMountingHole[] = pcb.mountingHoles && pcb.mountingHoles.length > 0
+      ? pcb.mountingHoles
+      : [
+          { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+        ];
+    const newHoleX = Math.round(pcb.widthMm / 2);
+    const newHoleY = Math.round(pcb.heightMm / 2);
+    const newHoleId = `hole_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newHole: PcbMountingHole = {
+      id: newHoleId,
+      xMm: newHoleX,
+      yMm: newHoleY,
+      x: newHoleX,
+      y: newHoleY,
+      drillMm: 3.2,
+      outerMm: 6.0,
+      diameterMm: 3.2,
+      isCustomMoved: true,
+    };
+    onUpdatePcb({ ...pcb, mountingHoles: [...baseHoles, newHole] });
+    setSelectedHoleId(newHoleId);
+    setSelectedCompId(null);
+    setSelectedTrackId(null);
+    setSelectedTextId(null);
+    setSidebarTab('inspector');
+    toast.success(`Added M3 mounting hole at (${newHoleX}, ${newHoleY}) mm`);
+  }, [pcb, onUpdatePcb]);
+
+  const handleResetCornerHoles = useCallback(() => {
+    if (!onUpdatePcb) return;
+    const cornerInset = 5.0;
+    const w = pcb.widthMm;
+    const h = pcb.heightMm;
+    const standardCorners: PcbMountingHole[] = [
+      { id: 'mount_tl', xMm: cornerInset, yMm: cornerInset, x: cornerInset, y: cornerInset, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2, isCustomMoved: false },
+      { id: 'mount_tr', xMm: w - cornerInset, yMm: cornerInset, x: w - cornerInset, y: cornerInset, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2, isCustomMoved: false },
+      { id: 'mount_bl', xMm: cornerInset, yMm: h - cornerInset, x: cornerInset, y: h - cornerInset, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2, isCustomMoved: false },
+      { id: 'mount_br', xMm: w - cornerInset, yMm: h - cornerInset, x: w - cornerInset, y: h - cornerInset, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2, isCustomMoved: false },
+    ];
+    onUpdatePcb({ ...pcb, mountingHoles: standardCorners });
+    setSelectedHoleId(null);
+    toast.success('Reset 4 corner M3 mounting holes to (5mm, 5mm) insets');
+  }, [pcb, onUpdatePcb]);
+
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedTextId && onUpdatePcb) {
@@ -335,6 +462,9 @@ export function Pcb2dEditor({
           onUpdatePcb({ ...pcb, tracks: nextTracks });
           setSelectedTrackId(null);
           toast.success('Copper track deleted');
+        } else if (selectedHoleId && onUpdatePcb) {
+          e.preventDefault();
+          handleDeleteSelectedHole();
         }
       } else if (e.key === 'Escape') {
         setRoutingStartPad(null);
@@ -342,8 +472,10 @@ export function Pcb2dEditor({
         setSelectedPadId(null);
         setSelectedCompId(null);
         setSelectedTextId(null);
+        setSelectedHoleId(null);
         setIsDraggingComp(false);
         setIsDraggingText(false);
+        setIsDraggingHole(false);
         setIsAddingText(false);
         setToolMode('select');
         setIsExportMenuOpen(false);
@@ -385,6 +517,7 @@ export function Pcb2dEditor({
     selectedTrackId,
     selectedCompId,
     selectedTextId,
+    selectedHoleId,
     routingStartPad,
     mouseCoord,
     activeLayer,
@@ -394,8 +527,11 @@ export function Pcb2dEditor({
     handleRotateSelectedComponent,
     handleRotateSelectedText,
     handleDeleteSelectedText,
+    handleDeleteSelectedHole,
     traceWidth,
     handleInsertPlatedVia,
+    handleUndo,
+    handleRedo,
   ]);
 
   // Run full Auto-Router with Manhattan 45-chamfered tracks
@@ -410,7 +546,9 @@ export function Pcb2dEditor({
       components
     );
 
-    const updatedPads = [...pcb.pads, ...vias];
+    // Filter out previous auto-routed vias to eliminate duplicate keys & duplicate vias
+    const nonViaPads = pcb.pads.filter((p) => p.componentId !== 'VIA');
+    const updatedPads = [...nonViaPads, ...vias];
     const drcViolationsFresh = DrcEngine.runChecks({ ...pcb, pads: updatedPads, tracks: routedTracks }, { wires });
 
     onUpdatePcb({
@@ -592,24 +730,63 @@ export function Pcb2dEditor({
       );
     }
 
-    // 2. Corner M3 Mounting Holes
-    const mountHoles = [
-      { x: offsetX + 4 * scale, y: offsetY + 4 * scale },
-      { x: offsetX + (pcb.widthMm - 4) * scale, y: offsetY + 4 * scale },
-      { x: offsetX + 4 * scale, y: offsetY + (pcb.heightMm - 4) * scale },
-      { x: offsetX + (pcb.widthMm - 4) * scale, y: offsetY + (pcb.heightMm - 4) * scale },
-    ];
+    // 2. Corner M3 Mounting Holes (Single source of truth synchronized with 3D PCB View)
+    const effectiveHoles: PcbMountingHole[] =
+      pcb.mountingHoles && pcb.mountingHoles.length > 0
+        ? pcb.mountingHoles
+        : [
+            { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+            { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+            { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+            { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+          ];
 
-    mountHoles.forEach((hole) => {
-      ctx.strokeStyle = '#D97706';
-      ctx.lineWidth = 1.5;
+    effectiveHoles.forEach((hole, idx) => {
+      const hId = hole.id || `m3_${idx}`;
+      const isSelected = hId === selectedHoleId;
+      const posX = hole.xMm ?? hole.x ?? 0;
+      const posY = hole.yMm ?? hole.y ?? 0;
+      const drill = hole.drillMm ?? hole.diameterMm ?? 3.2;
+      const outer = hole.outerMm ?? (drill + 2.8);
+      const hx = offsetX + posX * scale;
+      const hy = offsetY + posY * scale;
+      const padR = (outer / 2) * scale;
+      const drillR = (drill / 2) * scale;
+
+      // Outer ENIG gold annular ring
+      ctx.fillStyle = '#D4AF37';
       ctx.beginPath();
-      ctx.arc(hole.x, hole.y, 3.0 * scale, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(hx, hy, padR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner see-through drill hole bore
       ctx.fillStyle = '#050D1A';
       ctx.beginPath();
-      ctx.arc(hole.x, hole.y, 1.6 * scale, 0, Math.PI * 2);
+      ctx.arc(hx, hy, drillR, 0, Math.PI * 2);
       ctx.fill();
+
+      // Plated copper barrel edge
+      ctx.strokeStyle = '#C87D55';
+      ctx.lineWidth = Math.max(1, 0.25 * scale);
+      ctx.beginPath();
+      ctx.arc(hx, hy, drillR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Selection halo if selected
+      if (isSelected) {
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(hx, hy, padR + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Small silkscreen label
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = `bold ${Math.max(8, Math.round(1.1 * scale))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('M3', hx, hy + padR + 1.5);
     });
 
     // 2.1 CAD Dimensions & Outer Extension Lines
@@ -802,8 +979,8 @@ export function Pcb2dEditor({
       ctx.lineWidth = 1;
       ctx.font = 'bold 9px monospace';
 
-      ctx.fillText('EI HOUSE ENG LAB', offsetX + 8, offsetY + 16);
-      ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, offsetX + 8, offsetY + pcb.heightMm * scale - 8);
+      ctx.fillText('EI HOUSE ENG LAB', offsetX + 14 * scale, offsetY + 5.5 * scale);
+      ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, offsetX + 14 * scale, offsetY + pcb.heightMm * scale - 4 * scale);
 
       // User Custom Silkscreen Texts
       if (pcb.texts && pcb.texts.length > 0) {
@@ -871,158 +1048,13 @@ export function Pcb2dEditor({
             ctx.fillText('↺ [R]', -selW / 2 + 2, selH / 2 + 10);
           }
 
-          ctx.strokeStyle = isCompSelected ? '#38BDF8' : '#E2E8F0';
-          ctx.fillStyle = isCompSelected ? '#38BDF8' : '#F8FAFC';
-          ctx.lineWidth = 1;
-          ctx.font = 'bold 8px monospace';
-
-          // Layout labels tightly beside silkscreen courtyard
-          const layout = FootprintRenderer.calculateSilkscreenLayout({
-            designator: comp.designator,
-            type: comp.type,
-            value: comp.value,
-            x: 0,
-            y: 0,
-            rotation: comp.rotation || 0,
-            physicalSpec: spec,
+          // Render complete IPC-7351 production silkscreen
+          FootprintRenderer.renderSilkscreen(ctx, comp, {
+            scale,
+            isSelected: isCompSelected,
+            silkColor: isCompSelected ? '#38BDF8' : '#F8FAFC',
+            is3dDecal: false,
           });
-
-          // Draw authentic IPC-7351 EDA silkscreen symbols
-          if (layout.outlineType === 'rgb_led') {
-            const r = 4.0 * scale;
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.stroke();
-            const pins = [-3.81, -1.27, 1.27, 3.81];
-            const labels = ['R', 'C', 'G', 'B'];
-            pins.forEach((px, i) => {
-              const sx = (px / 2.54) * 2.5 * scale;
-              ctx.beginPath();
-              ctx.arc(sx, 0, 1.0 * scale, 0, Math.PI * 2);
-              ctx.stroke();
-              ctx.font = 'bold 7px sans-serif';
-              ctx.fillText(labels[i], sx - 2, -2.2 * scale);
-            });
-            ctx.font = 'bold 8px monospace';
-          } else if (layout.outlineType === 'dev_board' && layout.boxBounds) {
-            const bb = layout.boxBounds;
-            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            // Draw USB port indicator along left edge
-            ctx.strokeRect(bb.x * scale, -5 * scale, 8 * scale, 10 * scale);
-            // Silkscreen board label inside boundary
-            ctx.font = 'bold 8px monospace';
-            ctx.fillText(comp.designator, (bb.x + 10) * scale, 3 * scale);
-          } else if (layout.outlineType === 'transistor_to220' && layout.boxBounds) {
-            const bb = layout.boxBounds;
-            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            // Metal heat-sink tab line and mounting hole
-            ctx.beginPath();
-            ctx.moveTo(bb.x * scale, (bb.y + 1.5) * scale);
-            ctx.lineTo((bb.x + bb.width) * scale, (bb.y + 1.5) * scale);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(0, (bb.y + 1.5) * scale, 1.4 * scale, 0, Math.PI * 2);
-            ctx.stroke();
-          } else if (layout.outlineType === 'module' && layout.boxBounds) {
-            const bb = layout.boxBounds;
-            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            ctx.font = 'bold 8px monospace';
-            ctx.fillText(comp.designator, (bb.x + 3) * scale, 0);
-          } else if (layout.outlineType === 'electrolytic_cap') {
-            const r = (layout.radius || 4.2) * scale;
-            // Circular outline
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Polarized '+' mark near Pin 1 (anode at -X)
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillText('+', -r + 2, -r / 2);
-
-            // Shaded/hatched negative crescent on cathode side (+X)
-            ctx.beginPath();
-            ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
-            ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
-            ctx.fillStyle = isCompSelected ? 'rgba(56, 189, 248, 0.3)' : 'rgba(248, 250, 252, 0.25)';
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = isCompSelected ? '#38BDF8' : '#F8FAFC';
-            ctx.font = 'bold 8px monospace';
-          } else if (layout.outlineType === 'ceramic_cap' && layout.boxBounds) {
-            // Compact rounded-pill outline between pads
-            const bb = layout.boxBounds;
-            ctx.beginPath();
-            if (ctx.roundRect) {
-              ctx.roundRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale, 1.8 * scale);
-            } else {
-              ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            }
-            ctx.stroke();
-          } else if (layout.outlineType === 'axial_resistor' && layout.boxBounds) {
-            const bb = layout.boxBounds;
-            // Axial body rectangle
-            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            // Lead lines extending to pads
-            ctx.beginPath();
-            ctx.moveTo(bb.x * scale, 0);
-            ctx.lineTo((bb.x - 2.8) * scale, 0);
-            ctx.moveTo((bb.x + bb.width) * scale, 0);
-            ctx.lineTo((bb.x + bb.width + 2.8) * scale, 0);
-            ctx.stroke();
-          } else if (layout.outlineType === 'led') {
-            const r = (layout.radius || 4.0) * scale;
-            // Circular silkscreen with flat cathode bar on right (+X)
-            ctx.beginPath();
-            ctx.arc(0, 0, r, -0.6 * Math.PI, 0.6 * Math.PI);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(r * Math.cos(0.6 * Math.PI), r * Math.sin(0.6 * Math.PI));
-            ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
-            ctx.stroke();
-            // Cathode flat bar 'K' indicator
-            ctx.font = 'bold 7px sans-serif';
-            ctx.fillText('K', r - 2, 2.5 * scale);
-            ctx.font = 'bold 8px monospace';
-          } else if (layout.outlineType === 'dip' && layout.boxBounds) {
-            const bb = layout.boxBounds;
-            ctx.strokeRect(bb.x * scale, bb.y * scale, bb.width * scale, bb.height * scale);
-            // Semicircular notch on the left side (-X)
-            ctx.beginPath();
-            ctx.arc(bb.x * scale, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
-            ctx.stroke();
-            // Pin 1 indicator dot at top-left
-            ctx.beginPath();
-            ctx.arc((bb.x + 1.8) * scale, (bb.y + 1.8) * scale, 1.0 * scale, 0, Math.PI * 2);
-            ctx.fill();
-            // Pin 1 numeral '1' at top-left
-            ctx.font = 'bold 7px monospace';
-            ctx.fillText('1', (bb.x + 1.8) * scale, (bb.y + 3.4) * scale);
-            ctx.font = 'bold 8px monospace';
-          } else if (layout.outlineType === 'transistor') {
-            // TO-92 flat-face D-shape
-            const r = 3.5 * scale;
-            ctx.beginPath();
-            ctx.arc(0, 0, r, -0.4 * Math.PI, 0.4 * Math.PI);
-            ctx.lineTo(-r * 0.7, r * 0.8);
-            ctx.lineTo(-r * 0.7, -r * 0.8);
-            ctx.closePath();
-            ctx.stroke();
-          } else if (layout.boxBounds) {
-            ctx.strokeRect(
-              layout.boxBounds.x * scale,
-              layout.boxBounds.y * scale,
-              layout.boxBounds.width * scale,
-              layout.boxBounds.height * scale
-            );
-          }
-
-          // Designator text
-          ctx.fillText(layout.designatorText, layout.designatorPos.x * scale, layout.designatorPos.y * scale);
-          // Value text
-          if (layout.valueText) {
-            ctx.fillStyle = isCompSelected ? '#7DD3FC' : '#94A3B8';
-            ctx.fillText(layout.valueText, layout.valuePos.x * scale, layout.valuePos.y * scale);
-          }
 
           ctx.restore();
         });
@@ -1037,8 +1069,23 @@ export function Pcb2dEditor({
       const isHovered = pad.id === hoveredPadId;
       const isStart = routingStartPad?.id === pad.id;
       const isSelected = pad.id === selectedPadId;
-      const isPin1 = pad.pinId === '1' || pad.shape === 'rect';
-      const isRect = isPin1;
+      const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
+      const matchingComp = pcb.components?.find((c) => c.componentId === pad.componentId);
+      const upperType = matchingComp ? (matchingComp.type || '').toUpperCase() : '';
+      const upperVal = matchingComp ? (matchingComp.value || '').toUpperCase() : '';
+      const isCeramicCap =
+        upperType.includes('CAPACITOR') &&
+        !upperType.includes('ELECTROLYTIC') &&
+        !upperType.includes('RADIAL') &&
+        !upperType.includes('TANTALUM') &&
+        !upperVal.includes('UF') &&
+        !upperVal.includes('µF');
+      const isPlainResistor = upperType.includes('RESISTOR') && !upperType.includes('POT') && !upperType.includes('TRIMMER');
+      const isNonPolarizedPassive = isCeramicCap || isPlainResistor;
+      const isPin1 =
+        !isNonPolarizedPassive &&
+        (pad.pinId === '1' || pad.pinId.toLowerCase() === 'k' || pad.pinId.toLowerCase() === 'c' || pad.shape === 'rect');
+      const isRect = !isVia && (pad.shape === 'rect' || isPin1);
       const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
 
       // Thermal Relief 4-Spoke Cross for GND Pads connecting to Ground Pour
@@ -1223,6 +1270,24 @@ export function Pcb2dEditor({
       return;
     }
 
+    // Live M3 Mounting Hole Dragging
+    if (isDraggingHole && selectedHoleId && pcb.mountingHoles && onUpdatePcb) {
+      const targetHole = pcb.mountingHoles.find((h, idx) => (h.id || `m3_${idx}`) === selectedHoleId);
+      if (targetHole) {
+        const rawSnapX = snapCoord(coords.mmX - holeDragOffset.x);
+        const rawSnapY = snapCoord(coords.mmY - holeDragOffset.y);
+        const clampedX = Math.max(3, Math.min(pcb.widthMm - 3, rawSnapX));
+        const clampedY = Math.max(3, Math.min(pcb.heightMm - 3, rawSnapY));
+        const nextHoles = pcb.mountingHoles.map((h, idx) =>
+          (h.id || `m3_${idx}`) === selectedHoleId
+            ? { ...h, id: h.id || `m3_${idx}`, xMm: clampedX, yMm: clampedY, x: clampedX, y: clampedY, isCustomMoved: true }
+            : h
+        );
+        onUpdatePcb({ ...pcb, mountingHoles: nextHoles });
+        return;
+      }
+    }
+
     // Live Silkscreen Text Dragging
     if (isDraggingText && selectedTextId && pcb.texts && onUpdatePcb) {
       const snapX = snapCoord(coords.mmX - textDragOffset.x);
@@ -1306,6 +1371,44 @@ export function Pcb2dEditor({
     const { mmX, mmY } = coords;
 
     if (toolMode === 'select' && !routingStartPad) {
+      // Check M3 mounting holes
+      if (visibleLayers.drillHoles) {
+        const effectiveHoles: PcbMountingHole[] =
+          pcb.mountingHoles && pcb.mountingHoles.length > 0
+            ? pcb.mountingHoles
+            : [
+                { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+              ];
+        const clickedHole = effectiveHoles.find((h, idx) => {
+          const posX = h.xMm ?? h.x ?? 0;
+          const posY = h.yMm ?? h.y ?? 0;
+          const drill = h.drillMm ?? h.diameterMm ?? 3.2;
+          const outer = h.outerMm ?? (drill + 2.8);
+          const d = Math.hypot(posX - mmX, posY - mmY);
+          return d <= Math.max(outer / 2, 3.5);
+        });
+        if (clickedHole) {
+          const hId = clickedHole.id || `m3_${effectiveHoles.indexOf(clickedHole)}`;
+          if (!pcb.mountingHoles || pcb.mountingHoles.length === 0) {
+            onUpdatePcb?.({ ...pcb, mountingHoles: effectiveHoles });
+          }
+          const posX = clickedHole.xMm ?? clickedHole.x ?? 0;
+          const posY = clickedHole.yMm ?? clickedHole.y ?? 0;
+          setSelectedHoleId(hId);
+          setSelectedCompId(null);
+          setSelectedTrackId(null);
+          setSelectedPadId(null);
+          setSelectedTextId(null);
+          setIsDraggingHole(true);
+          setHoleDragOffset({ x: mmX - posX, y: mmY - posY });
+          setSidebarTab('inspector');
+          return;
+        }
+      }
+
       if (pcb.texts && visibleLayers.silkscreen) {
         const clickedText = pcb.texts.find((t) => {
           const charCount = t.text.length || 1;
@@ -1348,6 +1451,7 @@ export function Pcb2dEditor({
   const handleCanvasMouseUp = () => {
     setIsDraggingComp(false);
     setIsDraggingText(false);
+    setIsDraggingHole(false);
     setIsPanning(false);
   };
 
@@ -1361,6 +1465,7 @@ export function Pcb2dEditor({
     } else {
       setSelectedCompId(null);
       setSelectedPadId(null);
+      setSelectedHoleId(null);
       setHighlightLocation(null);
     }
   };
@@ -1395,6 +1500,8 @@ export function Pcb2dEditor({
               from: pts[i],
               to: pts[i + 1],
               widthMm: traceWidth,
+              netId: clickedPad.netId,
+              isManual: true,
             });
           }
           if (onUpdatePcb) {
@@ -1422,6 +1529,7 @@ export function Pcb2dEditor({
           from: pts[i],
           to: pts[i + 1],
           widthMm: traceWidth,
+          isManual: true,
         });
       }
       if (onUpdatePcb) {
@@ -1565,6 +1673,15 @@ export function Pcb2dEditor({
   const selectedPad = pcb.pads.find((p) => p.id === selectedPadId);
   const selectedComp = pcb.components?.find((c) => c.componentId === selectedCompId);
   const selectedText = pcb.texts?.find((t) => t.id === selectedTextId);
+  const selectedHole = (pcb.mountingHoles && pcb.mountingHoles.length > 0
+    ? pcb.mountingHoles
+    : [
+        { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+        { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+        { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+        { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+      ]
+  ).find((h, idx) => (h.id || `m3_${idx}`) === selectedHoleId);
 
   const hoveredPad = hoveredPadId ? pcb.pads.find((p) => p.id === hoveredPadId) : null;
   const hoveredComp = hoveredPad ? pcb.components?.find((c) => c.componentId === hoveredPad.componentId) : null;
@@ -1590,17 +1707,45 @@ export function Pcb2dEditor({
       {/* ---------------------------------------------------- */}
       {/* Top KiCad / Altium-Style Professional Engineering Console */}
       {/* ---------------------------------------------------- */}
-      <div className="h-10 bg-[#0B1528] border-b border-slate-800 flex items-center justify-between px-2.5 gap-2 text-xs shrink-0 select-none font-mono">
+      <div className="min-h-10 py-1 bg-[#0B1528] border-b border-slate-800 flex flex-wrap items-center justify-between px-2 gap-1.5 text-xs shrink-0 select-none font-mono">
         {/* Left Section: Tools Group + Active Layer + Track Width + GND Mode + Layer Visibility */}
-        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {/* Brand/Label */}
           <div className="flex items-center gap-1 text-slate-300 pr-1.5 border-r border-slate-800 shrink-0">
             <Layers className="w-4 h-4 text-cyan-400" />
             <span className="font-bold text-[11px] hidden md:inline text-cyan-200">PCB 2D</span>
           </div>
 
-          {/* Tools Group: Select, Pan (H), Route Track (X), Place Via (V), Auto-Route */}
-          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0">
+          {/* Tools Group: Undo/Redo, Select, Pan (H), Route Track (X), Place Via (V), Auto-Route */}
+          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0 gap-0.5">
+            {/* Undo / Redo */}
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className={`h-7 px-1.5 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                undoStack.length === 0
+                  ? 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Undo 2D Edit [Shortcut: Ctrl+Z]"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className={`h-7 px-1.5 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                redoStack.length === 0
+                  ? 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Redo 2D Edit [Shortcut: Ctrl+Y / Ctrl+Shift+Z]"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -1674,6 +1819,16 @@ export function Pcb2dEditor({
             >
               <Type className="w-3.5 h-3.5 text-cyan-400" />
               <span className="hidden md:inline">Text (T)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAddMountingHole}
+              className="h-7 px-2 rounded font-semibold text-[11px] text-purple-300 hover:text-purple-200 hover:bg-purple-950/60 transition-all cursor-pointer flex items-center gap-1"
+              title="Place M3 Mounting Hole (3.2mm drill, 6.0mm annular pad)"
+            >
+              <CircleDot className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden md:inline">+Hole</span>
             </button>
 
             <button
@@ -1832,7 +1987,7 @@ export function Pcb2dEditor({
         </div>
 
         {/* Right Section: Viewport, Stackup & Manufacturing */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto">
           {/* Zoom & View Reset */}
           <div className="flex items-center bg-slate-950/80 rounded border border-slate-800 p-0.5">
             <button
@@ -2440,9 +2595,9 @@ export function Pcb2dEditor({
                     </p>
                   </div>
                 ) : (
-                  drcViolations.map((v) => (
+                  drcViolations.map((v, vIdx) => (
                     <div
-                      key={v.id}
+                      key={`${v.id}_${vIdx}`}
                       className="p-2 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/60 rounded text-[11px] transition-colors space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
@@ -2524,6 +2679,23 @@ export function Pcb2dEditor({
                         const w = Math.max(20, Math.min(300, Number(e.target.value)));
                         setBoardWidth(w);
                         if (onUpdateDimensions) onUpdateDimensions(w, boardHeight);
+                        if (onUpdatePcb) {
+                          const updatedHoles: PcbMountingHole[] = (pcb.mountingHoles && pcb.mountingHoles.length > 0
+                            ? pcb.mountingHoles
+                            : [
+                                { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              ]
+                          ).map((h) => {
+                            if (!h.isCustomMoved && (h.id === 'mount_tr' || h.id === 'mount_br' || h.id === 'm3_tr' || h.id === 'm3_br' || Math.abs(h.x - (pcb.widthMm - 5.0)) < 1.5)) {
+                              return { ...h, x: w - 5.0, xMm: w - 5.0 };
+                            }
+                            return h;
+                          });
+                          onUpdatePcb({ ...pcb, widthMm: w, mountingHoles: updatedHoles });
+                        }
                       }}
                       className="w-full bg-transparent text-emerald-400 text-center focus:outline-hidden"
                     />
@@ -2538,6 +2710,23 @@ export function Pcb2dEditor({
                         const h = Math.max(20, Math.min(300, Number(e.target.value)));
                         setBoardHeight(h);
                         if (onUpdateDimensions) onUpdateDimensions(boardWidth, h);
+                        if (onUpdatePcb) {
+                          const updatedHoles: PcbMountingHole[] = (pcb.mountingHoles && pcb.mountingHoles.length > 0
+                            ? pcb.mountingHoles
+                            : [
+                                { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                                { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              ]
+                          ).map((hole) => {
+                            if (!hole.isCustomMoved && (hole.id === 'mount_bl' || hole.id === 'mount_br' || hole.id === 'm3_bl' || hole.id === 'm3_br' || Math.abs(hole.y - (pcb.heightMm - 5.0)) < 1.5)) {
+                              return { ...hole, y: h - 5.0, yMm: h - 5.0 };
+                            }
+                            return hole;
+                          });
+                          onUpdatePcb({ ...pcb, heightMm: h, mountingHoles: updatedHoles });
+                        }
                       }}
                       className="w-full bg-transparent text-emerald-400 text-center focus:outline-hidden"
                     />
@@ -2813,9 +3002,119 @@ export function Pcb2dEditor({
                 </div>
               )}
 
-              {!selectedTrack && !selectedPad && !selectedComp && !selectedText && (
+              {/* M3 Mounting Hole Selected */}
+              {selectedHole && (
+                <div className="p-2.5 bg-slate-950 border border-amber-500/40 rounded space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-400 flex items-center gap-1">
+                      <CircleDot className="w-3.5 h-3.5 text-amber-400" />
+                      M3 Mounting Hole
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">{selectedHole.id || selectedHoleId}</span>
+                  </div>
+                  <div className="text-slate-400 text-[10px]">
+                    Plated Through Hole Chassis Ground / Mechanical Screw Mount.
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">X Position (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="3.0"
+                      max={pcb.widthMm - 3}
+                      value={selectedHole.xMm ?? selectedHole.x ?? 5.0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        if (!onUpdatePcb) return;
+                        const baseHoles: PcbMountingHole[] = (pcb.mountingHoles && pcb.mountingHoles.length > 0)
+                          ? pcb.mountingHoles
+                          : [
+                              { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                            ];
+                        const nextHoles = baseHoles.map((h, idx) =>
+                          (h.id || `m3_${idx}`) === selectedHoleId
+                            ? { ...h, xMm: val, x: val, isCustomMoved: true }
+                            : h
+                        );
+                        onUpdatePcb({ ...pcb, mountingHoles: nextHoles });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px]">Y Position (mm):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="3.0"
+                      max={pcb.heightMm - 3}
+                      value={selectedHole.yMm ?? selectedHole.y ?? 5.0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        if (!onUpdatePcb) return;
+                        const baseHoles: PcbMountingHole[] = (pcb.mountingHoles && pcb.mountingHoles.length > 0)
+                          ? pcb.mountingHoles
+                          : [
+                              { id: 'mount_tl', xMm: 5.0, yMm: 5.0, x: 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_tr', xMm: pcb.widthMm - 5.0, yMm: 5.0, x: pcb.widthMm - 5.0, y: 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_bl', xMm: 5.0, yMm: pcb.heightMm - 5.0, x: 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                              { id: 'mount_br', xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, drillMm: 3.2, outerMm: 6.0, diameterMm: 3.2 },
+                            ];
+                        const nextHoles = baseHoles.map((h, idx) =>
+                          (h.id || `m3_${idx}`) === selectedHoleId
+                            ? { ...h, yMm: val, y: val, isCustomMoved: true }
+                            : h
+                        );
+                        onUpdatePcb({ ...pcb, mountingHoles: nextHoles });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-mono"
+                    />
+                  </div>
+                  <div className="flex justify-between text-slate-300 pt-1">
+                    <span>Drill Diameter:</span>
+                    <span className="font-mono text-cyan-400">
+                      {selectedHole.drillMm || selectedHole.diameterMm || 3.2} mm (M3)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Annular Ring:</span>
+                    <span className="font-mono text-cyan-400">
+                      {selectedHole.outerMm || ((selectedHole.drillMm || 3.2) + 2.8)} mm (ENIG Gold)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Connection:</span>
+                    <span className="font-mono text-emerald-400">Chassis Ground</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleResetCornerHoles}
+                      className="flex-1 py-1 bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-800 rounded font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="Reset all 4 corner holes to standard 5mm insets"
+                    >
+                      <RotateCw className="w-3 h-3" />
+                      <span>Reset Corners</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedHole}
+                      className="flex-1 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 rounded font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      title="Delete this mounting hole"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!selectedTrack && !selectedPad && !selectedComp && !selectedText && !selectedHole && (
                 <div className="p-4 text-center text-slate-500 space-y-1">
-                  <p>Click on any copper track, pad, via, footprint, or silkscreen text on the canvas to inspect and edit its parameters.</p>
+                  <p>Click on any copper track, pad, via, mounting hole, footprint, or silkscreen text on the canvas to inspect and edit its parameters.</p>
                 </div>
               )}
             </div>

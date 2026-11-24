@@ -13,6 +13,9 @@ export interface RaspberryPiPico3DProps {
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 export const PICO_PINS: { name: string; localPos: [number, number, number]; altNames?: string[] }[] = [
@@ -71,8 +74,12 @@ export function RaspberryPiPico3D({
   onPinClick,
   hoveredPin,
   onHoverPin,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: RaspberryPiPico3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
+  const suppressExternalCables = hideExternalCables || isPcbAssemblyMode || usbConnected === false;
 
   const materials = useMemo(() => {
     return {
@@ -170,7 +177,7 @@ export function RaspberryPiPico3D({
     };
   }, [silkscreenTexture]);
 
-  const activePowered = isUsbPlugged || isPowered;
+  const activePowered = !suppressExternalCables && isPowered && isUsbPlugged;
 
   return (
     <group position={position} rotation={rotation}>
@@ -233,53 +240,55 @@ export function RaspberryPiPico3D({
       </mesh>
 
       {/* Interactive Micro-USB Cable Plug */}
-      {isUsbPlugged ? (
-        <group
-          position={[0, 2.2, -27]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <mesh position={[0, 0, -3]} material={materials.usbMetal}>
-            <boxGeometry args={[6.5, 2.2, 5]} />
-          </mesh>
-          <mesh position={[0, 0, -8]} material={materials.usbCablePvc}>
-            <boxGeometry args={[9, 4, 8]} />
-          </mesh>
-          <mesh position={[0, 0, -18]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[1.8, 1.8, 16, 12]} />
-            <primitive object={materials.usbCablePvc} attach="material" />
-          </mesh>
-        </group>
-      ) : (
-        /* Unplugged USB cable resting near socket - click to plug in */
-        <group
-          position={[0, 1.5, -36]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <mesh position={[0, 0, 0]} material={materials.usbMetal}>
-            <boxGeometry args={[6.5, 2.2, 5]} />
-          </mesh>
-          <mesh position={[0, 0, -5]} material={materials.usbCablePvc}>
-            <boxGeometry args={[9, 4, 8]} />
-          </mesh>
-        </group>
+      {!suppressExternalCables && (
+        isUsbPlugged ? (
+          <group
+            position={[0, 2.2, -27]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <mesh position={[0, 0, -3]} material={materials.usbMetal}>
+              <boxGeometry args={[6.5, 2.2, 5]} />
+            </mesh>
+            <mesh position={[0, 0, -8]} material={materials.usbCablePvc}>
+              <boxGeometry args={[9, 4, 8]} />
+            </mesh>
+            <mesh position={[0, 0, -18]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[1.8, 1.8, 16, 12]} />
+              <primitive object={materials.usbCablePvc} attach="material" />
+            </mesh>
+          </group>
+        ) : (
+          /* Unplugged USB cable resting near socket - click to plug in */
+          <group
+            position={[0, 1.5, -36]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <mesh position={[0, 0, 0]} material={materials.usbMetal}>
+              <boxGeometry args={[6.5, 2.2, 5]} />
+            </mesh>
+            <mesh position={[0, 0, -5]} material={materials.usbCablePvc}>
+              <boxGeometry args={[9, 4, 8]} />
+            </mesh>
+          </group>
+        )
       )}
 
       {/* BOOTSEL Tactile Switch */}

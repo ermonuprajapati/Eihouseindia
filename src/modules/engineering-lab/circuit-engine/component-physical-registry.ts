@@ -124,16 +124,16 @@ export function buildTo220Pads(
 
 export function buildTo92Pads(
   pins: Array<{ id: string; num?: number | string }>,
-  pitchMm: number = 1.27,
-  drillMm: number = 0.8,
-  padDiaMm: number = 1.5
+  pitchMm: number = 2.54,
+  drillMm: number = 0.9,
+  padDiaMm: number = 1.8
 ): PadSpec[] {
   const startX = -((pins.length - 1) * pitchMm) / 2;
   return pins.map((p, idx) => ({
     pinId: p.id,
     pinNumber: p.num ?? idx + 1,
     xMm: Math.round((startX + idx * pitchMm) * 100) / 100,
-    yMm: idx === 1 ? 1.27 : 0, // In-line / staggered triangular center pin
+    yMm: 0,
     drillMm,
     padDiameterMm: padDiaMm,
     shape: idx === 0 ? 'rect' : 'circle',
@@ -769,8 +769,8 @@ function resolvePhysicalSpecRaw(comp: {
       pinPitchMm: 2.54,
       dimensionsMm: { width: 27.0, height: 8.0, depth: 13.0 },
       bodyDimensionsMm: { width: 27.0, depth: 13.0, height: 8.0 },
-      courtyardMm: { width: 28.5, depth: 14.5, margin: 0.8 },
-      pads: buildInlinePads(pins, 2.54, 5.0, 1.0, 1.8),
+      courtyardMm: { width: 29.0, depth: 15.0, margin: 1.0 },
+      pads: buildInlinePads(pins, 2.54, 0.0, 1.0, 1.8),
     };
   }
   if (upperType.includes('LCD') || upperType.includes('1602')) {
@@ -987,11 +987,11 @@ function resolvePhysicalSpecRaw(comp: {
       packageCode: 'TO-92',
       mountingType: 'THT',
       placementClass: 'single-semiconductor',
-      pinPitchMm: 1.27,
+      pinPitchMm: 2.54,
       dimensionsMm: { width: 4.8, height: 4.8, depth: 3.8 },
       bodyDimensionsMm: { width: 4.8, depth: 3.8, height: 4.8 },
-      courtyardMm: { width: 6.0, depth: 5.0, margin: 0.5 },
-      pads: buildTo92Pads(bjtPins, 1.27, 0.8, 1.5),
+      courtyardMm: { width: 7.62, depth: 5.0, margin: 0.8 },
+      pads: buildTo92Pads(bjtPins, 2.54, 0.9, 1.8),
     };
   }
 

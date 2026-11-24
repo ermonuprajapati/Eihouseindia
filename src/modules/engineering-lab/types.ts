@@ -355,6 +355,7 @@ export interface PcbTrack {
   to: { x: number; y: number };
   widthMm: number;
   netId?: string;
+  isManual?: boolean;
 }
 
 export interface PcbPad {
@@ -368,6 +369,7 @@ export interface PcbPad {
   holeMm: number;
   layer: 'all' | 'top' | 'bottom';
   netId?: string;
+  isManual?: boolean;
 }
 
 export interface PcbComponentPlacement {
@@ -381,6 +383,7 @@ export interface PcbComponentPlacement {
   y: number; // in mm
   rotation: number;
   parameters?: Record<string, unknown>;
+  isCustomMoved?: boolean;
 }
 
 export interface PcbSilkscreenText {
@@ -393,6 +396,18 @@ export interface PcbSilkscreenText {
   rotation?: number;
 }
 
+export interface PcbMountingHole {
+  id: string;
+  xMm: number;
+  yMm: number;
+  drillMm: number;
+  outerMm: number;
+  isCustomMoved?: boolean;
+  x: number;
+  y: number;
+  diameterMm: number;
+}
+
 export interface PcbLayout {
   widthMm: number;
   heightMm: number;
@@ -401,7 +416,7 @@ export interface PcbLayout {
   units?: 'mm' | 'mil';
   gridSizeMm?: number;
   cornerRoundingMm?: number;
-  mountingHoles?: { x: number; y: number; diameterMm: number }[];
+  mountingHoles?: PcbMountingHole[];
   edgeClearanceMm?: number;
   tracks: PcbTrack[];
   pads: PcbPad[];

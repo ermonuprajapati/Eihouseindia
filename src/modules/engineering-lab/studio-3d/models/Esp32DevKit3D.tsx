@@ -13,6 +13,9 @@ export interface Esp32DevKit3DProps {
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 export const ESP32_PINS: { name: string; localPos: [number, number, number] }[] = [
@@ -42,8 +45,12 @@ export function Esp32DevKit3D({
   onPinClick,
   hoveredPin,
   onHoverPin,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: Esp32DevKit3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
+  const suppressExternalCables = hideExternalCables || isPcbAssemblyMode || usbConnected === false;
 
   const materials = useMemo(() => {
     return {
@@ -146,7 +153,7 @@ export function Esp32DevKit3D({
     };
   }, [silkscreenTexture]);
 
-  const activePowered = isUsbPlugged || isPowered;
+  const activePowered = !suppressExternalCables && isPowered && isUsbPlugged;
 
   return (
     <group position={position} rotation={rotation}>
@@ -199,47 +206,49 @@ export function Esp32DevKit3D({
       </mesh>
 
       {/* EI House Interactive USB Micro Cable Plug */}
-      {isUsbPlugged ? (
-        <group
-          position={[-23, 2.5, 0]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <mesh position={[-5, 0, 0]} material={materials.usbMetal}>
-            <boxGeometry args={[4.5, 2.8, 6.8]} />
+      {!suppressExternalCables && (
+        isUsbPlugged ? (
+          <group
+            position={[-23, 2.5, 0]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <mesh position={[-5, 0, 0]} material={materials.usbMetal}>
+              <boxGeometry args={[4.5, 2.8, 6.8]} />
+            </mesh>
+            <mesh position={[-14, 0, 0]} material={materials.usbCablePvc}>
+              <boxGeometry args={[13, 6.0, 10.0]} />
+            </mesh>
+            <mesh position={[-25, -1, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
+              <cylinderGeometry args={[2.0, 2.0, 14, 16]} />
+            </mesh>
+          </group>
+        ) : (
+          <mesh
+            position={[-35, 1.5, 0]}
+            material={materials.usbCablePvc}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <boxGeometry args={[8, 5.0, 8.0]} />
           </mesh>
-          <mesh position={[-14, 0, 0]} material={materials.usbCablePvc}>
-            <boxGeometry args={[13, 6.0, 10.0]} />
-          </mesh>
-          <mesh position={[-25, -1, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
-            <cylinderGeometry args={[2.0, 2.0, 14, 16]} />
-          </mesh>
-        </group>
-      ) : (
-        <mesh
-          position={[-35, 1.5, 0]}
-          material={materials.usbCablePvc}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <boxGeometry args={[8, 5.0, 8.0]} />
-        </mesh>
+        )
       )}
 
       {/* EN & BOOT Tactile Buttons */}

@@ -13,6 +13,9 @@ export interface ArduinoNano3DProps {
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 // 30 DIP pins for Arduino Nano V3
@@ -43,8 +46,12 @@ export function ArduinoNano3D({
   onPinClick,
   hoveredPin,
   onHoverPin,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: ArduinoNano3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
+  const suppressExternalCables = hideExternalCables || isPcbAssemblyMode || usbConnected === false;
 
   const materials = useMemo(() => {
     return {
@@ -149,7 +156,7 @@ export function ArduinoNano3D({
     };
   }, [silkscreenTexture]);
 
-  const activePowered = isUsbPlugged || isPowered;
+  const activePowered = !suppressExternalCables && isPowered && isUsbPlugged;
 
   return (
     <group position={position} rotation={rotation}>
@@ -193,47 +200,49 @@ export function ArduinoNano3D({
       </mesh>
 
       {/* EI House Interactive USB Cable Plug */}
-      {isUsbPlugged ? (
-        <group
-          position={[-20, 2.5, 0]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <mesh position={[-6, 0, 0]} material={materials.usbMetal}>
-            <boxGeometry args={[5, 3.8, 7.2]} />
+      {!suppressExternalCables && (
+        isUsbPlugged ? (
+          <group
+            position={[-20, 2.5, 0]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <mesh position={[-6, 0, 0]} material={materials.usbMetal}>
+              <boxGeometry args={[5, 3.8, 7.2]} />
+            </mesh>
+            <mesh position={[-14, 0, 0]} material={materials.usbCablePvc}>
+              <boxGeometry args={[11, 6.0, 9.0]} />
+            </mesh>
+            <mesh position={[-25, -1, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
+              <cylinderGeometry args={[2.0, 2.0, 14, 16]} />
+            </mesh>
+          </group>
+        ) : (
+          <mesh
+            position={[-32, 1.5, 0]}
+            material={materials.usbCablePvc}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <boxGeometry args={[8, 5.0, 8.0]} />
           </mesh>
-          <mesh position={[-14, 0, 0]} material={materials.usbCablePvc}>
-            <boxGeometry args={[11, 6.0, 9.0]} />
-          </mesh>
-          <mesh position={[-25, -1, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
-            <cylinderGeometry args={[2.0, 2.0, 14, 16]} />
-          </mesh>
-        </group>
-      ) : (
-        <mesh
-          position={[-32, 1.5, 0]}
-          material={materials.usbCablePvc}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <boxGeometry args={[8, 5.0, 8.0]} />
-        </mesh>
+        )
       )}
 
       {/* ATmega328P QFP-32 square IC */}

@@ -1,6 +1,8 @@
-import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
-import { PcbAutoRouter, compute45RoutePoints } from './autorouter';
+import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement, PcbMountingHole } from '../types';
+import { PcbGridAutorouter, verifyPcbManufacturingIntegrity } from './pcb-autorouter';
 import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
+
+export { verifyPcbManufacturingIntegrity };
 
 /**
  * Returns true if the component represents a virtual schematic symbol
@@ -23,259 +25,10 @@ export function isVirtualSchematicSymbol(type?: string): boolean {
   );
 }
 
-function computeInverted45RoutePoints(
-  from: { x: number; y: number },
-  to: { x: number; y: number }
-): { x: number; y: number }[] {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return [from];
-  if (Math.abs(dx) < 0.01 || Math.abs(dy) < 0.01) return [from, to];
+// ---------------------------------------------------------------------------
+// Unified 2-Layer Grid A* Router & DFM Utilities
+// ---------------------------------------------------------------------------
 
-  const signX = Math.sign(dx) || 1;
-  const signY = Math.sign(dy) || 1;
-  const chamfer = Math.min(Math.abs(dx), Math.abs(dy));
-
-  let midX = from.x;
-  let midY = from.y;
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    midX = from.x;
-    midY = from.y + (Math.abs(dy) - chamfer) * signY;
-  } else {
-    midX = from.x + (Math.abs(dx) - chamfer) * signX;
-    midY = from.y;
-  }
-
-  const mid2X = midX + chamfer * signX;
-  const mid2Y = midY + chamfer * signY;
-
-  const pts: { x: number; y: number }[] = [from];
-  if (Math.hypot(midX - from.x, midY - from.y) > 0.05) pts.push({ x: midX, y: midY });
-  if (Math.hypot(mid2X - midX, mid2Y - midY) > 0.05) pts.push({ x: mid2X, y: mid2Y });
-  if (Math.hypot(to.x - mid2X, to.y - mid2Y) > 0.05) pts.push(to);
-  return pts;
-}
-
-function segmentsIntersect(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
-  p3: { x: number; y: number },
-  p4: { x: number; y: number }
-): boolean {
-  const denom = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
-  if (Math.abs(denom) < 1e-6) return false;
-  const ua = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / denom;
-  const ub = ((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / denom;
-  return ua > 0.05 && ua < 0.95 && ub > 0.05 && ub < 0.95;
-}
-
-function pointToSegmentDistance(
-  p: { x: number; y: number },
-  s1: { x: number; y: number },
-  s2: { x: number; y: number }
-): number {
-  const dx = s2.x - s1.x;
-  const dy = s2.y - s1.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.hypot(p.x - s1.x, p.y - s1.y);
-  const t = Math.max(0, Math.min(1, ((p.x - s1.x) * dx + (p.y - s1.y) * dy) / lenSq));
-  const projX = s1.x + t * dx;
-  const projY = s1.y + t * dy;
-  return Math.hypot(p.x - projX, p.y - projY);
-}
-
-function segmentToSegmentDistance(
-  a1: { x: number; y: number },
-  a2: { x: number; y: number },
-  b1: { x: number; y: number },
-  b2: { x: number; y: number }
-): number {
-  if (segmentsIntersect(a1, a2, b1, b2)) return 0;
-  return Math.min(
-    pointToSegmentDistance(a1, b1, b2),
-    pointToSegmentDistance(a2, b1, b2),
-    pointToSegmentDistance(b1, a1, a2),
-    pointToSegmentDistance(b2, a1, a2)
-  );
-}
-
-function isRouteClear(
-  pts: { x: number; y: number }[],
-  layer: 'top_copper' | 'bottom_copper',
-  trackWidth: number,
-  existingTracks: PcbTrack[],
-  allPads: PcbPad[]
-): boolean {
-  for (let i = 0; i < pts.length - 1; i++) {
-    const pA = pts[i];
-    const pB = pts[i + 1];
-    const segLen = Math.hypot(pB.x - pA.x, pB.y - pA.y);
-    if (segLen < 0.05) continue;
-
-    // Check angle: must be 45° or 90° (0°, 45°, 90°, 135°, 180°)
-    const angleDeg = Math.round(Math.abs((Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180) / Math.PI));
-    const mod45 = angleDeg % 45;
-    if (!(mod45 === 0 || mod45 === 45 || Math.abs(mod45 - 45) <= 1 || mod45 <= 1)) {
-      return false;
-    }
-
-    // Check crossings and clearance against existing tracks of different nets
-    for (const t of existingTracks) {
-      if (t.layer !== layer) continue;
-      if (t.netId && t.netId === 'GND') continue;
-
-      // Interior intersection
-      if (segmentsIntersect(pA, pB, t.from, t.to)) {
-        return false;
-      }
-
-      // Minimum clearance (DRC 0.2mm + safety margin)
-      const dist = segmentToSegmentDistance(pA, pB, t.from, t.to);
-      const minRequired = (trackWidth + t.widthMm) / 2 + 0.22;
-      if (dist < minRequired) {
-        return false;
-      }
-    }
-
-    // Check clearance against pads of other nets
-    for (const pad of allPads) {
-      if (pad.netId === 'GND' || pad.pinId === 'GND') continue;
-      const padRadius = pad.diameterMm / 2;
-      const distToPad = pointToSegmentDistance({ x: pad.x, y: pad.y }, pA, pB);
-      if (distToPad < padRadius + trackWidth / 2 + 0.22) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-interface SafeGndRoute {
-  waypoints: { x: number; y: number }[];
-  layer: 'top_copper' | 'bottom_copper';
-  needsVia: boolean;
-  score: number;
-}
-
-function findBestSafeGndRoute(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
-  gndLayer: 'top_copper' | 'bottom_copper',
-  trackWidth: number,
-  existingTracks: PcbTrack[],
-  allPads: PcbPad[],
-  boardWidth: number,
-  boardHeight: number
-): SafeGndRoute | null {
-  const otherLayer: 'top_copper' | 'bottom_copper' = gndLayer === 'bottom_copper' ? 'top_copper' : 'bottom_copper';
-  const candidates: { waypoints: { x: number; y: number }[]; layer: 'top_copper' | 'bottom_copper'; needsVia: boolean; baseCost: number }[] = [];
-
-  const direct45 = compute45RoutePoints(p1, p2);
-  const inv45 = computeInverted45RoutePoints(p1, p2);
-
-  // 1. Direct on GND layer
-  candidates.push({ waypoints: direct45, layer: gndLayer, needsVia: false, baseCost: 0 });
-  candidates.push({ waypoints: inv45, layer: gndLayer, needsVia: false, baseCost: 0 });
-
-  // 2. Direct on other layer (needs via)
-  candidates.push({ waypoints: direct45, layer: otherLayer, needsVia: true, baseCost: 15 });
-  candidates.push({ waypoints: inv45, layer: otherLayer, needsVia: true, baseCost: 15 });
-
-  // 3. X-detours on GND layer and other layer
-  const xOffsets = [-5, 5, -8, 8, -12, 12, -18, 18, -25, 25, -35, 35];
-  for (const off of xOffsets) {
-    const midX = Math.round((Math.min(p1.x, p2.x) + off) * 100) / 100;
-    if (midX >= 3 && midX <= boardWidth - 3) {
-      const waypoints = [
-        { x: p1.x, y: p1.y },
-        { x: midX, y: p1.y },
-        { x: midX, y: p2.y },
-        { x: p2.x, y: p2.y },
-      ];
-      candidates.push({ waypoints, layer: gndLayer, needsVia: false, baseCost: Math.abs(off) * 0.5 });
-      candidates.push({ waypoints, layer: otherLayer, needsVia: true, baseCost: 15 + Math.abs(off) * 0.5 });
-    }
-  }
-
-  // 4. Y-detours on GND layer and other layer
-  const yOffsets = [-5, 5, -8, 8, -12, 12, -18, 18, -25, 25];
-  for (const off of yOffsets) {
-    const midY = Math.round((Math.min(p1.y, p2.y) + off) * 100) / 100;
-    if (midY >= 3 && midY <= boardHeight - 3) {
-      const waypoints = [
-        { x: p1.x, y: p1.y },
-        { x: p1.x, y: midY },
-        { x: p2.x, y: midY },
-        { x: p2.x, y: p2.y },
-      ];
-      candidates.push({ waypoints, layer: gndLayer, needsVia: false, baseCost: Math.abs(off) * 0.5 });
-      candidates.push({ waypoints, layer: otherLayer, needsVia: true, baseCost: 15 + Math.abs(off) * 0.5 });
-    }
-  }
-
-  // 5. Perimeter edge margin fallback (all 4 board edges: left, right, top, bottom)
-  const margin = 3.5;
-  const leftPerimeter = [
-    { x: p1.x, y: p1.y },
-    { x: margin, y: p1.y },
-    { x: margin, y: p2.y },
-    { x: p2.x, y: p2.y },
-  ];
-  candidates.push({ waypoints: leftPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
-  candidates.push({ waypoints: leftPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
-
-  const rightPerimeter = [
-    { x: p1.x, y: p1.y },
-    { x: boardWidth - margin, y: p1.y },
-    { x: boardWidth - margin, y: p2.y },
-    { x: p2.x, y: p2.y },
-  ];
-  candidates.push({ waypoints: rightPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
-  candidates.push({ waypoints: rightPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
-
-  const topPerimeter = [
-    { x: p1.x, y: p1.y },
-    { x: p1.x, y: margin },
-    { x: p2.x, y: margin },
-    { x: p2.x, y: p2.y },
-  ];
-  candidates.push({ waypoints: topPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
-  candidates.push({ waypoints: topPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
-
-  const botPerimeter = [
-    { x: p1.x, y: p1.y },
-    { x: p1.x, y: boardHeight - margin },
-    { x: p2.x, y: boardHeight - margin },
-    { x: p2.x, y: p2.y },
-  ];
-  candidates.push({ waypoints: botPerimeter, layer: gndLayer, needsVia: false, baseCost: 40 });
-  candidates.push({ waypoints: botPerimeter, layer: otherLayer, needsVia: true, baseCost: 55 });
-
-  let bestCandidate: SafeGndRoute | null = null;
-  let lowestScore = Infinity;
-
-  for (const cand of candidates) {
-    if (isRouteClear(cand.waypoints, cand.layer, trackWidth, existingTracks, allPads)) {
-      let length = 0;
-      for (let i = 0; i < cand.waypoints.length - 1; i++) {
-        length += Math.hypot(cand.waypoints[i + 1].x - cand.waypoints[i].x, cand.waypoints[i + 1].y - cand.waypoints[i].y);
-      }
-      const score = length + cand.baseCost;
-      if (score < lowestScore) {
-        lowestScore = score;
-        bestCandidate = {
-          waypoints: cand.waypoints,
-          layer: cand.layer,
-          needsVia: cand.needsVia,
-          score,
-        };
-      }
-    }
-  }
-
-  return bestCandidate;
-}
 export const DEFAULT_GND_POUR_LAYER: 'bottom_copper' | 'top_copper' | 'off' = 'bottom_copper';
 
 export class PcbGenerator {
@@ -360,8 +113,13 @@ export class PcbGenerator {
     const spanX = Math.max(maxX - minX, 100);
     const spanY = Math.max(maxY - minY, 100);
 
-    // Place largest anchor components first, then net-connected ICs and discretes
+    // Place custom moved components first, then largest anchor components, then net-connected ICs and discretes
     const placementOrder = [...compSpecs].sort((a, b) => {
+      const aCustom = existingPcb?.components?.find((c) => c.componentId === a.comp.id)?.isCustomMoved;
+      const bCustom = existingPcb?.components?.find((c) => c.componentId === b.comp.id)?.isCustomMoved;
+      if (aCustom && !bCustom) return -1;
+      if (!aCustom && bCustom) return 1;
+
       const orderScore = (item: typeof a) => {
         if (item.spec.placementClass === 'dev-board' || item.comp.type.includes('UNO') || item.comp.type.includes('ESP32')) return 1;
         if (item.spec.placementClass === 'module-breadboard' || item.isLarge) return 2;
@@ -383,15 +141,47 @@ export class PcbGenerator {
     const maxSingleW = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cw + c.clearance * 2)) : 40;
     const maxSingleD = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cd + c.clearance * 2)) : 30;
     const estSide = Math.sqrt(totalAreaWithCorridors * 1.35);
-    let availW = Math.max(boardWidthMm, Math.ceil((estSide * 1.15) / 5) * 5, maxSingleW + EDGE_MARGIN * 2, 80);
-    let availH = Math.max(boardHeightMm, Math.ceil((estSide * 0.85) / 5) * 5, maxSingleD + EDGE_MARGIN * 2, 60);
+    const hasDevBoardOrMcu = compSpecs.some(
+      (c) =>
+        c.spec.placementClass === 'dev-board' ||
+        c.comp.type.includes('UNO') ||
+        c.comp.type.includes('ESP32') ||
+        c.comp.type.includes('MEGA') ||
+        c.comp.type.includes('PICO')
+    );
+    let availW = Math.max(
+      boardWidthMm,
+      hasDevBoardOrMcu ? 130 : 0,
+      Math.ceil((estSide * 1.15) / 5) * 5,
+      maxSingleW + EDGE_MARGIN * 2
+    );
+    let availH = Math.max(
+      boardHeightMm,
+      hasDevBoardOrMcu ? 85 : 0,
+      Math.ceil((estSide * 0.85) / 5) * 5,
+      maxSingleD + EDGE_MARGIN * 2
+    );
+
+    const hasCollision = (tx: number, ty: number, curCw: number, curCd: number, curClearance: number): boolean => {
+      for (const pb of placedBoxes) {
+        const minSepX = (curCw + pb.cw) / 2 + Math.max(curClearance, pb.clearance);
+        const minSepY = (curCd + pb.cd) / 2 + Math.max(curClearance, pb.clearance);
+        if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
+          return true;
+        }
+      }
+      return false;
+    };
 
     placementOrder.forEach(({ comp, cw, cd, clearance }) => {
       const existingComp = existingPcb?.components?.find((c) => c.componentId === comp.id);
       let candX: number;
       let candY: number;
 
-      if (existingComp) {
+      if (existingComp?.isCustomMoved) {
+        candX = existingComp.x;
+        candY = existingComp.y;
+      } else if (existingComp && !hasCollision(existingComp.x, existingComp.y, cw, cd, clearance)) {
         candX = existingComp.x;
         candY = existingComp.y;
       } else {
@@ -411,19 +201,7 @@ export class PcbGenerator {
         candX = targetX;
         candY = targetY;
 
-        // Pairwise AABB non-overlap verification
-        const hasCollision = (tx: number, ty: number): boolean => {
-          for (const pb of placedBoxes) {
-            const minSepX = (cw + pb.cw) / 2 + Math.max(clearance, pb.clearance);
-            const minSepY = (cd + pb.cd) / 2 + Math.max(clearance, pb.clearance);
-            if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
-              return true;
-            }
-          }
-          return false;
-        };
-
-        if (hasCollision(candX, candY)) {
+        if (hasCollision(candX, candY, cw, cd, clearance)) {
           let found = false;
           // First try within current board bounds
           const maxSearch = Math.max(availW, availH, 120);
@@ -435,7 +213,7 @@ export class PcbGenerator {
               const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
 
               if (testX >= minXBound && testX <= maxXBound && testY >= minYBound && testY <= maxYBound) {
-                if (!hasCollision(testX, testY)) {
+                if (!hasCollision(testX, testY, cw, cd, clearance)) {
                   candX = testX;
                   candY = testY;
                   found = true;
@@ -455,7 +233,7 @@ export class PcbGenerator {
                 const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
 
                 if (testX >= minXBound && testY >= minYBound) {
-                  if (!hasCollision(testX, testY)) {
+                  if (!hasCollision(testX, testY, cw, cd, clearance)) {
                     candX = testX;
                     candY = testY;
                     found = true;
@@ -494,6 +272,7 @@ export class PcbGenerator {
         y: candY,
         rotation: compRot,
         parameters: comp.parameters,
+        isCustomMoved: existingComp?.isCustomMoved,
       });
 
       // Compute physical IPC-7351 footprint pads strictly aligned with package geometry
@@ -557,16 +336,67 @@ export class PcbGenerator {
       }
     });
 
-    // Auto-route signal traces using pro 45-chamfered router (filtering virtual wires)
+    // Add a GND stitching via if needed for a single isolated GND pad
+    const gndPads = pads.filter((p) => p.netId === 'GND');
+    if (gndPads.length === 1 && !pads.some((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && p.netId === 'GND')) {
+      const gPad = gndPads[0];
+      const viaOuterR = 0.4;
+      let safeVx = gPad.x + 3.5;
+      let safeVy = gPad.y + 3.5;
+      let isSafe = false;
+      const testOffsets = [
+        [3.5, 3.5], [-3.5, 3.5], [3.5, -3.5], [-3.5, -3.5],
+        [4.5, 0], [-4.5, 0], [0, 4.5], [0, -4.5],
+        [5.0, 5.0], [-5.0, 5.0], [6.0, 0], [0, 6.0],
+      ];
+      for (const [ox, oy] of testOffsets) {
+        const tx = Math.min(effectiveWidth - 5, Math.max(5, gPad.x + ox));
+        const ty = Math.min(effectiveHeight - 5, Math.max(5, gPad.y + oy));
+        let collides = false;
+        for (const p of pads) {
+          const pOuterR = (p.diameterMm || 1.6) / 2;
+          if (Math.hypot(tx - p.x, ty - p.y) < pOuterR + viaOuterR + 0.35) {
+            collides = true;
+            break;
+          }
+        }
+        if (!collides) {
+          safeVx = tx;
+          safeVy = ty;
+          isSafe = true;
+          break;
+        }
+      }
+      if (isSafe) {
+        const gndStitchVia: PcbPad = {
+          id: `via_gnd_stitch_${Date.now()}`,
+          componentId: 'VIA',
+          pinId: 'GND',
+          netId: 'GND',
+          x: Math.round(safeVx * 100) / 100,
+          y: Math.round(safeVy * 100) / 100,
+          shape: 'round',
+          diameterMm: 0.8,
+          holeMm: 0.4,
+          layer: 'all',
+        };
+        pads.push(gndStitchVia);
+      }
+    }
+
+    // Auto-route all nets using deterministic 2-Layer Grid A* (Lee/Maze) Router
     const virtualCompIds = new Set(components.filter((c) => isVirtualSchematicSymbol(c.type)).map((c) => c.id));
     const routableWires = wires.filter((w) => !virtualCompIds.has(w.fromCompId) && !virtualCompIds.has(w.toCompId));
 
-    const { tracks: routedTracks, vias } = PcbAutoRouter.route(
+    const { tracks: routedTracks, vias } = PcbGridAutorouter.route(
       pads,
       routableWires,
       effectiveWidth,
       effectiveHeight,
-      { defaultSignalWidthMm: 0.35, powerTrackWidthMm: 0.8 },
+      {
+        defaultSignalWidthMm: 0.35,
+        powerTrackWidthMm: 0.55,
+      },
       physicalComponents
     );
 
@@ -575,197 +405,193 @@ export class PcbGenerator {
       pads.push(...vias);
     }
 
-    // Connect GND net through-hole pads with visible copper tracks on DEFAULT_GND_POUR_LAYER
-    const gndPads = pads.filter((p) => p.netId === 'GND');
-    const gndLayer: 'top_copper' | 'bottom_copper' = DEFAULT_GND_POUR_LAYER === 'top_copper' ? 'top_copper' : 'bottom_copper';
-    const gndTrackWidth = 0.55; // 0.55mm professional power/GND track width
-
-    // Add a GND stitching via if needed
-    let gndStitchVia: PcbPad | null = null;
-    if (gndPads.length > 0 && !pads.some((p) => p.componentId === 'VIA' && p.netId === 'GND')) {
-      const gPad = gndPads[0];
-      const vx = Math.min(effectiveWidth - 4, Math.max(4, gPad.x + 2.54));
-      const vy = Math.min(effectiveHeight - 4, Math.max(4, gPad.y + 2.54));
-      gndStitchVia = {
-        id: `via_gnd_stitch_${Date.now()}`,
-        componentId: 'VIA',
-        pinId: 'GND',
-        netId: 'GND',
-        x: Math.round(vx * 100) / 100,
-        y: Math.round(vy * 100) / 100,
-        shape: 'round',
-        diameterMm: 0.8,
-        holeMm: 0.4,
-        layer: 'all',
-      };
-      pads.push(gndStitchVia);
-    }
-
-    // Connect all GND pads together into a continuous routed ground network using an MST
-    const allGndNodes: { x: number; y: number; id: string }[] = gndPads.map((p) => ({ x: p.x, y: p.y, id: p.id }));
-    if (gndStitchVia) {
-      allGndNodes.push({ x: gndStitchVia.x, y: gndStitchVia.y, id: gndStitchVia.id });
-    }
-
-    if (allGndNodes.length >= 2) {
-      const inMst = new Set<number>([0]);
-      while (inMst.size < allGndNodes.length) {
-        let bestFrom = -1;
-        let bestTo = -1;
-        let bestRoute: SafeGndRoute | null = null;
-        let bestScore = Infinity;
-
-        // Find candidate edge (u, v) with the cleanest, lowest-score crossing-free route
-        for (const u of inMst) {
-          for (let v = 0; v < allGndNodes.length; v++) {
-            if (!inMst.has(v)) {
-              const p1 = allGndNodes[u];
-              const p2 = allGndNodes[v];
-              const route = findBestSafeGndRoute(
-                p1,
-                p2,
-                gndLayer,
-                gndTrackWidth,
-                routedTracks,
-                pads,
-                effectiveWidth,
-                effectiveHeight
-              );
-              if (route && route.score < bestScore) {
-                bestScore = route.score;
-                bestFrom = u;
-                bestTo = v;
-                bestRoute = route;
-              }
-            }
-          }
-        }
-
-        // Fallback: if all candidate routes had conflicts, pick closest pair with direct connection
-        if (bestTo === -1) {
-          let minEuclid = Infinity;
-          for (const u of inMst) {
-            for (let v = 0; v < allGndNodes.length; v++) {
-              if (!inMst.has(v)) {
-                const d = Math.hypot(allGndNodes[u].x - allGndNodes[v].x, allGndNodes[u].y - allGndNodes[v].y);
-                if (d < minEuclid) {
-                  minEuclid = d;
-                  bestFrom = u;
-                  bestTo = v;
-                }
-              }
-            }
-          }
-          if (bestTo !== -1) {
-            const p1 = allGndNodes[bestFrom];
-            const p2 = allGndNodes[bestTo];
-            const d45 = compute45RoutePoints(p1, p2);
-            const otherLayer: 'top_copper' | 'bottom_copper' = gndLayer === 'bottom_copper' ? 'top_copper' : 'bottom_copper';
-            if (isRouteClear(d45, gndLayer, gndTrackWidth, routedTracks, pads)) {
-              bestRoute = {
-                waypoints: d45,
-                layer: gndLayer,
-                needsVia: false,
-                score: minEuclid,
-              };
-            } else if (isRouteClear(d45, otherLayer, gndTrackWidth, routedTracks, pads)) {
-              bestRoute = {
-                waypoints: d45,
-                layer: otherLayer,
-                needsVia: true,
-                score: minEuclid + 15,
-              };
-            } else {
-              const inv45 = computeInverted45RoutePoints(p1, p2);
-              if (isRouteClear(inv45, otherLayer, gndTrackWidth, routedTracks, pads)) {
-                bestRoute = {
-                  waypoints: inv45,
-                  layer: otherLayer,
-                  needsVia: true,
-                  score: minEuclid + 20,
-                };
-              } else if (isRouteClear(inv45, gndLayer, gndTrackWidth, routedTracks, pads)) {
-                bestRoute = {
-                  waypoints: inv45,
-                  layer: gndLayer,
-                  needsVia: false,
-                  score: minEuclid + 10,
-                };
-              }
-            }
-          }
-        }
-
-        if (bestTo !== -1 && bestRoute) {
-          inMst.add(bestTo);
-          const p1 = allGndNodes[bestFrom];
-
-          if (bestRoute.needsVia) {
-            const p1Pad = pads.find((p) => Math.hypot(p.x - p1.x, p.y - p1.y) < 0.1);
-            if (!p1Pad || (p1Pad.layer !== 'all' && p1Pad.componentId !== 'VIA')) {
-              pads.push({
-                id: `via_gnd_hop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                componentId: 'VIA',
-                pinId: 'GND',
-                netId: 'GND',
-                x: p1.x,
-                y: p1.y,
-                shape: 'round',
-                diameterMm: 0.8,
-                holeMm: 0.4,
-                layer: 'all',
-              });
-            }
-          }
-
-          for (let i = 0; i < bestRoute.waypoints.length - 1; i++) {
-            const ptFrom = {
-              x: Math.round(bestRoute.waypoints[i].x * 100) / 100,
-              y: Math.round(bestRoute.waypoints[i].y * 100) / 100,
-            };
-            const ptTo = {
-              x: Math.round(bestRoute.waypoints[i + 1].x * 100) / 100,
-              y: Math.round(bestRoute.waypoints[i + 1].y * 100) / 100,
-            };
-            if (Math.hypot(ptTo.x - ptFrom.x, ptTo.y - ptFrom.y) >= 0.05) {
-              routedTracks.push({
-                id: `trk_gnd_${bestFrom}_${bestTo}_${i}_${Math.random().toString(36).substring(2, 6)}`,
-                layer: bestRoute.layer,
-                from: ptFrom,
-                to: ptTo,
-                widthMm: gndTrackWidth,
-                netId: 'GND',
-              });
-            }
-          }
-        } else {
+    // Check if component positions or topology changed compared to existingPcb
+    let layoutOrTopologyChanged = false;
+    if (!existingPcb || !existingPcb.components || existingPcb.components.length === 0) {
+      layoutOrTopologyChanged = true;
+    } else if (existingPcb.components.length !== placedComponents.length) {
+      layoutOrTopologyChanged = true;
+    } else {
+      for (const comp of placedComponents) {
+        const ec = existingPcb.components.find((c) => c.componentId === comp.componentId);
+        if (!ec || Math.hypot(ec.x - comp.x, ec.y - comp.y) > 0.05) {
+          layoutOrTopologyChanged = true;
           break;
+        }
+      }
+    }
+
+    // Also detect if existing auto-routed tracks have become stranded from pad coordinates
+    if (!layoutOrTopologyChanged && existingPcb?.tracks && existingPcb.tracks.length > 0) {
+      for (const track of existingPcb.tracks) {
+        if (track.isManual || !track.id.startsWith('trk_')) continue;
+        const fromNearPad = pads.some((p) => Math.hypot(p.x - track.from.x, p.y - track.from.y) < 1.5);
+        const toNearPad = pads.some((p) => Math.hypot(p.x - track.to.x, p.y - track.to.y) < 1.5);
+        const fromNearTrack = existingPcb.tracks.some(
+          (ot) =>
+            ot.id !== track.id &&
+            (Math.hypot(ot.from.x - track.from.x, ot.from.y - track.from.y) < 0.2 ||
+              Math.hypot(ot.to.x - track.from.x, ot.to.y - track.from.y) < 0.2)
+        );
+        const toNearTrack = existingPcb.tracks.some(
+          (ot) =>
+            ot.id !== track.id &&
+            (Math.hypot(ot.from.x - track.to.x, ot.from.y - track.to.y) < 0.2 ||
+              Math.hypot(ot.to.x - track.to.x, ot.to.y - track.to.y) < 0.2)
+        );
+        if ((!fromNearPad && !fromNearTrack) || (!toNearPad && !toNearTrack)) {
+          layoutOrTopologyChanged = true;
+          break;
+        }
+      }
+    }
+
+    // Determine final tracks:
+    // If layout/topology unchanged, keep existing tracks intact.
+    // If components moved, added, or deleted, discard stale auto-routed tracks for moved components,
+    // preserve user manual tracks (isManual === true or non-autorouter IDs), and use newly routed tracks.
+    let finalTracks: PcbTrack[];
+    if (!existingPcb?.tracks || existingPcb.tracks.length === 0) {
+      finalTracks = routedTracks;
+    } else if (!layoutOrTopologyChanged) {
+      finalTracks = existingPcb.tracks;
+    } else {
+      const isManualTrack = (t: PcbTrack) => t.isManual === true || !t.id.startsWith('trk_');
+      const manualTracks = existingPcb.tracks.filter(isManualTrack);
+      finalTracks = [...manualTracks];
+      for (const rt of routedTracks) {
+        const isDuplicate = manualTracks.some(
+          (mt) =>
+            mt.layer === rt.layer &&
+            Math.hypot(mt.from.x - rt.from.x, mt.from.y - rt.from.y) < 0.1 &&
+            Math.hypot(mt.to.x - rt.to.x, mt.to.y - rt.to.y) < 0.1
+        );
+        if (!isDuplicate) {
+          finalTracks.push(rt);
         }
       }
     }
 
     // Retain user-placed manual vias if existingPcb provided
     if (existingPcb?.pads) {
-      existingPcb.pads.filter((p) => p.componentId === 'VIA' || p.id.startsWith('via_')).forEach((via) => {
-        if (!pads.some((p) => p.id === via.id)) {
-          pads.push(via);
-        }
-      });
+      existingPcb.pads
+        .filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && p.isManual === true)
+        .forEach((via) => {
+          if (!pads.some((p) => p.id === via.id)) {
+            pads.push(via);
+          }
+        });
     }
 
-    const finalTracks = (existingPcb?.tracks && existingPcb.tracks.length > 0) ? existingPcb.tracks : routedTracks;
+    // 100% Electrically Valid Via Integrity Pass:
+    // Eliminate orphan/floating auto-routed vias not connected to both an F.Cu track and a B.Cu track of the same net.
+    // Enforce via-to-pad clearance (>= padOuterR + viaOuterR + 0.25mm) and track clearance (>= 0.20mm).
+    const validPads = pads.filter((pad) => {
+      const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
+      if (!isVia) return true;
+      if (pad.isManual) return true;
+
+      const connectsTop = finalTracks.some(
+        (t) =>
+          t.layer === 'top_copper' &&
+          (!pad.netId || !t.netId || t.netId === pad.netId) &&
+          (Math.hypot(t.from.x - pad.x, t.from.y - pad.y) < 0.35 ||
+            Math.hypot(t.to.x - pad.x, t.to.y - pad.y) < 0.35)
+      );
+
+      const connectsBottom = finalTracks.some(
+        (t) =>
+          t.layer === 'bottom_copper' &&
+          (!pad.netId || !t.netId || t.netId === pad.netId) &&
+          (Math.hypot(t.from.x - pad.x, t.from.y - pad.y) < 0.35 ||
+            Math.hypot(t.to.x - pad.x, t.to.y - pad.y) < 0.35)
+      );
+
+      const isStitchVia = pad.id.includes('stitch');
+      if (!isStitchVia && (!connectsTop || !connectsBottom)) {
+        return false;
+      }
+      if (isStitchVia && !connectsTop && !connectsBottom) {
+        return false;
+      }
+
+      // Enforce via-to-pad clearance
+      const viaOuterR = (pad.diameterMm || 0.8) / 2;
+      for (const otherPad of pads) {
+        if (otherPad.id === pad.id) continue;
+        const otherIsVia = otherPad.componentId === 'VIA' || otherPad.id.startsWith('via_');
+        if (!otherIsVia) {
+          const padOuterR = (otherPad.diameterMm || 1.8) / 2;
+          if (Math.hypot(otherPad.x - pad.x, otherPad.y - pad.y) < padOuterR + viaOuterR + 0.25) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
 
     // Run Design Rule Checks
-    const drcErrors = this.runDrc(pads, finalTracks, effectiveWidth, effectiveHeight);
+    const drcErrors = this.runDrc(validPads, finalTracks, effectiveWidth, effectiveHeight);
 
-    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 4mm from corners
-    const cornerInset = 4.0;
-    const mountingHoles = existingPcb?.mountingHoles || [
-      { x: cornerInset, y: cornerInset, diameterMm: 3.2 },
-      { x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
-      { x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
-      { x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
-    ];
+    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 5.0mm from corners
+    const cornerInset = 5.0;
+    let mountingHoles: PcbMountingHole[];
+    if (existingPcb?.mountingHoles && existingPcb.mountingHoles.length > 0) {
+      if (existingPcb.widthMm === effectiveWidth && existingPcb.heightMm === effectiveHeight) {
+        mountingHoles = existingPcb.mountingHoles.map((h, idx) => ({
+          id: h.id || `m3_${idx}`,
+          xMm: h.xMm ?? h.x ?? cornerInset,
+          yMm: h.yMm ?? h.y ?? cornerInset,
+          drillMm: h.drillMm || 3.2,
+          outerMm: h.outerMm || 6.0,
+          isCustomMoved: h.isCustomMoved || false,
+          x: h.xMm ?? h.x ?? cornerInset,
+          y: h.yMm ?? h.y ?? cornerInset,
+          diameterMm: h.drillMm || h.diameterMm || 3.2,
+        }));
+      } else {
+        const oldW = existingPcb.widthMm;
+        const oldH = existingPcb.heightMm;
+        mountingHoles = existingPcb.mountingHoles.map((h, idx) => {
+          const hX = h.xMm ?? h.x ?? cornerInset;
+          const hY = h.yMm ?? h.y ?? cornerInset;
+          const isNearTL = Math.hypot(hX - cornerInset, hY - cornerInset) < 2.5 || h.id === 'm3_tl';
+          const isNearTR = Math.hypot(hX - (oldW - cornerInset), hY - cornerInset) < 2.5 || h.id === 'm3_tr';
+          const isNearBL = Math.hypot(hX - cornerInset, hY - (oldH - cornerInset)) < 2.5 || h.id === 'm3_bl';
+          const isNearBR = Math.hypot(hX - (oldW - cornerInset), hY - (oldH - cornerInset)) < 2.5 || h.id === 'm3_br';
+
+          if (!h.isCustomMoved) {
+            if (isNearTL) return { id: h.id || 'm3_tl', xMm: cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: cornerInset, diameterMm: 3.2 };
+            if (isNearTR) return { id: h.id || 'm3_tr', xMm: effectiveWidth - cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 };
+            if (isNearBL) return { id: h.id || 'm3_bl', xMm: cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 };
+            if (isNearBR) return { id: h.id || 'm3_br', xMm: effectiveWidth - cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 };
+          }
+
+          // Custom moved hole: clamp within board boundaries
+          const clampedX = Math.max(3.0, Math.min(effectiveWidth - 3.0, hX));
+          const clampedY = Math.max(3.0, Math.min(effectiveHeight - 3.0, hY));
+          return {
+            id: h.id || `m3_${idx}`,
+            xMm: clampedX,
+            yMm: clampedY,
+            drillMm: h.drillMm || 3.2,
+            outerMm: h.outerMm || 6.0,
+            isCustomMoved: true,
+            x: clampedX,
+            y: clampedY,
+            diameterMm: h.drillMm || h.diameterMm || 3.2,
+          };
+        });
+      }
+    } else {
+      mountingHoles = [
+        { id: 'm3_tl', xMm: cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: cornerInset, diameterMm: 3.2 },
+        { id: 'm3_tr', xMm: effectiveWidth - cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
+        { id: 'm3_bl', xMm: cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+        { id: 'm3_br', xMm: effectiveWidth - cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+      ];
+    }
 
     return {
       widthMm: effectiveWidth,
@@ -776,7 +602,7 @@ export class PcbGenerator {
       gridSizeMm: existingPcb?.gridSizeMm || 2.54,
       mountingHoles,
       edgeClearanceMm: EDGE_MARGIN,
-      pads,
+      pads: validPads,
       tracks: finalTracks,
       components: placedComponents,
       texts: existingPcb?.texts || [],
@@ -987,7 +813,7 @@ export class PcbGenerator {
       const offsets = [-6.35, -3.81, -1.27, 1.27, 3.81, 6.35];
       comp.pins.forEach((pin, idx) => {
         const ox = offsets[idx] !== undefined ? offsets[idx] : -6.35 + idx * 2.54;
-        const pt = transformCoord(ox, 5.0);
+        const pt = transformCoord(ox, 0.0);
         pads.push({
           id: `pad_${comp.id}_${pin.id}`,
           componentId: comp.id,
@@ -1085,7 +911,7 @@ export class PcbGenerator {
           pinId: pin.id,
           x: pt.x,
           y: pt.y,
-          shape: idx === 0 ? 'rect' : 'round',
+          shape: isElectrolytic && idx === 0 ? 'rect' : 'round',
           diameterMm: 1.8,
           holeMm: 0.9,
           layer: 'all',
