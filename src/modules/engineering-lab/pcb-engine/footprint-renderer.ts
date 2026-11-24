@@ -82,6 +82,8 @@ export interface SilkscreenDescriptor {
   courtyardDepthMm: number;
   bodyWidthMm: number;
   bodyDepthMm: number;
+  mechanicalOrientation?: 'u-notch' | 'd-flat' | 'tab-bar' | 'cathode-band' | 'none';
+  pin1Indicator?: { type: 'dot' | 'triangle'; hasMarker: boolean };
 }
 
 export interface SilkscreenRenderOptions {
@@ -261,6 +263,8 @@ export class FootprintRenderer {
         courtyardDepthMm: 5.5,
         bodyWidthMm: 10.16,
         bodyDepthMm: 4.7,
+        mechanicalOrientation: 'tab-bar',
+        pin1Indicator: { type: 'triangle', hasMarker: true },
       };
     }
 
@@ -297,6 +301,8 @@ export class FootprintRenderer {
         courtyardDepthMm: 5.0,
         bodyWidthMm: 4.8,
         bodyDepthMm: 3.8,
+        mechanicalOrientation: 'd-flat',
+        pin1Indicator: { type: 'triangle', hasMarker: true },
       };
     }
 
@@ -321,6 +327,7 @@ export class FootprintRenderer {
         courtyardDepthMm: 4.0,
         bodyWidthMm: 5.0,
         bodyDepthMm: 2.6,
+        mechanicalOrientation: 'cathode-band',
       };
     }
 
@@ -355,6 +362,8 @@ export class FootprintRenderer {
         courtyardDepthMm: cd,
         bodyWidthMm: bw,
         bodyDepthMm: bd,
+        mechanicalOrientation: 'u-notch',
+        pin1Indicator: { type: 'dot', hasMarker: true },
       };
     }
 
@@ -596,7 +605,7 @@ export class FootprintRenderer {
 
     return {
       designatorText: designator,
-      valueText: value || designator,
+      valueText: '',
       designatorPos: { x: x - cw / 2, y: y - cd / 2 - 1.5 },
       valuePos: { x: x - cw / 2, y: y + cd / 2 + 2.8 },
       outlineType,
@@ -636,29 +645,44 @@ export class FootprintRenderer {
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Bold '+' polarity mark beside Pin 1 Anode (-X side) with clean pad clearance
-        const fontPlus = Math.max(10, Math.round(2.6 * scale));
-        ctx.font = `bold ${fontPlus}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('+', -r * 0.72, -r * 0.45);
-
-        // Negative cathode stripe band on Cathode side (+X side)
+        // High-contrast solid/thick white negative crescent segment covering cathode half-arc (+X side)
         ctx.beginPath();
-        ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
-        ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
+        ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+        ctx.arc(r * 0.35, 0, r * 0.72, Math.PI / 2, -Math.PI / 2, true);
+        ctx.closePath();
         ctx.fillStyle = isSelected
-          ? 'rgba(56, 189, 248, 0.35)'
+          ? 'rgba(56, 189, 248, 0.75)'
           : is3dDecal
-          ? 'rgba(248, 250, 252, 0.3)'
-          : 'rgba(248, 250, 252, 0.25)';
+          ? 'rgba(248, 250, 252, 0.9)'
+          : 'rgba(248, 250, 252, 0.85)';
         ctx.fill();
         ctx.stroke();
 
-        // Minus '-' indicator on cathode band
+        // High-contrast hatch lines across negative crescent band
+        const hatchStep = Math.max(2, Math.round(0.8 * scale));
+        ctx.lineWidth = Math.max(1, Math.round(0.14 * scale));
+        for (let y = -r * 0.65; y <= r * 0.65; y += hatchStep) {
+          const x1 = Math.sqrt(Math.max(0, r * r - y * y));
+          const x2 = r * 0.42;
+          if (x1 > x2) {
+            ctx.beginPath();
+            ctx.moveTo(x2, y);
+            ctx.lineTo(x1, y);
+            ctx.stroke();
+          }
+        }
+        ctx.lineWidth = Math.max(1, Math.round(0.18 * scale));
+
+        // Bold '-' symbol placed cleanly OUTSIDE the circle on the negative pin side (+X)
+        const fontPol = Math.max(11, Math.round(2.6 * scale));
+        ctx.font = `bold ${fontPol}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.fillStyle = isSelected ? '#38BDF8' : silkColor;
-        ctx.font = `bold ${Math.max(9, Math.round(2.2 * scale))}px sans-serif`;
-        ctx.fillText('-', r * 0.72, 0);
+        ctx.fillText('-', r + 2.0 * scale, 0);
+
+        // Bold '+' symbol placed cleanly OUTSIDE the circle on the positive pin side (-X)
+        ctx.fillText('+', -r - 2.0 * scale, 0);
         break;
       }
 
@@ -693,21 +717,20 @@ export class FootprintRenderer {
         ctx.closePath();
         ctx.stroke();
 
+        // Bold external Pin-1 start marker triangle pointing at datasheet Pin 1
+        const pin1X = -1.27 * scale;
+        const pin1Y = r + 1.4 * scale;
+        ctx.beginPath();
+        ctx.moveTo(pin1X, pin1Y - 0.4 * scale);
+        ctx.lineTo(pin1X - 0.5 * scale, pin1Y + 0.5 * scale);
+        ctx.lineTo(pin1X + 0.5 * scale, pin1Y + 0.5 * scale);
+        ctx.closePath();
+        ctx.fill();
+
         // Pin 1 filled dot marker outside Pad 1
         ctx.beginPath();
         ctx.arc(-r * 0.85, -r * 0.85, 0.45 * scale, 0, Math.PI * 2);
         ctx.fill();
-
-        // Micro pin labels (E B C or C B E)
-        const fontPin = Math.max(7, Math.round(1.1 * scale));
-        ctx.font = `bold ${fontPin}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const labels = desc.pinLabels.length === 3 ? desc.pinLabels : ['E', 'B', 'C'];
-        const pinOffsets = [-1.27 * scale, 0, 1.27 * scale];
-        pinOffsets.forEach((px, i) => {
-          ctx.fillText(labels[i], px, r + 1.3 * scale);
-        });
         break;
       }
 
@@ -727,21 +750,20 @@ export class FootprintRenderer {
         ctx.arc(0, tabY, 1.5 * scale, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Pin 1 dot / chevron
+        // Bold external Pin-1 start triangle pointing at datasheet Pin 1
+        const pin1X = -2.54 * scale;
+        const pin1Y = bd / 2 + 1.4 * scale;
+        ctx.beginPath();
+        ctx.moveTo(pin1X, pin1Y - 0.4 * scale);
+        ctx.lineTo(pin1X - 0.5 * scale, pin1Y + 0.5 * scale);
+        ctx.lineTo(pin1X + 0.5 * scale, pin1Y + 0.5 * scale);
+        ctx.closePath();
+        ctx.fill();
+
+        // External Pin 1 dot on tab side
         ctx.beginPath();
         ctx.arc(-bw / 2 - 1.2 * scale, bd / 2 - 0.8 * scale, 0.5 * scale, 0, Math.PI * 2);
         ctx.fill();
-
-        // Pin function labels (G D S or IN GND OUT)
-        const fontPin = Math.max(8, Math.round(1.2 * scale));
-        ctx.font = `bold ${fontPin}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const labels = desc.pinLabels;
-        const pinX = [-2.54 * scale, 0, 2.54 * scale];
-        pinX.forEach((px, i) => {
-          if (labels[i]) ctx.fillText(labels[i], px, bd / 2 + 1.8 * scale);
-        });
         break;
       }
 
@@ -788,13 +810,13 @@ export class FootprintRenderer {
         ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
         ctx.stroke();
 
-        // Polarity markings '+' and '-'
+        // Polarity markings '+' and '-' cleanly outside outline
         const fontPol = Math.max(9, Math.round(1.8 * scale));
         ctx.font = `bold ${fontPol}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('+', -r * 0.65, 0);
-        ctx.fillText('-', r * 0.65, 0);
+        ctx.fillText('+', -r - 1.4 * scale, 0);
+        ctx.fillText('-', r + 1.4 * scale, 0);
         break;
       }
 
@@ -836,17 +858,17 @@ export class FootprintRenderer {
         ctx.arc(-bw / 2, 0, notchR, -Math.PI / 2, Math.PI / 2);
         ctx.stroke();
 
-        // Pin 1 dot and numeral '1'
-        const dotX = -bw / 2 + 1.8 * scale;
-        const dotY = -bd / 2 + 1.6 * scale;
+        // Bold filled circular Pin-1 dot / solid marker placed clearly OUTSIDE the body right next to Pin 1
+        const dotX = -bw / 2 - 1.4 * scale;
+        const dotY = -bd / 2 + 1.2 * scale;
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 0.6 * scale, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 0.55 * scale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.font = `bold ${Math.max(7, Math.round(1.2 * scale))}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('1', dotX, dotY + 1.8 * scale);
+        // Internal Pin-1 start indicator dot
+        ctx.beginPath();
+        ctx.arc(-bw / 2 + 1.8 * scale, -bd / 2 + 1.6 * scale, 0.5 * scale, 0, Math.PI * 2);
+        ctx.fill();
         break;
       }
 
@@ -970,7 +992,7 @@ export class FootprintRenderer {
       }
     }
 
-    // Reference Designator & Value Labels (Clean DFM Courtyard Clearance)
+    // Reference Designator ONLY (Clean DFM Courtyard Clearance)
     const fontLabel = Math.max(9, Math.round((is3dDecal ? 1.6 : 1.4) * scale));
     ctx.font = `bold ${fontLabel}px monospace`;
     ctx.textAlign = 'center';
@@ -980,13 +1002,6 @@ export class FootprintRenderer {
     const desY = -cd / 2 - 1.2 * scale;
     ctx.fillStyle = isSelected ? '#38BDF8' : silkColor;
     ctx.fillText(comp.designator, 0, desY);
-
-    // Value placed cleanly below courtyard
-    if (comp.value && comp.value !== comp.designator) {
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = isSelected ? '#7DD3FC' : is3dDecal ? silkColor : '#94A3B8';
-      ctx.fillText(comp.value, 0, cd / 2 + 1.2 * scale);
-    }
 
     ctx.restore();
   }

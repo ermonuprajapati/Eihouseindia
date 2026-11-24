@@ -168,6 +168,141 @@ function WebGlResourceDisposer() {
   return null;
 }
 
+/**
+ * Precision Chamfered Square Pad with Authentic Round Inner Drill Hole (True Annular Ring)
+ */
+function SquarePadMesh({
+  position,
+  rotation,
+  size,
+  holeR,
+  material,
+  renderOrder,
+}: {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  size: number;
+  holeR: number;
+  material: THREE.Material;
+  renderOrder?: number;
+}) {
+  const geom = useMemo(() => {
+    const shape = new THREE.Shape();
+    const half = size / 2;
+    shape.moveTo(-half, -half);
+    shape.lineTo(half, -half);
+    shape.lineTo(half, half);
+    shape.lineTo(-half, half);
+    shape.closePath();
+    if (holeR > 0) {
+      const hole = new THREE.Path();
+      hole.absarc(0, 0, holeR, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    }
+    return new THREE.ShapeGeometry(shape);
+  }, [size, holeR]);
+
+  useEffect(() => {
+    return () => {
+      geom.dispose();
+    };
+  }, [geom]);
+
+  return <mesh position={position} rotation={rotation} geometry={geom} material={material} renderOrder={renderOrder} />;
+}
+
+/**
+ * Precision Circular Annular Ring with Authentic Round Inner Drill Hole
+ */
+function RoundPadMesh({
+  position,
+  rotation,
+  innerR,
+  outerR,
+  material,
+  renderOrder,
+}: {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  innerR: number;
+  outerR: number;
+  material: THREE.Material;
+  renderOrder?: number;
+}) {
+  const geom = useMemo(() => {
+    return new THREE.RingGeometry(Math.max(0.01, innerR), Math.max(innerR + 0.05, outerR), 24);
+  }, [innerR, outerR]);
+
+  useEffect(() => {
+    return () => {
+      geom.dispose();
+    };
+  }, [geom]);
+
+  return <mesh position={position} rotation={rotation} geometry={geom} material={material} renderOrder={renderOrder} />;
+}
+
+export interface HoleSpec {
+  x: number;
+  y: number;
+  holeMm?: number;
+  diameterMm?: number;
+}
+
+/**
+ * Pure Factory PCB Geometry Helper:
+ * Constructs a continuous planar THREE.Shape with real see-through circular punched holes
+ * for every PTH component pad, via, and M3 mounting hole.
+ */
+export function createPcbBoardShape(
+  widthMm: number,
+  heightMm: number,
+  pads: HoleSpec[] = [],
+  mountingHoles: HoleSpec[] = [
+    { x: 4.0, y: 4.0, diameterMm: 3.2 },
+    { x: widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+    { x: 4.0, y: heightMm - 4.0, diameterMm: 3.2 },
+    { x: widthMm - 4.0, y: heightMm - 4.0, diameterMm: 3.2 },
+  ]
+): THREE.Shape {
+  const halfW = widthMm / 2;
+  const halfH = heightMm / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfW, -halfH);
+  shape.lineTo(halfW, -halfH);
+  shape.lineTo(halfW, halfH);
+  shape.lineTo(-halfW, halfH);
+  shape.closePath();
+
+  // 1. Component PTH Pads & Vias
+  pads.forEach((pad) => {
+    const drill = pad.holeMm ?? pad.diameterMm ?? 0;
+    if (drill > 0) {
+      const hx = pad.x - halfW;
+      const hz = pad.y - halfH;
+      const hr = Math.max(0.1, drill / 2);
+      const hole = new THREE.Path();
+      hole.absarc(hx, hz, hr, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    }
+  });
+
+  // 2. M3 Mounting Holes
+  mountingHoles.forEach((hole) => {
+    const drill = hole.diameterMm ?? hole.holeMm ?? 3.2;
+    if (drill > 0) {
+      const hx = hole.x - halfW;
+      const hz = hole.y - halfH;
+      const hr = Math.max(0.1, drill / 2);
+      const hPath = new THREE.Path();
+      hPath.absarc(hx, hz, hr, 0, Math.PI * 2, true);
+      shape.holes.push(hPath);
+    }
+  });
+
+  return shape;
+}
+
 export function Pcb3dViewer({
   pcb,
   components = [],
@@ -314,6 +449,31 @@ export function Pcb3dViewer({
       });
     }
 
+    // Real punched-out transparent holes on silkscreen decal over drill holes & M3 holes
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    pcb.pads?.forEach((pad) => {
+      if (pad.holeMm && pad.holeMm > 0) {
+        ctx.beginPath();
+        ctx.arc(pad.x * scale, pad.y * scale, (pad.holeMm / 2) * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    const mHoles = pcb.mountingHoles || [
+      { x: 4.0, y: 4.0, diameterMm: 3.2 },
+      { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+      { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+      { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+    ];
+    mHoles.forEach((hole) => {
+      const hr = ((hole.diameterMm || 3.2) / 2) * scale;
+      ctx.beginPath();
+      ctx.arc(hole.x * scale, hole.y * scale, hr, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearMipMapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
@@ -373,21 +533,25 @@ export function Pcb3dViewer({
         color: '#135831', // bottom copper-under-green-mask relief
         metalness: 0.2,
         roughness: 0.34,
+        side: THREE.DoubleSide,
       }),
       copperPour: new THREE.MeshStandardMaterial({
         color: '#135831',
         metalness: 0.2,
         roughness: 0.34,
+        side: THREE.DoubleSide,
       }),
       goldPad: new THREE.MeshStandardMaterial({
         color: '#D4AF37', // Official ENIG Gold (Electroless Nickel Immersion Gold)
         metalness: 0.85,
         roughness: 0.2,
+        side: THREE.DoubleSide,
       }),
       copperBarrel: new THREE.MeshStandardMaterial({
         color: '#C87D55', // Authentic Copper Barrel Plating
         metalness: 0.88,
         roughness: 0.25,
+        side: THREE.DoubleSide,
       }),
       drillHole: new THREE.MeshBasicMaterial({
         color: '#020617',
@@ -467,6 +631,80 @@ export function Pcb3dViewer({
     };
   }, [theme]);
 
+  // 1. Punched FR-4 Substrate with Real See-Through Factory Drill Holes
+  const boardGeometry = useMemo(() => {
+    const shape = createPcbBoardShape(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+
+    const extrudeSettings: THREE.ExtrudeGeometryOptions = {
+      depth: thickness,
+      bevelEnabled: false,
+      curveSegments: 20,
+    };
+    const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geom.translate(0, 0, -thickness / 2);
+    geom.rotateX(Math.PI / 2);
+    geom.computeVertexNormals();
+    return geom;
+  }, [pcb.widthMm, pcb.heightMm, pcb.pads, pcb.mountingHoles, thickness]);
+
+  useEffect(() => {
+    return () => {
+      boardGeometry.dispose();
+    };
+  }, [boardGeometry]);
+
+  // 2. Bottom Ground Pour Geometry with Punched Clearances around Through-Holes
+  const groundPourGeometry = useMemo(() => {
+    const margin = 1.5;
+    const shape = new THREE.Shape();
+    shape.moveTo(-halfW + margin, -halfH + margin);
+    shape.lineTo(halfW - margin, -halfH + margin);
+    shape.lineTo(halfW - margin, halfH - margin);
+    shape.lineTo(-halfW + margin, halfH - margin);
+    shape.closePath();
+
+    pcb.pads?.forEach((pad) => {
+      if (pad.holeMm && pad.holeMm > 0) {
+        const hx = pad.x - halfW;
+        const hz = pad.y - halfH;
+        const clearR = (pad.diameterMm ? pad.diameterMm / 2 : pad.holeMm / 2) + 0.15;
+        const hole = new THREE.Path();
+        hole.absarc(hx, hz, clearR, 0, Math.PI * 2, true);
+        shape.holes.push(hole);
+      }
+    });
+
+    const mountingHoles = pcb.mountingHoles || [
+      { x: 4.0, y: 4.0, diameterMm: 3.2 },
+      { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
+      { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+      { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
+    ];
+    mountingHoles.forEach((hole) => {
+      const hx = hole.x - halfW;
+      const hz = hole.y - halfH;
+      const hr = (hole.diameterMm || 3.2) / 2 + 1.5;
+      const hPath = new THREE.Path();
+      hPath.absarc(hx, hz, hr, 0, Math.PI * 2, true);
+      shape.holes.push(hPath);
+    });
+
+    const geom = new THREE.ShapeGeometry(shape);
+    geom.rotateX(Math.PI / 2);
+    return geom;
+  }, [pcb.widthMm, pcb.heightMm, pcb.pads, pcb.mountingHoles, halfW, halfH]);
+
+  useEffect(() => {
+    return () => {
+      groundPourGeometry.dispose();
+    };
+  }, [groundPourGeometry]);
+
   return (
     <div className={`relative w-full h-full bg-[#070D18] select-none overflow-hidden touch-none ${isPanMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
       {/* Three.js Canvas */}
@@ -535,27 +773,21 @@ export function Pcb3dViewer({
           }
         />
 
-        {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Emerald Green Faces */}
+        {/* 1. FR-4 Substrate Core Slab with Realistic Tan Fiberglass Edges and Real Punched Through-Holes */}
         <mesh
-          position={[0, 0, 0]}
-          material={[
-            materials.fr4Edge,
-            materials.fr4Edge,
-            materials.solderMaskTop,
-            materials.solderMaskBottom,
-            materials.fr4Edge,
-            materials.fr4Edge,
-          ]}
+          geometry={boardGeometry}
+          material={[materials.solderMaskTop, materials.fr4Edge]}
           castShadow
           receiveShadow
-        >
-          <boxGeometry args={[pcb.widthMm, thickness, pcb.heightMm]} />
-        </mesh>
+        />
 
-        {/* 2. Bottom Face (B.Cu) Ground Pour & Ground Plane (Top Face stays clean emerald-green FR-4) */}
-        <mesh position={[0, -thickness / 2 - 0.008, 0]} material={materials.bottomGroundPour} receiveShadow>
-          <boxGeometry args={[pcb.widthMm - 3, 0.008, pcb.heightMm - 3]} />
-        </mesh>
+        {/* 2. Bottom Face (B.Cu) Ground Pour & Ground Plane with Punched Clearances */}
+        <mesh
+          position={[0, -thickness / 2 - 0.008, 0]}
+          geometry={groundPourGeometry}
+          material={materials.bottomGroundPour}
+          receiveShadow
+        />
 
         {/* 3. Top (F.Cu) & Bottom (B.Cu) Copper Traces with Rounded Joint Caps */}
         {pcb.tracks.map((track) => {
@@ -671,34 +903,50 @@ export function Pcb3dViewer({
               )}
 
               {/* Top Pad / Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
-                {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
-                ) : (
-                  <cylinderGeometry args={[r, r, 0.028, 20]} />
-                )}
-              </mesh>
-              {/* Silver Solder Fillet Ring around through-hole pin (omitted on bare vias) */}
-              {!isVia && (
-                <mesh position={[0, thickness / 2 + 0.045, 0]} material={materials.solderFillet} renderOrder={11}>
-                  <torusGeometry args={[r * 0.65, 0.12, 8, 20]} />
-                </mesh>
+              {isRect ? (
+                <SquarePadMesh
+                  position={[0, thickness / 2 + 0.015, 0]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  size={pad.diameterMm}
+                  holeR={pad.holeMm / 2}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              ) : (
+                <RoundPadMesh
+                  position={[0, thickness / 2 + 0.015, 0]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  innerR={pad.holeMm / 2}
+                  outerR={r}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
               )}
+
               {/* Bottom Pad / Annular Ring */}
-              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
-                {isRect ? (
-                  <boxGeometry args={[pad.diameterMm, 0.028, pad.diameterMm]} />
-                ) : (
-                  <cylinderGeometry args={[r, r, 0.028, 20]} />
-                )}
-              </mesh>
-              {/* Plated Through Hole Copper Inner Barrel */}
+              {isRect ? (
+                <SquarePadMesh
+                  position={[0, -thickness / 2 - 0.015, 0]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  size={pad.diameterMm}
+                  holeR={pad.holeMm / 2}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              ) : (
+                <RoundPadMesh
+                  position={[0, -thickness / 2 - 0.015, 0]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  innerR={pad.holeMm / 2}
+                  outerR={r}
+                  material={materials.goldPad}
+                  renderOrder={10}
+                />
+              )}
+
+              {/* Plated Through Hole Copper Inner Barrel (hollow cylinder with open ends) */}
               <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
-                <cylinderGeometry args={[pad.holeMm / 2 + 0.04, pad.holeMm / 2 + 0.04, thickness + 0.04, 16]} />
-              </mesh>
-              {/* Hollow Drill Hole Center */}
-              <mesh position={[0, 0, 0]} material={materials.drillHole}>
-                <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.1, 16]} />
+                <cylinderGeometry args={[pad.holeMm / 2, pad.holeMm / 2, thickness + 0.02, 20, 1, true]} />
               </mesh>
             </group>
           );
@@ -718,20 +966,26 @@ export function Pcb3dViewer({
           return (
             <group key={`m3_mount_${hIdx}`} position={[hx, 0, hz]}>
               {/* Top Gold Annular Ring */}
-              <mesh position={[0, thickness / 2 + 0.035, 0]} material={materials.goldPad} renderOrder={10}>
-                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
-              </mesh>
+              <RoundPadMesh
+                position={[0, thickness / 2 + 0.015, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                innerR={holeR}
+                outerR={padR}
+                material={materials.goldPad}
+                renderOrder={10}
+              />
               {/* Bottom Gold Annular Ring */}
-              <mesh position={[0, -thickness / 2 - 0.025, 0]} material={materials.goldPad} renderOrder={10}>
-                <cylinderGeometry args={[padR, padR, 0.028, 24]} />
-              </mesh>
-              {/* Plated Through Hole Copper Inner Barrel */}
+              <RoundPadMesh
+                position={[0, -thickness / 2 - 0.015, 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+                innerR={holeR}
+                outerR={padR}
+                material={materials.goldPad}
+                renderOrder={10}
+              />
+              {/* Plated Through Hole Copper Inner Barrel (hollow cylinder with open ends) */}
               <mesh position={[0, 0, 0]} material={materials.copperBarrel}>
-                <cylinderGeometry args={[holeR + 0.05, holeR + 0.05, thickness + 0.04, 20]} />
-              </mesh>
-              {/* Hollow Drill Hole Bore */}
-              <mesh position={[0, 0, 0]} material={materials.drillHole}>
-                <cylinderGeometry args={[holeR, holeR, thickness + 0.1, 20]} />
+                <cylinderGeometry args={[holeR, holeR, thickness + 0.02, 24, 1, true]} />
               </mesh>
             </group>
           );

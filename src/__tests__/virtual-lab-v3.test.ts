@@ -4,6 +4,7 @@ import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/comp
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { CircuitComponent, CircuitWire, Component3D, PcbLayout, PcbSilkscreenText } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
+import { createPcbBoardShape } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
@@ -2762,6 +2763,178 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(descUno.hasPin1Dot).toBe(true);
       expect(descUno.hasSquarePad1).toBe(true);
       expect(descUno.headerPinLabels.length).toBeGreaterThan(0);
+    });
+
+    it('10. Task 1 & 2: Silkscreen renders Reference Designator ONLY (ZERO MPN / pinout text) + unmistakable electrolytic +/- polarity', () => {
+      // Mechanical orientation and pin-1 marker spec verification
+      const descDip = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'TIMER_555',
+        value: 'NE555P',
+        footprint: 'DIP-8_W7.62mm',
+        designator: 'U1',
+      });
+      expect(descDip.mechanicalOrientation).toBe('u-notch');
+      expect(descDip.pin1Indicator?.type).toBe('dot');
+      expect(descDip.pin1Indicator?.hasMarker).toBe(true);
+
+      const descTo92 = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'TRANSISTOR_TO92',
+        value: '2N2222A',
+        footprint: 'TO-92_Inline',
+        designator: 'Q1',
+      });
+      expect(descTo92.mechanicalOrientation).toBe('d-flat');
+      expect(descTo92.pin1Indicator?.type).toBe('triangle');
+      expect(descTo92.pin1Indicator?.hasMarker).toBe(true);
+
+      const descTo220 = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'IRLZ44N',
+        value: 'IRLZ44NPBF',
+        footprint: 'TO-220-3_Vertical',
+        designator: 'Q3',
+      });
+      expect(descTo220.mechanicalOrientation).toBe('tab-bar');
+      expect(descTo220.pin1Indicator?.type).toBe('triangle');
+      expect(descTo220.pin1Indicator?.hasMarker).toBe(true);
+
+      const descDiode = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'DIODE',
+        value: '1N4007',
+        footprint: 'D_DO-41_SOD81_P10.16mm_Horizontal',
+        designator: 'D1',
+      });
+      expect(descDiode.mechanicalOrientation).toBe('cathode-band');
+
+      const recordedTexts: string[] = [];
+      const mockCtx = {
+        save: () => {},
+        restore: () => {},
+        beginPath: () => {},
+        closePath: () => {},
+        arc: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        stroke: () => {},
+        fill: () => {},
+        strokeRect: () => {},
+        fillRect: () => {},
+        fillText: (text: string) => {
+          recordedTexts.push(text);
+        },
+        measureText: () => ({ width: 10 }),
+        setLineDash: () => {},
+      } as unknown as CanvasRenderingContext2D;
+
+      // 1. DIP IC with MPN "NE555P" -> Silkscreen must ONLY draw "U1", never "NE555P"
+      recordedTexts.length = 0;
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'u1',
+          designator: 'U1',
+          label: '555 Timer',
+          type: 'TIMER_555',
+          value: 'NE555P',
+          footprint: 'DIP-8_W7.62mm',
+          x: 20,
+          y: 20,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+      expect(recordedTexts).toContain('U1');
+      expect(recordedTexts).not.toContain('NE555P');
+
+      // 2. Transistor TO-92 with MPN "2N2222A" -> Silkscreen must ONLY draw "Q1", never "2N2222A" or "E B C"
+      recordedTexts.length = 0;
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'q1',
+          designator: 'Q1',
+          label: 'NPN Transistor',
+          type: 'TRANSISTOR_TO92',
+          value: '2N2222A',
+          footprint: 'TO-92_Inline',
+          x: 30,
+          y: 30,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+      expect(recordedTexts).toContain('Q1');
+      expect(recordedTexts).not.toContain('2N2222A');
+      expect(recordedTexts).not.toContain('E');
+      expect(recordedTexts).not.toContain('B');
+      expect(recordedTexts).not.toContain('C');
+
+      // 3. Transistor TO-220 with MPN "IRLZ44N" -> Silkscreen must ONLY draw "Q3", never "IRLZ44N" or "G D S"
+      recordedTexts.length = 0;
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'q3',
+          designator: 'Q3',
+          label: 'N-Ch MOSFET',
+          type: 'IRLZ44N',
+          value: 'IRLZ44NPBF',
+          footprint: 'TO-220-3_Vertical',
+          x: 35,
+          y: 35,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+      expect(recordedTexts).toContain('Q3');
+      expect(recordedTexts).not.toContain('IRLZ44NPBF');
+      expect(recordedTexts).not.toContain('G');
+      expect(recordedTexts).not.toContain('D');
+      expect(recordedTexts).not.toContain('S');
+
+      // 4. Electrolytic Capacitor -> Silkscreen must draw "C1", "+", and "-"
+      recordedTexts.length = 0;
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'c1',
+          designator: 'C1',
+          label: '100uF Cap',
+          type: 'CAPACITOR_ELECTROLYTIC',
+          value: '100uF',
+          footprint: 'CP_Radial_D6.3mm_P2.50mm',
+          x: 40,
+          y: 40,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+      expect(recordedTexts).toContain('C1');
+      expect(recordedTexts).toContain('+');
+      expect(recordedTexts).toContain('-');
+      expect(recordedTexts).not.toContain('100uF');
+    });
+
+    it('11. Task 3 & 4: True punched 3D PCB board geometry has real see-through holes for all PTH pads, vias, and M3 holes', () => {
+      const pads = [
+        { x: 20, y: 20, holeMm: 0.8 },
+        { x: 20, y: 22.54, holeMm: 0.8 },
+        { x: 30, y: 30, holeMm: 1.0 }, // PTH pad
+        { x: 40, y: 40, holeMm: 0.3 }, // via drill
+        { x: 50, y: 50, holeMm: 0 },   // SMD pad without hole (must NOT create a hole)
+      ];
+
+      const mountingHoles = [
+        { x: 4.0, y: 4.0, diameterMm: 3.2 },
+        { x: 96.0, y: 4.0, diameterMm: 3.2 },
+        { x: 4.0, y: 76.0, diameterMm: 3.2 },
+        { x: 96.0, y: 76.0, diameterMm: 3.2 },
+      ];
+
+      const boardShape = createPcbBoardShape(100, 80, pads, mountingHoles);
+
+      // Total expected punched holes = 4 valid pads with holeMm > 0 + 4 mounting holes = 8
+      expect(boardShape.holes.length).toBe(8);
+      expect(boardShape.holes.length).not.toBe(pads.length + mountingHoles.length); // 0-drill pad excluded
     });
   });
 });
