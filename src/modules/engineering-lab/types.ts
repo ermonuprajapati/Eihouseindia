@@ -393,6 +393,18 @@ export interface PcbSilkscreenText {
   rotation?: number;
 }
 
+export interface PcbMountingHole {
+  id: string;
+  xMm: number;
+  yMm: number;
+  drillMm: number;
+  outerMm: number;
+  isCustomMoved?: boolean;
+  x: number;
+  y: number;
+  diameterMm: number;
+}
+
 export interface PcbLayout {
   widthMm: number;
   heightMm: number;
@@ -401,7 +413,7 @@ export interface PcbLayout {
   units?: 'mm' | 'mil';
   gridSizeMm?: number;
   cornerRoundingMm?: number;
-  mountingHoles?: { x: number; y: number; diameterMm: number }[];
+  mountingHoles?: PcbMountingHole[];
   edgeClearanceMm?: number;
   tracks: PcbTrack[];
   pads: PcbPad[];

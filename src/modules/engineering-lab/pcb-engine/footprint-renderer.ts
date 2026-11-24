@@ -59,6 +59,7 @@ export interface SilkscreenDescriptor {
     | 'inductor'
     | 'potentiometer'
     | 'buzzer'
+    | 'battery'
     | 'pushbutton'
     | 'header'
     | 'dev_board'
@@ -529,12 +530,39 @@ export class FootprintRenderer {
       };
     }
 
-    // 14. Headers / Connectors / Terminal Blocks
+    // 14. Batteries & Power Cells (BT1, Coin Cell, 9V Snap, 18650 Holder)
+    if (
+      rawType.includes('BATTERY') ||
+      rawType.includes('CELL') ||
+      (comp.designator || '').startsWith('BT')
+    ) {
+      return {
+        family: 'battery',
+        outlineType: 'battery',
+        hasPolarity: true,
+        hasPlusMark: true,
+        hasMinusMark: true,
+        hasCathodeBand: false,
+        hasCathodeFlatEdge: false,
+        hasSquarePad1: true,
+        hasNotch: false,
+        hasPin1Dot: false,
+        hasHeatsinkTab: false,
+        hasDiodeSymbol: false,
+        pinLabels: ['+', '-'],
+        headerPinLabels: [],
+        courtyardWidthMm: cw,
+        courtyardDepthMm: cd,
+        bodyWidthMm: bw,
+        bodyDepthMm: bd,
+      };
+    }
+
+    // 15. Headers / Connectors / Terminal Blocks
     if (
       rawType.includes('HEADER') ||
       rawType.includes('CONNECTOR') ||
-      rawType.includes('TERMINAL') ||
-      rawType.includes('BATTERY')
+      rawType.includes('TERMINAL')
     ) {
       return {
         family: 'header',
@@ -717,7 +745,7 @@ export class FootprintRenderer {
         ctx.closePath();
         ctx.stroke();
 
-        // Bold external Pin-1 start marker triangle pointing at datasheet Pin 1
+        // Single clean external Pin-1 start marker triangle pointing at datasheet Pin 1
         const pin1X = -1.27 * scale;
         const pin1Y = r + 1.4 * scale;
         ctx.beginPath();
@@ -725,11 +753,6 @@ export class FootprintRenderer {
         ctx.lineTo(pin1X - 0.5 * scale, pin1Y + 0.5 * scale);
         ctx.lineTo(pin1X + 0.5 * scale, pin1Y + 0.5 * scale);
         ctx.closePath();
-        ctx.fill();
-
-        // Pin 1 filled dot marker outside Pad 1
-        ctx.beginPath();
-        ctx.arc(-r * 0.85, -r * 0.85, 0.45 * scale, 0, Math.PI * 2);
         ctx.fill();
         break;
       }
@@ -858,16 +881,11 @@ export class FootprintRenderer {
         ctx.arc(-bw / 2, 0, notchR, -Math.PI / 2, Math.PI / 2);
         ctx.stroke();
 
-        // Bold filled circular Pin-1 dot / solid marker placed clearly OUTSIDE the body right next to Pin 1
+        // Single clean filled circular Pin-1 dot placed clearly OUTSIDE the body right next to Pin 1
         const dotX = -bw / 2 - 1.4 * scale;
         const dotY = -bd / 2 + 1.2 * scale;
         ctx.beginPath();
         ctx.arc(dotX, dotY, 0.55 * scale, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Internal Pin-1 start indicator dot
-        ctx.beginPath();
-        ctx.arc(-bw / 2 + 1.8 * scale, -bd / 2 + 1.6 * scale, 0.5 * scale, 0, Math.PI * 2);
         ctx.fill();
         break;
       }
@@ -925,17 +943,10 @@ export class FootprintRenderer {
           ctx.stroke();
         });
 
-        // Pin 1 chevron & header label highlights
+        // Pin 1 chevron indicator
         ctx.beginPath();
         ctx.arc(-bw / 2 + 3 * scale, -bd / 2 + 3 * scale, 0.7 * scale, 0, Math.PI * 2);
         ctx.fill();
-
-        // Readable board header labels
-        const pinFont = Math.max(8, Math.round(1.2 * scale));
-        ctx.font = `bold ${pinFont}px monospace`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(comp.designator || 'DEV', -bw / 2 + 12 * scale, 0);
         break;
       }
 
@@ -976,6 +987,18 @@ export class FootprintRenderer {
         ctx.moveTo(bw / 2, 0);
         ctx.lineTo(cw / 2, 0);
         ctx.stroke();
+        break;
+      }
+
+      case 'battery': {
+        // Battery holder outline: clean rectangle with distinct '+' and '-' polarity marks near pads (no floating Pin 1 box)
+        ctx.strokeRect(-bw / 2, -bd / 2, bw, bd);
+        const fontPol = Math.max(10, Math.round(2.0 * scale));
+        ctx.font = `bold ${fontPol}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('+', -bw / 2 + 2.5 * scale, 0);
+        ctx.fillText('-', bw / 2 - 2.5 * scale, 0);
         break;
       }
 

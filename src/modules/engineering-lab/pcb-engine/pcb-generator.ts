@@ -1,4 +1,4 @@
-import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement } from '../types';
+import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack, PcbComponentPlacement, PcbMountingHole } from '../types';
 import { PcbAutoRouter, compute45RoutePoints } from './autorouter';
 import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
 
@@ -383,15 +383,44 @@ export class PcbGenerator {
     const maxSingleW = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cw + c.clearance * 2)) : 40;
     const maxSingleD = compSpecs.length > 0 ? Math.max(...compSpecs.map((c) => c.cd + c.clearance * 2)) : 30;
     const estSide = Math.sqrt(totalAreaWithCorridors * 1.35);
-    let availW = Math.max(boardWidthMm, Math.ceil((estSide * 1.15) / 5) * 5, maxSingleW + EDGE_MARGIN * 2, 80);
-    let availH = Math.max(boardHeightMm, Math.ceil((estSide * 0.85) / 5) * 5, maxSingleD + EDGE_MARGIN * 2, 60);
+    const hasDevBoardOrMcu = compSpecs.some(
+      (c) =>
+        c.spec.placementClass === 'dev-board' ||
+        c.comp.type.includes('UNO') ||
+        c.comp.type.includes('ESP32') ||
+        c.comp.type.includes('MEGA') ||
+        c.comp.type.includes('PICO')
+    );
+    let availW = Math.max(
+      boardWidthMm,
+      hasDevBoardOrMcu ? 130 : 0,
+      Math.ceil((estSide * 1.15) / 5) * 5,
+      maxSingleW + EDGE_MARGIN * 2
+    );
+    let availH = Math.max(
+      boardHeightMm,
+      hasDevBoardOrMcu ? 85 : 0,
+      Math.ceil((estSide * 0.85) / 5) * 5,
+      maxSingleD + EDGE_MARGIN * 2
+    );
+
+    const hasCollision = (tx: number, ty: number, curCw: number, curCd: number, curClearance: number): boolean => {
+      for (const pb of placedBoxes) {
+        const minSepX = (curCw + pb.cw) / 2 + Math.max(curClearance, pb.clearance);
+        const minSepY = (curCd + pb.cd) / 2 + Math.max(curClearance, pb.clearance);
+        if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
+          return true;
+        }
+      }
+      return false;
+    };
 
     placementOrder.forEach(({ comp, cw, cd, clearance }) => {
       const existingComp = existingPcb?.components?.find((c) => c.componentId === comp.id);
       let candX: number;
       let candY: number;
 
-      if (existingComp) {
+      if (existingComp && !hasCollision(existingComp.x, existingComp.y, cw, cd, clearance)) {
         candX = existingComp.x;
         candY = existingComp.y;
       } else {
@@ -411,19 +440,7 @@ export class PcbGenerator {
         candX = targetX;
         candY = targetY;
 
-        // Pairwise AABB non-overlap verification
-        const hasCollision = (tx: number, ty: number): boolean => {
-          for (const pb of placedBoxes) {
-            const minSepX = (cw + pb.cw) / 2 + Math.max(clearance, pb.clearance);
-            const minSepY = (cd + pb.cd) / 2 + Math.max(clearance, pb.clearance);
-            if (Math.abs(tx - pb.x) < minSepX && Math.abs(ty - pb.y) < minSepY) {
-              return true;
-            }
-          }
-          return false;
-        };
-
-        if (hasCollision(candX, candY)) {
+        if (hasCollision(candX, candY, cw, cd, clearance)) {
           let found = false;
           // First try within current board bounds
           const maxSearch = Math.max(availW, availH, 120);
@@ -435,7 +452,7 @@ export class PcbGenerator {
               const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
 
               if (testX >= minXBound && testX <= maxXBound && testY >= minYBound && testY <= maxYBound) {
-                if (!hasCollision(testX, testY)) {
+                if (!hasCollision(testX, testY, cw, cd, clearance)) {
                   candX = testX;
                   candY = testY;
                   found = true;
@@ -455,7 +472,7 @@ export class PcbGenerator {
                 const testY = Math.round((targetY + r * Math.sin(angle)) / 2.54) * 2.54;
 
                 if (testX >= minXBound && testY >= minYBound) {
-                  if (!hasCollision(testX, testY)) {
+                  if (!hasCollision(testX, testY, cw, cd, clearance)) {
                     candX = testX;
                     candY = testY;
                     found = true;
@@ -580,25 +597,52 @@ export class PcbGenerator {
     const gndLayer: 'top_copper' | 'bottom_copper' = DEFAULT_GND_POUR_LAYER === 'top_copper' ? 'top_copper' : 'bottom_copper';
     const gndTrackWidth = 0.55; // 0.55mm professional power/GND track width
 
-    // Add a GND stitching via if needed
+    // Add a GND stitching via if needed with strict >= padOuterR + viaOuterR + 0.35mm clearance
     let gndStitchVia: PcbPad | null = null;
     if (gndPads.length > 0 && !pads.some((p) => p.componentId === 'VIA' && p.netId === 'GND')) {
       const gPad = gndPads[0];
-      const vx = Math.min(effectiveWidth - 4, Math.max(4, gPad.x + 2.54));
-      const vy = Math.min(effectiveHeight - 4, Math.max(4, gPad.y + 2.54));
-      gndStitchVia = {
-        id: `via_gnd_stitch_${Date.now()}`,
-        componentId: 'VIA',
-        pinId: 'GND',
-        netId: 'GND',
-        x: Math.round(vx * 100) / 100,
-        y: Math.round(vy * 100) / 100,
-        shape: 'round',
-        diameterMm: 0.8,
-        holeMm: 0.4,
-        layer: 'all',
-      };
-      pads.push(gndStitchVia);
+      const viaOuterR = 0.4;
+      let safeVx = gPad.x + 3.5;
+      let safeVy = gPad.y + 3.5;
+      let isSafe = false;
+      const testOffsets = [
+        [3.5, 3.5], [-3.5, 3.5], [3.5, -3.5], [-3.5, -3.5],
+        [4.5, 0], [-4.5, 0], [0, 4.5], [0, -4.5],
+        [5.0, 5.0], [-5.0, 5.0], [6.0, 0], [0, 6.0]
+      ];
+      for (const [ox, oy] of testOffsets) {
+        const tx = Math.min(effectiveWidth - 5, Math.max(5, gPad.x + ox));
+        const ty = Math.min(effectiveHeight - 5, Math.max(5, gPad.y + oy));
+        let collides = false;
+        for (const p of pads) {
+          const pOuterR = (p.diameterMm || 1.6) / 2;
+          if (Math.hypot(tx - p.x, ty - p.y) < pOuterR + viaOuterR + 0.35) {
+            collides = true;
+            break;
+          }
+        }
+        if (!collides) {
+          safeVx = tx;
+          safeVy = ty;
+          isSafe = true;
+          break;
+        }
+      }
+      if (isSafe) {
+        gndStitchVia = {
+          id: `via_gnd_stitch_${Date.now()}`,
+          componentId: 'VIA',
+          pinId: 'GND',
+          netId: 'GND',
+          x: Math.round(safeVx * 100) / 100,
+          y: Math.round(safeVy * 100) / 100,
+          shape: 'round',
+          diameterMm: 0.8,
+          holeMm: 0.4,
+          layer: 'all',
+        };
+        pads.push(gndStitchVia);
+      }
     }
 
     // Connect all GND pads together into a continuous routed ground network using an MST
@@ -758,14 +802,64 @@ export class PcbGenerator {
     // Run Design Rule Checks
     const drcErrors = this.runDrc(pads, finalTracks, effectiveWidth, effectiveHeight);
 
-    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 4mm from corners
-    const cornerInset = 4.0;
-    const mountingHoles = existingPcb?.mountingHoles || [
-      { x: cornerInset, y: cornerInset, diameterMm: 3.2 },
-      { x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
-      { x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
-      { x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
-    ];
+    // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 5.0mm from corners
+    const cornerInset = 5.0;
+    let mountingHoles: PcbMountingHole[];
+    if (existingPcb?.mountingHoles && existingPcb.mountingHoles.length > 0) {
+      if (existingPcb.widthMm === effectiveWidth && existingPcb.heightMm === effectiveHeight) {
+        mountingHoles = existingPcb.mountingHoles.map((h, idx) => ({
+          id: h.id || `m3_${idx}`,
+          xMm: h.xMm ?? h.x ?? cornerInset,
+          yMm: h.yMm ?? h.y ?? cornerInset,
+          drillMm: h.drillMm || 3.2,
+          outerMm: h.outerMm || 6.0,
+          isCustomMoved: h.isCustomMoved || false,
+          x: h.xMm ?? h.x ?? cornerInset,
+          y: h.yMm ?? h.y ?? cornerInset,
+          diameterMm: h.drillMm || h.diameterMm || 3.2,
+        }));
+      } else {
+        const oldW = existingPcb.widthMm;
+        const oldH = existingPcb.heightMm;
+        mountingHoles = existingPcb.mountingHoles.map((h, idx) => {
+          const hX = h.xMm ?? h.x ?? cornerInset;
+          const hY = h.yMm ?? h.y ?? cornerInset;
+          const isNearTL = Math.hypot(hX - cornerInset, hY - cornerInset) < 2.5 || h.id === 'm3_tl';
+          const isNearTR = Math.hypot(hX - (oldW - cornerInset), hY - cornerInset) < 2.5 || h.id === 'm3_tr';
+          const isNearBL = Math.hypot(hX - cornerInset, hY - (oldH - cornerInset)) < 2.5 || h.id === 'm3_bl';
+          const isNearBR = Math.hypot(hX - (oldW - cornerInset), hY - (oldH - cornerInset)) < 2.5 || h.id === 'm3_br';
+
+          if (!h.isCustomMoved) {
+            if (isNearTL) return { id: h.id || 'm3_tl', xMm: cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: cornerInset, diameterMm: 3.2 };
+            if (isNearTR) return { id: h.id || 'm3_tr', xMm: effectiveWidth - cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 };
+            if (isNearBL) return { id: h.id || 'm3_bl', xMm: cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 };
+            if (isNearBR) return { id: h.id || 'm3_br', xMm: effectiveWidth - cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 };
+          }
+
+          // Custom moved hole: clamp within board boundaries
+          const clampedX = Math.max(3.0, Math.min(effectiveWidth - 3.0, hX));
+          const clampedY = Math.max(3.0, Math.min(effectiveHeight - 3.0, hY));
+          return {
+            id: h.id || `m3_${idx}`,
+            xMm: clampedX,
+            yMm: clampedY,
+            drillMm: h.drillMm || 3.2,
+            outerMm: h.outerMm || 6.0,
+            isCustomMoved: true,
+            x: clampedX,
+            y: clampedY,
+            diameterMm: h.drillMm || h.diameterMm || 3.2,
+          };
+        });
+      }
+    } else {
+      mountingHoles = [
+        { id: 'm3_tl', xMm: cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: cornerInset, diameterMm: 3.2 },
+        { id: 'm3_tr', xMm: effectiveWidth - cornerInset, yMm: cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: cornerInset, diameterMm: 3.2 },
+        { id: 'm3_bl', xMm: cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+        { id: 'm3_br', xMm: effectiveWidth - cornerInset, yMm: effectiveHeight - cornerInset, drillMm: 3.2, outerMm: 6.0, isCustomMoved: false, x: effectiveWidth - cornerInset, y: effectiveHeight - cornerInset, diameterMm: 3.2 },
+      ];
+    }
 
     return {
       widthMm: effectiveWidth,

@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
 import { CircuitComponent, CircuitWire, Component3D, PcbLayout, PcbSilkscreenText } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
-import { createPcbBoardShape } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
+import { createPcbBoardShape, sanitizePcbHoles } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
@@ -2144,11 +2144,11 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(pcb.mountingHoles!.length).toBe(4);
       pcb.mountingHoles!.forEach((hole) => {
         expect(hole.diameterMm).toBe(3.2);
-        // Inset 4mm from borders
-        const nearLeft = Math.abs(hole.x - 4.0) < 0.1;
-        const nearRight = Math.abs(hole.x - (pcb.widthMm - 4.0)) < 0.1;
-        const nearTop = Math.abs(hole.y - 4.0) < 0.1;
-        const nearBot = Math.abs(hole.y - (pcb.heightMm - 4.0)) < 0.1;
+        // Inset 5.0mm (or 4.0mm) from borders
+        const nearLeft = Math.abs(hole.x - 5.0) < 0.1 || Math.abs(hole.x - 4.0) < 0.1;
+        const nearRight = Math.abs(hole.x - (pcb.widthMm - 5.0)) < 0.1 || Math.abs(hole.x - (pcb.widthMm - 4.0)) < 0.1;
+        const nearTop = Math.abs(hole.y - 5.0) < 0.1 || Math.abs(hole.y - 4.0) < 0.1;
+        const nearBot = Math.abs(hole.y - (pcb.heightMm - 5.0)) < 0.1 || Math.abs(hole.y - (pcb.heightMm - 4.0)) < 0.1;
         expect(nearLeft || nearRight).toBe(true);
         expect(nearTop || nearBot).toBe(true);
       });
@@ -2935,6 +2935,164 @@ describe('Virtual Lab v3 Verification Suite', () => {
       // Total expected punched holes = 4 valid pads with holeMm > 0 + 4 mounting holes = 8
       expect(boardShape.holes.length).toBe(8);
       expect(boardShape.holes.length).not.toBe(pads.length + mountingHoles.length); // 0-drill pad excluded
+    });
+
+    it('12. Robust hole sanitization eliminates colliding holes and prevents Earcut triangulation tears', () => {
+      // 2 overlapping pads at same location, 1 colliding pad touching mounting hole
+      const pads = [
+        { x: 20, y: 20, holeMm: 0.8 },
+        { x: 20, y: 20.05, holeMm: 0.8 }, // Almost identical / overlapping (must be filtered out)
+        { x: 4.5, y: 4.5, holeMm: 0.8 },   // Collides with top-left M3 mounting hole at (4, 4)
+        { x: 50, y: 40, holeMm: 1.0 },
+      ];
+
+      const mountingHoles = [
+        { x: 4.0, y: 4.0, diameterMm: 3.2 },
+        { x: 96.0, y: 4.0, diameterMm: 3.2 },
+        { x: 4.0, y: 76.0, diameterMm: 3.2 },
+        { x: 96.0, y: 76.0, diameterMm: 3.2 },
+      ];
+
+      const sanitized = sanitizePcbHoles(100, 80, pads, mountingHoles);
+
+      // 4 mounting holes must be preserved
+      const mountHoles = sanitized.filter((h) => h.type === 'mount');
+      expect(mountHoles.length).toBe(4);
+
+      // Overlapping pad and pad colliding with M3 hole must be filtered
+      const padHoles = sanitized.filter((h) => h.type === 'pad');
+      expect(padHoles.length).toBe(2); // Only {20, 20} and {50, 40} accepted
+
+      // Board shape generated with sanitized holes
+      const boardShape = createPcbBoardShape(100, 80, pads, mountingHoles);
+      expect(boardShape.holes.length).toBe(6);
+    });
+
+    it('13. Dev board silkscreen does not duplicate designator inside the body or courtyard', () => {
+      const recordedTexts: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        arc: vi.fn(),
+        rect: vi.fn(),
+        strokeRect: vi.fn(),
+        fillRect: vi.fn(),
+        stroke: vi.fn(),
+        fill: vi.fn(),
+        fillText: vi.fn((txt: string) => {
+          recordedTexts.push(txt);
+        }),
+        roundRect: vi.fn(),
+      } as unknown as CanvasRenderingContext2D;
+
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'u2',
+          designator: 'U2',
+          label: 'Arduino Uno',
+          type: 'ARDUINO_UNO',
+          value: 'Uno R3',
+          footprint: 'MODULE_ARDUINO_UNO',
+          x: 40,
+          y: 40,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+
+      // Must have exactly ONE "U2" (outside courtyard), never duplicate "U2" or "DEV" inside body
+      const u2Occurrences = recordedTexts.filter((t) => t === 'U2');
+      expect(u2Occurrences.length).toBe(1);
+      expect(recordedTexts).not.toContain('DEV');
+    });
+
+    it('14. PcbGenerator synchronizes 4 corner M3 mounting holes with dynamic board dimensions', () => {
+      const comps: CircuitComponent[] = [
+        {
+          id: 'r1',
+          type: 'RESISTOR',
+          label: 'R1',
+          value: '10k',
+          category: 'passive',
+          pins: [
+            { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+            { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+          ],
+          x: 100,
+          y: 100,
+          rotation: 0,
+          parameters: {},
+          footprint: 'R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal',
+        },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(comps, [], 90, 70);
+
+      expect(pcb.mountingHoles).toBeDefined();
+      expect(pcb.mountingHoles!.length).toBe(4);
+      expect(pcb.mountingHoles![0]).toEqual(expect.objectContaining({ x: 5.0, y: 5.0, diameterMm: 3.2 }));
+      expect(pcb.mountingHoles![1]).toEqual(expect.objectContaining({ x: pcb.widthMm - 5.0, y: 5.0, diameterMm: 3.2 }));
+      expect(pcb.mountingHoles![2]).toEqual(expect.objectContaining({ x: 5.0, y: pcb.heightMm - 5.0, diameterMm: 3.2 }));
+      expect(pcb.mountingHoles![3]).toEqual(expect.objectContaining({ x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, diameterMm: 3.2 }));
+    });
+
+    it('15. Battery BT1 produces dedicated battery silkscreen family with clean polarity markings', () => {
+      const desc = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'DC_BATTERY',
+        value: '9V',
+        designator: 'BT1',
+      });
+      expect(desc.family).toBe('battery');
+      expect(desc.hasPolarity).toBe(true);
+      expect(desc.hasPlusMark).toBe(true);
+      expect(desc.hasPin1Dot).toBe(false);
+
+      const recordedTexts: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        arc: vi.fn(),
+        strokeRect: vi.fn(),
+        fillRect: vi.fn(),
+        stroke: vi.fn(),
+        fill: vi.fn(),
+        fillText: vi.fn((txt: string) => {
+          recordedTexts.push(txt);
+        }),
+      } as unknown as CanvasRenderingContext2D;
+
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'bt1',
+          designator: 'BT1',
+          label: 'Battery 9V',
+          footprint: 'BAT_9V',
+          type: 'DC_BATTERY',
+          value: '9V',
+          x: 20,
+          y: 20,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+
+      expect(recordedTexts).toContain('+');
+      expect(recordedTexts).toContain('-');
+      expect(recordedTexts).toContain('BT1');
     });
   });
 });

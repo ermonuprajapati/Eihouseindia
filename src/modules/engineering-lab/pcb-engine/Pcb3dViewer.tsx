@@ -194,9 +194,10 @@ function SquarePadMesh({
     shape.lineTo(half, half);
     shape.lineTo(-half, half);
     shape.closePath();
-    if (holeR > 0) {
+    const safeHoleR = Math.max(0, Math.min(holeR, half - 0.1));
+    if (safeHoleR > 0) {
       const hole = new THREE.Path();
-      hole.absarc(0, 0, holeR, 0, Math.PI * 2, true);
+      hole.absarc(0, 0, safeHoleR, 0, Math.PI * 2, true);
       shape.holes.push(hole);
     }
     return new THREE.ShapeGeometry(shape);
@@ -243,16 +244,107 @@ function RoundPadMesh({
 }
 
 export interface HoleSpec {
-  x: number;
-  y: number;
+  x?: number;
+  y?: number;
+  xMm?: number;
+  yMm?: number;
   holeMm?: number;
+  drillMm?: number;
   diameterMm?: number;
+  outerMm?: number;
+}
+
+export interface SanitizedHole {
+  x: number;
+  z: number;
+  r: number;
+  type: 'mount' | 'pad' | 'via';
+}
+
+/**
+ * Robust hole sanitizer enforcing boundary margins and strict pairwise non-intersection
+ * to completely eliminate Earcut triangulation failures and missing triangular faces in 3D PCB meshes.
+ */
+export function sanitizePcbHoles(
+  widthMm: number,
+  heightMm: number,
+  pads: HoleSpec[] = [],
+  mountingHoles: HoleSpec[] = []
+): SanitizedHole[] {
+  const halfW = widthMm / 2;
+  const halfH = heightMm / 2;
+  const accepted: SanitizedHole[] = [];
+
+  // 1. M3 Mounting holes (priority 1)
+  const effectiveMountHoles = mountingHoles && mountingHoles.length > 0 ? mountingHoles : [
+    { x: 5.0, y: 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: widthMm - 5.0, y: 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: 5.0, y: heightMm - 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+    { x: widthMm - 5.0, y: heightMm - 5.0, diameterMm: 3.2, drillMm: 3.2, outerMm: 6.0 },
+  ];
+
+  for (const m of effectiveMountHoles) {
+    const drill = m.drillMm ?? m.diameterMm ?? m.holeMm ?? 3.2;
+    if (drill <= 0) continue;
+    const r = Math.max(0.1, drill / 2);
+    const minX = -halfW + r + 0.5;
+    const maxX = halfW - r - 0.5;
+    const minZ = -halfH + r + 0.5;
+    const maxZ = halfH - r - 0.5;
+    if (minX > maxX || minZ > maxZ) continue;
+    const rawX = m.xMm ?? m.x ?? 0;
+    const rawY = m.yMm ?? m.y ?? 0;
+    const x = Math.max(minX, Math.min(maxX, rawX - halfW));
+    const z = Math.max(minZ, Math.min(maxZ, rawY - halfH));
+    accepted.push({ x, z, r, type: 'mount' });
+  }
+
+  // 2. Component Pads (priority 2) & Vias (priority 3)
+  const sortedPads = [...pads].sort((a, b) => {
+    const aIsVia = (a as { componentId?: string; id?: string }).componentId === 'VIA' || String((a as { id?: string }).id || '').startsWith('via_');
+    const bIsVia = (b as { componentId?: string; id?: string }).componentId === 'VIA' || String((b as { id?: string }).id || '').startsWith('via_');
+    if (aIsVia && !bIsVia) return 1;
+    if (!aIsVia && bIsVia) return -1;
+    return 0;
+  });
+
+  for (const p of sortedPads) {
+    const drill = p.holeMm ?? p.drillMm ?? p.diameterMm ?? 0;
+    if (drill <= 0) continue;
+    const r = Math.max(0.1, drill / 2);
+    const minX = -halfW + r + 0.5;
+    const maxX = halfW - r - 0.5;
+    const minZ = -halfH + r + 0.5;
+    const maxZ = halfH - r - 0.5;
+    if (minX > maxX || minZ > maxZ) continue;
+    const rawPx = p.xMm ?? p.x ?? 0;
+    const rawPy = p.yMm ?? p.y ?? 0;
+    const x = rawPx - halfW;
+    const z = rawPy - halfH;
+    if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
+
+    // Strict non-intersection and tangent avoidance check (minimum 0.15mm gap)
+    let collides = false;
+    for (const ah of accepted) {
+      const dist = Math.hypot(x - ah.x, z - ah.z);
+      if (dist < r + ah.r + 0.15) {
+        collides = true;
+        break;
+      }
+    }
+    if (!collides) {
+      const isVia = (p as { componentId?: string; id?: string }).componentId === 'VIA' || String((p as { id?: string }).id || '').startsWith('via_');
+      accepted.push({ x, z, r, type: isVia ? 'via' : 'pad' });
+    }
+  }
+
+  return accepted;
 }
 
 /**
  * Pure Factory PCB Geometry Helper:
  * Constructs a continuous planar THREE.Shape with real see-through circular punched holes
- * for every PTH component pad, via, and M3 mounting hole.
+ * for every PTH component pad, via, and M3 mounting hole with zero Earcut triangulation errors.
  */
 export function createPcbBoardShape(
   widthMm: number,
@@ -274,31 +366,12 @@ export function createPcbBoardShape(
   shape.lineTo(-halfW, halfH);
   shape.closePath();
 
-  // 1. Component PTH Pads & Vias
-  pads.forEach((pad) => {
-    const drill = pad.holeMm ?? pad.diameterMm ?? 0;
-    if (drill > 0) {
-      const hx = pad.x - halfW;
-      const hz = pad.y - halfH;
-      const hr = Math.max(0.1, drill / 2);
-      const hole = new THREE.Path();
-      hole.absarc(hx, hz, hr, 0, Math.PI * 2, true);
-      shape.holes.push(hole);
-    }
-  });
-
-  // 2. M3 Mounting Holes
-  mountingHoles.forEach((hole) => {
-    const drill = hole.diameterMm ?? hole.holeMm ?? 3.2;
-    if (drill > 0) {
-      const hx = hole.x - halfW;
-      const hz = hole.y - halfH;
-      const hr = Math.max(0.1, drill / 2);
-      const hPath = new THREE.Path();
-      hPath.absarc(hx, hz, hr, 0, Math.PI * 2, true);
-      shape.holes.push(hPath);
-    }
-  });
+  const sanitized = sanitizePcbHoles(widthMm, heightMm, pads, mountingHoles);
+  for (const h of sanitized) {
+    const hole = new THREE.Path();
+    hole.absarc(h.x, h.z, h.r, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+  }
 
   return shape;
 }
@@ -398,12 +471,12 @@ export function Pcb3dViewer({
     ctx.lineWidth = Math.max(2, Math.round(0.25 * scale));
     ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
 
-    // Board branding & metadata
+    // Board branding & metadata cleanly offset from top-left M3 hole
     ctx.fillStyle = silkColor;
     ctx.font = `bold ${Math.max(16, Math.round(2.5 * scale))}px monospace`;
-    ctx.fillText('EI HOUSE ENG LAB', 18, 32);
+    ctx.fillText('EI HOUSE ENG LAB', 14 * scale, 5.5 * scale);
     ctx.font = `${Math.max(12, Math.round(1.8 * scale))}px monospace`;
-    ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 18);
+    ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 14 * scale, canvas.height - 4 * scale);
 
     // Component Silkscreen reference designators & IPC-7351 outlines via FootprintRenderer
     pcb.components?.forEach((comp) => {
@@ -449,29 +522,22 @@ export function Pcb3dViewer({
       });
     }
 
-    // Real punched-out transparent holes on silkscreen decal over drill holes & M3 holes
+    // Real punched-out transparent holes on silkscreen decal matching physical drill holes
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    pcb.pads?.forEach((pad) => {
-      if (pad.holeMm && pad.holeMm > 0) {
-        ctx.beginPath();
-        ctx.arc(pad.x * scale, pad.y * scale, (pad.holeMm / 2) * scale, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-
-    const mHoles = pcb.mountingHoles || [
-      { x: 4.0, y: 4.0, diameterMm: 3.2 },
-      { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
-      { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-      { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-    ];
-    mHoles.forEach((hole) => {
-      const hr = ((hole.diameterMm || 3.2) / 2) * scale;
+    const decalHoles = sanitizePcbHoles(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
+    for (const h of decalHoles) {
+      const cx = (h.x + halfW) * scale;
+      const cy = (h.z + halfH) * scale;
       ctx.beginPath();
-      ctx.arc(hole.x * scale, hole.y * scale, hr, 0, Math.PI * 2);
+      ctx.arc(cx, cy, h.r * scale, 0, Math.PI * 2);
       ctx.fill();
-    });
+    }
     ctx.restore();
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -668,31 +734,30 @@ export function Pcb3dViewer({
     shape.lineTo(-halfW + margin, halfH - margin);
     shape.closePath();
 
-    pcb.pads?.forEach((pad) => {
-      if (pad.holeMm && pad.holeMm > 0) {
-        const hx = pad.x - halfW;
-        const hz = pad.y - halfH;
-        const clearR = (pad.diameterMm ? pad.diameterMm / 2 : pad.holeMm / 2) + 0.15;
-        const hole = new THREE.Path();
-        hole.absarc(hx, hz, clearR, 0, Math.PI * 2, true);
-        shape.holes.push(hole);
-      }
-    });
+    const sanitizedHoles = sanitizePcbHoles(
+      pcb.widthMm,
+      pcb.heightMm,
+      pcb.pads?.filter((p) => (p.holeMm ?? 0) > 0) || [],
+      pcb.mountingHoles
+    );
 
-    const mountingHoles = pcb.mountingHoles || [
-      { x: 4.0, y: 4.0, diameterMm: 3.2 },
-      { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
-      { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-      { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-    ];
-    mountingHoles.forEach((hole) => {
-      const hx = hole.x - halfW;
-      const hz = hole.y - halfH;
-      const hr = (hole.diameterMm || 3.2) / 2 + 1.5;
-      const hPath = new THREE.Path();
-      hPath.absarc(hx, hz, hr, 0, Math.PI * 2, true);
-      shape.holes.push(hPath);
-    });
+    const acceptedClearances: { x: number; z: number; r: number }[] = [];
+    for (const h of sanitizedHoles) {
+      const clearR = h.type === 'mount' ? h.r + 1.2 : h.r + 0.25;
+      let collides = false;
+      for (const ac of acceptedClearances) {
+        if (Math.hypot(h.x - ac.x, h.z - ac.z) < clearR + ac.r + 0.1) {
+          collides = true;
+          break;
+        }
+      }
+      if (!collides) {
+        acceptedClearances.push({ x: h.x, z: h.z, r: clearR });
+        const hPath = new THREE.Path();
+        hPath.absarc(h.x, h.z, clearR, 0, Math.PI * 2, true);
+        shape.holes.push(hPath);
+      }
+    }
 
     const geom = new THREE.ShapeGeometry(shape);
     geom.rotateX(Math.PI / 2);
@@ -730,8 +795,7 @@ export function Pcb3dViewer({
           position={[60, 150, 80]}
           intensity={2.2}
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize={[2048, 2048]}
           shadow-bias={-0.0001}
         />
         <directionalLight position={[-80, 80, -60]} intensity={0.9} color="#94A3B8" />
@@ -789,24 +853,46 @@ export function Pcb3dViewer({
           receiveShadow
         />
 
-        {/* 3. Top (F.Cu) & Bottom (B.Cu) Copper Traces with Rounded Joint Caps */}
+        {/* 3. Top (F.Cu) & Bottom (B.Cu) Copper Traces with Clean Through-Hole Bore Clearance */}
         {pcb.tracks.map((track) => {
-          const x1 = track.from.x - halfW;
-          const z1 = track.from.y - halfH;
-          const x2 = track.to.x - halfW;
-          const z2 = track.to.y - halfH;
+          let x1 = track.from.x - halfW;
+          let z1 = track.from.y - halfH;
+          let x2 = track.to.x - halfW;
+          let z2 = track.to.y - halfH;
 
-          const dx = x2 - x1;
-          const dz = z2 - z1;
+          let dx = x2 - x1;
+          let dz = z2 - z1;
+          const origLen = Math.hypot(dx, dz);
+          if (origLen < 0.05) return null;
+
+          const ux = dx / origLen;
+          const uz = dz / origLen;
+          const trackWidth = track.widthMm || 0.35;
+          const trackRadius = trackWidth / 2;
+
+          // Check if endpoints connect to through-hole pads or vias so tracks never intersect open bores
+          const p1Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.from.x, p.y - track.from.y) < 0.35 && (p.holeMm ?? 0) > 0);
+          const p2Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.to.x, p.y - track.to.y) < 0.35 && (p.holeMm ?? 0) > 0);
+
+          const r1Offset = p1Pad ? Math.min((p1Pad.holeMm / 2) + trackRadius + 0.04, (p1Pad.diameterMm / 2) - 0.02) : 0;
+          const r2Offset = p2Pad ? Math.min((p2Pad.holeMm / 2) + trackRadius + 0.04, (p2Pad.diameterMm / 2) - 0.02) : 0;
+
+          if (origLen > r1Offset + r2Offset + 0.1) {
+            x1 += ux * r1Offset;
+            z1 += uz * r1Offset;
+            x2 -= ux * r2Offset;
+            z2 -= uz * r2Offset;
+            dx = x2 - x1;
+            dz = z2 - z1;
+          }
+
           const len = Math.hypot(dx, dz);
           const angle = Math.atan2(dz, dx);
           const midX = (x1 + x2) / 2;
           const midZ = (z1 + z2) / 2;
           const isTop = track.layer === 'top_copper';
-          // Top traces are slightly raised lighter emerald-green copper-under-mask relief (#1F8A4C)
-          const yPos = isTop ? thickness / 2 + 0.012 : -thickness / 2 - 0.014;
-          const trackWidth = track.widthMm || 0.35;
-          const trackRadius = trackWidth / 2;
+          // Physical elevations: copper tracks sit at thickness/2 + 0.012, exposed gold pads sit above at thickness/2 + 0.032
+          const yPos = isTop ? thickness / 2 + 0.012 : -thickness / 2 - 0.012;
           const trackMat = isTop ? materials.copperTop : materials.copperBottom;
 
           return (
@@ -819,7 +905,7 @@ export function Pcb3dViewer({
               >
                 <boxGeometry args={[len, 0.016, trackWidth]} />
               </mesh>
-              {/* Rounded vertex joint cylinders at endpoints to eliminate 45°/90° gaps */}
+              {/* Rounded vertex joint cylinders at endpoints */}
               <mesh position={[x1, yPos, z1]} material={trackMat}>
                 <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
               </mesh>
@@ -832,7 +918,7 @@ export function Pcb3dViewer({
 
         {/* 4. Crisp White Silkscreen Layer (F.SilkS) strictly ABOVE top copper tracks & solder mask */}
         {silkscreenTexture && (
-          <mesh position={[0, thickness / 2 + 0.030, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
+          <mesh position={[0, thickness / 2 + 0.024, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
             <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
             <meshBasicMaterial map={silkscreenTexture} transparent opacity={0.98} depthWrite={false} polygonOffset polygonOffsetFactor={-1} />
           </mesh>
@@ -888,24 +974,42 @@ export function Pcb3dViewer({
               }}
               onPointerOut={() => setHoveredItem(null)}
             >
-              {/* Bottom Thermal Relief 4-Spoke Cross for GND Pads connecting to B.Cu Ground Pour */}
+              {/* Bottom Thermal Relief 4 Radial Spokes for GND Pads connecting to B.Cu Ground Pour (center 100% open) */}
               {isGnd && (
                 <group position={[0, -thickness / 2 - 0.016, 0]}>
-                  {/* Horizontal spoke */}
-                  <mesh material={materials.copperBottom}>
-                    <boxGeometry args={[pad.diameterMm + 1.8, 0.016, 0.45]} />
-                  </mesh>
-                  {/* Vertical spoke */}
-                  <mesh material={materials.copperBottom}>
-                    <boxGeometry args={[0.45, 0.016, pad.diameterMm + 1.8]} />
-                  </mesh>
+                  {(() => {
+                    const padR = pad.diameterMm / 2;
+                    const spokeLen = 0.9;
+                    const spokeW = 0.45;
+                    const offset = padR + spokeLen / 2;
+                    return (
+                      <>
+                        {/* +X spoke */}
+                        <mesh position={[offset, 0, 0]} material={materials.copperBottom}>
+                          <boxGeometry args={[spokeLen, 0.016, spokeW]} />
+                        </mesh>
+                        {/* -X spoke */}
+                        <mesh position={[-offset, 0, 0]} material={materials.copperBottom}>
+                          <boxGeometry args={[spokeLen, 0.016, spokeW]} />
+                        </mesh>
+                        {/* +Z spoke */}
+                        <mesh position={[0, 0, offset]} material={materials.copperBottom}>
+                          <boxGeometry args={[spokeW, 0.016, spokeLen]} />
+                        </mesh>
+                        {/* -Z spoke */}
+                        <mesh position={[0, 0, -offset]} material={materials.copperBottom}>
+                          <boxGeometry args={[spokeW, 0.016, spokeLen]} />
+                        </mesh>
+                      </>
+                    );
+                  })()}
                 </group>
               )}
 
               {/* Top Pad / Annular Ring */}
               {isRect ? (
                 <SquarePadMesh
-                  position={[0, thickness / 2 + 0.015, 0]}
+                  position={[0, thickness / 2 + 0.032, 0]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   size={pad.diameterMm}
                   holeR={pad.holeMm / 2}
@@ -914,7 +1018,7 @@ export function Pcb3dViewer({
                 />
               ) : (
                 <RoundPadMesh
-                  position={[0, thickness / 2 + 0.015, 0]}
+                  position={[0, thickness / 2 + 0.032, 0]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   innerR={pad.holeMm / 2}
                   outerR={r}
@@ -926,7 +1030,7 @@ export function Pcb3dViewer({
               {/* Bottom Pad / Annular Ring */}
               {isRect ? (
                 <SquarePadMesh
-                  position={[0, -thickness / 2 - 0.015, 0]}
+                  position={[0, -thickness / 2 - 0.032, 0]}
                   rotation={[Math.PI / 2, 0, 0]}
                   size={pad.diameterMm}
                   holeR={pad.holeMm / 2}
@@ -935,7 +1039,7 @@ export function Pcb3dViewer({
                 />
               ) : (
                 <RoundPadMesh
-                  position={[0, -thickness / 2 - 0.015, 0]}
+                  position={[0, -thickness / 2 - 0.032, 0]}
                   rotation={[Math.PI / 2, 0, 0]}
                   innerR={pad.holeMm / 2}
                   outerR={r}
@@ -953,21 +1057,45 @@ export function Pcb3dViewer({
         })}
 
         {/* 5.1 Plated M3 Corner Mounting Holes (ENIG Gold Ring, Plated Barrel, Bore) */}
-        {(pcb.mountingHoles || [
-          { x: 4.0, y: 4.0, diameterMm: 3.2 },
-          { x: pcb.widthMm - 4.0, y: 4.0, diameterMm: 3.2 },
-          { x: 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-          { x: pcb.widthMm - 4.0, y: pcb.heightMm - 4.0, diameterMm: 3.2 },
-        ]).map((hole, hIdx) => {
-          const hx = hole.x - halfW;
-          const hz = hole.y - halfH;
-          const holeR = (hole.diameterMm || 3.2) / 2;
-          const padR = holeR + 1.4; // 6.0mm annular ring
+        {(pcb.mountingHoles && pcb.mountingHoles.length > 0
+          ? pcb.mountingHoles
+          : [
+              { id: 'm3_tl', x: 5.0, y: 5.0, xMm: 5.0, yMm: 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_tr', x: pcb.widthMm - 5.0, y: 5.0, xMm: pcb.widthMm - 5.0, yMm: 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_bl', x: 5.0, y: pcb.heightMm - 5.0, xMm: 5.0, yMm: pcb.heightMm - 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+              { id: 'm3_br', x: pcb.widthMm - 5.0, y: pcb.heightMm - 5.0, xMm: pcb.widthMm - 5.0, yMm: pcb.heightMm - 5.0, drillMm: 3.2, diameterMm: 3.2, outerMm: 6.0 },
+            ]
+        ).map((hole, hIdx) => {
+          const posX = hole.xMm ?? hole.x ?? 0;
+          const posY = hole.yMm ?? hole.y ?? 0;
+          const hx = posX - halfW;
+          const hz = posY - halfH;
+          const drill = hole.drillMm ?? hole.diameterMm ?? 3.2;
+          const holeR = drill / 2;
+          const padR = hole.outerMm ? hole.outerMm / 2 : holeR + 1.4; // 6.0mm annular ring
           return (
-            <group key={`m3_mount_${hIdx}`} position={[hx, 0, hz]}>
+            <group
+              key={hole.id || `m3_mount_${hIdx}`}
+              position={[hx, 0, hz]}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                setHoveredItem({
+                  designator: 'M3 Mounting Hole',
+                  pin: 'CHASSIS_GND',
+                  name: 'M3 Screw Hole',
+                  net: 'Chassis Ground / Mechanical',
+                  x: posX,
+                  y: posY,
+                  layer: 'Through-Hole (All Layers)',
+                  drill,
+                  diameter: hole.outerMm || drill + 2.8,
+                });
+              }}
+              onPointerOut={() => setHoveredItem(null)}
+            >
               {/* Top Gold Annular Ring */}
               <RoundPadMesh
-                position={[0, thickness / 2 + 0.015, 0]}
+                position={[0, thickness / 2 + 0.032, 0]}
                 rotation={[-Math.PI / 2, 0, 0]}
                 innerR={holeR}
                 outerR={padR}
@@ -976,7 +1104,7 @@ export function Pcb3dViewer({
               />
               {/* Bottom Gold Annular Ring */}
               <RoundPadMesh
-                position={[0, -thickness / 2 - 0.015, 0]}
+                position={[0, -thickness / 2 - 0.032, 0]}
                 rotation={[Math.PI / 2, 0, 0]}
                 innerR={holeR}
                 outerR={padR}
