@@ -5,19 +5,23 @@ import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/start
 import { PcbGenerator } from '../modules/engineering-lab/pcb-engine/pcb-generator';
 import { FootprintRenderer } from '../modules/engineering-lab/pcb-engine/footprint-renderer';
 import { resolvePhysicalSpec } from '../modules/engineering-lab/circuit-engine/component-physical-registry';
-import { CircuitComponent, CircuitWire, PcbLayout, PcbPad, PcbTrack } from '../modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, PcbLayout, PcbPad } from '../modules/engineering-lab/types';
 
 export interface PcbAuditResult {
   sameLayerCrossings: number;
   padShortViolations: number;
+  nonOctilinearSegments: number;
   unroutedNets: number;
+  unconnectedGndPads: number;
   orphanVias: number;
   deadEndTracks: number;
   courtyardOverlaps: number;
   details: {
     crossings: string[];
     padShorts: string[];
+    nonOctilinear: string[];
     unrouted: string[];
+    unconnectedGnd: string[];
     orphanVias: string[];
     deadEnds: string[];
     overlaps: string[];
@@ -56,7 +60,9 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
   const details = {
     crossings: [] as string[],
     padShorts: [] as string[],
+    nonOctilinear: [] as string[],
     unrouted: [] as string[],
+    unconnectedGnd: [] as string[],
     orphanVias: [] as string[],
     deadEnds: [] as string[],
     overlaps: [] as string[],
@@ -102,7 +108,20 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
     });
   });
 
-  // 3. Unrouted Nets
+  // 3. Strict 0/45/90 Octilinear Angle Integrity
+  let nonOctilinearSegments = 0;
+  tracks.forEach((t) => {
+    const dx = Math.abs(t.to.x - t.from.x);
+    const dy = Math.abs(t.to.y - t.from.y);
+    if (dx < 0.005 || dy < 0.005) return; // 0 or 90 degrees
+    if (Math.abs(dx - dy) < 0.005) return; // 45 degrees
+    nonOctilinearSegments++;
+    details.nonOctilinear.push(
+      `Track ${t.id} (${t.layer}, net ${t.netId}) has non-octilinear angle dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}`
+    );
+  });
+
+  // 4. Unrouted Nets
   const netPadsMap = new Map<string, PcbPad[]>();
   pads.forEach((p) => {
     if (p.componentId === 'VIA' || p.id.startsWith('via_')) return;
@@ -114,8 +133,8 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
   let unroutedNets = 0;
   netPadsMap.forEach((nPads, netId) => {
     if (nPads.length < 2) return;
-    const netTracks = tracks.filter((t) => t.netId === netId);
-    const netVias = pads.filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && p.netId === netId);
+    const netTracks = tracks.filter((t) => !t.netId || t.netId === netId || t.netId === `NET_${netId}`);
+    const netVias = pads.filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && (!p.netId || p.netId === netId || p.netId === `NET_${netId}`));
 
     const reachable = new Set<string>();
     const queue: { x: number; y: number }[] = [{ x: nPads[0].x, y: nPads[0].y }];
@@ -163,7 +182,30 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
     }
   });
 
-  // 4. Orphan Vias
+  // 5. Unconnected GND Pads
+  let unconnectedGndPads = 0;
+  pads.forEach((p) => {
+    if (p.componentId === 'VIA' || p.id.startsWith('via_')) return;
+    const isGnd =
+      p.netId === 'GND' ||
+      (p.pinId || '').toLowerCase() === 'gnd' ||
+      (p.netId || '').toLowerCase().includes('gnd') ||
+      p.pinId === 'n';
+    if (!isGnd) return;
+    const connected = tracks.some((t) => {
+      const dFrom = Math.hypot(t.from.x - p.x, t.from.y - p.y);
+      const dTo = Math.hypot(t.to.x - p.x, t.to.y - p.y);
+      return dFrom <= 0.15 || dTo <= 0.15;
+    });
+    if (!connected) {
+      unconnectedGndPads++;
+      details.unconnectedGnd.push(
+        `GND pad ${p.componentId}:${p.pinId} at (${p.x},${p.y}) has no track terminating within 0.15mm`
+      );
+    }
+  });
+
+  // 6. Orphan Vias
   let orphanVias = 0;
   const vias = pads.filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && !p.isManual);
   vias.forEach((v) => {
@@ -187,7 +229,7 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
     }
   });
 
-  // 5. Dead-End Tracks
+  // 7. Dead-End Tracks
   let deadEndTracks = 0;
   tracks.forEach((t) => {
     if (t.isManual) return;
@@ -211,7 +253,7 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
     }
   });
 
-  // 6. Courtyard Overlaps
+  // 8. Courtyard Overlaps
   let courtyardOverlaps = 0;
   const boxes = components.map((c) => {
     const spec = resolvePhysicalSpec(c.type, c.footprint);
@@ -242,7 +284,9 @@ export function auditPcbManufacturing(pcb: PcbLayout): PcbAuditResult {
   return {
     sameLayerCrossings,
     padShortViolations,
+    nonOctilinearSegments,
     unroutedNets,
+    unconnectedGndPads,
     orphanVias,
     deadEndTracks,
     courtyardOverlaps,
@@ -262,7 +306,9 @@ describe('GATE 1 & 2: Strict JLCPCB/PCBWay Manufacturing Audit Suite', () => {
     expect(pcb.tracks.length).toBeGreaterThan(0);
     expect(audit.sameLayerCrossings).toBe(0);
     expect(audit.padShortViolations).toBe(0);
+    expect(audit.nonOctilinearSegments).toBe(0);
     expect(audit.unroutedNets).toBe(0);
+    expect(audit.unconnectedGndPads).toBe(0);
     expect(audit.orphanVias).toBe(0);
     expect(audit.deadEndTracks).toBe(0);
     expect(audit.courtyardOverlaps).toBe(0);
@@ -272,7 +318,6 @@ describe('GATE 1 & 2: Strict JLCPCB/PCBWay Manufacturing Audit Suite', () => {
     const tmpl = TEMPLATE_555_ASTABLE;
     const pcbA = PcbGenerator.generatePcbFromSchematic(tmpl.components, tmpl.wires, 100, 80);
 
-    // Expand circuit with Arduino Uno (U2) and HC-05 Bluetooth (BT_MOD1)
     const expandedComponents: CircuitComponent[] = [
       ...tmpl.components,
       {
@@ -329,7 +374,6 @@ describe('GATE 1 & 2: Strict JLCPCB/PCBWay Manufacturing Audit Suite', () => {
       { id: 'w_bt_tx', fromCompId: 'u2', fromPinId: 'D0', toCompId: 'bt_mod1', toPinId: 'TXD' },
     ];
 
-    // Incremental rebuild from existing pcbA
     const pcbB = PcbGenerator.generatePcbFromSchematic(expandedComponents, expandedWires, pcbA.widthMm, pcbA.heightMm, pcbA);
 
     const audit = auditPcbManufacturing(pcbB);
@@ -339,7 +383,148 @@ describe('GATE 1 & 2: Strict JLCPCB/PCBWay Manufacturing Audit Suite', () => {
     expect(pcbB.tracks.length).toBeGreaterThan(0);
     expect(audit.sameLayerCrossings).toBe(0);
     expect(audit.padShortViolations).toBe(0);
+    expect(audit.nonOctilinearSegments).toBe(0);
     expect(audit.unroutedNets).toBe(0);
+    expect(audit.unconnectedGndPads).toBe(0);
+    expect(audit.orphanVias).toBe(0);
+    expect(audit.deadEndTracks).toBe(0);
+    expect(audit.courtyardOverlaps).toBe(0);
+  });
+
+  it('Scenario C: Audit 14-Component 150x115mm Live Board (Full Astable + Sensors/Actuators/MCU)', () => {
+    const tmpl = TEMPLATE_555_ASTABLE;
+
+    const largeComponents: CircuitComponent[] = [
+      ...tmpl.components,
+      {
+        id: 'u2',
+        type: 'ARDUINO_UNO',
+        label: 'Arduino Uno R3',
+        designator: 'U2',
+        category: 'microcontrollers',
+        value: 'ATmega328P',
+        x: 800,
+        y: 200,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins: [
+          { id: '5V', name: '5V', x: 0, y: 0, pinType: 'power' },
+          { id: 'GND', name: 'GND', x: 0, y: 2.54, pinType: 'power' },
+          { id: 'D0', name: 'RX', x: 0, y: 5.08, pinType: 'input' },
+          { id: 'D1', name: 'TX', x: 0, y: 7.62, pinType: 'output' },
+          { id: 'D2', name: 'D2', x: 0, y: 10.16, pinType: 'input' },
+          { id: 'A0', name: 'A0', x: 10.16, y: 0, pinType: 'input' },
+        ],
+      },
+      {
+        id: 'bt_mod1',
+        type: 'MODULE_HC05',
+        label: 'HC-05 Bluetooth',
+        designator: 'BT_MOD1',
+        category: 'modules',
+        value: 'HC-05',
+        x: 950,
+        y: 200,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins: [
+          { id: 'STATE', name: 'STATE', x: -6.35, y: 0, pinType: 'output' },
+          { id: 'RXD', name: 'RXD', x: -3.81, y: 0, pinType: 'input' },
+          { id: 'TXD', name: 'TXD', x: -1.27, y: 0, pinType: 'output' },
+          { id: 'GND', name: 'GND', x: 1.27, y: 0, pinType: 'power' },
+          { id: 'VCC', name: 'VCC', x: 3.81, y: 0, pinType: 'power' },
+          { id: 'EN', name: 'EN', x: 6.35, y: 0, pinType: 'input' },
+        ],
+      },
+      {
+        id: 'sen1',
+        type: 'SENSOR_DHT11',
+        label: 'DHT11 Sensor',
+        designator: 'SEN1',
+        category: 'sensors',
+        value: 'DHT11',
+        x: 600,
+        y: 400,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins: [
+          { id: 'VCC', name: 'VCC', x: 0, y: 0, pinType: 'power' },
+          { id: 'DATA', name: 'DATA', x: 2.54, y: 0, pinType: 'output' },
+          { id: 'NC', name: 'NC', x: 5.08, y: 0, pinType: 'passive' },
+          { id: 'GND', name: 'GND', x: 7.62, y: 0, pinType: 'power' },
+        ],
+      },
+      {
+        id: 'oled1',
+        type: 'DISPLAY_OLED_I2C',
+        label: '0.96 OLED Display',
+        designator: 'DISP1',
+        category: 'displays',
+        value: 'SSD1306',
+        x: 800,
+        y: 400,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins: [
+          { id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' },
+          { id: 'VCC', name: 'VCC', x: 2.54, y: 0, pinType: 'power' },
+          { id: 'SCL', name: 'SCL', x: 5.08, y: 0, pinType: 'input' },
+          { id: 'SDA', name: 'SDA', x: 7.62, y: 0, pinType: 'input' },
+        ],
+      },
+      {
+        id: 'buzz1',
+        type: 'BUZZER',
+        label: 'Piezo Buzzer',
+        designator: 'BZ1',
+        category: 'actuators',
+        value: '5V',
+        x: 400,
+        y: 400,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins: [
+          { id: 'pos', name: '+', x: 0, y: 0, pinType: 'passive' },
+          { id: 'neg', name: '-', x: 5.08, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    const largeWires: CircuitWire[] = [
+      ...tmpl.wires,
+      { id: 'w_u2_pwr', fromCompId: 'u2', fromPinId: '5V', toCompId: 'ic1', toPinId: '8' },
+      { id: 'w_u2_gnd', fromCompId: 'u2', fromPinId: 'GND', toCompId: 'gnd1', toPinId: '1' },
+      { id: 'w_u2_pulse', fromCompId: 'ic1', fromPinId: '3', toCompId: 'u2', toPinId: 'D2' },
+      { id: 'w_bt_vcc', fromCompId: 'u2', fromPinId: '5V', toCompId: 'bt_mod1', toPinId: 'VCC' },
+      { id: 'w_bt_gnd', fromCompId: 'u2', fromPinId: 'GND', toCompId: 'bt_mod1', toPinId: 'GND' },
+      { id: 'w_bt_rx', fromCompId: 'u2', fromPinId: 'D1', toCompId: 'bt_mod1', toPinId: 'RXD' },
+      { id: 'w_bt_tx', fromCompId: 'u2', fromPinId: 'D0', toCompId: 'bt_mod1', toPinId: 'TXD' },
+      { id: 'w_sen_vcc', fromCompId: 'u2', fromPinId: '5V', toCompId: 'sen1', toPinId: 'VCC' },
+      { id: 'w_sen_gnd', fromCompId: 'u2', fromPinId: 'GND', toCompId: 'sen1', toPinId: 'GND' },
+      { id: 'w_sen_data', fromCompId: 'u2', fromPinId: 'A0', toCompId: 'sen1', toPinId: 'DATA' },
+      { id: 'w_oled_vcc', fromCompId: 'u2', fromPinId: '5V', toCompId: 'oled1', toPinId: 'VCC' },
+      { id: 'w_oled_gnd', fromCompId: 'u2', fromPinId: 'GND', toCompId: 'oled1', toPinId: 'GND' },
+      { id: 'w_buzz_pos', fromCompId: 'ic1', fromPinId: '3', toCompId: 'buzz1', toPinId: 'pos' },
+      { id: 'w_buzz_neg', fromCompId: 'u2', fromPinId: 'GND', toCompId: 'buzz1', toPinId: 'neg' },
+    ];
+
+    const pcbC = PcbGenerator.generatePcbFromSchematic(largeComponents, largeWires, 150, 115);
+
+    const audit = auditPcbManufacturing(pcbC);
+    console.log('--- SCENARIO C (14-PART 150x115mm LIVE BOARD) AUDIT ---');
+    console.log(JSON.stringify(audit, null, 2));
+
+    expect(pcbC.tracks.length).toBeGreaterThan(0);
+    expect(audit.sameLayerCrossings).toBe(0);
+    expect(audit.padShortViolations).toBe(0);
+    expect(audit.nonOctilinearSegments).toBe(0);
+    expect(audit.unroutedNets).toBe(0);
+    expect(audit.unconnectedGndPads).toBe(0);
     expect(audit.orphanVias).toBe(0);
     expect(audit.deadEndTracks).toBe(0);
     expect(audit.courtyardOverlaps).toBe(0);
@@ -372,5 +557,59 @@ describe('GATE 1 & 2: Strict JLCPCB/PCBWay Manufacturing Audit Suite', () => {
     expect(btModDesc.family).not.toBe('battery');
     expect(btModDesc.hasPlusMark).toBe(false);
     expect(btModDesc.hasMinusMark).toBe(false);
+  });
+
+  it('GATE 3: 2D->3D Edit Persistence & 2D Undo/Redo History Integration', () => {
+    const tmpl = TEMPLATE_555_ASTABLE;
+    const initialPcb = PcbGenerator.generatePcbFromSchematic(tmpl.components, tmpl.wires, 100, 80);
+
+    // Simulate 2D manual edit: user moves component 'r1' and adds a manual copper track
+    const editedPcb: PcbLayout = {
+      ...initialPcb,
+      components: (initialPcb.components || []).map((c) =>
+        c.componentId === 'r1' ? { ...c, x: 22.0, y: 33.0, isCustomMoved: true } : c
+      ),
+      tracks: [
+        ...initialPcb.tracks,
+        {
+          id: 'manual_track_test',
+          from: { x: 22.0, y: 33.0 },
+          to: { x: 28.35, y: 33.0 },
+          widthMm: 0.35,
+          layer: 'top_copper',
+          isManual: true,
+          netId: 'NET_TEST',
+        },
+      ],
+    };
+
+    // When switching modes or re-generating with previous PCB state, edits must persist!
+    const regeneratedPcb = PcbGenerator.generatePcbFromSchematic(
+      tmpl.components,
+      tmpl.wires,
+      100,
+      80,
+      editedPcb
+    );
+
+    const r1Comp = (regeneratedPcb.components || []).find((c) => c.componentId === 'r1');
+    expect(r1Comp?.x).toBe(22.0);
+    expect(r1Comp?.y).toBe(33.0);
+    expect(r1Comp?.isCustomMoved).toBe(true);
+
+    const manualTrack = regeneratedPcb.tracks.find((t) => t.id === 'manual_track_test');
+    expect(manualTrack).toBeDefined();
+    expect(manualTrack?.isManual).toBe(true);
+
+    // Verify EngineeringLabApp and Pcb2dEditor files contain recordHistory and Undo/Redo handlers
+    const appSource = fs.readFileSync(path.resolve(__dirname, '../components/engineering-lab/EngineeringLabApp.tsx'), 'utf8');
+    expect(appSource).toContain('recordHistory()');
+    expect(appSource).toContain('// Preserve 2D edits: only regenerate if schematic components genuinely changed');
+
+    const editorSource = fs.readFileSync(path.resolve(__dirname, '../components/engineering-lab/Panels/Pcb2dEditor.tsx'), 'utf8');
+    expect(editorSource).toContain('undoStack');
+    expect(editorSource).toContain('redoStack');
+    expect(editorSource).toContain('handleUndo');
+    expect(editorSource).toContain('handleRedo');
   });
 });

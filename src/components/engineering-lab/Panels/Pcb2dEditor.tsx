@@ -26,6 +26,7 @@ import {
   Trash2,
   Sliders,
   RotateCw,
+  RotateCcw,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -191,6 +192,46 @@ export function Pcb2dEditor({
     GND: 'bottom_copper',
     SIGNALS: 'auto',
   });
+
+  // 2D PCB Dedicated Undo / Redo Stacks (Capped at 50 states)
+  const [undoStack, setUndoStack] = useState<PcbLayout[]>([]);
+  const [redoStack, setRedoStack] = useState<PcbLayout[]>([]);
+  const isUndoRedoRef = useRef(false);
+  const lastPcbRef = useRef<PcbLayout>(pcb);
+
+  useEffect(() => {
+    if (!isUndoRedoRef.current && lastPcbRef.current !== pcb) {
+      setUndoStack((prev) => [...prev.slice(-49), lastPcbRef.current]);
+      setRedoStack([]);
+    }
+    lastPcbRef.current = pcb;
+  }, [pcb]);
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, s.length - 1));
+    setRedoStack((s) => [...s.slice(-49), JSON.parse(JSON.stringify(pcb))]);
+    isUndoRedoRef.current = true;
+    if (onUpdatePcb) onUpdatePcb(prev);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
+    toast.info('Reverted 2D PCB change (Undo)');
+  }, [undoStack, pcb, onUpdatePcb]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((s) => s.slice(0, s.length - 1));
+    setUndoStack((s) => [...s.slice(-49), JSON.parse(JSON.stringify(pcb))]);
+    isUndoRedoRef.current = true;
+    if (onUpdatePcb) onUpdatePcb(next);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
+    toast.info('Re-applied 2D PCB change (Redo)');
+  }, [redoStack, pcb, onUpdatePcb]);
 
   // Run initial and reactive DRC
   useEffect(() => {
@@ -397,6 +438,20 @@ export function Pcb2dEditor({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedTextId && onUpdatePcb) {
           e.preventDefault();
@@ -475,6 +530,8 @@ export function Pcb2dEditor({
     handleDeleteSelectedHole,
     traceWidth,
     handleInsertPlatedVia,
+    handleUndo,
+    handleRedo,
   ]);
 
   // Run full Auto-Router with Manhattan 45-chamfered tracks
@@ -1650,17 +1707,45 @@ export function Pcb2dEditor({
       {/* ---------------------------------------------------- */}
       {/* Top KiCad / Altium-Style Professional Engineering Console */}
       {/* ---------------------------------------------------- */}
-      <div className="h-10 bg-[#0B1528] border-b border-slate-800 flex items-center justify-between px-2.5 gap-2 text-xs shrink-0 select-none font-mono">
+      <div className="min-h-10 py-1 bg-[#0B1528] border-b border-slate-800 flex flex-wrap items-center justify-between px-2 gap-1.5 text-xs shrink-0 select-none font-mono">
         {/* Left Section: Tools Group + Active Layer + Track Width + GND Mode + Layer Visibility */}
-        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {/* Brand/Label */}
           <div className="flex items-center gap-1 text-slate-300 pr-1.5 border-r border-slate-800 shrink-0">
             <Layers className="w-4 h-4 text-cyan-400" />
             <span className="font-bold text-[11px] hidden md:inline text-cyan-200">PCB 2D</span>
           </div>
 
-          {/* Tools Group: Select, Pan (H), Route Track (X), Place Via (V), Auto-Route */}
-          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0">
+          {/* Tools Group: Undo/Redo, Select, Pan (H), Route Track (X), Place Via (V), Auto-Route */}
+          <div className="flex items-center bg-slate-950/90 p-0.5 rounded-lg border border-slate-800 shrink-0 gap-0.5">
+            {/* Undo / Redo */}
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className={`h-7 px-1.5 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                undoStack.length === 0
+                  ? 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Undo 2D Edit [Shortcut: Ctrl+Z]"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className={`h-7 px-1.5 rounded font-semibold text-[11px] transition-all cursor-pointer flex items-center gap-1 ${
+                redoStack.length === 0
+                  ? 'text-slate-600 opacity-40 cursor-not-allowed pointer-events-none'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-900'
+              }`}
+              title="Redo 2D Edit [Shortcut: Ctrl+Y / Ctrl+Shift+Z]"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -1902,7 +1987,7 @@ export function Pcb2dEditor({
         </div>
 
         {/* Right Section: Viewport, Stackup & Manufacturing */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto">
           {/* Zoom & View Reset */}
           <div className="flex items-center bg-slate-950/80 rounded border border-slate-800 p-0.5">
             <button

@@ -76,7 +76,7 @@ export function getSolderMaskTheme(solderMaskColor: string): SolderMaskTheme {
     name: 'FR-4 Green',
     board: '#115E32', // Deep emerald PCB green (#115e32 / #146c3a)
     trackTop: '#1F8A4C', // authentic slightly raised lighter emerald-green copper-under-mask relief
-    trackBottom: '#176B3C',
+    trackBottom: '#2EB86A', // high-contrast emerald copper relief clearly visible on bottom
     silkscreen: '#F8FAFC',
     metalness: 0.08,
     roughness: 0.36,
@@ -648,15 +648,25 @@ export function Pcb3dViewer({
     const scale = canvas.width / pcb.widthMm;
 
     // Optional Bottom Ground Pour Plane
-    const gndPourActive = (pcb as { gndPourLayer?: string }).gndPourLayer !== 'off';
+    const gndPourActive = (pcb as { gndPourLayer?: string }).gndPourLayer === 'bottom_copper';
     if (gndPourActive) {
       const margin = 1.5 * scale;
-      ctx.fillStyle = theme.trackBottom;
+      ctx.fillStyle = '#166639';
       ctx.fillRect(margin, margin, canvas.width - margin * 2, canvas.height - margin * 2);
 
-      // Clearances around non-GND through-hole pads on ground pour
+      // Clearances around non-GND tracks on bottom copper pour
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
+      pcb.tracks?.forEach((track) => {
+        if (track.layer !== 'bottom_copper' || track.netId === 'GND') return;
+        ctx.lineWidth = ((track.widthMm || 0.35) + 0.40) * scale;
+        ctx.beginPath();
+        ctx.moveTo(track.from.x * scale, track.from.y * scale);
+        ctx.lineTo(track.to.x * scale, track.to.y * scale);
+        ctx.stroke();
+      });
+
+      // Clearances around non-GND through-hole pads on ground pour
       pcb.pads?.forEach((pad) => {
         if (pad.netId !== 'GND' && (pad.holeMm ?? 0) > 0) {
           const clearR = ((pad.diameterMm || 1.8) / 2 + 0.35) * scale;
@@ -724,6 +734,8 @@ export function Pcb3dViewer({
     ctx.restore();
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.repeat.y = -1;
+    texture.offset.y = 1;
     texture.minFilter = THREE.LinearMipMapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = true;
@@ -1008,7 +1020,7 @@ export function Pcb3dViewer({
 
         {/* 3. Bottom (B.Cu) Solder Mask Relief, Ground Pour & Smooth Copper Tracks */}
         {bottomCopperTexture && (
-          <mesh position={[0, -thickness / 2 - 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+          <mesh position={[0, -thickness / 2 - 0.014, 0]} rotation={[Math.PI / 2, 0, 0]} renderOrder={3}>
             <planeGeometry args={[pcb.widthMm, pcb.heightMm]} />
             <meshPhysicalMaterial
               map={bottomCopperTexture}

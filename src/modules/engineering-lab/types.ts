@@ -383,6 +383,7 @@ export interface PcbComponentPlacement {
   y: number; // in mm
   rotation: number;
   parameters?: Record<string, unknown>;
+  isCustomMoved?: boolean;
 }
 
 export interface PcbSilkscreenText {

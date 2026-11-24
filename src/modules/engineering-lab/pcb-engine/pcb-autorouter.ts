@@ -26,13 +26,14 @@ export interface ManufacturingIntegrityResult {
  * High-performance Binary Min-Heap Priority Queue for A* Search
  */
 class FastMinHeap {
-  private keys: number[] = [];
+  private keys: Int32Array;
   private priorities: Float64Array;
   private capacity: number;
   public size: number = 0;
 
-  constructor(initialCapacity: number = 65536) {
+  constructor(initialCapacity: number = 131072) {
     this.capacity = initialCapacity;
+    this.keys = new Int32Array(this.capacity);
     this.priorities = new Float64Array(this.capacity);
   }
 
@@ -43,6 +44,10 @@ class FastMinHeap {
   public push(key: number, priority: number): void {
     if (this.size >= this.capacity) {
       this.capacity *= 2;
+      const nextKeys = new Int32Array(this.capacity);
+      nextKeys.set(this.keys);
+      this.keys = nextKeys;
+
       const nextP = new Float64Array(this.capacity);
       nextP.set(this.priorities);
       this.priorities = nextP;
@@ -129,40 +134,47 @@ export function pointToSegmentDist(
   return Math.hypot(p.x - projX, p.y - projY);
 }
 
+/**
+ * Strict Octilinear Dogleg Router (strictly 0, 45, 90, 135 degrees)
+ */
 export function compute45RoutePoints(
   from: { x: number; y: number },
   to: { x: number; y: number }
 ): { x: number; y: number }[] {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return [from];
-  if (Math.abs(dx) < 0.01 || Math.abs(dy) < 0.01) return [from, to];
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return [from];
+  if (Math.abs(dx) < 0.001 || Math.abs(dy) < 0.001) return [from, to];
+
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  if (Math.abs(absDx - absDy) < 0.001) return [from, to];
 
   const signX = Math.sign(dx) || 1;
   const signY = Math.sign(dy) || 1;
-  const chamfer = Math.min(Math.abs(dx), Math.abs(dy));
+  const chamfer = Math.min(absDx, absDy);
 
   let midX = from.x;
   let midY = from.y;
 
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    midX = from.x + (Math.abs(dx) - chamfer) * signX;
+  if (absDx >= absDy) {
+    midX = from.x + (absDx - chamfer) * signX;
     midY = from.y;
   } else {
     midX = from.x;
-    midY = from.y + (Math.abs(dy) - chamfer) * signY;
+    midY = from.y + (absDy - chamfer) * signY;
   }
 
   const points = [from];
-  if (Math.hypot(midX - from.x, midY - from.y) > 0.05 && Math.hypot(to.x - midX, to.y - midY) > 0.05) {
-    points.push({ x: Math.round(midX * 100) / 100, y: Math.round(midY * 100) / 100 });
+  if (Math.hypot(midX - from.x, midY - from.y) > 0.02 && Math.hypot(to.x - midX, to.y - midY) > 0.02) {
+    points.push({ x: Math.round(midX * 1000) / 1000, y: Math.round(midY * 1000) / 1000 });
   }
   points.push(to);
   return points;
 }
 
 /**
- * Deterministic 2-Layer Grid A* PCB Autorouter
+ * Deterministic 2-Layer Grid A* PCB Autorouter with Fast Typed-Array Multi-Source Search & Rip-Up
  */
 export class PcbGridAutorouter {
   public static route(
@@ -173,34 +185,41 @@ export class PcbGridAutorouter {
     options?: AutoRouteOptions,
     _components?: CircuitComponent[]
   ): { tracks: PcbTrack[]; vias: PcbPad[] } {
-    const gridStep = options?.gridResolutionMm || 0.635; // 2.54 / 4 = 0.635mm
+    const gridStep = options?.gridResolutionMm || 0.635;
     const defaultSignalWidth = options?.defaultSignalWidthMm || 0.35;
     const powerTrackWidth = options?.powerTrackWidthMm || 0.55;
-    const clearanceMm = options?.clearanceMm || 0.25;
+    const clearanceMm = options?.clearanceMm || 0.20;
     const edgeMarginMm = 1.5;
 
     const cols = Math.ceil(boardWidthMm / gridStep) + 1;
     const rows = Math.ceil(boardHeightMm / gridStep) + 1;
     const layerCells = cols * rows;
+    const totalCells = layerCells * 2;
 
     const getCellIdx = (layer: number, gx: number, gy: number) => layer * layerCells + gy * cols + gx;
 
-    // Obstacle grid: 0 = free, -1 = permanent obstacle (margin/hole), > 0 = net ID
-    const grid = new Int32Array(layerCells * 2);
+    // Fast Typed-Array Memory for A* Search
+    const gScores = new Float32Array(totalCells);
+    const cameFrom = new Int32Array(totalCells);
+    const closed = new Int32Array(totalCells);
+    const settled = new Int32Array(totalCells);
+    let searchToken = 0;
 
-    // 1. Mark Board Margins as Permanent Obstacles (-1)
+    const baseObstacles = new Int32Array(totalCells);
+
+    // 1. Mark Board Margins
     const marginCols = Math.ceil(edgeMarginMm / gridStep);
     const marginRows = Math.ceil(edgeMarginMm / gridStep);
     for (let gy = 0; gy < rows; gy++) {
       for (let gx = 0; gx < cols; gx++) {
         if (gx < marginCols || gx >= cols - marginCols || gy < marginRows || gy >= rows - marginRows) {
-          grid[getCellIdx(0, gx, gy)] = -1;
-          grid[getCellIdx(1, gx, gy)] = -1;
+          baseObstacles[getCellIdx(0, gx, gy)] = -1;
+          baseObstacles[getCellIdx(1, gx, gy)] = -1;
         }
       }
     }
 
-    // 2. Mark M3 Mounting Holes as Permanent Obstacles (-1) on both layers
+    // 2. Mark M3 Mounting Holes
     const mHoles = [
       { id: 'm3_tl', xMm: 5.0, yMm: 5.0, drillMm: 3.2, outerMm: 6.0 },
       { id: 'm3_tr', xMm: boardWidthMm - 5.0, yMm: 5.0, drillMm: 3.2, outerMm: 6.0 },
@@ -220,8 +239,8 @@ export class PcbGridAutorouter {
       for (let gy = minGy; gy <= maxGy; gy++) {
         for (let gx = minGx; gx <= maxGx; gx++) {
           if (Math.hypot(gx * gridStep - hx, gy * gridStep - hy) <= keepoutR) {
-            grid[getCellIdx(0, gx, gy)] = -1;
-            grid[getCellIdx(1, gx, gy)] = -1;
+            baseObstacles[getCellIdx(0, gx, gy)] = -1;
+            baseObstacles[getCellIdx(1, gx, gy)] = -1;
           }
         }
       }
@@ -265,7 +284,7 @@ export class PcbGridAutorouter {
       }
     });
 
-    // Also union any pads that already share the same explicit netId (e.g. GND, VCC)
+    // Union explicit netId pads (e.g. GND, VCC)
     const padsByExplicitNet = new Map<string, PcbPad[]>();
     pads.forEach((pad) => {
       if (pad.netId && pad.componentId && pad.pinId) {
@@ -304,40 +323,74 @@ export class PcbGridAutorouter {
       if (!pad.netId) pad.netId = nName;
     });
 
-    // Identify Power Nets
+    // Identify Power & GND Nets
     const powerNetIds = new Set<number>();
+    const gndNetIds = new Set<number>();
     pads.forEach((pad) => {
       const nId = padNetMap.get(pad);
       if (!nId) return;
       const pinName = (pad.pinId || '').toLowerCase();
       const netName = (pad.netId || '').toLowerCase();
-      if (
-        pinName.includes('vcc') ||
-        pinName.includes('vdd') ||
+      const isGnd =
         pinName.includes('gnd') ||
         pinName.includes('vss') ||
+        netName.includes('gnd') ||
+        pad.pinId === 'n';
+      const isPwr =
+        pinName.includes('vcc') ||
+        pinName.includes('vdd') ||
         pinName.includes('+5v') ||
         pinName.includes('+9v') ||
         pinName.includes('bat') ||
-        netName.includes('vcc') ||
-        netName.includes('gnd')
-      ) {
+        netName.includes('vcc');
+
+      if (isGnd) {
+        gndNetIds.add(nId);
+        powerNetIds.add(nId);
+      } else if (isPwr) {
         powerNetIds.add(nId);
       }
     });
 
-    // 4. Populate Obstacle Grid with All Component Pads
+    // 4. Populate Base Obstacle Grid with All Component Pads (2-Phase to Prevent Overlap Pin Traps)
     const maxTrackWidth = Math.max(defaultSignalWidth, powerTrackWidth);
+
+    // Phase 4A: Mark each pad's own copper radius with its net ID
     pads.forEach((pad) => {
       const nId = padNetMap.get(pad) || 0;
       const padRadius = (pad.diameterMm || 1.8) / 2;
-      const keepoutR = padRadius + maxTrackWidth / 2 + 0.16;
+      const minGx = Math.max(0, Math.floor((pad.x - padRadius) / gridStep));
+      const maxGx = Math.min(cols - 1, Math.ceil((pad.x + padRadius) / gridStep));
+      const minGy = Math.max(0, Math.floor((pad.y - padRadius) / gridStep));
+      const maxGy = Math.min(rows - 1, Math.ceil((pad.y + padRadius) / gridStep));
+      const isTh = pad.layer === 'all' || (pad.holeMm ?? 0) > 0;
+      const layers = isTh ? [0, 1] : pad.layer === 'bottom' ? [1] : [0];
+
+      for (const l of layers) {
+        for (let gy = minGy; gy <= maxGy; gy++) {
+          for (let gx = minGx; gx <= maxGx; gx++) {
+            if (Math.hypot(gx * gridStep - pad.x, gy * gridStep - pad.y) <= padRadius + 0.05) {
+              const idx = getCellIdx(l, gx, gy);
+              if (baseObstacles[idx] !== -1) {
+                baseObstacles[idx] = nId;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Phase 4B: Mark pad keepouts without overwriting neighbor copper disks
+    pads.forEach((pad) => {
+      const nId = padNetMap.get(pad) || 0;
+      const padRadius = (pad.diameterMm || 1.8) / 2;
+      const keepoutR = padRadius + maxTrackWidth / 2 + 0.14;
       const minGx = Math.max(0, Math.floor((pad.x - keepoutR) / gridStep));
       const maxGx = Math.min(cols - 1, Math.ceil((pad.x + keepoutR) / gridStep));
       const minGy = Math.max(0, Math.floor((pad.y - keepoutR) / gridStep));
       const maxGy = Math.min(rows - 1, Math.ceil((pad.y + keepoutR) / gridStep));
-
-      const layers = pad.layer === 'bottom' ? [1] : pad.layer === 'top' ? [0] : [0, 1];
+      const isTh = pad.layer === 'all' || (pad.holeMm ?? 0) > 0;
+      const layers = isTh ? [0, 1] : pad.layer === 'bottom' ? [1] : [0];
 
       for (const l of layers) {
         for (let gy = minGy; gy <= maxGy; gy++) {
@@ -345,15 +398,10 @@ export class PcbGridAutorouter {
             const dist = Math.hypot(gx * gridStep - pad.x, gy * gridStep - pad.y);
             if (dist <= keepoutR) {
               const idx = getCellIdx(l, gx, gy);
-              if (grid[idx] === -1) {
-                continue;
-              }
-              if (nId === 0) {
-                grid[idx] = -1;
-              } else if (grid[idx] === 0) {
-                grid[idx] = nId;
-              } else if (grid[idx] !== nId) {
-                grid[idx] = -1;
+              if (baseObstacles[idx] === 0) {
+                baseObstacles[idx] = nId === 0 ? -1 : nId;
+              } else if (baseObstacles[idx] > 0 && baseObstacles[idx] !== nId && dist > padRadius) {
+                baseObstacles[idx] = -1;
               }
             }
           }
@@ -369,7 +417,7 @@ export class PcbGridAutorouter {
       netPadsMap.get(nId)!.push(pad);
     });
 
-    // 5. Direction vectors: 8 directions (4 orthogonal, 4 diagonal)
+    // 5. Direction vectors: 8 octilinear directions
     const DIRS = [
       { dx: 1, dy: 0, cost: 1.0, isDiag: false, isHoriz: true },
       { dx: -1, dy: 0, cost: 1.0, isDiag: false, isHoriz: true },
@@ -381,93 +429,14 @@ export class PcbGridAutorouter {
       { dx: -1, dy: -1, cost: 1.414, isDiag: true, isHoriz: false },
     ];
 
-    const tracks: PcbTrack[] = [];
-    const vias: PcbPad[] = [];
-    let viaCounter = 1;
+    const heap = new FastMinHeap();
+    const grid = new Int32Array(totalCells);
 
-    // Helper: Mark route on obstacle grid with clearance
-    const commitRouteToGrid = (
-      points: { gx: number; gy: number; layer: number }[],
-      netId: number,
-      traceRadiusMm: number
-    ) => {
-      const requiredClearance = Math.max(traceRadiusMm, maxTrackWidth / 2 + defaultSignalWidth / 2 + 0.22);
-      const radCells = Math.max(1, Math.ceil(requiredClearance / gridStep));
-      for (const pt of points) {
-        const minGx = Math.max(0, pt.gx - radCells);
-        const maxGx = Math.min(cols - 1, pt.gx + radCells);
-        const minGy = Math.max(0, pt.gy - radCells);
-        const maxGy = Math.min(rows - 1, pt.gy + radCells);
-
-        for (let gy = minGy; gy <= maxGy; gy++) {
-          for (let gx = minGx; gx <= maxGx; gx++) {
-            if (Math.hypot((gx - pt.gx) * gridStep, (gy - pt.gy) * gridStep) <= requiredClearance) {
-              const idx = getCellIdx(pt.layer, gx, gy);
-              if (grid[idx] === 0) {
-                grid[idx] = netId;
-              }
-            }
-          }
-        }
-      }
-    };
-
-    // Helper: Check if a via can be placed at (gx, gy)
-    const canPlaceViaAt = (gx: number, gy: number, netId: number): boolean => {
-      const viaOuterR = 0.4;
-      const requiredClearance = viaOuterR + clearanceMm;
-      const wx = gx * gridStep;
-      const wy = gy * gridStep;
-
-      if (
-        wx < edgeMarginMm + requiredClearance ||
-        wx > boardWidthMm - edgeMarginMm - requiredClearance ||
-        wy < edgeMarginMm + requiredClearance ||
-        wy > boardHeightMm - edgeMarginMm - requiredClearance
-      ) {
-        return false;
-      }
-
-      for (const h of mHoles) {
-        const hx = h.xMm ?? 5.0;
-        const hy = h.yMm ?? 5.0;
-        const hr = (h.outerMm || 6.0) / 2;
-        if (Math.hypot(wx - hx, wy - hy) < hr + requiredClearance + 0.25) {
-          return false;
-        }
-      }
-
-      for (const pad of pads) {
-        const padR = (pad.diameterMm || 1.8) / 2;
-        if (Math.hypot(wx - pad.x, wy - pad.y) < padR + viaOuterR + 0.30) {
-          return false;
-        }
-      }
-
-      const radCells = Math.ceil(requiredClearance / gridStep);
-      const minGx = Math.max(0, gx - radCells);
-      const maxGx = Math.min(cols - 1, gx + radCells);
-      const minGy = Math.max(0, gy - radCells);
-      const maxGy = Math.min(rows - 1, gy + radCells);
-
-      for (let y = minGy; y <= maxGy; y++) {
-        for (let x = minGx; x <= maxGx; x++) {
-          if (Math.hypot((x - gx) * gridStep, (y - gy) * gridStep) <= requiredClearance) {
-            const v0 = grid[getCellIdx(0, x, y)];
-            const v1 = grid[getCellIdx(1, x, y)];
-            if ((v0 !== 0 && v0 !== netId) || (v1 !== 0 && v1 !== netId)) {
-              return false;
-            }
-          }
-        }
-      }
-      return true;
-    };
-
-    // 6. Multi-Net Ordering: Shortest signal nets first, long power/GND nets last
-    const sortedNets: { netId: number; pads: PcbPad[]; isPower: boolean; span: number }[] = [];
+    // Initial Net Ordering: Shortest signal nets first, Power/GND nets last
+    const netOrder: { netId: number; pads: PcbPad[]; isPower: boolean; isGnd: boolean; span: number }[] = [];
     netPadsMap.forEach((nPads, nId) => {
       if (nPads.length < 2) return;
+      const isGnd = gndNetIds.has(nId);
       const isPower = powerNetIds.has(nId);
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       nPads.forEach((p) => {
@@ -477,339 +446,536 @@ export class PcbGridAutorouter {
         maxY = Math.max(maxY, p.y);
       });
       const span = Math.hypot(maxX - minX, maxY - minY);
-      sortedNets.push({ netId: nId, pads: nPads, isPower, span });
+      netOrder.push({ netId: nId, pads: nPads, isPower, isGnd, span });
     });
 
-    sortedNets.sort((a, b) => {
+    netOrder.sort((a, b) => {
+      if (a.isGnd && !b.isGnd) return 1;
+      if (!a.isGnd && b.isGnd) return -1;
       if (a.isPower && !b.isPower) return 1;
       if (!a.isPower && b.isPower) return -1;
       return a.span - b.span;
     });
 
-    // 7. Route each net using Multi-Target Tree A*
-    const heap = new FastMinHeap();
+    const maxPasses = options?.maxRipUpPasses || 6;
+    let finalTracks: PcbTrack[] = [];
+    let finalVias: PcbPad[] = [];
+    let bestUnroutedCount = Infinity;
 
-    sortedNets.forEach(({ netId, pads: nPads, isPower }) => {
-      const netName = rootToNetName.get(findSet(`${nPads[0].componentId}:${nPads[0].pinId}`)) || `NET_${netId}`;
-      const isGnd =
-        netName.toLowerCase().includes('gnd') ||
-        nPads.some((p) => (p.pinId || '').toLowerCase().includes('gnd') || p.netId === 'GND');
-      const trackWidth = isGnd ? 0.55 : isPower ? powerTrackWidth : defaultSignalWidth;
+    // Precompute forbidden cells for via placement
+    const viaForbidden = new Uint8Array(cols * rows);
+    const viaOuterR = 0.4;
+    const requiredViaClearance = viaOuterR + clearanceMm;
 
-      const treePoints: { x: number; y: number; gx: number; gy: number; layer: number }[] = [];
-
-      const p0 = nPads[0];
-      const p0Gx = Math.round(p0.x / gridStep);
-      const p0Gy = Math.round(p0.y / gridStep);
-      const preferredLayer = isGnd ? 1 : p0.layer === 'bottom' ? 1 : 0;
-      treePoints.push({ x: p0.x, y: p0.y, gx: p0Gx, gy: p0Gy, layer: preferredLayer });
-
-      const remainingPads = new Set<PcbPad>(nPads.slice(1));
-
-      while (remainingPads.size > 0) {
-        let bestPad: PcbPad | null = null;
-        let bestDist = Infinity;
-
-        remainingPads.forEach((candidate) => {
-          for (const tp of treePoints) {
-            const d = Math.hypot(candidate.x - tp.x, candidate.y - tp.y);
-            if (d < bestDist) {
-              bestDist = d;
-              bestPad = candidate;
-            }
-          }
-        });
-
-        if (!bestPad) break;
-        const currentTargetPad: PcbPad = bestPad;
-        remainingPads.delete(currentTargetPad);
-
-        const targetGx = Math.round(currentTargetPad.x / gridStep);
-        const targetGy = Math.round(currentTargetPad.y / gridStep);
-
-        heap.clear();
-        const gScores = new Map<number, number>();
-        const cameFrom = new Map<number, { parentKey: number; gx: number; gy: number; layer: number }>();
-
-        const startLayers = isGnd
-          ? [1]
-          : currentTargetPad.layer === 'bottom'
-            ? [1]
-            : currentTargetPad.layer === 'top'
-              ? [0]
-              : [0, 1];
-
-        const targetCellKeys = new Set<number>();
-        treePoints.forEach((tp) => {
-          targetCellKeys.add((tp.layer << 20) | (tp.gy << 10) | tp.gx);
-        });
-
-        const heuristic = (gx: number, gy: number): number => {
-          let minD = Infinity;
-          for (const tp of treePoints) {
-            const dx = Math.abs(gx - tp.gx);
-            const dy = Math.abs(gy - tp.gy);
-            const octile = Math.max(dx, dy) + 0.414 * Math.min(dx, dy);
-            if (octile < minD) minD = octile;
-          }
-          return minD * gridStep;
-        };
-
-        for (const l of startLayers) {
-          const key = (l << 20) | (targetGy << 10) | targetGx;
-          gScores.set(key, 0);
-          heap.push(key, heuristic(targetGx, targetGy));
+    for (let gy = 0; gy < rows; gy++) {
+      for (let gx = 0; gx < cols; gx++) {
+        const wx = gx * gridStep;
+        const wy = gy * gridStep;
+        if (
+          wx < edgeMarginMm + requiredViaClearance ||
+          wx > boardWidthMm - edgeMarginMm - requiredViaClearance ||
+          wy < edgeMarginMm + requiredViaClearance ||
+          wy > boardHeightMm - edgeMarginMm - requiredViaClearance
+        ) {
+          viaForbidden[gy * cols + gx] = 1;
+          continue;
         }
 
-        let foundEndKey: number | null = null;
-        let iterations = 0;
-        const maxIterations = 25000;
-
-        while (heap.size > 0 && iterations++ < maxIterations) {
-          const currentKey = heap.pop()!;
-          const currentLayer = (currentKey >> 20) & 1;
-          const currentGy = (currentKey >> 10) & 0x3ff;
-          const currentGx = currentKey & 0x3ff;
-
-          if (targetCellKeys.has(currentKey)) {
-            foundEndKey = currentKey;
+        for (const h of mHoles) {
+          const hx = h.xMm ?? 5.0;
+          const hy = h.yMm ?? 5.0;
+          const hr = (h.outerMm || 6.0) / 2;
+          if (Math.hypot(wx - hx, wy - hy) < hr + requiredViaClearance + 0.25) {
+            viaForbidden[gy * cols + gx] = 1;
             break;
           }
-
-          const currentG = gScores.get(currentKey) || 0;
-
-          // 1. Move in 8 directions on same layer
-          for (const dir of DIRS) {
-            const nextGx = currentGx + dir.dx;
-            const nextGy = currentGy + dir.dy;
-
-            if (nextGx < marginCols || nextGx >= cols - marginCols || nextGy < marginRows || nextGy >= rows - marginRows) {
-              continue;
-            }
-
-            const cellVal = grid[getCellIdx(currentLayer, nextGx, nextGy)];
-            if (cellVal !== 0 && cellVal !== netId) {
-              continue;
-            }
-
-            // Diagonal corner-crossing prevention
-            if (dir.isDiag) {
-              const adj1 = grid[getCellIdx(currentLayer, currentGx + dir.dx, currentGy)];
-              const adj2 = grid[getCellIdx(currentLayer, currentGx, currentGy + dir.dy)];
-              if ((adj1 !== 0 && adj1 !== netId) || (adj2 !== 0 && adj2 !== netId)) {
-                continue;
-              }
-            }
-
-            // Directional Layer Bias
-            let biasMultiplier = 1.0;
-            if (currentLayer === 0 && !dir.isHoriz) {
-              biasMultiplier = 1.35;
-            } else if (currentLayer === 1 && dir.isHoriz) {
-              biasMultiplier = 1.35;
-            }
-
-            const stepCost = dir.cost * gridStep * biasMultiplier;
-            const nextG = currentG + stepCost;
-            const nextKey = (currentLayer << 20) | (nextGy << 10) | nextGx;
-
-            if (!gScores.has(nextKey) || nextG < gScores.get(nextKey)!) {
-              gScores.set(nextKey, nextG);
-              cameFrom.set(nextKey, {
-                parentKey: currentKey,
-                gx: currentGx,
-                gy: currentGy,
-                layer: currentLayer,
-              });
-              heap.push(nextKey, nextG + heuristic(nextGx, nextGy));
-            }
-          }
-
-          // 2. Layer Switch Via ((gx, gy, 0) <-> (gx, gy, 1))
-          if (!isGnd && canPlaceViaAt(currentGx, currentGy, netId)) {
-            const otherLayer = currentLayer === 0 ? 1 : 0;
-            const viaCost = 10.0 * gridStep;
-            const nextG = currentG + viaCost;
-            const nextKey = (otherLayer << 20) | (currentGy << 10) | currentGx;
-
-            if (!gScores.has(nextKey) || nextG < gScores.get(nextKey)!) {
-              gScores.set(nextKey, nextG);
-              cameFrom.set(nextKey, {
-                parentKey: currentKey,
-                gx: currentGx,
-                gy: currentGy,
-                layer: currentLayer,
-              });
-              heap.push(nextKey, nextG + heuristic(currentGx, currentGy));
-            }
-          }
         }
+        if (viaForbidden[gy * cols + gx] === 1) continue;
 
-        if (foundEndKey !== null) {
-          const rawPath: { gx: number; gy: number; layer: number }[] = [];
-          let curr: number | undefined = foundEndKey;
-          while (curr !== undefined) {
-            const l = (curr >> 20) & 1;
-            const gy = (curr >> 10) & 0x3ff;
-            const gx = curr & 0x3ff;
-            rawPath.push({ gx, gy, layer: l });
-            const prev = cameFrom.get(curr);
-            curr = prev ? prev.parentKey : undefined;
-          }
-
-          rawPath.reverse();
-
-          rawPath.forEach((pt) => {
-            treePoints.push({
-              x: pt.gx * gridStep,
-              y: pt.gy * gridStep,
-              gx: pt.gx,
-              gy: pt.gy,
-              layer: pt.layer,
-            });
-          });
-
-          commitRouteToGrid(rawPath, netId, trackWidth / 2 + clearanceMm);
-
-          const endPtCell = rawPath[rawPath.length - 1];
-          let treeEndPt = { x: endPtCell.gx * gridStep, y: endPtCell.gy * gridStep };
-          for (const p of nPads) {
-            if (p === currentTargetPad) continue;
-            if (Math.hypot(p.x - treeEndPt.x, p.y - treeEndPt.y) <= gridStep * 1.5) {
-              treeEndPt = { x: p.x, y: p.y };
-              break;
-            }
-          }
-
-          for (let ti = 0; ti < tracks.length; ti++) {
-            const ot = tracks[ti];
-            if (ot.netId === netName && pointToSegmentDist(treeEndPt, ot.from, ot.to) < 0.05) {
-              const dFrom = Math.hypot(ot.from.x - treeEndPt.x, ot.from.y - treeEndPt.y);
-              const dTo = Math.hypot(ot.to.x - treeEndPt.x, ot.to.y - treeEndPt.y);
-              if (dFrom > 0.05 && dTo > 0.05) {
-                tracks.splice(ti, 1);
-                tracks.push(
-                  {
-                    id: `${ot.id}_s1`,
-                    layer: ot.layer,
-                    from: ot.from,
-                    to: treeEndPt,
-                    widthMm: ot.widthMm,
-                    netId: ot.netId,
-                  },
-                  {
-                    id: `${ot.id}_s2`,
-                    layer: ot.layer,
-                    from: treeEndPt,
-                    to: ot.to,
-                    widthMm: ot.widthMm,
-                    netId: ot.netId,
-                  }
-                );
-                break;
-              }
-            }
-          }
-
-          emitRouteSegmentsAndVias(
-            rawPath,
-            { x: currentTargetPad.x, y: currentTargetPad.y },
-            treeEndPt,
-            trackWidth,
-            netName,
-            tracks,
-            vias,
-            () => viaCounter++
-          );
-        } else {
-          // Fallback: Chamfered 45 route to closest already-connected tree pad
-          let bestConnectedPad: PcbPad = nPads[0];
-          let bestD = Infinity;
-          nPads.forEach((p) => {
-            if (p !== currentTargetPad && !remainingPads.has(p)) {
-              const d = Math.hypot(p.x - currentTargetPad.x, p.y - currentTargetPad.y);
-              if (d < bestD) {
-                bestD = d;
-                bestConnectedPad = p;
-              }
-            }
-          });
-          const waypoints = compute45RoutePoints(
-            { x: currentTargetPad.x, y: currentTargetPad.y },
-            { x: bestConnectedPad.x, y: bestConnectedPad.y }
-          );
-          const chosenLayer: 'top_copper' | 'bottom_copper' = isGnd
-            ? 'bottom_copper'
-            : currentTargetPad.layer === 'bottom'
-              ? 'bottom_copper'
-              : 'top_copper';
-          for (let i = 0; i < waypoints.length - 1; i++) {
-            tracks.push({
-              id: `trk_${netName}_fb_${chosenLayer}_${Date.now()}_${i}`,
-              layer: chosenLayer,
-              from: waypoints[i],
-              to: waypoints[i + 1],
-              widthMm: trackWidth,
-              netId: netName,
-            });
+        for (const pad of pads) {
+          const padR = (pad.diameterMm || 1.8) / 2;
+          if (Math.hypot(wx - pad.x, wy - pad.y) < padR + viaOuterR + 0.25) {
+            viaForbidden[gy * cols + gx] = 1;
+            break;
           }
         }
       }
-    });
+    }
 
-    return { tracks, vias };
+    // Helper: Check if a via can be placed at (gx, gy)
+    const canPlaceViaAt = (gx: number, gy: number, netId: number): boolean => {
+      if (viaForbidden[gy * cols + gx] === 1) return false;
+      const rad = 1;
+      const minX = Math.max(0, gx - rad);
+      const maxX = Math.min(cols - 1, gx + rad);
+      const minY = Math.max(0, gy - rad);
+      const maxY = Math.min(rows - 1, gy + rad);
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const v0 = grid[getCellIdx(0, x, y)];
+          const v1 = grid[getCellIdx(1, x, y)];
+          if ((v0 !== 0 && v0 !== netId) || (v1 !== 0 && v1 !== netId)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    // Helper: Mark route on obstacle grid with clearance
+    const commitRouteToGrid = (
+      points: { gx: number; gy: number; layer: number }[],
+      netId: number,
+      traceRadiusMm: number
+    ) => {
+      const requiredClearance = Math.max(traceRadiusMm, maxTrackWidth / 2 + defaultSignalWidth / 2 + 0.16);
+      const radCells = Math.max(1, Math.ceil(requiredClearance / gridStep));
+      for (let i = 0; i < points.length; i++) {
+        const pt = points[i];
+        const isVia =
+          (i > 0 && points[i - 1].layer !== pt.layer) ||
+          (i < points.length - 1 && points[i + 1].layer !== pt.layer);
+        const layersToMark = isVia ? [0, 1] : [pt.layer];
+
+        const minGx = Math.max(0, pt.gx - radCells);
+        const maxGx = Math.min(cols - 1, pt.gx + radCells);
+        const minGy = Math.max(0, pt.gy - radCells);
+        const maxGy = Math.min(rows - 1, pt.gy + radCells);
+
+        for (const l of layersToMark) {
+          for (let gy = minGy; gy <= maxGy; gy++) {
+            for (let gx = minGx; gx <= maxGx; gx++) {
+              if (Math.hypot((gx - pt.gx) * gridStep, (gy - pt.gy) * gridStep) <= requiredClearance) {
+                const idx = getCellIdx(l, gx, gy);
+                if (grid[idx] === 0) {
+                  grid[idx] = netId;
+                }
+              }
+            }
+          }
+        }
+        if (isVia) {
+          viaForbidden[pt.gy * cols + pt.gx] = 1;
+        }
+      }
+    };
+
+    // 6. RIP-UP & RE-ROUTE PASSES
+    for (let pass = 0; pass < maxPasses; pass++) {
+      grid.set(baseObstacles);
+      const tracks: PcbTrack[] = [];
+      const vias: PcbPad[] = [];
+      let viaCounter = 1;
+      const failedNetIds = new Set<number>();
+
+      for (const { netId, pads: nPads, isPower, isGnd } of netOrder) {
+        const netName = rootToNetName.get(findSet(`${nPads[0].componentId}:${nPads[0].pinId}`)) || `NET_${netId}`;
+        const trackWidth = isGnd ? 0.55 : isPower ? powerTrackWidth : defaultSignalWidth;
+
+        // Tree of already connected nodes for this net
+        const treeNodes: { x: number; y: number; gx: number; gy: number; layer: number; pad?: PcbPad }[] = [];
+
+        const p0 = nPads[0];
+        const p0Gx = Math.round(p0.x / gridStep);
+        const p0Gy = Math.round(p0.y / gridStep);
+        const p0IsTh = p0.layer === 'all' || (p0.holeMm ?? 0) > 0;
+        const p0Layers = p0IsTh ? [0, 1] : p0.layer === 'bottom' ? [1] : [0];
+        const p0R = (p0.diameterMm || 1.8) / 2;
+
+        p0Layers.forEach((l) => {
+          treeNodes.push({ x: p0.x, y: p0.y, gx: p0Gx, gy: p0Gy, layer: l, pad: p0 });
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const gx = p0Gx + dx;
+              const gy = p0Gy + dy;
+              if (gx >= marginCols && gx < cols - marginCols && gy >= marginRows && gy < rows - marginRows) {
+                if (Math.hypot(gx * gridStep - p0.x, gy * gridStep - p0.y) <= p0R + 0.05) {
+                  treeNodes.push({ x: gx * gridStep, y: gy * gridStep, gx, gy, layer: l, pad: p0 });
+                }
+              }
+            }
+          }
+        });
+
+        const remainingPads = new Set<PcbPad>(nPads.slice(1));
+        let netSuccessfullyRouted = true;
+
+        while (remainingPads.size > 0) {
+          // Select closest remaining pad to the current tree
+          let bestPad: PcbPad | null = null;
+          let bestDist = Infinity;
+
+          remainingPads.forEach((candidate) => {
+            for (const tn of treeNodes) {
+              const d = Math.hypot(candidate.x - tn.x, candidate.y - tn.y);
+              if (d < bestDist) {
+                bestDist = d;
+                bestPad = candidate;
+              }
+            }
+          });
+
+          if (!bestPad) break;
+          const targetPad: PcbPad = bestPad;
+          remainingPads.delete(targetPad);
+
+          const targetGx = Math.round(targetPad.x / gridStep);
+          const targetGy = Math.round(targetPad.y / gridStep);
+          const targetIsTh = targetPad.layer === 'all' || (targetPad.holeMm ?? 0) > 0;
+          const targetLayers = new Set<number>(
+            targetIsTh
+              ? [0, 1]
+              : targetPad.layer === 'bottom'
+                ? [1]
+                : [0]
+          );
+
+          // Fast Multi-Source A*: Start from ALL nodes in the existing tree towards targetPad
+          heap.clear();
+          searchToken++;
+
+          const getHeuristic = (gx: number, gy: number): number => {
+            const dx = Math.abs(gx - targetGx);
+            const dy = Math.abs(gy - targetGy);
+            return (Math.max(dx, dy) + 0.414 * Math.min(dx, dy)) * gridStep;
+          };
+
+          for (const tn of treeNodes) {
+            const idx = getCellIdx(tn.layer, tn.gx, tn.gy);
+            gScores[idx] = 0;
+            closed[idx] = searchToken;
+            cameFrom[idx] = -1; // Root node in cameFrom
+            const key = (tn.layer << 20) | (tn.gy << 10) | tn.gx;
+            heap.push(key, getHeuristic(tn.gx, tn.gy));
+          }
+
+          let foundEndIdx: number | null = null;
+          let iterations = 0;
+          const maxIterations = Math.max(120000, cols * rows * 4);
+
+          while (heap.size > 0 && iterations++ < maxIterations) {
+            const currentKey = heap.pop()!;
+            const currentLayer = (currentKey >> 20) & 1;
+            const currentGy = (currentKey >> 10) & 0x3ff;
+            const currentGx = currentKey & 0x3ff;
+            const currentIdx = getCellIdx(currentLayer, currentGx, currentGy);
+
+            if (settled[currentIdx] === searchToken) continue;
+            settled[currentIdx] = searchToken;
+
+            // Reached target pad's cell or copper disk
+            const distToTarget = Math.hypot(currentGx * gridStep - targetPad.x, currentGy * gridStep - targetPad.y);
+            const targetPadR = (targetPad.diameterMm || 1.8) / 2;
+            if (
+              (distToTarget <= Math.max(gridStep * 0.75, targetPadR - 0.05) ||
+                (currentGx === targetGx && currentGy === targetGy)) &&
+              targetLayers.has(currentLayer)
+            ) {
+              foundEndIdx = currentIdx;
+              break;
+            }
+
+            const currentG = gScores[currentIdx];
+
+            // 1. Move in 8 octilinear directions on same layer
+            for (const dir of DIRS) {
+              const nextGx = currentGx + dir.dx;
+              const nextGy = currentGy + dir.dy;
+
+              if (nextGx < marginCols || nextGx >= cols - marginCols || nextGy < marginRows || nextGy >= rows - marginRows) {
+                continue;
+              }
+
+              const nextIdx = getCellIdx(currentLayer, nextGx, nextGy);
+              if (settled[nextIdx] === searchToken) continue;
+
+              const cellVal = grid[nextIdx];
+              if (cellVal !== 0 && cellVal !== netId) {
+                continue;
+              }
+
+              // Diagonal corner-crossing prevention
+              if (dir.isDiag) {
+                const adj1 = grid[getCellIdx(currentLayer, currentGx + dir.dx, currentGy)];
+                const adj2 = grid[getCellIdx(currentLayer, currentGx, currentGy + dir.dy)];
+                if ((adj1 !== 0 && adj1 !== netId) || (adj2 !== 0 && adj2 !== netId)) {
+                  continue;
+                }
+              }
+
+              // Directional Layer Bias: horizontal on top (layer 0), vertical on bottom (layer 1)
+              let biasMultiplier = 1.0;
+              if (currentLayer === 0 && !dir.isHoriz) {
+                biasMultiplier = 1.25;
+              } else if (currentLayer === 1 && dir.isHoriz) {
+                biasMultiplier = 1.25;
+              }
+
+              const stepCost = dir.cost * gridStep * biasMultiplier;
+              const nextG = currentG + stepCost;
+
+              if (closed[nextIdx] !== searchToken || nextG < gScores[nextIdx]) {
+                gScores[nextIdx] = nextG;
+                closed[nextIdx] = searchToken;
+                cameFrom[nextIdx] = currentIdx;
+                const nextKey = (currentLayer << 20) | (nextGy << 10) | nextGx;
+                heap.push(nextKey, nextG + getHeuristic(nextGx, nextGy));
+              }
+            }
+
+            // 2. Layer Switch Via
+            if (canPlaceViaAt(currentGx, currentGy, netId)) {
+              const otherLayer = currentLayer === 0 ? 1 : 0;
+              const otherIdx = getCellIdx(otherLayer, currentGx, currentGy);
+              if (settled[otherIdx] !== searchToken) {
+                const viaCost = (isGnd ? 2.5 : 6.0) * gridStep;
+                const nextG = currentG + viaCost;
+
+                if (closed[otherIdx] !== searchToken || nextG < gScores[otherIdx]) {
+                  gScores[otherIdx] = nextG;
+                  closed[otherIdx] = searchToken;
+                  cameFrom[otherIdx] = currentIdx;
+                  const nextKey = (otherLayer << 20) | (currentGy << 10) | currentGx;
+                  heap.push(nextKey, nextG + getHeuristic(currentGx, currentGy));
+                }
+              }
+            }
+          }
+
+          if (foundEndIdx !== null) {
+            // Reconstruct path from target back to tree start
+            const pathCells: { gx: number; gy: number; layer: number }[] = [];
+            let currIdx: number = foundEndIdx;
+
+            while (currIdx !== -1) {
+              const l = currIdx < layerCells ? 0 : 1;
+              const rem = currIdx - l * layerCells;
+              const gy = Math.floor(rem / cols);
+              const gx = rem % cols;
+              pathCells.push({ gx, gy, layer: l });
+              currIdx = cameFrom[currIdx];
+            }
+
+            pathCells.reverse(); // Now ordered: [treeStart, ..., targetEnd]
+
+            const startCell = pathCells[0];
+            const startCellWorld = {
+              x: Math.round(startCell.gx * gridStep * 1000) / 1000,
+              y: Math.round(startCell.gy * gridStep * 1000) / 1000,
+            };
+
+            const matchedNode = treeNodes.find(
+              (tn) => tn.layer === startCell.layer && tn.gx === startCell.gx && tn.gy === startCell.gy
+            );
+            const isPadBranch = !!matchedNode?.pad;
+            const treeStartPoint = isPadBranch && matchedNode?.pad
+              ? { x: matchedNode.pad.x, y: matchedNode.pad.y }
+              : startCellWorld;
+
+            // Add new path cells to tree
+            pathCells.forEach((pt) => {
+              treeNodes.push({
+                x: pt.gx * gridStep,
+                y: pt.gy * gridStep,
+                gx: pt.gx,
+                gy: pt.gy,
+                layer: pt.layer,
+                pad: undefined,
+              });
+            });
+
+            // If target pad is through-hole, register opposite layer as tree node as well
+            if (targetIsTh) {
+              const oppLayer = pathCells[pathCells.length - 1].layer === 0 ? 1 : 0;
+              treeNodes.push({
+                x: targetPad.x,
+                y: targetPad.y,
+                gx: targetGx,
+                gy: targetGy,
+                layer: oppLayer,
+                pad: targetPad,
+              });
+            }
+
+            commitRouteToGrid(pathCells, netId, trackWidth / 2 + clearanceMm);
+
+            emitStrictOctilinearRoute(
+              pathCells,
+              treeStartPoint,
+              { x: targetPad.x, y: targetPad.y },
+              trackWidth,
+              netName,
+              tracks,
+              vias,
+              () => viaCounter++,
+              isPadBranch
+            );
+          } else {
+            console.log(`[ROUTE-FAIL] Net ${netName} (pass ${pass}) target=${targetPad.componentId}:${targetPad.pinId} at (${targetPad.x},${targetPad.y}) heapSize=${heap.size} iter=${iterations}/${maxIterations}`);
+            netSuccessfullyRouted = false;
+            failedNetIds.add(netId);
+            break;
+          }
+        }
+
+        if (!netSuccessfullyRouted) {
+          failedNetIds.add(netId);
+        }
+      }
+
+      if (failedNetIds.size === 0) {
+        finalTracks = tracks;
+        finalVias = vias;
+        break;
+      }
+
+      if (failedNetIds.size < bestUnroutedCount) {
+        bestUnroutedCount = failedNetIds.size;
+        finalTracks = tracks;
+        finalVias = vias;
+      }
+
+      // Re-order nets for next pass: route failed nets FIRST
+      netOrder.sort((a, b) => {
+        const aFailed = failedNetIds.has(a.netId);
+        const bFailed = failedNetIds.has(b.netId);
+        if (aFailed && !bFailed) return -1;
+        if (!aFailed && bFailed) return 1;
+        return a.span - b.span;
+      });
+    }
+
+    return { tracks: finalTracks, vias: finalVias };
   }
 }
 
-function emitRouteSegmentsAndVias(
+function splitTracksAtPoint(
+  tracks: PcbTrack[],
+  pt: { x: number; y: number },
+  layer: 'top_copper' | 'bottom_copper',
+  netId: string
+) {
+  for (let i = 0; i < tracks.length; i++) {
+    const t = tracks[i];
+    if (t.layer !== layer || t.netId !== netId) continue;
+    const dFrom = Math.hypot(t.from.x - pt.x, t.from.y - pt.y);
+    const dTo = Math.hypot(t.to.x - pt.x, t.to.y - pt.y);
+    if (dFrom > 0.05 && dTo > 0.05) {
+      const dx = t.to.x - t.from.x;
+      const dy = t.to.y - t.from.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq > 0) {
+        const u = ((pt.x - t.from.x) * dx + (pt.y - t.from.y) * dy) / lenSq;
+        if (u > 0.01 && u < 0.99) {
+          const projX = Math.round((t.from.x + u * dx) * 1000) / 1000;
+          const projY = Math.round((t.from.y + u * dy) * 1000) / 1000;
+          if (Math.hypot(pt.x - projX, pt.y - projY) < 0.02) {
+            const t1: PcbTrack = {
+              ...t,
+              id: `${t.id}_s1`,
+              to: { x: projX, y: projY },
+            };
+            const t2: PcbTrack = {
+              ...t,
+              id: `${t.id}_s2`,
+              from: { x: projX, y: projY },
+            };
+            tracks.splice(i, 1, t1, t2);
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Emits strictly octilinear track segments and through-hole vias
+ */
+function emitStrictOctilinearRoute(
   rawPath: { gx: number; gy: number; layer: number }[],
-  startPoint: { x: number; y: number },
-  endPoint: { x: number; y: number },
+  padStartPoint: { x: number; y: number },
+  padEndPoint: { x: number; y: number },
   widthMm: number,
   netName: string,
   outTracks: PcbTrack[],
   outVias: PcbPad[],
-  nextViaId: () => number
+  nextViaId: () => number,
+  isPadBranch: boolean = false
 ) {
   if (rawPath.length === 0) return;
-
   const gridStep = 0.635;
 
-  if (rawPath.length === 1) {
-    const layer = rawPath[0].layer === 0 ? 'top_copper' : 'bottom_copper';
-    if (Math.hypot(startPoint.x - endPoint.x, startPoint.y - endPoint.y) > 0.05) {
-      outTracks.push({
-        id: `trk_${netName}_${layer}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        layer,
-        from: startPoint,
-        to: endPoint,
-        widthMm,
-        netId: netName,
-      });
-    }
-    return;
+  const startLayerName: 'top_copper' | 'bottom_copper' = rawPath[0].layer === 0 ? 'top_copper' : 'bottom_copper';
+  if (!isPadBranch) {
+    splitTracksAtPoint(outTracks, padStartPoint, startLayerName, netName);
   }
 
-  const pointsWithLayer: { x: number; y: number; layer: number }[] = [];
-  for (let i = 0; i < rawPath.length; i++) {
-    if (i === 0) {
-      pointsWithLayer.push({ x: startPoint.x, y: startPoint.y, layer: rawPath[0].layer });
-    } else if (i === rawPath.length - 1) {
-      pointsWithLayer.push({ x: endPoint.x, y: endPoint.y, layer: rawPath[i].layer });
-    } else {
-      pointsWithLayer.push({
-        x: Math.round(rawPath[i].gx * gridStep * 100) / 100,
-        y: Math.round(rawPath[i].gy * gridStep * 100) / 100,
-        layer: rawPath[i].layer,
-      });
+  // 1. Simplify raw grid points using strict integer collinearity
+  const simplifiedGrid: { gx: number; gy: number; layer: number }[] = [rawPath[0]];
+
+  for (let i = 1; i < rawPath.length - 1; i++) {
+    const prev = simplifiedGrid[simplifiedGrid.length - 1];
+    const curr = rawPath[i];
+    const next = rawPath[i + 1];
+
+    if (prev.layer !== curr.layer || curr.layer !== next.layer) {
+      simplifiedGrid.push(curr);
+      continue;
+    }
+
+    const dx1 = curr.gx - prev.gx;
+    const dy1 = curr.gy - prev.gy;
+    const dx2 = next.gx - curr.gx;
+    const dy2 = next.gy - curr.gy;
+
+    const cross = dx1 * dy2 - dy1 * dx2;
+    const sameDir = dx1 * dx2 >= 0 && dy1 * dy2 >= 0;
+
+    if (cross !== 0 || !sameDir) {
+      simplifiedGrid.push(curr);
     }
   }
 
-  let currentSlice: { x: number; y: number }[] = [pointsWithLayer[0]];
-  let currentLayer = pointsWithLayer[0].layer;
+  if (rawPath.length > 1) {
+    simplifiedGrid.push(rawPath[rawPath.length - 1]);
+  }
 
-  for (let i = 1; i < pointsWithLayer.length; i++) {
-    const pt = pointsWithLayer[i];
+  // 2. Build world coordinate waypoints with strictly octilinear dogleg connections to pads
+  const firstGrid = simplifiedGrid[0];
+  const lastGrid = simplifiedGrid[simplifiedGrid.length - 1];
+  const firstWorld = { x: firstGrid.gx * gridStep, y: firstGrid.gy * gridStep };
+  const lastWorld = { x: lastGrid.gx * gridStep, y: lastGrid.gy * gridStep };
+
+  const startDogleg = compute45RoutePoints(padStartPoint, firstWorld);
+  const endDogleg = compute45RoutePoints(lastWorld, padEndPoint);
+
+  const waypointsWithLayer: { x: number; y: number; layer: number }[] = [];
+
+  for (let i = 0; i < startDogleg.length - 1; i++) {
+    waypointsWithLayer.push({ x: startDogleg[i].x, y: startDogleg[i].y, layer: firstGrid.layer });
+  }
+
+  for (let i = 0; i < simplifiedGrid.length; i++) {
+    const g = simplifiedGrid[i];
+    waypointsWithLayer.push({
+      x: Math.round(g.gx * gridStep * 1000) / 1000,
+      y: Math.round(g.gy * gridStep * 1000) / 1000,
+      layer: g.layer,
+    });
+  }
+
+  for (let i = 1; i < endDogleg.length; i++) {
+    waypointsWithLayer.push({ x: endDogleg[i].x, y: endDogleg[i].y, layer: lastGrid.layer });
+  }
+
+  // 3. Emit segments by layer, inserting vias at layer transitions
+  let currentSlice: { x: number; y: number }[] = [waypointsWithLayer[0]];
+  let currentLayer = waypointsWithLayer[0].layer;
+
+  for (let i = 1; i < waypointsWithLayer.length; i++) {
+    const pt = waypointsWithLayer[i];
     if (pt.layer !== currentLayer) {
       const viaWorldPt = { x: pt.x, y: pt.y };
       const viaPad: PcbPad = {
@@ -827,7 +993,7 @@ function emitRouteSegmentsAndVias(
       outVias.push(viaPad);
 
       currentSlice.push(viaWorldPt);
-      emitSimplifiedSlice(
+      emitTracksForSlice(
         currentSlice,
         currentLayer === 0 ? 'top_copper' : 'bottom_copper',
         widthMm,
@@ -843,7 +1009,7 @@ function emitRouteSegmentsAndVias(
   }
 
   if (currentSlice.length >= 2) {
-    emitSimplifiedSlice(
+    emitTracksForSlice(
       currentSlice,
       currentLayer === 0 ? 'top_copper' : 'bottom_copper',
       widthMm,
@@ -853,7 +1019,7 @@ function emitRouteSegmentsAndVias(
   }
 }
 
-function emitSimplifiedSlice(
+function emitTracksForSlice(
   points: { x: number; y: number }[],
   layer: 'top_copper' | 'bottom_copper',
   widthMm: number,
@@ -865,10 +1031,11 @@ function emitSimplifiedSlice(
   const deduped: { x: number; y: number }[] = [points[0]];
   for (let i = 1; i < points.length; i++) {
     const prev = deduped[deduped.length - 1];
-    if (Math.hypot(points[i].x - prev.x, points[i].y - prev.y) > 0.05) {
+    if (Math.hypot(points[i].x - prev.x, points[i].y - prev.y) > 0.01) {
       deduped.push(points[i]);
     }
   }
+
   if (deduped.length < 2) return;
 
   const simplified: { x: number; y: number }[] = [deduped[0]];
@@ -883,18 +1050,24 @@ function emitSimplifiedSlice(
     const dy2 = pNext.y - pCurr.y;
 
     const cross = dx1 * dy2 - dy1 * dx2;
-    if (Math.abs(cross) > 0.001) {
+    const sameDir = dx1 * dx2 >= -0.001 && dy1 * dy2 >= -0.001;
+
+    if (Math.abs(cross) > 0.001 || !sameDir) {
       simplified.push(pCurr);
     }
   }
   simplified.push(deduped[deduped.length - 1]);
 
   for (let i = 0; i < simplified.length - 1; i++) {
+    const from = simplified[i];
+    const to = simplified[i + 1];
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 0.01) continue;
+
     outTracks.push({
       id: `trk_${netName}_${layer}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       layer,
-      from: simplified[i],
-      to: simplified[i + 1],
+      from,
+      to,
       widthMm,
       netId: netName,
     });

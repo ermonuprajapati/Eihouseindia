@@ -113,8 +113,13 @@ export class PcbGenerator {
     const spanX = Math.max(maxX - minX, 100);
     const spanY = Math.max(maxY - minY, 100);
 
-    // Place largest anchor components first, then net-connected ICs and discretes
+    // Place custom moved components first, then largest anchor components, then net-connected ICs and discretes
     const placementOrder = [...compSpecs].sort((a, b) => {
+      const aCustom = existingPcb?.components?.find((c) => c.componentId === a.comp.id)?.isCustomMoved;
+      const bCustom = existingPcb?.components?.find((c) => c.componentId === b.comp.id)?.isCustomMoved;
+      if (aCustom && !bCustom) return -1;
+      if (!aCustom && bCustom) return 1;
+
       const orderScore = (item: typeof a) => {
         if (item.spec.placementClass === 'dev-board' || item.comp.type.includes('UNO') || item.comp.type.includes('ESP32')) return 1;
         if (item.spec.placementClass === 'module-breadboard' || item.isLarge) return 2;
@@ -173,7 +178,10 @@ export class PcbGenerator {
       let candX: number;
       let candY: number;
 
-      if (existingComp && !hasCollision(existingComp.x, existingComp.y, cw, cd, clearance)) {
+      if (existingComp?.isCustomMoved) {
+        candX = existingComp.x;
+        candY = existingComp.y;
+      } else if (existingComp && !hasCollision(existingComp.x, existingComp.y, cw, cd, clearance)) {
         candX = existingComp.x;
         candY = existingComp.y;
       } else {
@@ -264,6 +272,7 @@ export class PcbGenerator {
         y: candY,
         rotation: compRot,
         parameters: comp.parameters,
+        isCustomMoved: existingComp?.isCustomMoved,
       });
 
       // Compute physical IPC-7351 footprint pads strictly aligned with package geometry
