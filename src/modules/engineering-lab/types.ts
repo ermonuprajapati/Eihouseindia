@@ -1,10 +1,13 @@
 export type WorkspaceMode =
   | 'schematic'
   | 'virtual3d'
+  | 'studio3d'
+  | 'schematicEditor'
   | 'simulation'
   | 'pcb2d'
   | 'pcb3d'
   | 'firmware'
+  | 'mcu'
   | 'instruments'
   | 'experiments'
   | 'calculators';
@@ -145,6 +148,9 @@ export interface CircuitComponent {
   y3d?: number;
   z3d?: number;
   rot3d?: number;
+  editorPosition?: { x: number; y: number };
+  editorRotation?: 0 | 90 | 180 | 270;
+  editorFlipped?: boolean;
   state?: {
     voltage?: number;
     current?: number;
@@ -468,6 +474,8 @@ export interface EngineeringProject {
   instruments: VirtualInstrumentState;
   // Track 2: Independent Direct 3D Virtual Electronics Studio
   virtual3d?: Virtual3DProjectState;
+  // Professional Schematic Editor Layout (Optional & Backward-Compatible)
+  schematicEditorLayout?: Record<string, { x: number; y: number; rotation?: number }>;
 }
 
 export interface GuidedExperiment {
