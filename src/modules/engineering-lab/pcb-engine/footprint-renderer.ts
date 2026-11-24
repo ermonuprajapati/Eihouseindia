@@ -393,6 +393,39 @@ export class FootprintRenderer {
       };
     }
 
+    // 9.1 Bluetooth HC-05 / HC-06 Module
+    const isBluetooth =
+      rawType.includes('BLUETOOTH') ||
+      rawType.includes('HC05') ||
+      rawType.includes('HC-05') ||
+      rawType.includes('HC06') ||
+      rawType.includes('HC-06') ||
+      (comp.designator || '').startsWith('BT_MOD') ||
+      rawFp.includes('HC05');
+
+    if (isBluetooth) {
+      return {
+        family: 'module',
+        outlineType: 'bluetooth',
+        hasPolarity: true,
+        hasPlusMark: false,
+        hasMinusMark: false,
+        hasCathodeBand: false,
+        hasCathodeFlatEdge: false,
+        hasSquarePad1: true,
+        hasNotch: false,
+        hasPin1Dot: true,
+        hasHeatsinkTab: false,
+        hasDiodeSymbol: false,
+        pinLabels: [],
+        headerPinLabels: ['STATE', 'RXD', 'TXD', 'GND', 'VCC', 'EN'],
+        courtyardWidthMm: 29.0,
+        courtyardDepthMm: 15.0,
+        bodyWidthMm: 27.0,
+        bodyDepthMm: 13.0,
+      };
+    }
+
     // 10. Dev Boards (Arduino Uno, Nano, Mega, ESP32, Pico)
     const isDevBoard =
       rawType.includes('ARDUINO') ||
@@ -530,11 +563,12 @@ export class FootprintRenderer {
       };
     }
 
-    // 14. Batteries & Power Cells (BT1, Coin Cell, 9V Snap, 18650 Holder)
+    // 14. Batteries & Power Cells (BT1, Coin Cell, 9V Snap, 18650 Holder - excluding Bluetooth modules!)
     if (
-      rawType.includes('BATTERY') ||
-      rawType.includes('CELL') ||
-      (comp.designator || '').startsWith('BT')
+      !isBluetooth &&
+      (rawType.includes('BATTERY') ||
+        rawType.includes('CELL') ||
+        /^(BT|BATT?)\d+$/i.test(comp.designator || ''))
     ) {
       return {
         family: 'battery',
@@ -891,7 +925,7 @@ export class FootprintRenderer {
       }
 
       case 'module': {
-        // Sensor Module (HC-SR04, etc.)
+        // Sensor Module (HC-SR04, HC-05 Bluetooth, etc.)
         ctx.strokeRect(-bw / 2, -bd / 2, bw, bd);
         if (desc.family === 'module' && (comp.type?.includes('SR04') || comp.footprint?.includes('HCSR04'))) {
           // Dual transducer circles T and R
@@ -918,6 +952,27 @@ export class FootprintRenderer {
           desc.headerPinLabels.forEach((label, i) => {
             if (pXs[i]) ctx.fillText(label, pXs[i], bd / 2 - 2.5 * scale);
           });
+        } else if (
+          desc.outlineType === 'bluetooth' ||
+          comp.type?.includes('BLUETOOTH') ||
+          comp.type?.includes('HC05') ||
+          (comp.designator || '').startsWith('BT_MOD')
+        ) {
+          // Header pin names: STATE, RXD, TXD, GND, VCC, EN along header edge
+          const pinFont = Math.max(6, Math.round(0.9 * scale));
+          ctx.font = `bold ${pinFont}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const pXs = [-6.35 * scale, -3.81 * scale, -1.27 * scale, 1.27 * scale, 3.81 * scale, 6.35 * scale];
+          desc.headerPinLabels.forEach((label, i) => {
+            if (pXs[i] !== undefined) {
+              ctx.fillText(label, pXs[i], 2.2 * scale);
+            }
+          });
+          // Carrier label "HC-05 BT" inside module body
+          const subFont = Math.max(7, Math.round(1.2 * scale));
+          ctx.font = `bold ${subFont}px monospace`;
+          ctx.fillText('HC-05 BT', 0, -bd / 2 + 2.5 * scale);
         }
         break;
       }

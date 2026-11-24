@@ -271,6 +271,7 @@ export function Pcb2dEditor({
       shape: 'round',
       layer: 'all',
       netId: routingStartPad ? (pcb.pads.find((p) => p.id === routingStartPad.id)?.netId || undefined) : undefined,
+      isManual: true,
     };
 
     if (routingStartPad && onUpdatePcb) {
@@ -284,6 +285,7 @@ export function Pcb2dEditor({
           to: pts[i + 1],
           widthMm: traceWidth,
           netId: viaPad.netId,
+          isManual: true,
         });
       }
 
@@ -1441,6 +1443,8 @@ export function Pcb2dEditor({
               from: pts[i],
               to: pts[i + 1],
               widthMm: traceWidth,
+              netId: clickedPad.netId,
+              isManual: true,
             });
           }
           if (onUpdatePcb) {
@@ -1468,6 +1472,7 @@ export function Pcb2dEditor({
           from: pts[i],
           to: pts[i + 1],
           widthMm: traceWidth,
+          isManual: true,
         });
       }
       if (onUpdatePcb) {

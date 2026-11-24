@@ -9,7 +9,6 @@ import { Box, Layers, Hand } from 'lucide-react';
 import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
-import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
 import { FootprintRenderer } from './footprint-renderer';
 
 export interface SolderMaskTheme {
@@ -612,6 +611,9 @@ export function Pcb3dViewer({
         metalness: 0.85,
         roughness: 0.2,
         side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       }),
       copperBarrel: new THREE.MeshStandardMaterial({
         color: '#C87D55', // Authentic Copper Barrel Plating
@@ -871,11 +873,11 @@ export function Pcb3dViewer({
           const trackRadius = trackWidth / 2;
 
           // Check if endpoints connect to through-hole pads or vias so tracks never intersect open bores
-          const p1Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.from.x, p.y - track.from.y) < 0.35 && (p.holeMm ?? 0) > 0);
-          const p2Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.to.x, p.y - track.to.y) < 0.35 && (p.holeMm ?? 0) > 0);
+          const p1Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.from.x, p.y - track.from.y) < ((p.diameterMm || 1.8) / 2 + 0.25) && (p.holeMm ?? 0) > 0);
+          const p2Pad = pcb.pads?.find((p) => Math.hypot(p.x - track.to.x, p.y - track.to.y) < ((p.diameterMm || 1.8) / 2 + 0.25) && (p.holeMm ?? 0) > 0);
 
-          const r1Offset = p1Pad ? Math.min((p1Pad.holeMm / 2) + trackRadius + 0.04, (p1Pad.diameterMm / 2) - 0.02) : 0;
-          const r2Offset = p2Pad ? Math.min((p2Pad.holeMm / 2) + trackRadius + 0.04, (p2Pad.diameterMm / 2) - 0.02) : 0;
+          const r1Offset = p1Pad ? Math.min((p1Pad.holeMm / 2) + trackRadius + 0.05, (p1Pad.diameterMm / 2) - 0.02) : 0;
+          const r2Offset = p2Pad ? Math.min((p2Pad.holeMm / 2) + trackRadius + 0.05, (p2Pad.diameterMm / 2) - 0.02) : 0;
 
           if (origLen > r1Offset + r2Offset + 0.1) {
             x1 += ux * r1Offset;
@@ -905,13 +907,17 @@ export function Pcb3dViewer({
               >
                 <boxGeometry args={[len, 0.016, trackWidth]} />
               </mesh>
-              {/* Rounded vertex joint cylinders at endpoints */}
-              <mesh position={[x1, yPos, z1]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
-              </mesh>
-              <mesh position={[x2, yPos, z2]} material={trackMat}>
-                <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 12]} />
-              </mesh>
+              {/* Smooth circular joint caps at internal track bend vertices (omitted over through-hole drill bores) */}
+              {!p1Pad && (
+                <mesh position={[x1, yPos, z1]} material={trackMat}>
+                  <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 16]} />
+                </mesh>
+              )}
+              {!p2Pad && (
+                <mesh position={[x2, yPos, z2]} material={trackMat}>
+                  <cylinderGeometry args={[trackRadius, trackRadius, 0.016, 16]} />
+                </mesh>
+              )}
             </group>
           );
         })}
@@ -930,7 +936,6 @@ export function Pcb3dViewer({
           const pz = pad.y - halfH;
           const r = pad.diameterMm / 2;
           const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
-          const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
           const matchingComp = pcb.components?.find((c) => c.componentId === pad.componentId);
           const upperType = matchingComp ? (matchingComp.type || '').toUpperCase() : '';
           const upperVal = matchingComp ? (matchingComp.value || '').toUpperCase() : '';
@@ -974,42 +979,10 @@ export function Pcb3dViewer({
               }}
               onPointerOut={() => setHoveredItem(null)}
             >
-              {/* Bottom Thermal Relief 4 Radial Spokes for GND Pads connecting to B.Cu Ground Pour (center 100% open) */}
-              {isGnd && (
-                <group position={[0, -thickness / 2 - 0.016, 0]}>
-                  {(() => {
-                    const padR = pad.diameterMm / 2;
-                    const spokeLen = 0.9;
-                    const spokeW = 0.45;
-                    const offset = padR + spokeLen / 2;
-                    return (
-                      <>
-                        {/* +X spoke */}
-                        <mesh position={[offset, 0, 0]} material={materials.copperBottom}>
-                          <boxGeometry args={[spokeLen, 0.016, spokeW]} />
-                        </mesh>
-                        {/* -X spoke */}
-                        <mesh position={[-offset, 0, 0]} material={materials.copperBottom}>
-                          <boxGeometry args={[spokeLen, 0.016, spokeW]} />
-                        </mesh>
-                        {/* +Z spoke */}
-                        <mesh position={[0, 0, offset]} material={materials.copperBottom}>
-                          <boxGeometry args={[spokeW, 0.016, spokeLen]} />
-                        </mesh>
-                        {/* -Z spoke */}
-                        <mesh position={[0, 0, -offset]} material={materials.copperBottom}>
-                          <boxGeometry args={[spokeW, 0.016, spokeLen]} />
-                        </mesh>
-                      </>
-                    );
-                  })()}
-                </group>
-              )}
-
               {/* Top Pad / Annular Ring */}
               {isRect ? (
                 <SquarePadMesh
-                  position={[0, thickness / 2 + 0.032, 0]}
+                  position={[0, thickness / 2 + 0.036, 0]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   size={pad.diameterMm}
                   holeR={pad.holeMm / 2}
@@ -1018,7 +991,7 @@ export function Pcb3dViewer({
                 />
               ) : (
                 <RoundPadMesh
-                  position={[0, thickness / 2 + 0.032, 0]}
+                  position={[0, thickness / 2 + 0.036, 0]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   innerR={pad.holeMm / 2}
                   outerR={r}
@@ -1030,7 +1003,7 @@ export function Pcb3dViewer({
               {/* Bottom Pad / Annular Ring */}
               {isRect ? (
                 <SquarePadMesh
-                  position={[0, -thickness / 2 - 0.032, 0]}
+                  position={[0, -thickness / 2 - 0.036, 0]}
                   rotation={[Math.PI / 2, 0, 0]}
                   size={pad.diameterMm}
                   holeR={pad.holeMm / 2}
@@ -1039,7 +1012,7 @@ export function Pcb3dViewer({
                 />
               ) : (
                 <RoundPadMesh
-                  position={[0, -thickness / 2 - 0.032, 0]}
+                  position={[0, -thickness / 2 - 0.036, 0]}
                   rotation={[Math.PI / 2, 0, 0]}
                   innerR={pad.holeMm / 2}
                   outerR={r}
@@ -1095,7 +1068,7 @@ export function Pcb3dViewer({
             >
               {/* Top Gold Annular Ring */}
               <RoundPadMesh
-                position={[0, thickness / 2 + 0.032, 0]}
+                position={[0, thickness / 2 + 0.036, 0]}
                 rotation={[-Math.PI / 2, 0, 0]}
                 innerR={holeR}
                 outerR={padR}
@@ -1104,7 +1077,7 @@ export function Pcb3dViewer({
               />
               {/* Bottom Gold Annular Ring */}
               <RoundPadMesh
-                position={[0, -thickness / 2 - 0.032, 0]}
+                position={[0, -thickness / 2 - 0.036, 0]}
                 rotation={[Math.PI / 2, 0, 0]}
                 innerR={holeR}
                 outerR={padR}

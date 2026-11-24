@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { CircuitComponent, CircuitWire, Component3D, PcbLayout, PcbSilkscreenText } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, Component3D, ComponentPin, PcbLayout, PcbSilkscreenText, PcbTrack } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { createPcbBoardShape, sanitizePcbHoles } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
@@ -3093,6 +3093,347 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(recordedTexts).toContain('+');
       expect(recordedTexts).toContain('-');
       expect(recordedTexts).toContain('BT1');
+    });
+
+    it('TASK 1/3: validates HC-05 Bluetooth module seating, silkscreen and absence of battery polarity', () => {
+      const desc = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'MODULE_BLUETOOTH_HC05',
+        designator: 'BT_MOD1',
+      });
+      expect(desc.family).toBe('module');
+      expect(desc.outlineType).toBe('bluetooth');
+      expect(desc.hasPolarity).toBe(true);
+      expect(desc.hasPlusMark).toBe(false);
+      expect(desc.hasMinusMark).toBe(false);
+      expect(desc.headerPinLabels).toEqual(['STATE', 'RXD', 'TXD', 'GND', 'VCC', 'EN']);
+
+      const recordedTexts: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        arc: vi.fn(),
+        strokeRect: vi.fn(),
+        fillRect: vi.fn(),
+        stroke: vi.fn(),
+        fill: vi.fn(),
+        fillText: vi.fn((txt: string) => {
+          recordedTexts.push(txt);
+        }),
+      } as unknown as CanvasRenderingContext2D;
+
+      FootprintRenderer.renderSilkscreen(
+        mockCtx,
+        {
+          componentId: 'bt_mod1',
+          designator: 'BT_MOD1',
+          label: 'Bluetooth HC-05',
+          footprint: 'MODULE_HC05',
+          type: 'MODULE_BLUETOOTH_HC05',
+          value: 'HC-05',
+          x: 40,
+          y: 30,
+          rotation: 0,
+        },
+        { scale: 10 }
+      );
+
+      expect(recordedTexts).toContain('HC-05 BT');
+      expect(recordedTexts).toContain('STATE');
+      expect(recordedTexts).toContain('GND');
+      expect(recordedTexts).toContain('VCC');
+      expect(recordedTexts).not.toContain('+');
+      expect(recordedTexts).not.toContain('-');
+
+      // Check pad offset in PcbGenerator is y = 0.0
+      const hc05Comp: CircuitComponent = {
+        id: 'bt_mod1',
+        type: 'MODULE_BLUETOOTH_HC05',
+        label: 'BT_MOD1',
+        value: 'HC-05',
+        category: 'modules',
+        x: 40,
+        y: 30,
+        rotation: 0,
+        parameters: {},
+        footprint: 'MODULE_HC05',
+        pins: [
+          { id: 'state', name: 'STATE', x: 0, y: 0, pinType: 'passive' },
+          { id: 'rxd', name: 'RXD', x: 2.54, y: 0, pinType: 'passive' },
+          { id: 'txd', name: 'TXD', x: 5.08, y: 0, pinType: 'passive' },
+          { id: 'gnd', name: 'GND', x: 7.62, y: 0, pinType: 'passive' },
+          { id: 'vcc', name: 'VCC', x: 10.16, y: 0, pinType: 'passive' },
+          { id: 'en', name: 'EN', x: 12.7, y: 0, pinType: 'passive' },
+        ],
+      };
+      const pcb = PcbGenerator.generatePcbFromSchematic([hc05Comp], []);
+      const pads = pcb.pads.filter((p) => p.componentId === 'bt_mod1');
+      expect(pads.length).toBe(6);
+      const compPlacement = pcb.components!.find((c) => c.componentId === 'bt_mod1')!;
+      // All 6 pads must align horizontally with compPlacement.y (y = compPlacement.y)
+      pads.forEach((pad) => {
+        expect(pad.y).toBeCloseTo(compPlacement.y, 1);
+      });
+    });
+
+    it('TASK 2: purges stale auto-routed tracks on component move while preserving manual tracks', () => {
+      const r1: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        category: 'passive',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        footprint: 'R_Axial_DIN0207',
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      };
+      const r2: CircuitComponent = {
+        id: 'r2',
+        type: 'RESISTOR',
+        label: 'R2',
+        value: '2k',
+        category: 'passive',
+        x: 200,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        footprint: 'R_Axial_DIN0207',
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      };
+      const wire: CircuitWire = {
+        id: 'w1',
+        fromCompId: 'r1',
+        fromPinId: '2',
+        toCompId: 'r2',
+        toPinId: '1',
+      };
+
+      const initialPcb = PcbGenerator.generatePcbFromSchematic([r1, r2], [wire]);
+
+      // Add a manual track by the user
+      const manualTrack: PcbTrack = {
+        id: 'manual_trk_1',
+        layer: 'top_copper',
+        from: { x: 5, y: 5 },
+        to: { x: 10, y: 10 },
+        widthMm: 0.5,
+        isManual: true,
+      };
+      initialPcb.tracks.push(manualTrack);
+
+      // Now move R2 in 2D PCB by moving its component placement
+      initialPcb.components = initialPcb.components!.map((c) =>
+        c.componentId === 'r2' ? { ...c, x: 25.0, y: 45.0 } : c
+      );
+      const updatedPcb = PcbGenerator.generatePcbFromSchematic([r1, r2], [wire], 80, 60, initialPcb);
+
+      // Manual track must be preserved
+      expect(updatedPcb.tracks.some((t) => t.id === 'manual_trk_1')).toBe(true);
+
+      // Verify that R2's component placement is at the moved location
+      const updatedCompR2 = updatedPcb.components!.find((c) => c.componentId === 'r2')!;
+      expect(updatedCompR2.x).toBeCloseTo(25.0, 1);
+      expect(updatedCompR2.y).toBeCloseTo(45.0, 1);
+
+      // Auto-routed tracks for moved components must connect to new pad locations
+      const r2Pad1 = updatedPcb.pads.find((p) => p.componentId === 'r2' && p.pinId === '1')!;
+      const connectedTrack = updatedPcb.tracks.find(
+        (t) =>
+          Math.hypot(t.from.x - r2Pad1.x, t.from.y - r2Pad1.y) < 1.0 ||
+          Math.hypot(t.to.x - r2Pad1.x, t.to.y - r2Pad1.y) < 1.0
+      );
+      expect(connectedTrack).toBeDefined();
+    });
+
+    it('TASK 2B: Incremental Component Addition Continuity Test (Exact 3.png Regression Protocol)', () => {
+      // Step A: 9-component NE555 circuit (BT1, R1, R2, R3, U1, C1, C2, LED1, Q1)
+      const pinPass = (id: string, name: string): ComponentPin => ({ id, name, x: 0, y: 0, pinType: 'passive' });
+
+      const createComp = (id: string, type: string, label: string, value: string, x: number, y: number, pins: ComponentPin[]): CircuitComponent => ({
+        id,
+        type,
+        label,
+        value,
+        category: 'passive',
+        x,
+        y,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins,
+      });
+
+      const comps9: CircuitComponent[] = [
+        createComp('bt1', 'DC_BATTERY', 'BT1', '9V', 50, 50, [pinPass('1', '+'), pinPass('2', '-')]),
+        createComp('r1', 'RESISTOR', 'R1', '1k', 150, 50, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('r2', 'RESISTOR', 'R2', '10k', 250, 50, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('r3', 'RESISTOR', 'R3', '470', 350, 50, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('u1', 'TIMER_555', 'U1', 'NE555', 200, 150, [
+          pinPass('1', 'GND'), pinPass('2', 'TRIG'), pinPass('3', 'OUT'), pinPass('4', 'RESET'),
+          pinPass('5', 'CTRL'), pinPass('6', 'THRES'), pinPass('7', 'DISCH'), pinPass('8', 'VCC'),
+        ]),
+        createComp('c1', 'CAPACITOR_ELECTROLYTIC', 'C1', '10uF', 100, 250, [pinPass('1', '+'), pinPass('2', '-')]),
+        createComp('c2', 'CAPACITOR_CERAMIC', 'C2', '10nF', 200, 250, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('led1', 'LED', 'LED1', 'RED', 300, 250, [pinPass('1', 'A'), pinPass('2', 'K')]),
+        createComp('q1', 'TRANSISTOR_NPN', 'Q1', '2N2222', 400, 250, [pinPass('e', 'E'), pinPass('b', 'B'), pinPass('c', 'C')]),
+      ];
+
+      const wires9: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bt1', fromPinId: '1', toCompId: 'u1', toPinId: '8' },
+        { id: 'w2', fromCompId: 'u1', toCompId: 'r1', fromPinId: '8', toPinId: '1' },
+        { id: 'w3', fromCompId: 'r1', toCompId: 'r2', fromPinId: '2', toPinId: '1' },
+        { id: 'w4', fromCompId: 'r2', toCompId: 'u1', fromPinId: '2', toPinId: '7' },
+        { id: 'w5', fromCompId: 'u1', toCompId: 'r3', fromPinId: '3', toPinId: '1' },
+        { id: 'w6', fromCompId: 'r3', toCompId: 'led1', fromPinId: '2', toPinId: '1' },
+        { id: 'w7', fromCompId: 'led1', toCompId: 'q1', fromPinId: '2', toPinId: 'c' },
+        { id: 'w8', fromCompId: 'bt1', toCompId: 'u1', fromPinId: '2', toPinId: '1' },
+      ];
+
+      const pcbA = PcbGenerator.generatePcbFromSchematic(comps9, wires9, 90, 70);
+      expect(pcbA.components!.length).toBe(9);
+      expect(pcbA.tracks.length).toBeGreaterThan(0);
+
+      // Step B: Add ARDUINO_UNO (U2) + MODULE_BLUETOOTH_HC05 (BT_MOD1)
+      const u2: CircuitComponent = createComp('u2', 'ARDUINO_UNO', 'U2', 'Uno R3', 500, 100, [
+        pinPass('5V', '5V'), pinPass('GND', 'GND'), pinPass('D0', 'RX'), pinPass('D1', 'TX'),
+      ]);
+      const btMod1: CircuitComponent = createComp('bt_mod1', 'MODULE_BLUETOOTH_HC05', 'BT_MOD1', 'HC-05', 600, 200, [
+        pinPass('state', 'STATE'), pinPass('rxd', 'RXD'), pinPass('txd', 'TXD'),
+        pinPass('gnd', 'GND'), pinPass('vcc', 'VCC'), pinPass('en', 'EN'),
+      ]);
+
+      const comps11 = [...comps9, u2, btMod1];
+      const pcbB = PcbGenerator.generatePcbFromSchematic(comps11, wires9, 90, 70, pcbA);
+
+      // Assert 1: 0 component courtyard overlaps
+      const placements = pcbB.components!;
+      expect(placements.length).toBe(11);
+      for (let i = 0; i < placements.length; i++) {
+        for (let j = i + 1; j < placements.length; j++) {
+          const cA = placements[i];
+          const cB = placements[j];
+          const specA = resolvePhysicalSpec(comps11.find((c) => c.id === cA.componentId)!);
+          const specB = resolvePhysicalSpec(comps11.find((c) => c.id === cB.componentId)!);
+          const cwA = specA.courtyardMm?.width || specA.bodyDimensionsMm?.width || 10;
+          const cdA = specA.courtyardMm?.depth || specA.bodyDimensionsMm?.depth || 8;
+          const cwB = specB.courtyardMm?.width || specB.bodyDimensionsMm?.width || 10;
+          const cdB = specB.courtyardMm?.depth || specB.bodyDimensionsMm?.depth || 8;
+          const distOverlapX = Math.abs(cA.x - cB.x) - (cwA + cwB) / 2;
+          const distOverlapY = Math.abs(cA.y - cB.y) - (cdA + cdB) / 2;
+          // Must not strictly overlap in both X and Y
+          expect(distOverlapX >= 0 || distOverlapY >= 0).toBe(true);
+        }
+      }
+
+      // Assert 2: All 555 circuit nets remain connected (tracks connect to placed pads)
+      wires9.forEach((w) => {
+        const pFrom = pcbB.pads.find((p) => p.componentId === w.fromCompId && p.pinId === w.fromPinId);
+        const pTo = pcbB.pads.find((p) => p.componentId === w.toCompId && p.pinId === w.toPinId);
+        if (pFrom && pTo) {
+          const hasTrackNearFrom = pcbB.tracks.some(
+            (t) => Math.hypot(t.from.x - pFrom.x, t.from.y - pFrom.y) < 1.0 || Math.hypot(t.to.x - pFrom.x, t.to.y - pFrom.y) < 1.0
+          );
+          expect(hasTrackNearFrom).toBe(true);
+        }
+      });
+
+      // Assert 3: 0 orphan vias - every auto-via connects to both F.Cu and B.Cu
+      const vias = pcbB.pads.filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && !p.isManual);
+      vias.forEach((via) => {
+        const hasTop = pcbB.tracks.some(
+          (t) => t.layer === 'top_copper' && (Math.hypot(t.from.x - via.x, t.from.y - via.y) < 0.35 || Math.hypot(t.to.x - via.x, t.to.y - via.y) < 0.35)
+        );
+        const hasBottom = pcbB.tracks.some(
+          (t) => t.layer === 'bottom_copper' && (Math.hypot(t.from.x - via.x, t.from.y - via.y) < 0.35 || Math.hypot(t.to.x - via.x, t.to.y - via.y) < 0.35)
+        );
+        expect(hasTop).toBe(true);
+        expect(hasBottom).toBe(true);
+      });
+    });
+
+    it('TASK 1/4: via integrity pass eliminates orphan/floating auto-vias without both copper layers', () => {
+      const r1: CircuitComponent = {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        category: 'passive',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        footprint: 'R_Axial_DIN0207',
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      };
+      const pcb = PcbGenerator.generatePcbFromSchematic([r1], []);
+
+      // Every auto-generated via must have connections to both top and bottom copper tracks
+      const autoVias = pcb.pads.filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && !p.isManual);
+      autoVias.forEach((via) => {
+        const hasTop = pcb.tracks.some(
+          (t) =>
+            t.layer === 'top_copper' &&
+            (Math.hypot(t.from.x - via.x, t.from.y - via.y) < 0.35 ||
+              Math.hypot(t.to.x - via.x, t.to.y - via.y) < 0.35)
+        );
+        const hasBottom = pcb.tracks.some(
+          (t) =>
+            t.layer === 'bottom_copper' &&
+            (Math.hypot(t.from.x - via.x, t.from.y - via.y) < 0.35 ||
+              Math.hypot(t.to.x - via.x, t.to.y - via.y) < 0.35)
+        );
+        expect(hasTop).toBe(true);
+        expect(hasBottom).toBe(true);
+      });
+    });
+
+    it('TASK 4: TO-92 transistor pads generate 3 inline pins at standard 2.54mm pitch', () => {
+      const bjt: CircuitComponent = {
+        id: 'q1',
+        type: 'TRANSISTOR_NPN',
+        label: 'Q1',
+        value: '2N2222',
+        category: 'passive',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        footprint: 'TO-92',
+        pins: [
+          { id: 'e', name: 'E', x: -2.54, y: 0, pinType: 'passive' },
+          { id: 'b', name: 'B', x: 0, y: 0, pinType: 'passive' },
+          { id: 'c', name: 'C', x: 2.54, y: 0, pinType: 'passive' },
+        ],
+      };
+      const pcb = PcbGenerator.generatePcbFromSchematic([bjt], []);
+      const pads = pcb.pads.filter((p) => p.componentId === 'q1');
+      expect(pads.length).toBe(3);
+
+      const comp = pcb.components!.find((c) => c.componentId === 'q1')!;
+      // All 3 pads aligned along y = comp.y
+      pads.forEach((pad) => {
+        expect(pad.y).toBeCloseTo(comp.y, 1);
+      });
+      // Spacing between pad 0 and pad 1, and pad 1 and pad 2 must be 2.54mm
+      expect(Math.abs(pads[1].x - pads[0].x)).toBeCloseTo(2.54, 1);
+      expect(Math.abs(pads[2].x - pads[1].x)).toBeCloseTo(2.54, 1);
     });
   });
 });

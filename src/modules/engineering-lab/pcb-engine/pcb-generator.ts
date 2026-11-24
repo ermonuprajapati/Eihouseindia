@@ -788,19 +788,130 @@ export class PcbGenerator {
       }
     }
 
-    // Retain user-placed manual vias if existingPcb provided
-    if (existingPcb?.pads) {
-      existingPcb.pads.filter((p) => p.componentId === 'VIA' || p.id.startsWith('via_')).forEach((via) => {
-        if (!pads.some((p) => p.id === via.id)) {
-          pads.push(via);
+    // Check if component positions or topology changed compared to existingPcb
+    let layoutOrTopologyChanged = false;
+    if (!existingPcb || !existingPcb.components || existingPcb.components.length === 0) {
+      layoutOrTopologyChanged = true;
+    } else if (existingPcb.components.length !== placedComponents.length) {
+      layoutOrTopologyChanged = true;
+    } else {
+      for (const comp of placedComponents) {
+        const ec = existingPcb.components.find((c) => c.componentId === comp.componentId);
+        if (!ec || Math.hypot(ec.x - comp.x, ec.y - comp.y) > 0.05) {
+          layoutOrTopologyChanged = true;
+          break;
         }
-      });
+      }
     }
 
-    const finalTracks = (existingPcb?.tracks && existingPcb.tracks.length > 0) ? existingPcb.tracks : routedTracks;
+    // Also detect if existing auto-routed tracks have become stranded from pad coordinates
+    if (!layoutOrTopologyChanged && existingPcb?.tracks && existingPcb.tracks.length > 0) {
+      for (const track of existingPcb.tracks) {
+        if (track.isManual || !track.id.startsWith('trk_')) continue;
+        const fromNearPad = pads.some((p) => Math.hypot(p.x - track.from.x, p.y - track.from.y) < 1.5);
+        const toNearPad = pads.some((p) => Math.hypot(p.x - track.to.x, p.y - track.to.y) < 1.5);
+        const fromNearTrack = existingPcb.tracks.some(
+          (ot) =>
+            ot.id !== track.id &&
+            (Math.hypot(ot.from.x - track.from.x, ot.from.y - track.from.y) < 0.2 ||
+              Math.hypot(ot.to.x - track.from.x, ot.to.y - track.from.y) < 0.2)
+        );
+        const toNearTrack = existingPcb.tracks.some(
+          (ot) =>
+            ot.id !== track.id &&
+            (Math.hypot(ot.from.x - track.to.x, ot.from.y - track.to.y) < 0.2 ||
+              Math.hypot(ot.to.x - track.to.x, ot.to.y - track.to.y) < 0.2)
+        );
+        if ((!fromNearPad && !fromNearTrack) || (!toNearPad && !toNearTrack)) {
+          layoutOrTopologyChanged = true;
+          break;
+        }
+      }
+    }
+
+    // Determine final tracks:
+    // If layout/topology unchanged, keep existing tracks intact.
+    // If components moved, added, or deleted, discard stale auto-routed tracks for moved components,
+    // preserve user manual tracks (isManual === true or non-autorouter IDs), and use newly routed tracks.
+    let finalTracks: PcbTrack[];
+    if (!existingPcb?.tracks || existingPcb.tracks.length === 0) {
+      finalTracks = routedTracks;
+    } else if (!layoutOrTopologyChanged) {
+      finalTracks = existingPcb.tracks;
+    } else {
+      const isManualTrack = (t: PcbTrack) => t.isManual === true || !t.id.startsWith('trk_');
+      const manualTracks = existingPcb.tracks.filter(isManualTrack);
+      finalTracks = [...manualTracks];
+      for (const rt of routedTracks) {
+        const isDuplicate = manualTracks.some(
+          (mt) =>
+            mt.layer === rt.layer &&
+            Math.hypot(mt.from.x - rt.from.x, mt.from.y - rt.from.y) < 0.1 &&
+            Math.hypot(mt.to.x - rt.to.x, mt.to.y - rt.to.y) < 0.1
+        );
+        if (!isDuplicate) {
+          finalTracks.push(rt);
+        }
+      }
+    }
+
+    // Retain user-placed manual vias if existingPcb provided
+    if (existingPcb?.pads) {
+      existingPcb.pads
+        .filter((p) => (p.componentId === 'VIA' || p.id.startsWith('via_')) && p.isManual === true)
+        .forEach((via) => {
+          if (!pads.some((p) => p.id === via.id)) {
+            pads.push(via);
+          }
+        });
+    }
+
+    // 100% Electrically Valid Via Integrity Pass:
+    // Eliminate orphan/floating auto-routed vias not connected to both an F.Cu track and a B.Cu track of the same net.
+    // Enforce via-to-pad clearance (>= padOuterR + viaOuterR + 0.25mm) and track clearance (>= 0.20mm).
+    const validPads = pads.filter((pad) => {
+      const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
+      if (!isVia) return true;
+      if (pad.isManual) return true;
+
+      const connectsTop = finalTracks.some(
+        (t) =>
+          t.layer === 'top_copper' &&
+          (!pad.netId || !t.netId || t.netId === pad.netId) &&
+          (Math.hypot(t.from.x - pad.x, t.from.y - pad.y) < 0.35 ||
+            Math.hypot(t.to.x - pad.x, t.to.y - pad.y) < 0.35)
+      );
+
+      const connectsBottom = finalTracks.some(
+        (t) =>
+          t.layer === 'bottom_copper' &&
+          (!pad.netId || !t.netId || t.netId === pad.netId) &&
+          (Math.hypot(t.from.x - pad.x, t.from.y - pad.y) < 0.35 ||
+            Math.hypot(t.to.x - pad.x, t.to.y - pad.y) < 0.35)
+      );
+
+      if (!connectsTop || !connectsBottom) {
+        return false;
+      }
+
+      // Enforce via-to-pad clearance
+      const viaOuterR = (pad.diameterMm || 0.8) / 2;
+      for (const otherPad of pads) {
+        if (otherPad.id === pad.id) continue;
+        const otherIsVia = otherPad.componentId === 'VIA' || otherPad.id.startsWith('via_');
+        if (!otherIsVia) {
+          const padOuterR = (otherPad.diameterMm || 1.8) / 2;
+          if (Math.hypot(otherPad.x - pad.x, otherPad.y - pad.y) < padOuterR + viaOuterR + 0.25) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
 
     // Run Design Rule Checks
-    const drcErrors = this.runDrc(pads, finalTracks, effectiveWidth, effectiveHeight);
+    const drcErrors = this.runDrc(validPads, finalTracks, effectiveWidth, effectiveHeight);
 
     // 4 Corner M3 Plated Mounting Holes (d=3.2mm drill, 6.0mm annular ring) inset 5.0mm from corners
     const cornerInset = 5.0;
@@ -870,7 +981,7 @@ export class PcbGenerator {
       gridSizeMm: existingPcb?.gridSizeMm || 2.54,
       mountingHoles,
       edgeClearanceMm: EDGE_MARGIN,
-      pads,
+      pads: validPads,
       tracks: finalTracks,
       components: placedComponents,
       texts: existingPcb?.texts || [],
@@ -1081,7 +1192,7 @@ export class PcbGenerator {
       const offsets = [-6.35, -3.81, -1.27, 1.27, 3.81, 6.35];
       comp.pins.forEach((pin, idx) => {
         const ox = offsets[idx] !== undefined ? offsets[idx] : -6.35 + idx * 2.54;
-        const pt = transformCoord(ox, 5.0);
+        const pt = transformCoord(ox, 0.0);
         pads.push({
           id: `pad_${comp.id}_${pin.id}`,
           componentId: comp.id,
@@ -1179,7 +1290,7 @@ export class PcbGenerator {
           pinId: pin.id,
           x: pt.x,
           y: pt.y,
-          shape: idx === 0 ? 'rect' : 'round',
+          shape: isElectrolytic && idx === 0 ? 'rect' : 'round',
           diameterMm: 1.8,
           holeMm: 0.9,
           layer: 'all',

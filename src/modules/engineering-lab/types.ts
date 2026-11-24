@@ -355,6 +355,7 @@ export interface PcbTrack {
   to: { x: number; y: number };
   widthMm: number;
   netId?: string;
+  isManual?: boolean;
 }
 
 export interface PcbPad {
@@ -368,6 +369,7 @@ export interface PcbPad {
   holeMm: number;
   layer: 'all' | 'top' | 'bottom';
   netId?: string;
+  isManual?: boolean;
 }
 
 export interface PcbComponentPlacement {
