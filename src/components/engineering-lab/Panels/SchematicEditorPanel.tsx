@@ -3,28 +3,32 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  MousePointer,
-  Hand,
-  GitCommit,
-  RotateCw,
-  Trash2,
-  Sparkles,
-  CheckCircle,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Grid,
-  RotateCcw,
-} from 'lucide-react';
-import { CircuitComponent, CircuitWire, EngineeringProject } from '@/modules/engineering-lab/types';
-import { SchematicSymbol } from '../Canvas/SchematicSymbols';
-import { getPinWorldCoord, runElectricalRulesCheck, ErcViolation } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+  CircuitComponent,
+  CircuitWire,
+  EngineeringProject,
+  SchematicGraphicShape,
+  SchematicTextNote,
+  SchematicAttachedImage,
+  SchematicNoConnect,
+  SchematicManualJunction,
+  SchematicNetLabel,
+  SchematicPowerPort,
+  SchematicTitleBlock,
+  SchematicEditorSheetConfig,
+} from '@/modules/engineering-lab/types';
+import { runElectricalRulesCheck, ErcViolation } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 import {
   autoLayoutCircuit,
   routeOrthogonalWires,
-  RoutedWirePath,
-  JunctionDot,
 } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
+
+import { SchematicLeftRail, SchematicTool } from './schematic-editor/SchematicLeftRail';
+import { SchematicTopBar } from './schematic-editor/SchematicTopBar';
+import { SchematicVectorSymbol } from './schematic-editor/SchematicVectorSymbols';
+import { SchematicDrawingLayer } from './schematic-editor/SchematicDrawingLayer';
+import { SchematicTitleBlockView } from './schematic-editor/SchematicTitleBlockView';
+import { SchematicInlineEditor, InlineEditorTarget } from './schematic-editor/SchematicInlineEditor';
+import { exportSchematicSvg, exportSchematicPng, printSchematicSheet } from './schematic-editor/export-utils';
 
 const ErcReportModal = dynamic(
   () => import('./ErcReportModal').then((m) => m.ErcReportModal),
@@ -37,6 +41,7 @@ export interface SchematicEditorPanelProps {
   wires: CircuitWire[];
   selectedCompId: string | null;
   selectedWireId?: string | null;
+  placingComponent?: CircuitComponent | null;
   onSelectComponent: (id: string | null) => void;
   onSelectWire?: (id: string | null) => void;
   onUpdateComponentPosition: (id: string, x: number, y: number) => void;
@@ -46,13 +51,13 @@ export interface SchematicEditorPanelProps {
   onDeleteWire: (wireId: string) => void;
   onUpdateComponents: (comps: CircuitComponent[]) => void;
   onUpdateWires: (wires: CircuitWire[]) => void;
+  onFinishPlacing?: (comp: CircuitComponent) => void;
+  onCancelPlacing?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
 }
-
-type EditorTool = 'select' | 'pan' | 'wire';
 
 export function SchematicEditorPanel({
   project,
@@ -60,6 +65,7 @@ export function SchematicEditorPanel({
   wires,
   selectedCompId,
   selectedWireId,
+  placingComponent: incomingPlacingComponent = null,
   onSelectComponent,
   onSelectWire = () => {},
   onUpdateComponentPosition,
@@ -69,35 +75,112 @@ export function SchematicEditorPanel({
   onDeleteWire,
   onUpdateComponents,
   onUpdateWires,
+  onFinishPlacing,
+  onCancelPlacing,
   onUndo,
   onRedo,
   canUndo = false,
   canRedo = false,
 }: SchematicEditorPanelProps) {
-  const [tool, setTool] = useState<EditorTool>('select');
+  // Primary Tool Selection
+  const [tool, setTool] = useState<SchematicTool>('select');
+
+  // Sheet configuration (A4 / A3 / Letter, Grid, Theme)
+  const [sheetConfig, setSheetConfig] = useState<SchematicEditorSheetConfig>(() => ({
+    size: project.schematicEditorSheet?.size || project.schematicEditorAnnotations?.sheet?.size || 'A3',
+    theme: project.schematicEditorSheet?.theme || project.schematicEditorAnnotations?.sheet?.theme || 'dark',
+    gridStep: project.schematicEditorSheet?.gridStep || project.schematicEditorAnnotations?.sheet?.gridStep || 20,
+    snapToGrid: project.schematicEditorSheet?.snapToGrid ?? true,
+  }));
+
+  // Canvas Viewport Pan & Zoom
   const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 100, y: 80 });
-  const [isGridSnap, setIsGridSnap] = useState<boolean>(true);
-  const [activeWireStart, setActiveWireStart] = useState<{ compId: string; pinId: string; x: number; y: number } | null>(null);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 80, y: 60 });
   const [isDraggingCanvas, setIsDraggingCanvas] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Component Dragging State
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
   const [compDragOffset, setCompDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Wire Drawing State
+  const [activeWireStart, setActiveWireStart] = useState<{ compId: string; pinId: string; x: number; y: number } | null>(null);
+  const [wireWaypoints, setWireWaypoints] = useState<{ x: number; y: number }[]>([]);
+  const [wireElbowFlip, setWireElbowFlip] = useState<boolean>(false);
+  const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+
+  // Mouse Coordinates (World space)
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Ghost Placing State (from library or internal)
+  const [localPlacingComponent, setLocalPlacingComponent] = useState<CircuitComponent | null>(null);
+  const [ghostRotation, setGhostRotation] = useState<0 | 90 | 180 | 270>(0);
+  const [ghostMirrored, setGhostMirrored] = useState<boolean>(false);
+
+  // Active placing component reference
+  const currentPlacingComp = incomingPlacingComponent || localPlacingComponent;
+
+  // Annotations State (Shapes, text notes, images, no-connects, manual junctions, net labels, power ports, title block)
+  const [shapes, setShapes] = useState<SchematicGraphicShape[]>(() => project.schematicEditorAnnotations?.shapes || []);
+  const [textNotes, setTextNotes] = useState<SchematicTextNote[]>(() => project.schematicEditorAnnotations?.textNotes || []);
+  const [images, setImages] = useState<SchematicAttachedImage[]>(() => project.schematicEditorAnnotations?.images || []);
+  const [noConnects, setNoConnects] = useState<SchematicNoConnect[]>(() => project.schematicEditorAnnotations?.noConnects || []);
+  const [manualJunctions, setManualJunctions] = useState<SchematicManualJunction[]>(() => project.schematicEditorAnnotations?.manualJunctions || []);
+  const [netLabels, setNetLabels] = useState<SchematicNetLabel[]>(() => project.schematicEditorAnnotations?.netLabels || []);
+  const [powerPorts, setPowerPorts] = useState<SchematicPowerPort[]>(() => project.schematicEditorAnnotations?.powerPorts || []);
+  const [titleBlock, setTitleBlock] = useState<SchematicTitleBlock | undefined>(() => project.schematicEditorAnnotations?.titleBlock);
+
+  // Selected annotation item
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Shape drawing in-progress
+  const [drawingShapeStart, setDrawingShapeStart] = useState<{ x: number; y: number } | null>(null);
+
+  // Power port sub-selection
+  const [selectedPowerPortType, setSelectedPowerPortType] = useState<'VCC' | 'GND' | '+3.3V' | '+5V' | '+9V' | '+12V'>('VCC');
+
+  // Inline Editor Modal Target
+  const [inlineEditorTarget, setInlineEditorTarget] = useState<InlineEditorTarget | null>(null);
 
   // ERC Modal
   const [isErcOpen, setIsErcOpen] = useState(false);
   const [ercViolations, setErcViolations] = useState<ErcViolation[]>([]);
 
+  // Hidden File Input for Image Upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const gridStep = 20;
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Dynamic Sheet Dimensions based on standard size
+  const sheetDimensions = useMemo(() => {
+    switch (sheetConfig.size) {
+      case 'A4':
+        return { width: 1100, height: 780 };
+      case 'Letter':
+        return { width: 1050, height: 800 };
+      case 'A3':
+      default:
+        return { width: 1400, height: 950 };
+    }
+  }, [sheetConfig.size]);
 
   // Compute 90° Manhattan routed wires and junctions
-  const { routedWires, junctions } = useMemo(() => {
-    return routeOrthogonalWires(components, wires, true, gridStep);
-  }, [components, wires]);
+  const { routedWires, junctions: autoJunctions } = useMemo(() => {
+    return routeOrthogonalWires(components, wires, true, sheetConfig.gridStep);
+  }, [components, wires, sheetConfig.gridStep]);
 
-  // Unique net count
+  // Combine auto-computed junction dots with manual junction dots
+  const allJunctions = useMemo(() => {
+    const combined = [...autoJunctions];
+    manualJunctions.forEach((mj) => {
+      if (!combined.some((j) => Math.hypot(j.x - mj.x, j.y - mj.y) < 5)) {
+        combined.push({ x: mj.x, y: mj.y, netName: mj.netName || 'NET' });
+      }
+    });
+    return combined;
+  }, [autoJunctions, manualJunctions]);
+
+  // Unique electrical nets count
   const netCount = useMemo(() => {
     const nets = new Set<string>();
     wires.forEach((w) => {
@@ -107,20 +190,6 @@ export function SchematicEditorPanel({
     return Math.max(nets.size, wires.length > 0 ? 1 : 0);
   }, [wires]);
 
-  // Auto-Tidy Layout handler
-  const handleAutoTidy = useCallback(() => {
-    const layout = autoLayoutCircuit(components, wires, gridStep);
-    onUpdateComponents(layout.components);
-    onUpdateWires(layout.wires);
-  }, [components, wires, onUpdateComponents, onUpdateWires]);
-
-  // Run ERC handler
-  const handleRunErc = useCallback(() => {
-    const violations = runElectricalRulesCheck(components, wires);
-    setErcViolations(violations);
-    setIsErcOpen(true);
-  }, [components, wires]);
-
   // Convert client mouse coordinates to world coordinates
   const clientToWorld = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } => {
@@ -128,55 +197,186 @@ export function SchematicEditorPanel({
       const rect = containerRef.current.getBoundingClientRect();
       const rawX = (clientX - rect.left - pan.x) / zoom;
       const rawY = (clientY - rect.top - pan.y) / zoom;
+      const step = sheetConfig.gridStep;
       return {
-        x: isGridSnap ? Math.round(rawX / gridStep) * gridStep : Math.round(rawX),
-        y: isGridSnap ? Math.round(rawY / gridStep) * gridStep : Math.round(rawY),
+        x: sheetConfig.snapToGrid ? Math.round(rawX / step) * step : Math.round(rawX),
+        y: sheetConfig.snapToGrid ? Math.round(rawY / step) * step : Math.round(rawY),
       };
     },
-    [pan, zoom, isGridSnap]
+    [pan, zoom, sheetConfig.gridStep, sheetConfig.snapToGrid]
   );
 
-  // Pin click handler (for Wire mode)
+  // Auto-Tidy Layout handler
+  const handleAutoTidy = useCallback(() => {
+    const layout = autoLayoutCircuit(components, wires, sheetConfig.gridStep);
+    onUpdateComponents(layout.components);
+    onUpdateWires(layout.wires);
+  }, [components, wires, sheetConfig.gridStep, onUpdateComponents, onUpdateWires]);
+
+  // Run ERC handler
+  const handleRunErc = useCallback(() => {
+    // Filter out unconnected pin warnings for pins with explicit No-Connect flags
+    const ncPinKeys = new Set(noConnects.map((nc) => `${nc.compId}:${nc.pinId}`));
+    const rawViolations = runElectricalRulesCheck(components, wires);
+    const filtered = rawViolations.filter((v) => {
+      if (v.code === 'WARN_UNCONNECTED_PIN' && v.compIds && v.pinIds) {
+        const key = `${v.compIds[0]}:${v.pinIds[0]}`;
+        return !ncPinKeys.has(key);
+      }
+      return true;
+    });
+    setErcViolations(filtered);
+    setIsErcOpen(true);
+  }, [components, wires, noConnects]);
+
+  // Pin click handler
   const handlePinClick = useCallback(
     (e: React.MouseEvent, compId: string, pinId: string, wx: number, wy: number) => {
       e.stopPropagation();
-      if (tool !== 'wire') {
-        onSelectComponent(compId);
+
+      // Tool: No-Connect marker
+      if (tool === 'noconnect') {
+        setNoConnects((prev) => [
+          ...prev.filter((nc) => !(nc.compId === compId && nc.pinId === pinId)),
+          { id: `nc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, compId, pinId, x: wx, y: wy },
+        ]);
         return;
       }
 
-      if (!activeWireStart) {
-        setActiveWireStart({ compId, pinId, x: wx, y: wy });
-      } else {
-        if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
-          onAddWire({
-            fromCompId: activeWireStart.compId,
-            fromPinId: activeWireStart.pinId,
-            toCompId: compId,
-            toPinId: pinId,
-          });
+      // Tool: Wire drawing
+      if (tool === 'wire') {
+        if (!activeWireStart) {
+          setActiveWireStart({ compId, pinId, x: wx, y: wy });
+          setWireWaypoints([]);
+        } else {
+          if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
+            onAddWire({
+              fromCompId: activeWireStart.compId,
+              fromPinId: activeWireStart.pinId,
+              toCompId: compId,
+              toPinId: pinId,
+              points: wireWaypoints.length > 0 ? wireWaypoints : undefined,
+            });
+          }
+          setActiveWireStart(null);
+          setWireWaypoints([]);
         }
-        setActiveWireStart(null);
+        return;
       }
+
+      onSelectComponent(compId);
     },
-    [tool, activeWireStart, onSelectComponent, onAddWire]
+    [tool, activeWireStart, wireWaypoints, onSelectComponent, onAddWire]
   );
 
-  // Keyboard shortcuts
+  // Wire click handler
+  const handleWireClick = useCallback(
+    (e: React.MouseEvent, wireId: string, hitX: number, hitY: number) => {
+      e.stopPropagation();
+
+      // Tool: Junction placement on wire
+      if (tool === 'junction') {
+        setManualJunctions((prev) => [
+          ...prev,
+          { id: `mj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, x: hitX, y: hitY },
+        ]);
+        return;
+      }
+
+      // Tool: Net Label attachment
+      if (tool === 'netlabel') {
+        setNetLabels((prev) => [
+          ...prev,
+          { id: `nl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, x: hitX, y: hitY, name: 'NET', wireId },
+        ]);
+        return;
+      }
+
+      onSelectWire(wireId);
+    },
+    [tool, onSelectWire]
+  );
+
+  // Keyboard Shortcuts (V, H, W, J, N, P, Q, G, T, R, X, Y, Del, Ctrl+D, Ctrl+Z, Ctrl+Y, Space)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Space flips wire elbow or triggers pan
+      if (e.code === 'Space') {
+        if (tool === 'wire' && activeWireStart) {
+          e.preventDefault();
+          setWireElbowFlip((prev) => !prev);
+          return;
+        }
+      }
 
       if (e.key === 'v' || e.key === 'V') setTool('select');
       else if (e.key === 'h' || e.key === 'H') setTool('pan');
       else if (e.key === 'w' || e.key === 'W') {
         setTool('wire');
         setActiveWireStart(null);
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (selectedCompId) onRotateComponent(selectedCompId);
+        setWireWaypoints([]);
+      } else if (e.key === 'j' || e.key === 'J') setTool('junction');
+      else if (e.key === 'n' || e.key === 'N') setTool('netlabel');
+      else if (e.key === 'p' || e.key === 'P') setTool('power');
+      else if (e.key === 'q' || e.key === 'Q') setTool('noconnect');
+      else if (e.key === 'g' || e.key === 'G') setTool('draw_rect');
+      else if (e.key === 't' || e.key === 'T') setTool('text');
+      else if (e.key === 'r' || e.key === 'R') {
+        if (currentPlacingComp) {
+          setGhostRotation((prev) => (((prev + 90) % 360) as 0 | 90 | 180 | 270));
+        } else if (selectedCompId) {
+          onRotateComponent(selectedCompId);
+        }
+      } else if (e.key === 'x' || e.key === 'X') {
+        if (currentPlacingComp) {
+          setGhostMirrored((prev) => !prev);
+        } else if (selectedCompId) {
+          const comp = components.find((c) => c.id === selectedCompId);
+          if (comp) {
+            onUpdateComponents(components.map((c) => (c.id === comp.id ? { ...c, mirrored: !c.mirrored } : c)));
+          }
+        }
+      } else if ((e.key === 'y' || e.key === 'Y') && !(e.ctrlKey || e.metaKey)) {
+        if (currentPlacingComp) {
+          setGhostRotation((prev) => (((prev + 180) % 360) as 0 | 90 | 180 | 270));
+        } else if (selectedCompId) {
+          onRotateComponent(selectedCompId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        if (selectedCompId) {
+          const comp = components.find((c) => c.id === selectedCompId);
+          if (comp) {
+            const dupId = `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            const dup: CircuitComponent = {
+              ...comp,
+              id: dupId,
+              x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
+              y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
+              editorPosition: {
+                x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
+                y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
+              },
+            };
+            onUpdateComponents([...components, dup]);
+            onSelectComponent(dupId);
+          }
+        }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedCompId) onDeleteComponent(selectedCompId);
         else if (selectedWireId) onDeleteWire(selectedWireId);
+        else if (selectedItemId) {
+          setShapes((prev) => prev.filter((s) => s.id !== selectedItemId));
+          setTextNotes((prev) => prev.filter((t) => t.id !== selectedItemId));
+          setImages((prev) => prev.filter((i) => i.id !== selectedItemId));
+          setNoConnects((prev) => prev.filter((nc) => nc.id !== selectedItemId));
+          setManualJunctions((prev) => prev.filter((mj) => mj.id !== selectedItemId));
+          setNetLabels((prev) => prev.filter((nl) => nl.id !== selectedItemId));
+          setPowerPorts((prev) => prev.filter((pp) => pp.id !== selectedItemId));
+          setSelectedItemId(null);
+        }
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
         if (e.shiftKey) {
@@ -189,25 +389,131 @@ export function SchematicEditorPanel({
         if (onRedo && canRedo) onRedo();
       } else if (e.key === 'Escape') {
         setActiveWireStart(null);
+        setWireWaypoints([]);
+        if (currentPlacingComp) {
+          setLocalPlacingComponent(null);
+          if (onCancelPlacing) onCancelPlacing();
+        }
         setTool('select');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCompId, selectedWireId, onRotateComponent, onDeleteComponent, onDeleteWire, onUndo, onRedo, canUndo, canRedo]);
+  }, [
+    tool,
+    activeWireStart,
+    currentPlacingComp,
+    selectedCompId,
+    selectedWireId,
+    selectedItemId,
+    components,
+    onRotateComponent,
+    onDeleteComponent,
+    onDeleteWire,
+    onUpdateComponents,
+    onSelectComponent,
+    onCancelPlacing,
+    onUndo,
+    onRedo,
+    canUndo,
+    canRedo,
+  ]);
 
-  // Canvas Mouse Handlers
+  // Canvas Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1 || tool === 'pan') {
+    // Middle-click or Pan tool activates canvas dragging
+    if (e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey)) {
       setIsDraggingCanvas(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (e.button === 0 && tool === 'select') {
-      onSelectComponent(null);
-      onSelectWire(null);
+      return;
+    }
+
+    const wCoord = clientToWorld(e.clientX, e.clientY);
+
+    // Cancel placing on right-click
+    if (e.button === 2) {
+      e.preventDefault();
+      if (currentPlacingComp) {
+        setLocalPlacingComponent(null);
+        if (onCancelPlacing) onCancelPlacing();
+      }
+      setActiveWireStart(null);
+      setWireWaypoints([]);
+      return;
+    }
+
+    if (e.button === 0) {
+      // Placing mode: drop component at cursor
+      if (currentPlacingComp) {
+        const placed: CircuitComponent = {
+          ...currentPlacingComp,
+          x: wCoord.x,
+          y: wCoord.y,
+          editorPosition: { x: wCoord.x, y: wCoord.y },
+          rotation: ghostRotation,
+          mirrored: ghostMirrored,
+        };
+
+        if (onFinishPlacing) {
+          onFinishPlacing(placed);
+        } else {
+          onUpdateComponents([...components, placed]);
+        }
+        setLocalPlacingComponent(null);
+        return;
+      }
+
+      // Drawing Graphics (Rect, Line, Circle)
+      if (['draw_rect', 'draw_line', 'draw_circle'].includes(tool)) {
+        setDrawingShapeStart(wCoord);
+        return;
+      }
+
+      // Text Note placement
+      if (tool === 'text') {
+        const newNote: SchematicTextNote = {
+          id: `text_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          x: wCoord.x,
+          y: wCoord.y,
+          text: 'Note Text',
+          fontSize: 12,
+        };
+        setTextNotes((prev) => [...prev, newNote]);
+        setInlineEditorTarget({ type: 'text', textNote: newNote });
+        setTool('select');
+        return;
+      }
+
+      // Power / GND Port placement
+      if (tool === 'power') {
+        const newPort: SchematicPowerPort = {
+          id: `pwr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          x: wCoord.x,
+          y: wCoord.y,
+          portType: selectedPowerPortType,
+        };
+        setPowerPorts((prev) => [...prev, newPort]);
+        setTool('select');
+        return;
+      }
+
+      // Wire waypoint locking when drawing wire
+      if (tool === 'wire' && activeWireStart) {
+        setWireWaypoints((prev) => [...prev, wCoord]);
+        return;
+      }
+
+      // Deselect if clicking empty sheet in select mode
+      if (tool === 'select') {
+        onSelectComponent(null);
+        onSelectWire(null);
+        setSelectedItemId(null);
+      }
     }
   };
 
+  // Canvas Mouse Move
   const handleMouseMove = (e: React.MouseEvent) => {
     const wCoord = clientToWorld(e.clientX, e.clientY);
     setMousePos(wCoord);
@@ -218,380 +524,472 @@ export function SchematicEditorPanel({
         y: e.clientY - dragStart.y,
       });
     } else if (draggingCompId) {
-      const newX = isGridSnap ? Math.round((wCoord.x - compDragOffset.x) / gridStep) * gridStep : wCoord.x - compDragOffset.x;
-      const newY = isGridSnap ? Math.round((wCoord.y - compDragOffset.y) / gridStep) * gridStep : wCoord.y - compDragOffset.y;
+      const newX = sheetConfig.snapToGrid
+        ? Math.round((wCoord.x - compDragOffset.x) / sheetConfig.gridStep) * sheetConfig.gridStep
+        : wCoord.x - compDragOffset.x;
+      const newY = sheetConfig.snapToGrid
+        ? Math.round((wCoord.y - compDragOffset.y) / sheetConfig.gridStep) * sheetConfig.gridStep
+        : wCoord.y - compDragOffset.y;
       onUpdateComponentPosition(draggingCompId, newX, newY);
     }
   };
 
+  // Canvas Mouse Up
   const handleMouseUp = () => {
     setIsDraggingCanvas(false);
     setDraggingCompId(null);
+
+    // Finalize shape drawing
+    if (drawingShapeStart && ['draw_rect', 'draw_line', 'draw_circle'].includes(tool)) {
+      const type = tool === 'draw_rect' ? 'rect' : tool === 'draw_line' ? 'line' : 'circle';
+      const shape: SchematicGraphicShape = {
+        id: `shape_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        type,
+        x1: drawingShapeStart.x,
+        y1: drawingShapeStart.y,
+        x2: mousePos.x,
+        y2: mousePos.y,
+        stroke: sheetConfig.theme === 'dark' ? '#38BDF8' : '#0284C7',
+        strokeWidth: 1.5,
+      };
+      setShapes((prev) => [...prev, shape]);
+      setDrawingShapeStart(null);
+      setTool('select');
+    }
   };
 
+  // Canvas Wheel Zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     setZoom((prev) => Math.min(2.5, Math.max(0.4, prev * factor)));
   };
 
+  // Image Upload handler
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (uploadEv) => {
+      const dataUrl = uploadEv.target?.result as string;
+      if (dataUrl) {
+        const newImg: SchematicAttachedImage = {
+          id: `img_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          x: 200,
+          y: 200,
+          width: 180,
+          height: 120,
+          dataUrl,
+          opacity: 1.0,
+        };
+        setImages((prev) => [...prev, newImg]);
+        setSelectedItemId(newImg.id);
+        setTool('select');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Computed Rubberband wire points preview
+  const rubberbandPoints = useMemo(() => {
+    if (!activeWireStart) return '';
+    const lastPt = wireWaypoints.length > 0 ? wireWaypoints[wireWaypoints.length - 1] : activeWireStart;
+    const corner = wireElbowFlip
+      ? `${lastPt.x},${mousePos.y}`
+      : `${mousePos.x},${lastPt.y}`;
+    const pts = [
+      `${activeWireStart.x},${activeWireStart.y}`,
+      ...wireWaypoints.map((w) => `${w.x},${w.y}`),
+      corner,
+      `${mousePos.x},${mousePos.y}`,
+    ];
+    return pts.join(' ');
+  }, [activeWireStart, wireWaypoints, wireElbowFlip, mousePos]);
+
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#050A14] select-none overflow-hidden">
-      {/* Top Professional Toolbar */}
-      <div className="h-10 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between px-3 z-20 shrink-0 gap-1.5 text-xs">
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Tool Modes */}
-          <button
-            onClick={() => {
-              setTool('select');
-              setActiveWireStart(null);
-            }}
-            className={`px-2 py-1 rounded flex items-center gap-1 font-medium transition-colors ${
-              tool === 'select' ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
-            title="Select & Move (V)"
-          >
-            <MousePointer className="w-3.5 h-3.5" />
-            <span>Select (V)</span>
-          </button>
+    <div
+      data-testid="schematic-editor-panel"
+      className="relative w-full h-full flex flex-col bg-[#050A14] select-none overflow-hidden"
+    >
+      {/* Hidden File Input for Image Attachment */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
 
-          <button
-            onClick={() => {
-              setTool('pan');
-              setActiveWireStart(null);
-            }}
-            className={`px-2 py-1 rounded flex items-center gap-1 font-medium transition-colors ${
-              tool === 'pan' ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
-            title="Pan Sheet (H)"
-          >
-            <Hand className="w-3.5 h-3.5" />
-            <span>Pan (H)</span>
-          </button>
+      {/* Slim Top Action Bar */}
+      <SchematicTopBar
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onRotate={() => selectedCompId && onRotateComponent(selectedCompId)}
+        onMirrorH={() => {
+          if (selectedCompId) {
+            onUpdateComponents(components.map((c) => (c.id === selectedCompId ? { ...c, mirrored: !c.mirrored } : c)));
+          }
+        }}
+        onMirrorV={() => selectedCompId && onRotateComponent(selectedCompId)}
+        onDuplicate={() => {
+          if (selectedCompId) {
+            const comp = components.find((c) => c.id === selectedCompId);
+            if (comp) {
+              const dupId = `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              const dup: CircuitComponent = {
+                ...comp,
+                id: dupId,
+                x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
+                y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
+                editorPosition: {
+                  x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
+                  y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
+                },
+              };
+              onUpdateComponents([...components, dup]);
+              onSelectComponent(dupId);
+            }
+          }
+        }}
+        onDelete={() => {
+          if (selectedCompId) onDeleteComponent(selectedCompId);
+          else if (selectedWireId) onDeleteWire(selectedWireId);
+          else if (selectedItemId) {
+            setShapes((prev) => prev.filter((s) => s.id !== selectedItemId));
+            setTextNotes((prev) => prev.filter((t) => t.id !== selectedItemId));
+            setImages((prev) => prev.filter((i) => i.id !== selectedItemId));
+            setNoConnects((prev) => prev.filter((nc) => nc.id !== selectedItemId));
+            setManualJunctions((prev) => prev.filter((mj) => mj.id !== selectedItemId));
+            setNetLabels((prev) => prev.filter((nl) => nl.id !== selectedItemId));
+            setPowerPorts((prev) => prev.filter((pp) => pp.id !== selectedItemId));
+            setSelectedItemId(null);
+          }
+        }}
+        onAutoTidy={handleAutoTidy}
+        onRunErc={handleRunErc}
+        zoom={zoom}
+        onZoomIn={() => setZoom((z) => Math.min(2.5, z * 1.15))}
+        onZoomOut={() => setZoom((z) => Math.max(0.4, z * 0.85))}
+        onZoomReset={() => setZoom(1)}
+        onZoomFit={() => {
+          setZoom(0.85);
+          setPan({ x: 50, y: 40 });
+        }}
+        sheetConfig={sheetConfig}
+        onUpdateSheetConfig={(cfg) => setSheetConfig((prev) => ({ ...prev, ...cfg }))}
+        onExportSvg={() => exportSchematicSvg(svgRef.current, `${project.title || 'schematic'}.svg`)}
+        onExportPng={() => exportSchematicPng(svgRef.current, `${project.title || 'schematic'}.png`, 2)}
+        onPrintPdf={printSchematicSheet}
+        selectedCompId={selectedCompId}
+        selectedItemId={selectedItemId}
+      />
 
-          <button
-            onClick={() => {
-              setTool('wire');
-              setActiveWireStart(null);
-            }}
-            className={`px-2 py-1 rounded flex items-center gap-1 font-medium transition-colors ${
-              tool === 'wire' ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
-            title="Orthogonal Wire (W)"
-          >
-            <GitCommit className="w-3.5 h-3.5 text-blue-400" />
-            <span>Wire (W)</span>
-          </button>
-
-          <div className="w-[1px] h-4 bg-slate-800 mx-1" />
-
-          {/* Component Operations */}
-          <button
-            onClick={() => selectedCompId && onRotateComponent(selectedCompId)}
-            disabled={!selectedCompId}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
-            title="Rotate Component (R)"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={() => {
-              if (selectedCompId) onDeleteComponent(selectedCompId);
-              else if (selectedWireId) onDeleteWire(selectedWireId);
-            }}
-            disabled={!selectedCompId && !selectedWireId}
-            className="p-1.5 rounded text-red-400 hover:text-red-300 hover:bg-red-950/40 disabled:opacity-40 disabled:hover:bg-transparent"
-            title="Delete Selected (Del)"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-
-          <div className="w-[1px] h-4 bg-slate-800 mx-1" />
-
-          {/* History */}
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-            title="Undo (Ctrl+Z)"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={onRedo}
-            disabled={!canRedo}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-            title="Redo (Ctrl+Y)"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Center / Right Tools */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={handleAutoTidy}
-            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 flex items-center gap-1 font-medium transition-colors"
-            title="Auto-Tidy: Align components into clean signal flow with zero overlaps"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Auto-Tidy</span>
-          </button>
-
-          <button
-            onClick={handleRunErc}
-            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 flex items-center gap-1 font-medium transition-colors"
-            title="Electrical Rules Check (ERC)"
-          >
-            <CheckCircle className="w-3.5 h-3.5" />
-            <span>ERC Check</span>
-          </button>
-
-          <div className="w-[1px] h-4 bg-slate-800 mx-1" />
-
-          {/* Grid Snap Toggle */}
-          <button
-            onClick={() => setIsGridSnap((prev) => !prev)}
-            className={`p-1.5 rounded transition-colors ${
-              isGridSnap ? 'text-emerald-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
-            }`}
-            title={`Grid Snap: ${isGridSnap ? 'ON (20px)' : 'OFF'}`}
-          >
-            <Grid className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Zoom */}
-          <button
-            onClick={() => setZoom((prev) => Math.min(2.5, prev * 1.15))}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title="Zoom In (+)"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={() => setZoom((prev) => Math.max(0.4, prev * 0.85))}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title="Zoom Out (-)"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={() => {
-              setZoom(1);
-              setPan({ x: 100, y: 80 });
-            }}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-            title="Reset Fit (100%)"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Drafting Sheet Viewport */}
-      <div
-        ref={containerRef}
-        className="flex-1 w-full h-full relative overflow-hidden cursor-crosshair"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
-      >
-        <svg className="w-full h-full absolute inset-0 pointer-events-none">
-          <defs>
-            {/* Fine Grid Pattern */}
-            <pattern id="schematic-grid" width={gridStep * zoom} height={gridStep * zoom} patternUnits="userSpaceOnUse">
-              <circle cx={(gridStep * zoom) / 2} cy={(gridStep * zoom) / 2} r="0.75" fill="#1E293B" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#schematic-grid)" />
-        </svg>
-
-        {/* Scaled & Panned Sheet Layer */}
-        <div
-          className="absolute inset-0 origin-top-left"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+      {/* Main Workspace: Left Tool Rail + Central SVG Engineering Sheet Canvas */}
+      <div className="flex-1 flex overflow-hidden relative w-full h-full min-w-0">
+        {/* Slim Left Vertical EDA Tool Rail */}
+        <SchematicLeftRail
+          activeTool={tool}
+          onSelectTool={(t) => {
+            setTool(t);
+            setActiveWireStart(null);
+            setWireWaypoints([]);
           }}
+          onAttachImageClick={() => fileInputRef.current?.click()}
+          onSelectPowerPortType={(pt) => setSelectedPowerPortType(pt)}
+          selectedPowerPortType={selectedPowerPortType}
+        />
+
+        {/* Central Drafting Sheet Canvas */}
+        <div
+          ref={containerRef}
+          data-testid="sch-canvas-viewport"
+          className={`flex-1 h-full overflow-hidden relative ${
+            tool === 'pan' || isDraggingCanvas
+              ? 'cursor-grab active:cursor-grabbing'
+              : tool === 'wire' || currentPlacingComp || ['draw_rect', 'draw_line', 'draw_circle'].includes(tool)
+              ? 'cursor-crosshair'
+              : 'cursor-default'
+          }`}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
+          onContextMenu={(e) => e.preventDefault()}
         >
-          {/* Engineering Sheet Frame (A3 Standard) */}
-          <div className="absolute left-0 top-0 w-[1400px] h-[950px] border-2 border-slate-700 pointer-events-none bg-slate-950/40 shadow-2xl">
-            {/* Inner Border */}
-            <div className="absolute inset-2 border border-slate-800 pointer-events-none flex flex-col justify-between p-1 text-[9px] font-mono text-slate-600 select-none">
-              <div className="flex justify-between px-2">
-                <span>A</span>
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-                <span>6</span>
-                <span>B</span>
-              </div>
-              <div className="flex justify-between px-2">
-                <span>C</span>
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-                <span>6</span>
-                <span>D</span>
-              </div>
-            </div>
-
-            {/* Bottom-Right Professional Title Block */}
-            <div className="absolute bottom-2 right-2 w-72 bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[10px] p-2 pointer-events-auto shadow-lg">
-              <div className="border-b border-slate-700 pb-1 mb-1 font-bold text-slate-100 flex justify-between items-center">
-                <span className="truncate max-w-[180px]">{project.title || 'Schematic Capture'}</span>
-                <span className="text-[9px] text-emerald-400">REV 1.0</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] text-slate-400">
-                <div>ORG: <span className="text-slate-200">EI HOUSE ENG</span></div>
-                <div>SHEET: <span className="text-slate-200">1 / 1</span></div>
-                <div>COMPS: <span className="text-slate-200">{components.length}</span></div>
-                <div>NETS: <span className="text-slate-200">{netCount}</span></div>
-              </div>
-            </div>
-          </div>
-
-          {/* SVG Wires & Junctions Layer */}
-          <svg className="absolute left-0 top-0 w-[1400px] h-[950px] overflow-visible pointer-events-none z-10">
-            {/* 90° Manhattan Orthogonal Wires */}
-            {routedWires.map((rw) => (
-              <g key={rw.wireId} className="pointer-events-auto">
-                <polyline
-                  points={rw.points.map((p) => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke={selectedWireId === rw.wireId ? '#10B981' : '#38BDF8'}
-                  strokeWidth={selectedWireId === rw.wireId ? '3' : '2'}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="cursor-pointer hover:stroke-emerald-400 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectWire(rw.wireId);
-                  }}
-                />
-              </g>
-            ))}
-
-            {/* Junction Dots (3+ Net connections) */}
-            {junctions.map((j, idx) => (
-              <circle
-                key={`junct-${idx}`}
-                cx={j.x}
-                cy={j.y}
-                r="3.5"
-                fill="#38BDF8"
-                stroke="#0284C7"
-                strokeWidth="1"
-              />
-            ))}
-
-            {/* Active Rubberband Wire Preview */}
-            {activeWireStart && (
-              <line
-                x1={activeWireStart.x}
-                y1={activeWireStart.y}
-                x2={mousePos.x}
-                y2={mousePos.y}
-                stroke="#F59E0B"
-                strokeWidth="2"
-                strokeDasharray="4 4"
-              />
-            )}
-          </svg>
-
-          {/* Components Layer */}
-          <div className="absolute left-0 top-0 w-[1400px] h-[950px] pointer-events-none z-20">
-            {components.map((comp) => {
-              const posX = comp.editorPosition ? comp.editorPosition.x : comp.x;
-              const posY = comp.editorPosition ? comp.editorPosition.y : comp.y;
-              const isSelected = selectedCompId === comp.id;
-
-              return (
-                <div
-                  key={comp.id}
-                  className={`absolute pointer-events-auto cursor-move select-none ${
-                    isSelected ? 'ring-2 ring-emerald-500 rounded' : ''
-                  }`}
-                  style={{
-                    left: `${posX}px`,
-                    top: `${posY}px`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                  onMouseDown={(e) => {
-                    if (e.button === 0 && tool === 'select') {
-                      e.stopPropagation();
-                      onSelectComponent(comp.id);
-                      setDraggingCompId(comp.id);
-                      const wCoord = clientToWorld(e.clientX, e.clientY);
-                      setCompDragOffset({
-                        x: wCoord.x - posX,
-                        y: wCoord.y - posY,
-                      });
-                    }
-                  }}
+          {/* Engineering Sheet Transform Container */}
+          <div
+            className="absolute origin-top-left transition-transform duration-75"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              width: `${sheetDimensions.width}px`,
+              height: `${sheetDimensions.height}px`,
+            }}
+          >
+            {/* Pure SVG Engineering Capture Sheet */}
+            <svg
+              ref={svgRef}
+              data-testid="sch-sheet-svg"
+              width={sheetDimensions.width}
+              height={sheetDimensions.height}
+              viewBox={`0 0 ${sheetDimensions.width} ${sheetDimensions.height}`}
+              className={`overflow-visible shadow-2xl select-none ${
+                sheetConfig.theme === 'dark' ? 'bg-[#09101E]' : 'bg-[#FAFCFF]'
+              }`}
+            >
+              {/* Subtle Engineering Dot Grid */}
+              <defs>
+                <pattern
+                  id="sch-grid-pattern"
+                  width={sheetConfig.gridStep}
+                  height={sheetConfig.gridStep}
+                  patternUnits="userSpaceOnUse"
                 >
-                  <svg className="overflow-visible" width="1" height="1">
-                    <SchematicSymbol
-                      component={comp}
-                      isSelected={isSelected}
-                      isSimulating={false}
+                  <circle
+                    cx="1"
+                    cy="1"
+                    r="0.85"
+                    fill={sheetConfig.theme === 'dark' ? '#334155' : '#CBD5E1'}
+                  />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#sch-grid-pattern)" pointerEvents="none" />
+
+              {/* Standard Engineering Sheet Frame Border & Bottom-Right Title Block */}
+              <SchematicTitleBlockView
+                sheetWidth={sheetDimensions.width}
+                sheetHeight={sheetDimensions.height}
+                titleBlock={titleBlock}
+                projectTitle={project.title}
+                componentCount={components.length}
+                netCount={netCount}
+                theme={sheetConfig.theme}
+                onDoubleClick={() => setInlineEditorTarget({ type: 'titleblock', titleBlock, projectTitle: project.title })}
+              />
+
+              {/* User Annotations Layer (Shapes, Images, Text Notes, Net Labels, Power Ports, No-Connects) */}
+              <SchematicDrawingLayer
+                shapes={shapes}
+                textNotes={textNotes}
+                images={images}
+                noConnects={noConnects}
+                manualJunctions={manualJunctions}
+                netLabels={netLabels}
+                powerPorts={powerPorts}
+                theme={sheetConfig.theme}
+                selectedItemId={selectedItemId}
+                onSelectItem={(id) => {
+                  setSelectedItemId(id);
+                  onSelectComponent(null);
+                  onSelectWire(null);
+                }}
+                onDoubleClickItem={(item) => {
+                  if (item.type === 'text') setInlineEditorTarget({ type: 'text', textNote: item.data as SchematicTextNote });
+                  else if (item.type === 'netlabel') setInlineEditorTarget({ type: 'netlabel', netLabel: item.data as SchematicNetLabel });
+                }}
+              />
+
+              {/* 90° Manhattan Orthogonal Wires Layer */}
+              <g className="sch-wires-layer">
+                {routedWires.map((rw) => {
+                  const isSelected = selectedWireId === rw.wireId;
+                  const ptsStr = rw.points.map((p) => `${p.x},${p.y}`).join(' ');
+                  return (
+                    <g key={rw.wireId} className="cursor-pointer">
+                      {/* Generous Invisible Hover/Click Stroke */}
+                      <polyline
+                        points={ptsStr}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        onClick={(e) => {
+                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
+                          handleWireClick(e, rw.wireId, mid.x, mid.y);
+                        }}
+                      />
+                      {/* Visible Copper Track Line */}
+                      <polyline
+                        points={ptsStr}
+                        fill="none"
+                        stroke={isSelected ? '#10B981' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0284C7'}
+                        strokeWidth={isSelected ? '3' : '2'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="transition-colors hover:stroke-emerald-400"
+                        onClick={(e) => {
+                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
+                          handleWireClick(e, rw.wireId, mid.x, mid.y);
+                        }}
+                      />
+                    </g>
+                  );
+                })}
+
+                {/* Electrical Solder Junction Dots (3+ wires & manual junctions) */}
+                {allJunctions.map((j, idx) => (
+                  <circle
+                    key={`junct-${idx}`}
+                    cx={j.x}
+                    cy={j.y}
+                    r="4"
+                    fill="#38BDF8"
+                    stroke="#0284C7"
+                    strokeWidth="1.2"
+                  />
+                ))}
+
+                {/* Live Rubberband Wire Preview (When actively routing wire) */}
+                {activeWireStart && (
+                  <polyline
+                    points={rubberbandPoints}
+                    fill="none"
+                    stroke="#F59E0B"
+                    strokeWidth="2"
+                    strokeDasharray="4 4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+              </g>
+
+              {/* Components Layer (Real Full Vector IEEE/IEC Schematic Symbols) */}
+              <g className="sch-components-layer">
+                {components.map((comp) => {
+                  const isSelected = selectedCompId === comp.id;
+                  const posX = comp.editorPosition ? comp.editorPosition.x : comp.x;
+                  const posY = comp.editorPosition ? comp.editorPosition.y : comp.y;
+
+                  return (
+                    <g
+                      key={comp.id}
+                      onMouseDown={(e) => {
+                        if (e.button === 0 && tool === 'select') {
+                          e.stopPropagation();
+                          onSelectComponent(comp.id);
+                          setDraggingCompId(comp.id);
+                          const wCoord = clientToWorld(e.clientX, e.clientY);
+                          setCompDragOffset({
+                            x: wCoord.x - posX,
+                            y: wCoord.y - posY,
+                          });
+                        }
+                      }}
+                    >
+                      <SchematicVectorSymbol
+                        component={comp}
+                        isSelected={isSelected}
+                        theme={sheetConfig.theme}
+                        onPinClick={handlePinClick}
+                        onPinHover={setHoveredPinId}
+                        hoveredPinId={hoveredPinId}
+                        onDoubleClick={(e, c) => setInlineEditorTarget({ type: 'component', component: c })}
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* Ghost Preview Following Cursor While Placing Component from Library */}
+              {currentPlacingComp && (
+                <g className="sch-ghost-preview opacity-70 pointer-events-none">
+                  <SchematicVectorSymbol
+                    component={{
+                      ...currentPlacingComp,
+                      x: mousePos.x,
+                      y: mousePos.y,
+                      editorPosition: { x: mousePos.x, y: mousePos.y },
+                      rotation: ghostRotation,
+                      mirrored: ghostMirrored,
+                    }}
+                    isSelected={true}
+                    theme={sheetConfig.theme}
+                  />
+                </g>
+              )}
+
+              {/* Active Shape Drawing Preview */}
+              {drawingShapeStart && (
+                <g className="sch-shape-preview pointer-events-none opacity-80">
+                  {tool === 'draw_rect' && (
+                    <rect
+                      x={Math.min(drawingShapeStart.x, mousePos.x)}
+                      y={Math.min(drawingShapeStart.y, mousePos.y)}
+                      width={Math.abs(mousePos.x - drawingShapeStart.x)}
+                      height={Math.abs(mousePos.y - drawingShapeStart.y)}
+                      fill="none"
+                      stroke="#38BDF8"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 2"
                     />
-                  </svg>
-
-                  {/* Interactive Pin Connection Terminals */}
-                  {comp.pins &&
-                    comp.pins.map((pin) => {
-                      const world = getPinWorldCoord(
-                        { ...comp, x: posX, y: posY },
-                        pin
-                      );
-                      const relX = world.x - posX;
-                      const relY = world.y - posY;
-
-                      return (
-                        <div
-                          key={pin.id}
-                          className="absolute w-3 h-3 rounded-full border border-blue-400 bg-slate-900 hover:bg-emerald-400 hover:scale-125 transition-all cursor-pointer z-30"
-                          style={{
-                            left: `calc(50% + ${relX}px)`,
-                            top: `calc(50% + ${relY}px)`,
-                            transform: 'translate(-50%, -50%)',
-                          }}
-                          onClick={(e) => handlePinClick(e, comp.id, pin.id, world.x, world.y)}
-                          title={`Pin: ${pin.name || pin.id} (${pin.pinType})`}
-                        />
-                      );
-                    })}
-                </div>
-              );
-            })}
+                  )}
+                  {tool === 'draw_line' && (
+                    <line
+                      x1={drawingShapeStart.x}
+                      y1={drawingShapeStart.y}
+                      x2={mousePos.x}
+                      y2={mousePos.y}
+                      stroke="#38BDF8"
+                      strokeWidth="1.8"
+                      strokeDasharray="4 2"
+                    />
+                  )}
+                  {tool === 'draw_circle' && (
+                    <circle
+                      cx={(drawingShapeStart.x + mousePos.x) / 2}
+                      cy={(drawingShapeStart.y + mousePos.y) / 2}
+                      r={Math.hypot(mousePos.x - drawingShapeStart.x, mousePos.y - drawingShapeStart.y) / 2}
+                      fill="none"
+                      stroke="#38BDF8"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 2"
+                    />
+                  )}
+                </g>
+              )}
+            </svg>
           </div>
         </div>
       </div>
 
-      {/* ERC Report Modal */}
+      {/* Double-Click Inline Editing Modal */}
+      {inlineEditorTarget && (
+        <SchematicInlineEditor
+          target={inlineEditorTarget}
+          onClose={() => setInlineEditorTarget(null)}
+          onSaveComponent={(updated) => {
+            onUpdateComponents(components.map((c) => (c.id === updated.id ? updated : c)));
+          }}
+          onSaveTextNote={(updated) => {
+            setTextNotes((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          }}
+          onSaveNetLabel={(updated) => {
+            setNetLabels((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+          }}
+          onSaveTitleBlock={(updated) => {
+            setTitleBlock(updated);
+          }}
+        />
+      )}
+
+      {/* ERC Violation Diagnostic Report Modal */}
       {isErcOpen && (
         <ErcReportModal
           isOpen={isErcOpen}
-          onClose={() => setIsErcOpen(false)}
           violations={ercViolations}
-          onLocateViolation={(targetLocation, compId) => {
-            if (compId) onSelectComponent(compId);
-            if (targetLocation) {
+          onClose={() => setIsErcOpen(false)}
+          onLocateViolation={(loc, compId) => {
+            if (loc) {
               setPan({
-                x: 400 - targetLocation.x * zoom,
-                y: 300 - targetLocation.y * zoom,
+                x: 300 - loc.x * zoom,
+                y: 200 - loc.y * zoom,
               });
+            } else if (compId) {
+              onSelectComponent(compId);
             }
-            setIsErcOpen(false);
           }}
         />
       )}

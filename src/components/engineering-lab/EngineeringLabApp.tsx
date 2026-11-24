@@ -421,6 +421,9 @@ export function EngineeringLabApp() {
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
   const [activeFaults, setActiveFaults] = useState<SolverStepResult['faults']>([]);
 
+  // Schematic Editor Interactive Placement Ghost State
+  const [editorPlacingComponent, setEditorPlacingComponent] = useState<CircuitComponent | null>(null);
+
   // Firmware & MCU State
   const [isFlashing, setIsFlashing] = useState(false);
 
@@ -1636,7 +1639,9 @@ export function EngineeringLabApp() {
               />
             )}
             <ComponentBrowser
-              onAddComponent={handleAddComponent}
+              onAddComponent={(comp) => {
+                setEditorPlacingComponent(comp);
+              }}
               existingComponents={project.components}
               isOpen={isBrowserOpen}
               onToggleOpen={() => setIsBrowserOpen(!isBrowserOpen)}
@@ -1651,6 +1656,12 @@ export function EngineeringLabApp() {
                 wires={project.wires}
                 selectedCompId={selectedCompId}
                 selectedWireId={selectedWireId}
+                placingComponent={editorPlacingComponent}
+                onFinishPlacing={(placedComp) => {
+                  handleAddComponent(placedComp);
+                  setEditorPlacingComponent(null);
+                }}
+                onCancelPlacing={() => setEditorPlacingComponent(null)}
                 onSelectComponent={(id) => {
                   setSelectedCompId(id);
                   setSelectedWireId(null);

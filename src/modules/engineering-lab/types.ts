@@ -458,6 +458,102 @@ export interface Virtual3DProjectState {
   wires3d: Wire3D[];
 }
 
+// -------------------------------------------------------------------------
+// Professional EDA Schematic Capture Annotations & Sheet Configuration
+// -------------------------------------------------------------------------
+export interface SchematicGraphicShape {
+  id: string;
+  type: 'rect' | 'line' | 'circle';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  stroke: string;
+  strokeWidth: number;
+  strokeDash?: string;
+  fill?: string;
+}
+
+export interface SchematicTextNote {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  fontSize?: number;
+  color?: string;
+  bold?: boolean;
+}
+
+export interface SchematicAttachedImage {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  dataUrl: string;
+  opacity: number; // 0.2 to 1.0
+  locked?: boolean;
+}
+
+export interface SchematicNoConnect {
+  id: string;
+  compId: string;
+  pinId: string;
+  x: number;
+  y: number;
+}
+
+export interface SchematicManualJunction {
+  id: string;
+  x: number;
+  y: number;
+  netName?: string;
+}
+
+export interface SchematicNetLabel {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  wireId?: string;
+}
+
+export interface SchematicPowerPort {
+  id: string;
+  x: number;
+  y: number;
+  portType: 'VCC' | 'GND' | '+3.3V' | '+5V' | '+9V' | '+12V';
+  rotation?: number;
+}
+
+export interface SchematicTitleBlock {
+  title: string;
+  revision: string;
+  company: string;
+  author: string;
+  date: string;
+  sheet: string;
+}
+
+export interface SchematicEditorSheetConfig {
+  size: 'A4' | 'A3' | 'Letter';
+  theme: 'dark' | 'light';
+  gridStep: number;
+  snapToGrid: boolean;
+}
+
+export interface SchematicEditorAnnotations {
+  shapes?: SchematicGraphicShape[];
+  textNotes?: SchematicTextNote[];
+  images?: SchematicAttachedImage[];
+  noConnects?: SchematicNoConnect[];
+  manualJunctions?: SchematicManualJunction[];
+  netLabels?: SchematicNetLabel[];
+  powerPorts?: SchematicPowerPort[];
+  titleBlock?: SchematicTitleBlock;
+  sheet?: SchematicEditorSheetConfig;
+}
+
 export interface EngineeringProject {
   id: string;
   title: string;
@@ -476,6 +572,8 @@ export interface EngineeringProject {
   virtual3d?: Virtual3DProjectState;
   // Professional Schematic Editor Layout (Optional & Backward-Compatible)
   schematicEditorLayout?: Record<string, { x: number; y: number; rotation?: number }>;
+  schematicEditorAnnotations?: SchematicEditorAnnotations;
+  schematicEditorSheet?: SchematicEditorSheetConfig;
 }
 
 export interface GuidedExperiment {
