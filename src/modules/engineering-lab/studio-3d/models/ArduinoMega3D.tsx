@@ -14,6 +14,9 @@ export interface ArduinoMega3DProps {
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 export interface MegaPinDef {
@@ -135,8 +138,12 @@ export function ArduinoMega3D({
   onPinClick,
   hoveredPin,
   onHoverPin,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: ArduinoMega3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
+  const suppressExternalCables = hideExternalCables || isPcbAssemblyMode || usbConnected === false;
 
   // Smooth continuous CatmullRomCurve3 USB Cable Tube
   const usbCableTubeGeo = useMemo(() => {
@@ -289,7 +296,7 @@ export function ArduinoMega3D({
     };
   }, [silkscreenTexture]);
 
-  const activePowered = isUsbPlugged || isDcJackPlugged || isPowered;
+  const activePowered = !suppressExternalCables && isPowered && (isUsbPlugged || isDcJackPlugged);
 
   return (
     <group position={position} rotation={rotation}>
@@ -342,7 +349,8 @@ export function ArduinoMega3D({
       </mesh>
 
       {/* EI House Interactive USB Type-B Cable Plug */}
-      {isUsbPlugged ? (
+      {!suppressExternalCables && (
+        isUsbPlugged ? (
         <group
           position={[-44, 5.5, -14]}
           onPointerDown={(e) => e.stopPropagation()}
@@ -392,7 +400,7 @@ export function ArduinoMega3D({
             <boxGeometry args={[12, 11, 12]} />
           </mesh>
         </group>
-      )}
+      ))}
 
       {/* DC Power Barrel Jack (Black cylindrical body with metal pin) */}
       <mesh position={[-38, 5.5, 15]} material={materials.barrelPlastic} castShadow>
@@ -403,7 +411,7 @@ export function ArduinoMega3D({
         <meshStandardMaterial color="#0A0A0A" />
       </mesh>
       {/* DC Barrel Jack Cable Plug when active */}
-      {isDcJackPlugged && (
+      {isDcJackPlugged && !suppressExternalCables && (
         <group position={[-38, 5.5, 15]}>
           <mesh position={[-10, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbPlugMetal}>
             <cylinderGeometry args={[2.7, 2.7, 8, 16]} />

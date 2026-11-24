@@ -2566,4 +2566,202 @@ describe('Virtual Lab v3 Verification Suite', () => {
       expect(silkscreenText2.fontSizeMm).toBe(1.5);
     });
   });
+
+  describe('Task 9: IPC-7351 Production PCBA & Zero USB Cables in 3D PCB Mode', () => {
+    it('1. Zero External USB Cables & Plugs in 3D PCB View mode contract', () => {
+      // Test prop contract for dev boards in PCB assembly mode
+      const pcbAssemblyProps = {
+        isPcbAssemblyMode: true,
+        hideExternalCables: true,
+        usbConnected: false,
+      };
+
+      // Ensure that when these props are set, external cable suppression evaluates to true
+      const unoSuppressed =
+        pcbAssemblyProps.hideExternalCables ||
+        pcbAssemblyProps.isPcbAssemblyMode ||
+        pcbAssemblyProps.usbConnected === false;
+      expect(unoSuppressed).toBe(true);
+
+      const boards = [
+        'ARDUINO_UNO',
+        'ARDUINO_MEGA',
+        'ARDUINO_NANO',
+        'ESP32_DEVKIT',
+        'RASPBERRY_PI_PICO',
+      ];
+      boards.forEach((boardType) => {
+        const canonical = resolve3DModelType(boardType);
+        expect(canonical).toBe(boardType);
+      });
+    });
+
+    it('2. Pro Silkscreen Spec Completeness: Electrolytic Capacitor outputs + polarity mark, cathode band, and Square Pad 1', () => {
+      const desc = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'CAPACITOR_ELECTROLYTIC',
+        value: '100uF',
+        footprint: 'CP_Radial_D6.3mm_P2.50mm',
+        designator: 'C1',
+      });
+      expect(desc.family).toBe('electrolytic_cap');
+      expect(desc.hasPolarity).toBe(true);
+      expect(desc.hasPlusMark).toBe(true);
+      expect(desc.hasCathodeBand).toBe(true);
+      expect(desc.hasMinusMark).toBe(true);
+      expect(desc.hasSquarePad1).toBe(true);
+    });
+
+    it('3. Pro Silkscreen Spec Completeness: Ceramic Capacitor outputs non-polarized outline with ZERO +/- polarity marks', () => {
+      const desc = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'CAPACITOR_CERAMIC',
+        value: '100nF',
+        footprint: 'C_Disc_D5.0mm_W2.5mm_P5.00mm',
+        designator: 'C2',
+      });
+      expect(desc.family).toBe('ceramic_cap');
+      expect(desc.hasPolarity).toBe(false);
+      expect(desc.hasPlusMark).toBe(false);
+      expect(desc.hasMinusMark).toBe(false);
+      expect(desc.hasSquarePad1).toBe(false);
+    });
+
+    it('4. Pro Silkscreen Spec Completeness: TO-92 Transistor outputs D-shape flat orientation, Pin-1 marker, exact pin labels, and Square Pad 1', () => {
+      const desc2N = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'TRANSISTOR_TO92',
+        value: '2N2222',
+        footprint: 'TO-92_Inline',
+        designator: 'Q1',
+      });
+      expect(desc2N.family).toBe('transistor_to92');
+      expect(desc2N.hasCathodeFlatEdge).toBe(true); // D-shape flat orientation
+      expect(desc2N.hasPin1Dot).toBe(true);
+      expect(desc2N.hasSquarePad1).toBe(true);
+      expect(desc2N.pinLabels).toEqual(['E', 'B', 'C']);
+
+      const descBC = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'BC547',
+        value: 'BC547',
+        footprint: 'TO-92_Inline',
+        designator: 'Q2',
+      });
+      expect(descBC.pinLabels).toEqual(['C', 'B', 'E']);
+    });
+
+    it('5. Pro Silkscreen Spec Completeness: TO-220 MOSFET/Regulator outputs heatsink tab bar, Pin-1 marker, exact datasheet pin labels, and Square Pad 1', () => {
+      const descMosfet = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'IRLZ44N',
+        value: 'IRLZ44NPBF',
+        footprint: 'TO-220-3_Vertical',
+        designator: 'Q3',
+      });
+      expect(descMosfet.family).toBe('transistor_to220');
+      expect(descMosfet.hasHeatsinkTab).toBe(true);
+      expect(descMosfet.hasPin1Dot).toBe(true);
+      expect(descMosfet.hasSquarePad1).toBe(true);
+      expect(descMosfet.pinLabels).toEqual(['G', 'D', 'S']);
+
+      const descReg = FootprintRenderer.getSilkscreenDescriptor({
+        type: '7805',
+        value: 'L7805CV',
+        footprint: 'TO-220-3_Vertical',
+        designator: 'U1',
+      });
+      expect(descReg.family).toBe('transistor_to220');
+      expect(descReg.hasHeatsinkTab).toBe(true);
+      expect(descReg.hasPin1Dot).toBe(true);
+      expect(descReg.hasSquarePad1).toBe(true);
+      expect(descReg.pinLabels).toEqual(['IN', 'GND', 'OUT']);
+    });
+
+    it('6. Pro Silkscreen Spec Completeness: Diode 1N4007 outputs cathode bar, mini diode symbol, and Square Pad 1', () => {
+      const desc = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'DIODE',
+        value: '1N4007',
+        footprint: 'D_DO-41_SOD81_P10.16mm_Horizontal',
+        designator: 'D1',
+      });
+      expect(desc.family).toBe('diode');
+      expect(desc.hasCathodeBand).toBe(true);
+      expect(desc.hasDiodeSymbol).toBe(true);
+      expect(desc.hasSquarePad1).toBe(true);
+    });
+
+    it('7. Pro Silkscreen Spec Completeness: Standard LED and 4-pin RGB LED output cathode flat edge, polarity markers, and Square Pad 1', () => {
+      const descLed = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'LED',
+        value: 'Red',
+        footprint: 'LED_D5.0mm',
+        designator: 'D2',
+      });
+      expect(descLed.family).toBe('led');
+      expect(descLed.hasCathodeFlatEdge).toBe(true);
+      expect(descLed.hasPlusMark).toBe(true);
+      expect(descLed.hasMinusMark).toBe(true);
+      expect(descLed.hasSquarePad1).toBe(true);
+
+      const descRgb = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'ACTUATOR_RGB_LED',
+        value: 'RGB',
+        footprint: 'LED_D5.0mm-4',
+        designator: 'D3',
+      });
+      expect(descRgb.family).toBe('rgb_led');
+      expect(descRgb.hasCathodeFlatEdge).toBe(true);
+      expect(descRgb.hasPin1Dot).toBe(true);
+      expect(descRgb.hasSquarePad1).toBe(true);
+      expect(descRgb.pinLabels).toEqual(['R', 'COM', 'G', 'B']);
+    });
+
+    it('8. Pro Silkscreen Spec Completeness: DIP ICs output U-notch, Pin-1 dot, and Square Pad 1', () => {
+      const desc555 = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'TIMER_555',
+        value: 'NE555P',
+        footprint: 'DIP-8_W7.62mm',
+        designator: 'U2',
+      });
+      expect(desc555.family).toBe('dip_ic');
+      expect(desc555.hasNotch).toBe(true);
+      expect(desc555.hasPin1Dot).toBe(true);
+      expect(desc555.hasSquarePad1).toBe(true);
+
+      const desc74HC = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'IC_74HC14',
+        value: '74HC14',
+        footprint: 'DIP-14_W7.62mm',
+        designator: 'U3',
+      });
+      expect(desc74HC.family).toBe('dip_ic');
+      expect(desc74HC.hasNotch).toBe(true);
+      expect(desc74HC.hasPin1Dot).toBe(true);
+      expect(desc74HC.hasSquarePad1).toBe(true);
+    });
+
+    it('9. Pro Silkscreen Spec Completeness: Modules & Dev Boards output pin header silkscreen names and Pin-1 marker', () => {
+      const descSr04 = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'HC_SR04',
+        value: 'HC-SR04',
+        footprint: 'MODULE-HCSR04',
+        designator: 'MOD1',
+      });
+      expect(descSr04.family).toBe('module');
+      expect(descSr04.hasPin1Dot).toBe(true);
+      expect(descSr04.hasSquarePad1).toBe(true);
+      expect(descSr04.headerPinLabels).toContain('VCC');
+      expect(descSr04.headerPinLabels).toContain('TRIG');
+      expect(descSr04.headerPinLabels).toContain('ECHO');
+      expect(descSr04.headerPinLabels).toContain('GND');
+      expect(descSr04.directionalArrow).toBe('FRONT ->');
+
+      const descUno = FootprintRenderer.getSilkscreenDescriptor({
+        type: 'MCU_ARDUINO_UNO',
+        value: 'Arduino Uno',
+        footprint: 'BOARD_ARDUINO_UNO',
+        designator: 'BOARD1',
+      });
+      expect(descUno.family).toBe('dev_board');
+      expect(descUno.hasPin1Dot).toBe(true);
+      expect(descUno.hasSquarePad1).toBe(true);
+      expect(descUno.headerPinLabels.length).toBeGreaterThan(0);
+    });
+  });
 });

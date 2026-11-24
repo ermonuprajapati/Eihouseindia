@@ -14,6 +14,9 @@ export interface ArduinoUno3DProps {
   onPinClick?: (pinName: string, worldPos: THREE.Vector3) => void;
   hoveredPin?: string | null;
   onHoverPin?: (pinName: string | null) => void;
+  hideExternalCables?: boolean;
+  isPcbAssemblyMode?: boolean;
+  usbConnected?: boolean;
 }
 
 export const ARDUINO_PINS: { name: string; localPos: [number, number, number]; group: 'power' | 'digital' | 'analog' }[] = [
@@ -61,8 +64,12 @@ export function ArduinoUno3D({
   onPinClick,
   hoveredPin,
   onHoverPin,
+  hideExternalCables = false,
+  isPcbAssemblyMode = false,
+  usbConnected,
 }: ArduinoUno3DProps) {
   const [usbHovered, setUsbHovered] = useState(false);
+  const suppressExternalCables = hideExternalCables || isPcbAssemblyMode || usbConnected === false;
 
   // Smooth continuous CatmullRomCurve3 USB Cable Tube
   const usbCableTubeGeo = useMemo(() => {
@@ -232,7 +239,7 @@ export function ArduinoUno3D({
     };
   }, [materials, silkscreenTexture]);
 
-  const activePowered = isUsbPlugged || isDcJackPlugged || isPowered;
+  const activePowered = !suppressExternalCables && isPowered && (isUsbPlugged || isDcJackPlugged);
 
   return (
     <group position={position} rotation={rotation}>
@@ -304,57 +311,59 @@ export function ArduinoUno3D({
       </mesh>
 
       {/* EI House Interactive USB Type-B Cable Plug */}
-      {isUsbPlugged ? (
-        <group
-          position={[-28, 5.5, -14]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          {/* Nickel Shroud Plug entering socket */}
-          <mesh position={[-3, 0, 0]} material={materials.usbPlugMetal}>
-            <boxGeometry args={[6, 9.5, 10.5]} />
-          </mesh>
-          {/* Molded Blue PVC Plug Body */}
-          <mesh position={[-10, 0, 0]} material={materials.usbCablePvc} castShadow>
-            <boxGeometry args={[10, 11, 12]} />
-          </mesh>
-          {/* Strain Relief Boot Collar */}
-          <mesh position={[-15, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
-            <cylinderGeometry args={[3.2, 4.2, 4, 16]} />
-          </mesh>
-          {/* Continuous Flexible Blue USB Cable trailing across workbench */}
-          <mesh geometry={usbCableTubeGeo} material={materials.usbCablePvc} castShadow />
-        </group>
-      ) : (
-        /* Unplugged USB cable resting near socket - click to plug in */
-        <group
-          position={[-50, 2.5, -14]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleUsb?.();
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            setUsbHovered(true);
-          }}
-          onPointerOut={() => setUsbHovered(false)}
-        >
-          <mesh position={[0, 0, 0]} material={materials.usbPlugMetal}>
-            <boxGeometry args={[6, 9.5, 10.5]} />
-          </mesh>
-          <mesh position={[-9, 0, 0]} material={materials.usbCablePvc}>
-            <boxGeometry args={[12, 11, 12]} />
-          </mesh>
-        </group>
+      {!suppressExternalCables && (
+        isUsbPlugged ? (
+          <group
+            position={[-28, 5.5, -14]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            {/* Nickel Shroud Plug entering socket */}
+            <mesh position={[-3, 0, 0]} material={materials.usbPlugMetal}>
+              <boxGeometry args={[6, 9.5, 10.5]} />
+            </mesh>
+            {/* Molded Blue PVC Plug Body */}
+            <mesh position={[-10, 0, 0]} material={materials.usbCablePvc} castShadow>
+              <boxGeometry args={[10, 11, 12]} />
+            </mesh>
+            {/* Strain Relief Boot Collar */}
+            <mesh position={[-15, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbCablePvc}>
+              <cylinderGeometry args={[3.2, 4.2, 4, 16]} />
+            </mesh>
+            {/* Continuous Flexible Blue USB Cable trailing across workbench */}
+            <mesh geometry={usbCableTubeGeo} material={materials.usbCablePvc} castShadow />
+          </group>
+        ) : (
+          /* Unplugged USB cable resting near socket - click to plug in */
+          <group
+            position={[-50, 2.5, -14]}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUsb?.();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setUsbHovered(true);
+            }}
+            onPointerOut={() => setUsbHovered(false)}
+          >
+            <mesh position={[0, 0, 0]} material={materials.usbPlugMetal}>
+              <boxGeometry args={[6, 9.5, 10.5]} />
+            </mesh>
+            <mesh position={[-9, 0, 0]} material={materials.usbCablePvc}>
+              <boxGeometry args={[12, 11, 12]} />
+            </mesh>
+          </group>
+        )
       )}
 
       {/* DC Barrel Jack */}
@@ -366,7 +375,7 @@ export function ArduinoUno3D({
         <meshStandardMaterial color="#0A0A0A" />
       </mesh>
       {/* DC Barrel Jack Cable Plug when active */}
-      {isDcJackPlugged && (
+      {isDcJackPlugged && !suppressExternalCables && (
         <group position={[-27, 5.5, 15]}>
           <mesh position={[-8, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.usbPlugMetal}>
             <cylinderGeometry args={[2.7, 2.7, 7, 16]} />

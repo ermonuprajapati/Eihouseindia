@@ -10,6 +10,7 @@ import { PcbLayout, CircuitComponent } from '../types';
 import { SharedComponent3D } from '../studio-3d/SharedComponent3D';
 import { isVirtualSchematicSymbol } from './pcb-generator';
 import { resolvePhysicalSpec } from '../circuit-engine/component-physical-registry';
+import { FootprintRenderer } from './footprint-renderer';
 
 export interface SolderMaskTheme {
   name: string;
@@ -242,12 +243,14 @@ export function Pcb3dViewer({
     ctrl.update();
   }, [cameraPreset, pcb.widthMm, pcb.heightMm]);
 
-  // High-Resolution Crisp Silkscreen Texture Decal
+  // High-Resolution Crisp Silkscreen Texture Decal (High-DPI >= 24 px/mm)
   const silkscreenTexture = useMemo(() => {
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = Math.round((1024 * pcb.heightMm) / pcb.widthMm);
+    const dpiScale = 24; // 24 px per mm for crisp manufacturing silkscreen
+    const baseW = Math.max(2048, Math.round(pcb.widthMm * dpiScale));
+    canvas.width = Math.min(4096, baseW);
+    canvas.height = Math.min(4096, Math.max(1024, Math.round((canvas.width * pcb.heightMm) / pcb.widthMm)));
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
@@ -257,18 +260,19 @@ export function Pcb3dViewer({
 
     // Outer border silkscreen
     ctx.strokeStyle = silkColor;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(2, Math.round(0.25 * scale));
     ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
 
     // Board branding & metadata
     ctx.fillStyle = silkColor;
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText('EI HOUSE ENG LAB', 18, 28);
-    ctx.font = '13px monospace';
-    ctx.fillText(`REV 1.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 16);
+    ctx.font = `bold ${Math.max(16, Math.round(2.5 * scale))}px monospace`;
+    ctx.fillText('EI HOUSE ENG LAB', 18, 32);
+    ctx.font = `${Math.max(12, Math.round(1.8 * scale))}px monospace`;
+    ctx.fillText(`REV 2.0 (${pcb.widthMm}x${pcb.heightMm}mm)`, 18, canvas.height - 18);
 
-    // Component Silkscreen reference designators & IPC-7351 outlines
+    // Component Silkscreen reference designators & IPC-7351 outlines via FootprintRenderer
     pcb.components?.forEach((comp) => {
+      if (isVirtualSchematicSymbol(comp.type)) return;
       const cx = comp.x * scale;
       const cy = comp.y * scale;
 
@@ -278,211 +282,13 @@ export function Pcb3dViewer({
         ctx.rotate(((comp.rotation || 0) * Math.PI) / 180);
       }
 
-      ctx.strokeStyle = silkColor;
-      ctx.fillStyle = silkColor;
-      ctx.lineWidth = 2;
-      ctx.font = 'bold 14px monospace';
+      FootprintRenderer.renderSilkscreen(ctx, comp, {
+        scale,
+        isSelected: false,
+        silkColor,
+        is3dDecal: true,
+      });
 
-      const upperType = comp.type.toUpperCase();
-      const upperVal = (comp.value || '').toUpperCase();
-
-      if (
-        upperType.includes('RGB') ||
-        upperType === 'ACTUATOR_RGB_LED' ||
-        comp.footprint?.includes('THT-5MM-4PIN') ||
-        comp.footprint?.includes('LED_D5.0mm-4')
-      ) {
-        // RGB LED 4-pin outline with 4 pads & Pin 1 marker
-        const r = 4.0 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.stroke();
-        // 4 in-line pin pads
-        const pins = [-3.81, -1.27, 1.27, 3.81];
-        const labels = ['R', 'C', 'G', 'B'];
-        pins.forEach((px, i) => {
-          const sx = (px / 2.54) * 2.5 * scale;
-          ctx.beginPath();
-          ctx.arc(sx, 0, 1.0 * scale, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillText(labels[i], sx - 3, -2.5 * scale);
-        });
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(comp.designator, -12, 6 * scale);
-      } else if (
-        upperType.includes('SR04') ||
-        upperType.includes('ULTRASONIC') ||
-        comp.footprint?.includes('MODULE-HCSR04') ||
-        comp.footprint?.includes('HCSR04')
-      ) {
-        // HC-SR04 Ultrasonic Module outline (45mm x 20mm)
-        const mw = 26.0 * scale;
-        const mh = 14.0 * scale;
-        ctx.strokeRect(-mw / 2, -mh / 2, mw, mh);
-        // Transducers T and R
-        ctx.beginPath();
-        ctx.arc(-7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(7.0 * scale, 0, 4.5 * scale, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillText('T', -7.0 * scale - 3, 3);
-        ctx.fillText('R', 7.0 * scale - 3, 3);
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText('HC-SR04', -18, -mh / 2 - 2);
-        ctx.fillText(comp.designator, -12, mh / 2 + 8 * scale);
-      } else if (upperType.includes('LED')) {
-        // LED circular rim with cathode flat bar & 'K' marker
-        const r = 4.0 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, -0.6 * Math.PI, 0.6 * Math.PI);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(r * Math.cos(0.6 * Math.PI), r * Math.sin(0.6 * Math.PI));
-        ctx.lineTo(r * Math.cos(-0.6 * Math.PI), r * Math.sin(-0.6 * Math.PI));
-        ctx.stroke();
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('K', r - 2, 2.5 * scale);
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, 6 * scale);
-      } else if (upperType.includes('DIODE')) {
-        // Rectifier diode body with cathode bar
-        ctx.strokeRect(-4.0 * scale, -2.0 * scale, 8.0 * scale, 4.0 * scale);
-        ctx.fillRect(2.0 * scale, -2.0 * scale, 1.6 * scale, 4.0 * scale);
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (
-        upperType.includes('ELECTROLYTIC') ||
-        upperType.includes('RADIAL') ||
-        (upperType.includes('CAPACITOR') && (upperVal.includes('UF') || upperVal.includes('µF') || upperVal.includes('MF')))
-      ) {
-        // Polarized electrolytic capacitor circle with + mark & shaded crescent
-        const r = 4.2 * scale;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.font = 'bold 15px sans-serif';
-        ctx.fillText('+', -r + 2, -r / 2 + 1);
-        ctx.beginPath();
-        ctx.arc(0, 0, r, -Math.PI / 3, Math.PI / 3);
-        ctx.arc(r * 0.45, 0, r * 0.65, Math.PI / 2, -Math.PI / 2, true);
-        ctx.fillStyle = silkColor === '#FFFFFF' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(30, 41, 59, 0.35)';
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = silkColor;
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, 7 * scale);
-      } else if (upperType.includes('CAPACITOR')) {
-        // Ceramic disc / SMD capacitor rounded pill
-        const pw = 7.0 * scale;
-        const ph = 3.6 * scale;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 1.8 * scale);
-        } else {
-          ctx.strokeRect(-pw / 2, -ph / 2, pw, ph);
-        }
-        ctx.stroke();
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (upperType.includes('RESISTOR') || upperType.includes('DIODE') || upperType.includes('INDUCTOR')) {
-        // Axial resistor/diode body with lead lines (10.16mm pitch)
-        const bw = 10.16 * scale;
-        const bh = 3.8 * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.beginPath();
-        ctx.moveTo(-bw / 2, 0);
-        ctx.lineTo(-bw / 2 - 2.8 * scale, 0);
-        ctx.moveTo(bw / 2, 0);
-        ctx.lineTo(bw / 2 + 2.8 * scale, 0);
-        ctx.stroke();
-        ctx.fillText(comp.designator, -12, -3.5 * scale);
-      } else if (
-        upperType.includes('IC') ||
-        upperType.includes('TIMER') ||
-        comp.footprint?.includes('DIP') ||
-        upperType.includes('555') ||
-        upperType.includes('74HC') ||
-        upperType.includes('358') ||
-        upperType.includes('324')
-      ) {
-        // DIP IC with Pin 1 notch and Pin 1 dot
-        const isDip28 = comp.footprint?.includes('DIP-28') || upperType.includes('ATMEGA');
-        const isDip14Or16 = comp.footprint?.includes('DIP-14') || comp.footprint?.includes('DIP-16') || upperType.includes('74HC') || upperType.includes('324') || upperType.includes('595') || upperType.includes('4017') || upperType.includes('2003') || upperType.includes('293');
-        const bLen = (isDip28 ? 35.5 : isDip14Or16 ? 19.5 : 10.0) * scale;
-        const bWid = 6.8 * scale;
-        ctx.strokeRect(-bLen / 2, -bWid / 2, bLen, bWid);
-        // Semicircular notch on the left (-X) side
-        ctx.beginPath();
-        ctx.arc(-bLen / 2, 0, 1.8 * scale, -Math.PI / 2, Math.PI / 2);
-        ctx.stroke();
-        // Pin 1 dot at top-left
-        ctx.beginPath();
-        ctx.arc(-bLen / 2 + 1.8 * scale, -bWid / 2 + 1.6 * scale, 1.0 * scale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.font = 'bold 8px monospace';
-        ctx.fillText('1', -bLen / 2 + 1.8 * scale, -bWid / 2 + 3.4 * scale);
-        ctx.fillText(comp.designator, -10, 2);
-      } else if (
-        upperType.includes('UNO') ||
-        upperType.includes('NANO') ||
-        upperType.includes('MEGA') ||
-        upperType.includes('ESP32') ||
-        upperType.includes('PICO') ||
-        comp.footprint?.includes('BOARD')
-      ) {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 68.6) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 53.4) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        // USB port indicator at top-left edge
-        ctx.strokeRect(-bw / 2, -5 * scale, 9 * scale, 10 * scale);
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText(comp.designator, -bw / 2 + 12 * scale, 3 * scale);
-      } else if (
-        upperType.includes('MODULE') ||
-        upperType.includes('LCD1602') ||
-        upperType.includes('OLED') ||
-        upperType.includes('SERVO')
-      ) {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 30) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 20) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(comp.designator, -bw / 2 + 4 * scale, 2 * scale);
-      } else if (upperType.includes('TO220') || upperType.includes('IRLZ44N') || upperType.includes('7805')) {
-        const bw = 10.4 * scale;
-        const bh = 4.6 * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.beginPath();
-        ctx.moveTo(-bw / 2, -bh / 2 + 1.2 * scale);
-        ctx.lineTo(bw / 2, -bh / 2 + 1.2 * scale);
-        ctx.stroke();
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(comp.designator, -bw / 2, bh / 2 + 7 * scale);
-      } else if (
-        upperType.includes('HEADER') ||
-        upperType.includes('CONNECTOR') ||
-        upperType.includes('TERMINAL') ||
-        upperType.includes('BATTERY')
-      ) {
-        const hw = 12.0 * scale;
-        const hh = 7.0 * scale;
-        ctx.strokeRect(-hw / 2, -hh / 2, hw, hh);
-        ctx.strokeRect(-hw / 2 + 1.0 * scale, -hh / 2 + 1.0 * scale, 2.2 * scale, 2.2 * scale);
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('+', -hw / 2 + 1.2 * scale, hh / 2 - 1.2 * scale);
-        ctx.fillText('-', hw / 2 - 3.5 * scale, hh / 2 - 1.2 * scale);
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(comp.designator, -12, -5.5 * scale);
-      } else {
-        const spec = resolvePhysicalSpec(comp.type, comp.footprint);
-        const bw = (spec.bodyDimensionsMm?.width || 10) * scale;
-        const bh = (spec.bodyDimensionsMm?.depth || 8) * scale;
-        ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-        ctx.fillText(comp.designator, -bw / 2, -bh / 2 - 2 * scale);
-      }
       ctx.restore();
     });
 
@@ -509,6 +315,10 @@ export function Pcb3dViewer({
     }
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipMapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 16;
     texture.needsUpdate = true;
     return texture;
   }, [pcb, theme]);
@@ -801,10 +611,24 @@ export function Pcb3dViewer({
           const px = pad.x - halfW;
           const pz = pad.y - halfH;
           const r = pad.diameterMm / 2;
-          const isRect = pad.shape === 'rect';
           const isVia = pad.componentId === 'VIA' || pad.id.startsWith('via_');
           const isGnd = pad.netId === 'GND' || pad.pinId.toLowerCase().includes('gnd');
           const matchingComp = pcb.components?.find((c) => c.componentId === pad.componentId);
+          const upperType = matchingComp ? (matchingComp.type || '').toUpperCase() : '';
+          const upperVal = matchingComp ? (matchingComp.value || '').toUpperCase() : '';
+          const isCeramicCap =
+            upperType.includes('CAPACITOR') &&
+            !upperType.includes('ELECTROLYTIC') &&
+            !upperType.includes('RADIAL') &&
+            !upperType.includes('TANTALUM') &&
+            !upperVal.includes('UF') &&
+            !upperVal.includes('µF');
+          const isPlainResistor = upperType.includes('RESISTOR') && !upperType.includes('POT') && !upperType.includes('TRIMMER');
+          const isNonPolarizedPassive = isCeramicCap || isPlainResistor;
+          const isPin1 =
+            !isNonPolarizedPassive &&
+            (pad.pinId === '1' || pad.pinId.toLowerCase() === 'k' || pad.pinId.toLowerCase() === 'c' || pad.shape === 'rect');
+          const isRect = !isVia && (pad.shape === 'rect' || isPin1);
 
           return (
             <group
@@ -942,6 +766,8 @@ export function Pcb3dViewer({
               parameters={{
                 ...circuitComp?.parameters,
                 ...pComp.parameters,
+                usbPlugged: false,
+                isUsbPlugged: false,
                 rLevel: 0,
                 gLevel: 0,
                 bLevel: 0,
@@ -950,8 +776,11 @@ export function Pcb3dViewer({
                 b: 0,
               }}
               renderContext="3d-view"
+              isPcbAssemblyMode={true}
+              hideExternalCables={true}
+              usbConnected={false}
               isSelected={false}
-              isSimulating={true}
+              isSimulating={false}
               simState={{
                 on: false,
                 brightness: 0,
