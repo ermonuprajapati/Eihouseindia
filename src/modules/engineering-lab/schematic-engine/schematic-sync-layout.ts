@@ -265,6 +265,100 @@ export function autoLayoutCircuit(
 }
 
 /**
+ * Pure helper for converting client mouse coordinates to snapped/unsnapped sheet coordinates.
+ */
+export function clientToSheetCoords(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width?: number; height?: number },
+  pan: { x: number; y: number },
+  zoom: number,
+  gridStep = 20,
+  snap = true
+): { x: number; y: number } {
+  const effectiveZoom = zoom || 1;
+  const rawX = (clientX - rect.left - pan.x) / effectiveZoom;
+  const rawY = (clientY - rect.top - pan.y) / effectiveZoom;
+  return {
+    x: snap ? Math.round(rawX / gridStep) * gridStep : Math.round(rawX),
+    y: snap ? Math.round(rawY / gridStep) * gridStep : Math.round(rawY),
+  };
+}
+
+/**
+ * Places ONLY components that lack `editorPosition`, leaving all existing components
+ * with their exact editorPosition/editorRotation AND preserving ALL components' simulation (x, y, rotation).
+ */
+export function placeOnlyUnplacedEditorComponents(
+  components: CircuitComponent[],
+  wires: CircuitWire[],
+  gridStep = 20
+): CircuitComponent[] {
+  // If all components already have an editorPosition, return components 100% untouched
+  if (components.every((c) => Boolean(c.editorPosition))) {
+    return components;
+  }
+
+  const occupiedBoxes: BoundingBox[] = [];
+
+  // Register existing editor positions as obstacles
+  components.forEach((c) => {
+    if (c.editorPosition) {
+      occupiedBoxes.push(computeComponentBoundingBox(c, true, 20));
+    }
+  });
+
+  const tryPlaceAt = (comp: CircuitComponent, targetX: number, targetY: number): { x: number; y: number } => {
+    let curX = Math.round(targetX / gridStep) * gridStep;
+    let curY = Math.round(targetY / gridStep) * gridStep;
+    let attempts = 0;
+    const maxAttempts = 200;
+
+    while (attempts < maxAttempts) {
+      const candidate: CircuitComponent = {
+        ...comp,
+        editorPosition: { x: curX, y: curY },
+      };
+      const candidateBox = computeComponentBoundingBox(candidate, true, 20);
+      const collides = occupiedBoxes.some((box) => doBoxesOverlap(candidateBox, box));
+
+      if (!collides) {
+        occupiedBoxes.push(candidateBox);
+        return { x: curX, y: curY };
+      }
+
+      curY += gridStep * 3;
+      if (curY > 800) {
+        curY = 120;
+        curX += gridStep * 8;
+      }
+      attempts++;
+    }
+
+    occupiedBoxes.push(computeComponentBoundingBox({ ...comp, editorPosition: { x: curX, y: curY } }, true, 20));
+    return { x: curX, y: curY };
+  };
+
+  return components.map((c) => {
+    if (c.editorPosition) {
+      return c; // Keep 100% untouched
+    }
+
+    const col = getSignalFlowColumn(c);
+    const startX = col === 'power' ? 140 : col === 'control' ? 460 : 760;
+    const startY = 160;
+    const placedPos = tryPlaceAt(c, startX, startY);
+
+    return {
+      ...c,
+      // CRITICAL: Preserve simulation x, y, rotation byte-for-byte!
+      editorPosition: placedPos,
+      editorRotation: c.editorRotation ?? c.rotation ?? 0,
+    };
+  });
+}
+
+/**
  * Determine pin exit outward normal vector.
  */
 function getPinExitVector(pin: ComponentPin, comp: CircuitComponent): { dx: number; dy: number } {
@@ -365,8 +459,49 @@ export function routeOrthogonalWires(
     box: computeComponentBoundingBox(c, useEditorPos, 8),
   }));
 
+  // Net equivalence via Disjoint Set (Union-Find)
+  const pinParent = new Map<string, string>();
+  const findRoot = (pinKey: string): string => {
+    let root = pinKey;
+    while (pinParent.has(root)) {
+      root = pinParent.get(root)!;
+    }
+    let cur = pinKey;
+    while (pinParent.has(cur)) {
+      const nxt = pinParent.get(cur)!;
+      pinParent.set(cur, root);
+      cur = nxt;
+    }
+    return root;
+  };
+  const unionPins = (k1: string, k2: string) => {
+    const r1 = findRoot(k1);
+    const r2 = findRoot(k2);
+    if (r1 !== r2) {
+      pinParent.set(r1, r2);
+    }
+  };
+
+  wires.forEach((w) => {
+    unionPins(`${w.fromCompId}:${w.fromPinId}`, `${w.toCompId}:${w.toPinId}`);
+  });
+
+  const rootNetNameMap = new Map<string, string>();
+  wires.forEach((w) => {
+    if (w.netName) {
+      const root = findRoot(`${w.fromCompId}:${w.fromPinId}`);
+      if (!rootNetNameMap.has(root)) {
+        rootNetNameMap.set(root, w.netName);
+      }
+    }
+  });
+
+  const getWireNetName = (w: CircuitWire): string => {
+    const root = findRoot(`${w.fromCompId}:${w.fromPinId}`);
+    return rootNetNameMap.get(root) || w.netName || `NET_${root.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  };
+
   const routedWires: RoutedWirePath[] = [];
-  const pointNetMap = new Map<string, { count: number; netName: string; x: number; y: number }>();
 
   wires.forEach((wire, wireIdx) => {
     const fromComp = compMap.get(wire.fromCompId);
@@ -381,6 +516,37 @@ export function routeOrthogonalWires(
 
     const p1 = getPinWorldCoord({ ...fromComp, x: fromPos.x, y: fromPos.y }, fromPin);
     const p2 = getPinWorldCoord({ ...toComp, x: toPos.x, y: toPos.y }, toPin);
+
+    const wireNet = getWireNetName(wire);
+
+    // STRICT RULE: If manual editor waypoints exist, render those EXACT points (NEVER auto-overwrite!)
+    const manualWaypoints = wire.editorWaypoints || wire.manualWaypoints;
+    if (manualWaypoints && manualWaypoints.length >= 2) {
+      const points = [...manualWaypoints];
+      // Snap ends to pins if close
+      points[0] = p1;
+      points[points.length - 1] = p2;
+
+      const segments: RoutedSegment[] = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        segments.push({
+          x1: points[i].x,
+          y1: points[i].y,
+          x2: points[i + 1].x,
+          y2: points[i + 1].y,
+        });
+      }
+
+      routedWires.push({
+        wireId: wire.id,
+        fromCompId: wire.fromCompId,
+        toCompId: wire.toCompId,
+        netName: wireNet,
+        points,
+        segments,
+      });
+      return;
+    }
 
     const fromExit = getPinExitVector(fromPin, fromComp);
     const toExit = getPinExitVector(toPin, toComp);
@@ -478,8 +644,8 @@ export function routeOrthogonalWires(
       if (simplified.length >= 2) {
         const prev1 = simplified[simplified.length - 1];
         const prev2 = simplified[simplified.length - 2];
-        const isCollinearX = prev2.x === prev1.x && prev1.x === cur.x;
-        const isCollinearY = prev2.y === prev1.y && prev1.y === cur.y;
+        const isCollinearX = Math.abs(prev2.x - prev1.x) < 0.1 && Math.abs(prev1.x - cur.x) < 0.1;
+        const isCollinearY = Math.abs(prev2.y - prev1.y) < 0.1 && Math.abs(prev1.y - cur.y) < 0.1;
         if (isCollinearX || isCollinearY) {
           simplified[simplified.length - 1] = cur;
           continue;
@@ -491,45 +657,94 @@ export function routeOrthogonalWires(
     // Build segments
     const segments: RoutedSegment[] = [];
     for (let i = 0; i < simplified.length - 1; i++) {
-      const seg: RoutedSegment = {
+      segments.push({
         x1: simplified[i].x,
         y1: simplified[i].y,
         x2: simplified[i + 1].x,
         y2: simplified[i + 1].y,
-      };
-      segments.push(seg);
-
-      // Register vertices for junction detection
-      const key = `${Math.round(seg.x2)},${Math.round(seg.y2)}`;
-      const net = wire.netName || `NET_${wire.fromCompId}_${wire.fromPinId}`;
-      const existing = pointNetMap.get(key);
-      if (existing && existing.netName === net) {
-        existing.count++;
-      } else if (!existing) {
-        pointNetMap.set(key, { count: 1, netName: net, x: seg.x2, y: seg.y2 });
-      }
+      });
     }
 
     routedWires.push({
       wireId: wire.id,
       fromCompId: wire.fromCompId,
       toCompId: wire.toCompId,
-      netName: wire.netName || `NET_${wire.fromCompId}_${wire.fromPinId}`,
+      netName: wireNet,
       points: simplified,
       segments,
     });
   });
 
-  // Junction dots: Emit ONLY where 3+ segments of the SAME net meet
+  // Accurate Electrical Junction Detection:
+  // Detect where 3+ segments of the SAME net meet (T-junctions or branch intersections)
   const junctions: JunctionDot[] = [];
-  pointNetMap.forEach((entry) => {
-    if (entry.count >= 3) {
-      junctions.push({
-        x: entry.x,
-        y: entry.y,
-        netName: entry.netName,
+  const junctionKeySet = new Set<string>();
+
+  // Group routed wires by netName
+  const netWireMap = new Map<string, RoutedWirePath[]>();
+  routedWires.forEach((rw) => {
+    const list = netWireMap.get(rw.netName) || [];
+    list.push(rw);
+    netWireMap.set(rw.netName, list);
+  });
+
+  netWireMap.forEach((paths, netName) => {
+    // Collect all unique segments in this net
+    const allSegments: RoutedSegment[] = [];
+    paths.forEach((p) => allSegments.push(...p.segments));
+
+    // Endpoint count map for this net
+    const endpointCount = new Map<string, { count: number; x: number; y: number }>();
+    allSegments.forEach((seg) => {
+      [{ x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 }].forEach((pt) => {
+        const key = `${Math.round(pt.x)},${Math.round(pt.y)}`;
+        const existing = endpointCount.get(key);
+        if (existing) {
+          existing.count++;
+        } else {
+          endpointCount.set(key, { count: 1, x: pt.x, y: pt.y });
+        }
       });
-    }
+    });
+
+    // 1. Where 3+ endpoints meet in the same net
+    endpointCount.forEach((entry, key) => {
+      if (entry.count >= 3 && !junctionKeySet.has(key)) {
+        junctionKeySet.add(key);
+        junctions.push({ x: entry.x, y: entry.y, netName });
+      }
+    });
+
+    // 2. T-Junctions where an endpoint of segA touches strictly inside segB of the SAME net
+    allSegments.forEach((segA) => {
+      const endsA = [{ x: segA.x1, y: segA.y1 }, { x: segA.x2, y: segA.y2 }];
+      endsA.forEach((pt) => {
+        allSegments.forEach((segB) => {
+          if (segA === segB) return;
+          const isHorizB = Math.abs(segB.y1 - segB.y2) < 0.5;
+          const isVertB = Math.abs(segB.x1 - segB.x2) < 0.5;
+          const minXB = Math.min(segB.x1, segB.x2);
+          const maxXB = Math.max(segB.x1, segB.x2);
+          const minYB = Math.min(segB.y1, segB.y2);
+          const maxYB = Math.max(segB.y1, segB.y2);
+
+          // Check if pt is strictly on interior of segB (not just at an end)
+          if (isHorizB && Math.abs(pt.y - segB.y1) < 1.0 && pt.x > minXB + 1.0 && pt.x < maxXB - 1.0) {
+            const key = `${Math.round(pt.x)},${Math.round(pt.y)}`;
+            if (!junctionKeySet.has(key)) {
+              junctionKeySet.add(key);
+              junctions.push({ x: pt.x, y: pt.y, netName });
+            }
+          } else if (isVertB && Math.abs(pt.x - segB.x1) < 1.0 && pt.y > minYB + 1.0 && pt.y < maxYB - 1.0) {
+            const key = `${Math.round(pt.x)},${Math.round(pt.y)}`;
+            if (!junctionKeySet.has(key)) {
+              junctionKeySet.add(key);
+              junctions.push({ x: pt.x, y: pt.y, netName });
+            }
+          }
+        });
+      });
+    });
   });
 
   return { routedWires, junctions };

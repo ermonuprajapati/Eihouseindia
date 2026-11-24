@@ -369,8 +369,8 @@ export function LabHeader({
           )}
         </div>
 
-        {/* Master Simulation Run / Stop Button (Hidden on PCB 2D & PCB 3D tabs) */}
-        {activeMode !== 'pcb2d' && activeMode !== 'pcb3d' && (
+        {/* Master Simulation Run / Stop Button (Hidden on PCB 2D, PCB 3D, and Schematic Editor tabs) */}
+        {activeMode !== 'pcb2d' && activeMode !== 'pcb3d' && activeMode !== 'schematicEditor' && (
           <>
             <button
               onClick={onToggleSimulation}

@@ -19,6 +19,9 @@ import {
   Sun,
   Moon,
   Printer,
+  AlignLeft,
+  Search,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { SchematicEditorSheetConfig } from '@/modules/engineering-lab/types';
 
@@ -34,6 +37,9 @@ interface SchematicTopBarProps {
   onDelete?: () => void;
   onAutoTidy?: () => void;
   onRunErc?: () => void;
+  onAlign?: (alignment: 'left' | 'top' | 'center' | 'distribute') => void;
+  onOpenFind?: () => void;
+  onOpenBomNetlist?: () => void;
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -64,6 +70,9 @@ export function SchematicTopBar({
   onDelete,
   onAutoTidy,
   onRunErc,
+  onAlign,
+  onOpenFind,
+  onOpenBomNetlist,
   zoom,
   onZoomIn,
   onZoomOut,
@@ -78,6 +87,7 @@ export function SchematicTopBar({
   selectedItemId,
 }: SchematicTopBarProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showAlignMenu, setShowAlignMenu] = useState(false);
   const hasSelection = Boolean(selectedCompId || selectedItemId);
 
   return (
@@ -172,6 +182,85 @@ export function SchematicTopBar({
           title="Delete Selection (Del / Backspace)"
         >
           <Trash2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Alignment Dropdown */}
+        <div className="relative">
+          <button
+            data-testid="action-align"
+            onClick={() => setShowAlignMenu((p) => !p)}
+            className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors flex items-center gap-1"
+            title="Align Selected Components"
+          >
+            <AlignLeft className="w-3.5 h-3.5" />
+          </button>
+          {showAlignMenu && (
+            <div className="absolute left-0 top-8 bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-50 flex flex-col gap-1 w-32 text-[10px] font-mono">
+              <button
+                data-testid="action-align-left"
+                onClick={() => {
+                  onAlign?.('left');
+                  setShowAlignMenu(false);
+                }}
+                className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400"
+              >
+                Align Left
+              </button>
+              <button
+                data-testid="action-align-top"
+                onClick={() => {
+                  onAlign?.('top');
+                  setShowAlignMenu(false);
+                }}
+                className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400"
+              >
+                Align Top
+              </button>
+              <button
+                data-testid="action-align-center"
+                onClick={() => {
+                  onAlign?.('center');
+                  setShowAlignMenu(false);
+                }}
+                className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400"
+              >
+                Align Center
+              </button>
+              <button
+                data-testid="action-distribute"
+                onClick={() => {
+                  onAlign?.('distribute');
+                  setShowAlignMenu(false);
+                }}
+                className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400"
+              >
+                Distribute H
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 2B. Search & BOM */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          data-testid="action-find"
+          onClick={onOpenFind}
+          className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white flex items-center gap-1 text-[11px] font-mono border border-slate-700 transition-colors"
+          title="Quick Find (Ctrl+F)"
+        >
+          <Search className="w-3 h-3 text-cyan-400" />
+          <span className="hidden sm:inline">Find</span>
+        </button>
+
+        <button
+          data-testid="action-bom-netlist"
+          onClick={onOpenBomNetlist}
+          className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white flex items-center gap-1 text-[11px] font-mono border border-slate-700 transition-colors"
+          title="Bill of Materials & Netlist"
+        >
+          <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+          <span className="hidden sm:inline">BOM</span>
         </button>
       </div>
 

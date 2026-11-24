@@ -66,7 +66,7 @@ export function SchematicLeftRail({
   return (
     <div
       data-testid="sch-left-rail"
-      className="w-10 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-2 z-30 shrink-0 gap-1 overflow-y-auto no-scrollbar select-none"
+      className="w-10 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-2 z-50 shrink-0 gap-1 overflow-visible select-none"
     >
       {/* 1. Select / Box-Select (V) */}
       <button

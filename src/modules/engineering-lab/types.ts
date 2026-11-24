@@ -151,6 +151,8 @@ export interface CircuitComponent {
   editorPosition?: { x: number; y: number };
   editorRotation?: 0 | 90 | 180 | 270;
   editorFlipped?: boolean;
+  editorFlipX?: boolean;
+  editorFlipY?: boolean;
   state?: {
     voltage?: number;
     current?: number;
@@ -178,6 +180,9 @@ export interface CircuitWire {
   color?: string; // Virtual 3D wire jumper color (e.g. #EF4444, #10B981, #3B82F6)
   style?: WireRoutingStyle;
   netName?: string;
+  editorWaypoints?: { x: number; y: number }[];
+  manualWaypoints?: { x: number; y: number }[];
+  isManualEditorRoute?: boolean;
 }
 
 export interface ComponentSimTelemetry {

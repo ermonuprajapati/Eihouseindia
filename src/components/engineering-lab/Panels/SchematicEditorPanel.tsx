@@ -29,6 +29,8 @@ import { SchematicDrawingLayer } from './schematic-editor/SchematicDrawingLayer'
 import { SchematicTitleBlockView } from './schematic-editor/SchematicTitleBlockView';
 import { SchematicInlineEditor, InlineEditorTarget } from './schematic-editor/SchematicInlineEditor';
 import { exportSchematicSvg, exportSchematicPng, printSchematicSheet } from './schematic-editor/export-utils';
+import { SchematicBomNetlistModal } from './schematic-editor/SchematicBomNetlistModal';
+import { Search, X, Trash2 } from 'lucide-react';
 
 const ErcReportModal = dynamic(
   () => import('./ErcReportModal').then((m) => m.ErcReportModal),
@@ -146,6 +148,12 @@ export function SchematicEditorPanel({
   const [isErcOpen, setIsErcOpen] = useState(false);
   const [ercViolations, setErcViolations] = useState<ErcViolation[]>([]);
 
+  // Pro EDA Dialogs State
+  const [isFindOpen, setIsFindOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isBomOpen, setIsBomOpen] = useState(false);
+  const [wirePillPos, setWirePillPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // Hidden File Input for Image Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -213,6 +221,65 @@ export function SchematicEditorPanel({
     onUpdateWires(layout.wires);
   }, [components, wires, sheetConfig.gridStep, onUpdateComponents, onUpdateWires]);
 
+  // Align Components handler
+  const handleAlign = useCallback(
+    (type: 'left' | 'top' | 'center' | 'distribute') => {
+      if (components.length < 2) return;
+      const sorted = [...components];
+      if (type === 'left') {
+        const minX = Math.min(...sorted.map((c) => (c.editorPosition ? c.editorPosition.x : c.x)));
+        onUpdateComponents(
+          components.map((c) => ({
+            ...c,
+            editorPosition: { x: minX, y: c.editorPosition ? c.editorPosition.y : c.y },
+          }))
+        );
+      } else if (type === 'top') {
+        const minY = Math.min(...sorted.map((c) => (c.editorPosition ? c.editorPosition.y : c.y)));
+        onUpdateComponents(
+          components.map((c) => ({
+            ...c,
+            editorPosition: { x: c.editorPosition ? c.editorPosition.x : c.x, y: minY },
+          }))
+        );
+      } else if (type === 'center') {
+        const avgX =
+          sorted.reduce((sum, c) => sum + (c.editorPosition ? c.editorPosition.x : c.x), 0) /
+          sorted.length;
+        onUpdateComponents(
+          components.map((c) => ({
+            ...c,
+            editorPosition: { x: Math.round(avgX / 20) * 20, y: c.editorPosition ? c.editorPosition.y : c.y },
+          }))
+        );
+      } else if (type === 'distribute') {
+        sorted.sort(
+          (a, b) =>
+            (a.editorPosition ? a.editorPosition.x : a.x) - (b.editorPosition ? b.editorPosition.x : b.x)
+        );
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        const minX = first?.editorPosition ? first.editorPosition.x : first?.x ?? 0;
+        const maxX = last?.editorPosition ? last.editorPosition.x : last?.x ?? 0;
+        const step = (maxX - minX) / (sorted.length - 1 || 1);
+        const posMap = new Map<string, number>();
+        sorted.forEach((c, idx) => {
+          posMap.set(c.id, Math.round((minX + idx * step) / 20) * 20);
+        });
+        onUpdateComponents(
+          components.map((c) => ({
+            ...c,
+            editorPosition: {
+              x: posMap.get(c.id) ?? (c.editorPosition ? c.editorPosition.x : c.x),
+              y: c.editorPosition ? c.editorPosition.y : c.y,
+            },
+          }))
+        );
+      }
+    },
+    [components, onUpdateComponents]
+  );
+
   // Run ERC handler
   const handleRunErc = useCallback(() => {
     // Filter out unconnected pin warnings for pins with explicit No-Connect flags
@@ -250,12 +317,18 @@ export function SchematicEditorPanel({
           setWireWaypoints([]);
         } else {
           if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
+            const startPt = { x: activeWireStart.x, y: activeWireStart.y };
+            const endPt = { x: wx, y: wy };
+            const fullWaypoints = [startPt, ...wireWaypoints, endPt];
+
             onAddWire({
               fromCompId: activeWireStart.compId,
               fromPinId: activeWireStart.pinId,
               toCompId: compId,
               toPinId: pinId,
-              points: wireWaypoints.length > 0 ? wireWaypoints : undefined,
+              editorWaypoints: fullWaypoints,
+              points: fullWaypoints,
+              isManualEditorRoute: true,
             });
           }
           setActiveWireStart(null);
@@ -292,9 +365,11 @@ export function SchematicEditorPanel({
         return;
       }
 
+      setWirePillPos({ x: hitX, y: hitY });
       onSelectWire(wireId);
+      onSelectComponent(null);
     },
-    [tool, onSelectWire]
+    [tool, onSelectWire, onSelectComponent]
   );
 
   // Keyboard Shortcuts (V, H, W, J, N, P, Q, G, T, R, X, Y, Del, Ctrl+D, Ctrl+Z, Ctrl+Y, Space)
@@ -630,10 +705,24 @@ export function SchematicEditorPanel({
         onRotate={() => selectedCompId && onRotateComponent(selectedCompId)}
         onMirrorH={() => {
           if (selectedCompId) {
-            onUpdateComponents(components.map((c) => (c.id === selectedCompId ? { ...c, mirrored: !c.mirrored } : c)));
+            onUpdateComponents(
+              components.map((c) =>
+                c.id === selectedCompId
+                  ? { ...c, editorFlipX: !c.editorFlipX, mirrored: !c.mirrored }
+                  : c
+              )
+            );
           }
         }}
-        onMirrorV={() => selectedCompId && onRotateComponent(selectedCompId)}
+        onMirrorV={() => {
+          if (selectedCompId) {
+            onUpdateComponents(
+              components.map((c) =>
+                c.id === selectedCompId ? { ...c, editorFlipY: !c.editorFlipY } : c
+              )
+            );
+          }
+        }}
         onDuplicate={() => {
           if (selectedCompId) {
             const comp = components.find((c) => c.id === selectedCompId);
@@ -670,6 +759,9 @@ export function SchematicEditorPanel({
         }}
         onAutoTidy={handleAutoTidy}
         onRunErc={handleRunErc}
+        onAlign={handleAlign}
+        onOpenFind={() => setIsFindOpen(true)}
+        onOpenBomNetlist={() => setIsBomOpen(true)}
         zoom={zoom}
         onZoomIn={() => setZoom((z) => Math.min(2.5, z * 1.15))}
         onZoomOut={() => setZoom((z) => Math.max(0.4, z * 0.85))}
@@ -798,21 +890,30 @@ export function SchematicEditorPanel({
                   const ptsStr = rw.points.map((p) => `${p.x},${p.y}`).join(' ');
                   return (
                     <g key={rw.wireId} className="cursor-pointer">
-                      {/* Generous Invisible Hover/Click Stroke */}
+                      {/* Generous Invisible Hover/Click Stroke (14px) */}
                       <polyline
+                        data-testid={`sch-wire-hit-${rw.wireId}`}
                         points={ptsStr}
                         fill="none"
                         stroke="transparent"
-                        strokeWidth="12"
+                        strokeWidth="14"
+                        pointerEvents="stroke"
                         strokeLinecap="round"
                         strokeLinejoin="round"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
+                          handleWireClick(e, rw.wireId, mid.x, mid.y);
+                        }}
                         onClick={(e) => {
+                          e.stopPropagation();
                           const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
                           handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                       />
                       {/* Visible Copper Track Line */}
                       <polyline
+                        data-testid={`sch-wire-${rw.wireId}`}
                         points={ptsStr}
                         fill="none"
                         stroke={isSelected ? '#10B981' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0284C7'}
@@ -820,11 +921,32 @@ export function SchematicEditorPanel({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="transition-colors hover:stroke-emerald-400"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
+                          handleWireClick(e, rw.wireId, mid.x, mid.y);
+                        }}
                         onClick={(e) => {
+                          e.stopPropagation();
                           const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
                           handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                       />
+                      {/* Draggable Corner Handles when selected */}
+                      {isSelected &&
+                        rw.points.map((pt, pIdx) => (
+                          <circle
+                            key={`corner-${rw.wireId}-${pIdx}`}
+                            data-testid={`sch-wire-corner-${pIdx}`}
+                            cx={pt.x}
+                            cy={pt.y}
+                            r="4"
+                            fill="#10B981"
+                            stroke="#FFFFFF"
+                            strokeWidth="1.5"
+                            className="cursor-move"
+                          />
+                        ))}
                     </g>
                   );
                 })}
@@ -833,12 +955,13 @@ export function SchematicEditorPanel({
                 {allJunctions.map((j, idx) => (
                   <circle
                     key={`junct-${idx}`}
+                    data-testid={`sch-junction-${Math.round(j.x)}-${Math.round(j.y)}`}
                     cx={j.x}
                     cy={j.y}
-                    r="4"
-                    fill="#38BDF8"
-                    stroke="#0284C7"
-                    strokeWidth="1.2"
+                    r="4.5"
+                    fill="#34D399"
+                    stroke="#0F172A"
+                    strokeWidth="1.5"
                   />
                 ))}
 
@@ -993,6 +1116,115 @@ export function SchematicEditorPanel({
           }}
         />
       )}
+      {/* Floating Wire Action Pill */}
+      {selectedWireId && (
+        <div
+          data-testid="sch-wire-action-pill"
+          className="absolute z-40 bg-slate-900 border border-slate-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1.5 text-xs font-mono"
+          style={{
+            left: Math.max(20, Math.min(sheetDimensions.width - 150, wirePillPos.x * zoom + pan.x)),
+            top: Math.max(20, Math.min(sheetDimensions.height - 40, wirePillPos.y * zoom + pan.y - 30)),
+          }}
+        >
+          <button
+            data-testid="pill-delete-wire"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteWire(selectedWireId);
+              onSelectWire(null);
+            }}
+            className="text-rose-400 hover:text-rose-300 px-1.5 py-0.5 rounded hover:bg-rose-950/60 transition-colors flex items-center gap-1"
+          >
+            <Trash2 className="w-3 h-3" />
+            <span>Delete Wire</span>
+          </button>
+          <div className="w-[1px] h-3 bg-slate-700" />
+          <button
+            data-testid="pill-add-junction"
+            onClick={(e) => {
+              e.stopPropagation();
+              setManualJunctions((prev) => [
+                ...prev,
+                { id: `mj_${Date.now()}`, x: wirePillPos.x, y: wirePillPos.y },
+              ]);
+            }}
+            className="text-cyan-400 hover:text-cyan-300 px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors"
+          >
+            +Junc
+          </button>
+          <button
+            data-testid="pill-close-wire"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectWire(null);
+            }}
+            className="text-slate-400 hover:text-white px-1"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Quick Find (Ctrl+F) Popover */}
+      {isFindOpen && (
+        <div
+          data-testid="sch-quick-find"
+          className="absolute top-12 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl p-3 z-50 w-80 text-xs font-mono"
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <span className="font-bold text-white flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-cyan-400" /> Quick Find
+            </span>
+            <button onClick={() => setIsFindOpen(false)} className="text-slate-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <input
+            data-testid="sch-find-input"
+            type="text"
+            placeholder="Search component (e.g. U1, 10k, R1)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 mt-2 focus:outline-none focus:border-cyan-400"
+            autoFocus
+          />
+          <div className="mt-2 max-h-40 overflow-y-auto divide-y divide-slate-800">
+            {components
+              .filter(
+                (c) =>
+                  !searchQuery ||
+                  c.designator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  c.label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  c.value?.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+              .map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    onSelectComponent(c.id);
+                    const posX = c.editorPosition ? c.editorPosition.x : c.x;
+                    const posY = c.editorPosition ? c.editorPosition.y : c.y;
+                    setPan({ x: 400 - posX * zoom, y: 300 - posY * zoom });
+                    setIsFindOpen(false);
+                  }}
+                  className="w-full text-left py-1 px-1 hover:bg-slate-800 rounded flex items-center justify-between text-slate-300"
+                >
+                  <span className="text-emerald-400 font-bold">{c.designator || c.label}</span>
+                  <span className="text-slate-500 text-[10px]">{c.value}</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Bill of Materials & Netlist Modal */}
+      <SchematicBomNetlistModal
+        isOpen={isBomOpen}
+        onClose={() => setIsBomOpen(false)}
+        components={components}
+        wires={wires}
+        projectName={project.title}
+      />
     </div>
   );
 }

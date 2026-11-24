@@ -49,13 +49,45 @@ export function SchematicVectorSymbol({
     'MCU_ATTINY85',
   ].includes(type);
 
-  const compW = component.width ? Math.max(isMcu ? 130 : 60, component.width) : isMcu ? 130 : 60;
-  const compH = component.height ? Math.max(isMcu ? 180 : 40, component.height) : isMcu ? 180 : 40;
+  const isGround =
+    type === 'GROUND' ||
+    type === 'GND' ||
+    type === 'POWER_GND' ||
+    type.includes('GROUND') ||
+    component.label?.toUpperCase().includes('GND') ||
+    designator.toUpperCase().startsWith('GND');
+
+  const isIC =
+    !isMcu &&
+    (type.includes('555') ||
+      type.includes('IC_') ||
+      type.includes('OPAMP') ||
+      type.includes('COMPARATOR') ||
+      type.includes('LOGIC') ||
+      (component.pins && component.pins.length >= 4));
+
+  const compW = component.width
+    ? Math.max(isMcu ? 140 : isIC ? 126 : 60, component.width)
+    : isMcu ? 140 : isIC ? 126 : 60;
+  const compH = component.height
+    ? Math.max(isMcu ? 180 : isIC ? 90 : 40, component.height)
+    : isMcu ? 180 : isIC ? 90 : 40;
   const halfW = compW / 2;
   const halfH = compH / 2;
 
   // Render symbol-specific vector graphics inside pure SVG
   const renderSymbolGraphic = () => {
+    if (isGround) {
+      return (
+        <g className="sch-symbol-ground">
+          <line x1="0" y1="-15" x2="0" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+          <line x1="-16" y1="0" x2="16" y2="0" stroke={strokeColor} strokeWidth={2.4} strokeLinecap="round" />
+          <line x1="-10" y1="5" x2="10" y2="5" stroke={strokeColor} strokeWidth={2.0} strokeLinecap="round" />
+          <line x1="-4" y1="10" x2="4" y2="10" stroke={strokeColor} strokeWidth={1.8} strokeLinecap="round" />
+        </g>
+      );
+    }
+
     switch (type) {
       case 'RESISTOR':
         return (
@@ -244,8 +276,8 @@ export function SchematicVectorSymbol({
       case 'IC_L293D':
       default: {
         // Multi-Pin Integrated Circuit or MCU Module
-        const icW = compW > 60 ? compW : 70;
-        const icH = compH > 40 ? compH : 85;
+        const icW = compW;
+        const icH = compH;
         const icHalfW = icW / 2;
         const icHalfH = icH / 2;
 
@@ -346,8 +378,22 @@ export function SchematicVectorSymbol({
       data-comp-type={type}
       transform={`translate(${posX}, ${posY}) rotate(${rotation}) ${mirrored ? 'scale(-1, 1)' : ''}`}
       className={`sch-component cursor-move select-none ${isSelected ? 'sch-selected' : ''}`}
+      onMouseDown={(e) => {
+        // Prevent background viewport from stealing selection
+        e.stopPropagation();
+      }}
       onDoubleClick={(e) => onDoubleClick && onDoubleClick(e, component)}
     >
+      {/* Transparent Click Hit-Box covering entire component footprint */}
+      <rect
+        x={-halfW - 6}
+        y={-halfH - 6}
+        width={compW + 12}
+        height={compH + 12}
+        fill="transparent"
+        pointerEvents="all"
+      />
+
       {/* Selection Glow / Reticle */}
       {isSelected && (
         <rect
@@ -383,20 +429,22 @@ export function SchematicVectorSymbol({
           {designator}
         </text>
 
-        {/* Component Nominal Value (10kΩ, 100nF, NE555) - Placed cleanly below symbol */}
-        <text
-          data-testid={`sch-value-${component.id}`}
-          x="0"
-          y={halfH + 16}
-          textAnchor="middle"
-          fill={theme === 'dark' ? '#CBD5E1' : '#334155'}
-          fontSize="10"
-          fontWeight="600"
-          fontFamily="monospace"
-          className="pointer-events-none drop-shadow-sm select-none"
-        >
-          {value}
-        </text>
+        {/* Component Nominal Value (10kΩ, 100nF, NE555) - Placed cleanly below symbol (suppressed for GND/0V) */}
+        {!isGround && value && value !== '0V' && (
+          <text
+            data-testid={`sch-value-${component.id}`}
+            x="0"
+            y={halfH + 16}
+            textAnchor="middle"
+            fill={theme === 'dark' ? '#CBD5E1' : '#334155'}
+            fontSize="10"
+            fontWeight="600"
+            fontFamily="monospace"
+            className="pointer-events-none drop-shadow-sm select-none"
+          >
+            {value}
+          </text>
+        )}
       </g>
 
       {/* Interactive Pin Connection Terminals */}

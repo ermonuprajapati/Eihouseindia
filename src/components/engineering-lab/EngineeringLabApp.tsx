@@ -15,7 +15,7 @@ import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circu
 import { VirtualMcuRuntime, GpioState } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
-import { autoLayoutCircuit } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
+import { placeOnlyUnplacedEditorComponents } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
 
 import { LabHeader, ExportFormat } from './Header/LabHeader';
 import { SchematicCanvas } from './Canvas/SchematicCanvas';
@@ -218,8 +218,10 @@ export function EngineeringLabApp() {
       setProject((prev) => {
         const hasUnplaced = prev.components.some((c) => !c.editorPosition);
         if (hasUnplaced) {
-          const layout = autoLayoutCircuit(prev.components, prev.wires);
-          return { ...prev, components: layout.components };
+          return {
+            ...prev,
+            components: placeOnlyUnplacedEditorComponents(prev.components, prev.wires),
+          };
         }
         return prev;
       });
@@ -840,11 +842,31 @@ export function EngineeringLabApp() {
   const handleUpdateComponentPosition = (id: string, x: number, y: number) => {
     setProject((prev) => ({
       ...prev,
+      components: prev.components.map((c) => (c.id === id ? { ...c, x, y } : c)),
+    }));
+  };
+
+  const handleUpdateEditorComponentPosition = (id: string, x: number, y: number) => {
+    setProject((prev) => ({
+      ...prev,
       components: prev.components.map((c) =>
-        c.id === id ? { ...c, x, y, editorPosition: { x, y } } : c
+        c.id === id ? { ...c, editorPosition: { x, y } } : c
       ),
     }));
   };
+
+  const handleRotateEditorComponent = useCallback((id: string) => {
+    recordHistory();
+    setProject((prev) => ({
+      ...prev,
+      components: prev.components.map((c) => {
+        if (c.id !== id) return c;
+        const curRot = c.editorRotation ?? c.rotation ?? 0;
+        const nextRot = ((curRot + 90) % 360) as 0 | 90 | 180 | 270;
+        return { ...c, editorRotation: nextRot };
+      }),
+    }));
+  }, [recordHistory]);
 
   const handleUpdateComponent3DPosition = (id: string, x3d: number, y3d: number, z3d: number) => {
     setProject((prev) => ({
@@ -1658,7 +1680,14 @@ export function EngineeringLabApp() {
                 selectedWireId={selectedWireId}
                 placingComponent={editorPlacingComponent}
                 onFinishPlacing={(placedComp) => {
-                  handleAddComponent(placedComp);
+                  const simX = placedComp.x || placedComp.editorPosition?.x || 200;
+                  const simY = placedComp.y || placedComp.editorPosition?.y || 160;
+                  handleAddComponent({
+                    ...placedComp,
+                    x: simX,
+                    y: simY,
+                    editorPosition: placedComp.editorPosition || { x: simX, y: simY },
+                  });
                   setEditorPlacingComponent(null);
                 }}
                 onCancelPlacing={() => setEditorPlacingComponent(null)}
@@ -1670,14 +1699,27 @@ export function EngineeringLabApp() {
                   setSelectedWireId(id);
                   setSelectedCompId(null);
                 }}
-                onUpdateComponentPosition={handleUpdateComponentPosition}
-                onRotateComponent={handleRotateComponent}
+                onUpdateComponentPosition={handleUpdateEditorComponentPosition}
+                onRotateComponent={handleRotateEditorComponent}
                 onDeleteComponent={handleDeleteComponent}
                 onAddWire={handleAddWire}
                 onDeleteWire={handleDeleteWire}
                 onUpdateComponents={(comps) => {
                   recordHistory();
-                  setProject((prev) => ({ ...prev, components: comps }));
+                  setProject((prev) => {
+                    const oldMap = new Map(prev.components.map((c) => [c.id, c]));
+                    const guarded = comps.map((c) => {
+                      const old = oldMap.get(c.id);
+                      if (!old) return c;
+                      return {
+                        ...c,
+                        x: old.x,
+                        y: old.y,
+                        rotation: old.rotation,
+                      };
+                    });
+                    return { ...prev, components: guarded };
+                  });
                   setHasUnsavedChanges(true);
                 }}
                 onUpdateWires={(wires) => {
