@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { getComponentPinLabels } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import { COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { CircuitSolver } from '@/modules/engineering-lab/circuit-engine/circuit-solver';
-import { CircuitComponent, CircuitWire, Component3D, ComponentPin, PcbLayout, PcbSilkscreenText, PcbTrack } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, Component3D, ComponentPin, PcbComponentPlacement, PcbLayout, PcbSilkscreenText, PcbTrack } from '@/modules/engineering-lab/types';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { createPcbBoardShape, sanitizePcbHoles } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
-import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
+import { PcbGenerator, verifyPcbManufacturingIntegrity } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { DrcEngine } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { resolve3DModelType } from '@/modules/engineering-lab/studio-3d/SharedComponent3D';
 import {
@@ -3434,6 +3434,112 @@ describe('Virtual Lab v3 Verification Suite', () => {
       // Spacing between pad 0 and pad 1, and pad 1 and pad 2 must be 2.54mm
       expect(Math.abs(pads[1].x - pads[0].x)).toBeCloseTo(2.54, 1);
       expect(Math.abs(pads[2].x - pads[1].x)).toBeCloseTo(2.54, 1);
+    });
+
+    it('TASK 1/5: verifyPcbManufacturingIntegrity validates 100% net continuity, 0 crossings, and 0 pad shorts', () => {
+      const pinPass = (id: string, name: string): ComponentPin => ({ id, name, x: 0, y: 0, pinType: 'passive' });
+      const createComp = (id: string, type: string, label: string, value: string, x: number, y: number, pins: ComponentPin[]): CircuitComponent => ({
+        id,
+        type,
+        label,
+        value,
+        category: 'passive',
+        x,
+        y,
+        rotation: 0,
+        parameters: {},
+        footprint: 'DEFAULT',
+        pins,
+      });
+
+      const comps: CircuitComponent[] = [
+        createComp('bt1', 'DC_BATTERY', 'BT1', '9V', 50, 50, [pinPass('1', '+'), pinPass('2', '-')]),
+        createComp('r1', 'RESISTOR', 'R1', '1k', 150, 50, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('r2', 'RESISTOR', 'R2', '10k', 250, 50, [pinPass('1', '1'), pinPass('2', '2')]),
+        createComp('u1', 'TIMER_555', 'U1', 'NE555', 200, 150, [
+          pinPass('1', 'GND'), pinPass('2', 'TRIG'), pinPass('3', 'OUT'), pinPass('4', 'RESET'),
+          pinPass('5', 'CTRL'), pinPass('6', 'THRES'), pinPass('7', 'DISCH'), pinPass('8', 'VCC'),
+        ]),
+        createComp('u2', 'ARDUINO_UNO', 'U2', 'Uno R3', 450, 150, [
+          pinPass('5V', '5V'), pinPass('GND', 'GND'), pinPass('D0', 'RX'), pinPass('D1', 'TX'),
+        ]),
+      ];
+
+      const wires: CircuitWire[] = [
+        { id: 'w1', fromCompId: 'bt1', fromPinId: '1', toCompId: 'u1', toPinId: '8' },
+        { id: 'w2', fromCompId: 'u1', toCompId: 'r1', fromPinId: '8', toPinId: '1' },
+        { id: 'w3', fromCompId: 'r1', toCompId: 'r2', fromPinId: '2', toPinId: '1' },
+        { id: 'w4', fromCompId: 'bt1', toCompId: 'u1', fromPinId: '2', toPinId: '1' },
+        { id: 'w5', fromCompId: 'u1', toCompId: 'u2', fromPinId: '1', toPinId: 'GND' },
+      ];
+
+      const pcb = PcbGenerator.generatePcbFromSchematic(comps, wires, 110, 80);
+      expect(pcb.tracks.length).toBeGreaterThan(0);
+
+      const drc = verifyPcbManufacturingIntegrity(pcb);
+      if (drc.errors.length > 0) console.log('DRC ERRORS:', drc.errors);
+      expect(drc.stats.crossings).toBe(0);
+      expect(drc.stats.padShorts).toBe(0);
+      expect(drc.stats.unroutedNets).toBe(0);
+      expect(drc.stats.orphanVias).toBe(0);
+      expect(drc.stats.deadEndTracks).toBe(0);
+      expect(drc.valid).toBe(true);
+    });
+
+    it('TASK 3: Battery BT1 renders distinct + and - silkscreen polarity marks beside pads', () => {
+      const bt1: CircuitComponent = {
+        id: 'bt1',
+        type: 'DC_BATTERY',
+        label: 'BT1',
+        designator: 'BT1',
+        value: '9V',
+        category: 'power',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        footprint: 'BATTERY_HOLDER',
+        pins: [
+          { id: '1', name: '+', x: -2.54, y: 0, pinType: 'passive' },
+          { id: '2', name: '-', x: 2.54, y: 0, pinType: 'passive' },
+        ],
+      };
+
+      const filledTexts: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        strokeRect: vi.fn(),
+        beginPath: vi.fn(),
+        arc: vi.fn(),
+        stroke: vi.fn(),
+        fill: vi.fn(),
+        fillText: vi.fn((text: string) => filledTexts.push(text)),
+      } as unknown as CanvasRenderingContext2D;
+
+      const btPlacement: PcbComponentPlacement = {
+        componentId: bt1.id,
+        type: bt1.type,
+        label: bt1.label,
+        designator: bt1.designator || 'BT1',
+        value: bt1.value,
+        footprint: bt1.footprint,
+        x: bt1.x,
+        y: bt1.y,
+        rotation: bt1.rotation,
+      };
+
+      FootprintRenderer.renderSilkscreen(mockCtx, btPlacement, {
+        scale: 10,
+        isSelected: false,
+        silkColor: '#ffffff',
+      });
+
+      expect(filledTexts).toContain('+');
+      expect(filledTexts).toContain('-');
+      expect(filledTexts).toContain('BT1');
     });
   });
 });

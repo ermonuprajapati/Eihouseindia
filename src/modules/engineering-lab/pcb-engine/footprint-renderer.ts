@@ -1046,14 +1046,18 @@ export class FootprintRenderer {
       }
 
       case 'battery': {
-        // Battery holder outline: clean rectangle with distinct '+' and '-' polarity marks near pads (no floating Pin 1 box)
+        // Battery holder outline: clean rectangle with distinct '+' and '-' polarity marks near pads
         ctx.strokeRect(-bw / 2, -bd / 2, bw, bd);
-        const fontPol = Math.max(10, Math.round(2.0 * scale));
+        const fontPol = Math.max(11, Math.round(2.2 * scale));
         ctx.font = `bold ${fontPol}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('+', -bw / 2 + 2.5 * scale, 0);
-        ctx.fillText('-', bw / 2 - 2.5 * scale, 0);
+        // Bold polarity marks right beside pads (Pin 1 positive +, Pin 2 negative -)
+        ctx.fillText('+', -2.54 * scale - 2.2 * scale, 0);
+        ctx.fillText('-', 2.54 * scale + 2.2 * scale, 0);
+        // Also draw polarity badges on the body outline
+        ctx.fillText('+', -bw / 2 + 2.5 * scale, -bd / 2 + 2.5 * scale);
+        ctx.fillText('-', bw / 2 - 2.5 * scale, -bd / 2 + 2.5 * scale);
         break;
       }
 
