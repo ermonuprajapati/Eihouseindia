@@ -281,7 +281,7 @@ export function SchematicEditorPanel({
   // Compute canonical wire points and junctions matching SchematicCanvas.tsx 1-to-1
   const routedWires = useMemo(() => {
     return wires.map((w) => {
-      const pts = getCanonicalWirePoints(w, components);
+      const pts = getCanonicalWirePoints(w, components, wires);
       return {
         wireId: w.id,
         points: pts,

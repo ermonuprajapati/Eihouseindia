@@ -1821,5 +1821,209 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(tapped).toBeDefined();
     expect(tapped?.junctionPoint).toBeDefined();
   });
+
+  it('GATE 6 Test 1 (Reverse 3D Click-Order Bi-Directional Auto-Tap): Reverse click-order from bb_col_30_A to U2:D9 resolves T-junction tap and returns strictly 1 wire', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'u2',
+        type: 'arduino_uno',
+        label: 'Arduino',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: {}, // Off-board MCU pin
+      },
+      {
+        id: 'led1',
+        type: 'led',
+        label: 'LED',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { 'a': 'bb_col_30_c', 'k': 'bb_rail_bot_neg_1' },
+      },
+      {
+        id: 'r3',
+        type: 'resistor',
+        label: 'Resistor',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_30_e', '2': 'bb_col_25_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'u2',
+        type: 'MCU',
+        designator: 'U2',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        value: 'Arduino',
+        footprint: 'Arduino_Uno',
+        x: 240,
+        y: 150,
+        rotation: 0,
+        parameters: {},
+        pins: [{ id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'output' }],
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'LED1',
+        label: 'Red LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_D5.0mm',
+        x: 200,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: 'a', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'r3',
+        type: 'RESISTOR',
+        designator: 'R3',
+        label: '330 Resistor',
+        category: 'passive',
+        value: '330',
+        footprint: 'R_Axial',
+        x: 300,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Existing net: r3:1 connected to led1:a
+    const existingWire: CircuitWire = {
+      id: 'wire_r3_led1',
+      fromCompId: 'r3',
+      fromPinId: '1',
+      toCompId: 'led1',
+      toPinId: 'a',
+      points: [{ x: 290, y: 100 }, { x: 190, y: 100 }],
+    };
+
+    // Reverse click-order in 3D: from breadboard hole to MCU pin!
+    const reverseJumperWire: Wire3D = {
+      id: 'w3d_jumper_reverse',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_30_a' },
+      toPin: { compId: 'u2', pinId: 'D9' },
+      color: '#3B82F6',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      reverseJumperWire,
+      [reverseJumperWire],
+      components3d,
+      schematicComponents,
+      [existingWire]
+    );
+
+    // Strictly 1 wire returned (zero fan-out, zero duplicate)
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].tappedWireId).toBe('wire_r3_led1');
+    expect(resolved[0].junctionPoint).toBeDefined();
+    expect(resolved[0].junctionPoint?.x).toBe(240);
+    expect(resolved[0].junctionPoint?.y).toBe(100);
+  });
+
+  it('GATE 6 Test 2 (Live Dynamic T-Junction Glue on Move): Moving a parent component dynamically glues tapping wire endpoint with 0px detachment', () => {
+    const comps: CircuitComponent[] = [
+      {
+        id: 'comp_parent_A',
+        type: 'RESISTOR',
+        designator: 'R_P1',
+        label: 'Parent Resistor A',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 100, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'comp_tap',
+        type: 'RESISTOR',
+        designator: 'R_TAP',
+        label: 'Tap Resistor',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 150,
+        y: 200,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Parent wire between pin 1 (100, 100) and pin 2 (200, 100)
+    const parentWire: CircuitWire = {
+      id: 'parent_wire_1',
+      fromCompId: 'comp_parent_A',
+      fromPinId: '1',
+      toCompId: 'comp_parent_A',
+      toPinId: '2',
+    };
+
+    // Tapping wire starting at comp_tap:1 (150, 200) and tapped into parent_wire_1 at (150, 100)
+    const tappingWire: CircuitWire = {
+      id: 'tapping_wire_1',
+      fromCompId: 'comp_tap',
+      fromPinId: '1',
+      toCompId: 'comp_parent_A',
+      toPinId: '1',
+      tappedWireId: 'parent_wire_1',
+      junctionPoint: { x: 150, y: 100 },
+    };
+
+    const allWires = [parentWire, tappingWire];
+
+    // Initial canonical wire points
+    const ptsInitial = getCanonicalWirePoints(tappingWire, comps, allWires);
+    const lastPtInitial = ptsInitial[ptsInitial.length - 1];
+    expect(lastPtInitial.x).toBe(150);
+    expect(lastPtInitial.y).toBe(100);
+
+    // NOW MOVE parent component by dx=+80, dy=+60 (x: 180, y: 160)
+    const movedComps: CircuitComponent[] = comps.map((c) =>
+      c.id === 'comp_parent_A' ? { ...c, x: 180, y: 160 } : c
+    );
+
+    // Dynamic evaluation with moved parent component
+    const ptsMoved = getCanonicalWirePoints(tappingWire, movedComps, allWires);
+    const lastPtMoved = ptsMoved[ptsMoved.length - 1];
+
+    // Parent wire is now along y = 160 (between x=180 and x=280).
+    // Tapping wire terminal endpoint MUST dynamically project onto y = 160 (0px detachment!)
+    expect(lastPtMoved.y).toBe(160);
+    expect(lastPtMoved.x).toBeGreaterThanOrEqual(180);
+    expect(lastPtMoved.x).toBeLessThanOrEqual(280);
+  });
 });
 

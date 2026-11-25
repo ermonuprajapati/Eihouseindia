@@ -41,6 +41,7 @@ import {
   runElectricalRulesCheck,
   ErcViolation,
 } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+import { projectPointOntoPolyline } from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 import {
   Point,
   ElbowOrientation,
@@ -852,7 +853,25 @@ export function SchematicCanvas({
           return { id: w.id, vertices: [] as Point[], netName: w.netName };
         }
         const p1 = getPinWorldCoord(fromComp, fromPin);
-        const p2 = isTapped && w.junctionPoint ? w.junctionPoint : getPinWorldCoord(toComp!, toPin!);
+        let p2 = isTapped && w.junctionPoint ? w.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y });
+        if (w.tappedWireId) {
+          const parent = wires.find((pw) => pw.id === w.tappedWireId);
+          if (parent) {
+            const parentFromComp = components.find((c) => c.id === parent.fromCompId);
+            const parentToComp = components.find((c) => c.id === parent.toCompId);
+            const parentFromPin = parentFromComp?.pins.find((p) => p.id === parent.fromPinId);
+            const parentToPin = parentToComp?.pins.find((p) => p.id === parent.toPinId);
+            if (parentFromComp && parentToComp && parentFromPin && parentToPin) {
+              const pp1 = getPinWorldCoord(parentFromComp, parentFromPin);
+              const pp2 = getPinWorldCoord(parentToComp, parentToPin);
+              const pVerts = getFullWireVertices(pp1, pp2, parent.points, parent.style || activeRoutingStyle, elbowOrientation);
+              const proj = projectPointOntoPolyline(w.junctionPoint || p2, pVerts, 10);
+              if (proj) {
+                p2 = proj.point;
+              }
+            }
+          }
+        }
         const vertices = getFullWireVertices(
           p1,
           p2,
@@ -1244,7 +1263,25 @@ export function SchematicCanvas({
             if (!isTapped && !toPin) return null;
 
             const p1 = getPinWorldCoord(fromComp, fromPin);
-            const p2 = isTapped && wire.junctionPoint ? wire.junctionPoint : getPinWorldCoord(toComp!, toPin!);
+            let p2 = isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y });
+            if (wire.tappedWireId) {
+              const parent = wires.find((pw) => pw.id === wire.tappedWireId);
+              if (parent) {
+                const parentFromComp = components.find((c) => c.id === parent.fromCompId);
+                const parentToComp = components.find((c) => c.id === parent.toCompId);
+                const parentFromPin = parentFromComp?.pins.find((p) => p.id === parent.fromPinId);
+                const parentToPin = parentToComp?.pins.find((p) => p.id === parent.toPinId);
+                if (parentFromComp && parentToComp && parentFromPin && parentToPin) {
+                  const pp1 = getPinWorldCoord(parentFromComp, parentFromPin);
+                  const pp2 = getPinWorldCoord(parentToComp, parentToPin);
+                  const pVerts = getFullWireVertices(pp1, pp2, parent.points, parent.style || activeRoutingStyle, elbowOrientation);
+                  const proj = projectPointOntoPolyline(wire.junctionPoint || p2, pVerts, 10);
+                  if (proj) {
+                    p2 = proj.point;
+                  }
+                }
+              }
+            }
 
             const isShorted = ercViolations.some(
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)

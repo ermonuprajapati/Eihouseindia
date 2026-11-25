@@ -541,22 +541,59 @@ export function resolve3DWireToSchematicConnections(
 
   const { a: bestA, b: bestB, dist: directDist } = bestPair;
   const posA = getPinPos(bestA.compId, bestA.pinId);
+  const posB = getPinPos(bestB.compId, bestB.pinId);
 
-  // 6. Auto-Tap Nearest Existing Wire of That Net (Shortest Path Junction!)
-  let closestTap: { wireId: string; point: { x: number; y: number }; dist: number } | null = null;
+  // 6. Auto-Tap Nearest Existing Wire of That Net (Shortest Path Junction!) - Check BOTH directions!
+  interface TapCandidate {
+    from: CandidatePin;
+    to: CandidatePin;
+    wireId: string;
+    point: { x: number; y: number };
+    dist: number;
+  }
+
+  let closestTap: TapCandidate | null = null;
+  const netRootA = uf.find(`${bestA.compId}:${bestA.pinId}`);
   const netRootB = uf.find(`${bestB.compId}:${bestB.pinId}`);
 
   for (const sw of schematicWires) {
     const swNet = uf.find(`${sw.fromCompId}:${sw.fromPinId}`);
-    if (swNet !== netRootB) continue;
+    const verts = getCanonicalWirePoints(sw, schematicComponents, schematicWires);
 
-    const verts = getCanonicalWirePoints(sw, schematicComponents);
-    for (let i = 0; i < verts.length - 1; i++) {
-      const proj = projectPointToSegment(posA, verts[i], verts[i + 1]);
-      if (proj) {
-        const threshold = closestTap ? closestTap.dist : directDist - 15;
-        if (proj.dist < threshold) {
-          closestTap = { wireId: sw.id, point: { x: proj.x, y: proj.y }, dist: proj.dist };
+    // Direction 1: posA tapping onto existing wires of netRootB (from = bestA, to = bestB)
+    if (swNet === netRootB) {
+      for (let i = 0; i < verts.length - 1; i++) {
+        const proj = projectPointToSegment(posA, verts[i], verts[i + 1]);
+        if (proj) {
+          const threshold = closestTap ? closestTap.dist : directDist - 15;
+          if (proj.dist < threshold) {
+            closestTap = {
+              from: bestA,
+              to: bestB,
+              wireId: sw.id,
+              point: { x: proj.x, y: proj.y },
+              dist: proj.dist,
+            };
+          }
+        }
+      }
+    }
+
+    // Direction 2: posB tapping onto existing wires of netRootA (from = bestB, to = bestA)
+    if (swNet === netRootA) {
+      for (let i = 0; i < verts.length - 1; i++) {
+        const proj = projectPointToSegment(posB, verts[i], verts[i + 1]);
+        if (proj) {
+          const threshold = closestTap ? closestTap.dist : directDist - 15;
+          if (proj.dist < threshold) {
+            closestTap = {
+              from: bestB,
+              to: bestA,
+              wireId: sw.id,
+              point: { x: proj.x, y: proj.y },
+              dist: proj.dist,
+            };
+          }
         }
       }
     }
@@ -571,10 +608,10 @@ export function resolve3DWireToSchematicConnections(
   if (closestTap) {
     return [
       {
-        fromCompId: bestA.compId,
-        fromPinId: bestA.pinId,
-        toCompId: bestB.compId,
-        toPinId: bestB.pinId,
+        fromCompId: closestTap.from.compId,
+        fromPinId: closestTap.from.pinId,
+        toCompId: closestTap.to.compId,
+        toPinId: closestTap.to.pinId,
         color: resolvedColor,
         tappedWireId: closestTap.wireId,
         junctionPoint: closestTap.point,
