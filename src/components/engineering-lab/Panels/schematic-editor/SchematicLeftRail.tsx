@@ -5,8 +5,10 @@ import {
   MousePointer,
   Hand,
   GitCommit,
+  Network,
   CircleDot,
   Tag,
+  Share2,
   Zap,
   XSquare,
   Square,
@@ -14,21 +16,28 @@ import {
   Image as ImageIcon,
   Minus,
   Circle,
+  Ruler,
+  Eraser,
 } from 'lucide-react';
 
 export type SchematicTool =
   | 'select'
   | 'pan'
   | 'wire'
+  | 'bus'
   | 'junction'
   | 'netlabel'
+  | 'sheetport'
   | 'power'
   | 'noconnect'
+  | 'draw_graphics'
   | 'draw_rect'
   | 'draw_line'
   | 'draw_circle'
   | 'text'
-  | 'image';
+  | 'image'
+  | 'ruler'
+  | 'eraser';
 
 interface SchematicLeftRailProps {
   activeTool: SchematicTool;
@@ -124,9 +133,23 @@ export function SchematicLeftRail({
         <GitCommit className="w-4 h-4" />
       </button>
 
+      {/* 4. Bus (B) */}
+      <button
+        data-testid="tool-bus"
+        onClick={() => handleToolSelect('bus')}
+        className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+          activeTool === 'bus'
+            ? 'bg-emerald-600 text-white shadow-md'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+        }`}
+        title="Bus Route (B) — Multi-signal bundle routing"
+      >
+        <Network className="w-4 h-4" />
+      </button>
+
       <div className="w-5 h-[1px] bg-slate-800 my-0.5" />
 
-      {/* 4. Junction (J) */}
+      {/* 5. Junction (J) */}
       <button
         data-testid="tool-junction"
         onClick={() => handleToolSelect('junction')}
@@ -140,7 +163,7 @@ export function SchematicLeftRail({
         <CircleDot className="w-4 h-4" />
       </button>
 
-      {/* 5. Net Label (N) */}
+      {/* 6. Net Label (N) */}
       <button
         data-testid="tool-netlabel"
         onClick={() => handleToolSelect('netlabel')}
@@ -152,6 +175,20 @@ export function SchematicLeftRail({
         title="Net Label (N) — Attach named net label (VCC, GND, CLK, OUT) to wires"
       >
         <Tag className="w-4 h-4" />
+      </button>
+
+      {/* 7. Sheet Port (S) */}
+      <button
+        data-testid="tool-sheetport"
+        onClick={() => handleToolSelect('sheetport')}
+        className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+          activeTool === 'sheetport'
+            ? 'bg-emerald-600 text-white shadow-md'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+        }`}
+        title="Sheet Port (S) — Hierarchical global net connection port"
+      >
+        <Share2 className="w-4 h-4" />
       </button>
 
       {/* 6. Power / GND Port (P) */}
@@ -283,7 +320,7 @@ export function SchematicLeftRail({
         <Type className="w-4 h-4" />
       </button>
 
-      {/* 10. Attach Image (Img) */}
+      {/* 12. Attach Image (Img) */}
       <button
         data-testid="tool-image"
         onClick={() => {
@@ -298,6 +335,36 @@ export function SchematicLeftRail({
         title="Attach Image — Embed reference diagrams, pinouts, or company logos"
       >
         <ImageIcon className="w-4 h-4" />
+      </button>
+
+      <div className="w-5 h-[1px] bg-slate-800 my-0.5" />
+
+      {/* 13. Ruler / Dimension Tool (U) */}
+      <button
+        data-testid="tool-ruler"
+        onClick={() => handleToolSelect('ruler')}
+        className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+          activeTool === 'ruler'
+            ? 'bg-emerald-600 text-white shadow-md'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+        }`}
+        title="Dimension Ruler (U) — Measure distance on sheet"
+      >
+        <Ruler className="w-4 h-4" />
+      </button>
+
+      {/* 14. Eraser Tool (E) */}
+      <button
+        data-testid="tool-eraser"
+        onClick={() => handleToolSelect('eraser')}
+        className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+          activeTool === 'eraser'
+            ? 'bg-rose-600 text-white shadow-md'
+            : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800'
+        }`}
+        title="Eraser (E) — Click component, wire or annotation to delete"
+      >
+        <Eraser className="w-4 h-4" />
       </button>
     </div>
   );

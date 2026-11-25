@@ -51,6 +51,7 @@ export interface SchematicEditorPanelProps {
   onSelectWire?: (id: string | null) => void;
   onUpdateComponentPosition: (id: string, x: number, y: number) => void;
   onRotateComponent: (id: string) => void;
+  onMirrorComponent?: (id: string) => void;
   onDeleteComponent: (id: string) => void;
   onAddWire: (wire: Omit<CircuitWire, 'id'> & { id?: string }) => void;
   onDeleteWire: (wireId: string) => void;
@@ -77,6 +78,7 @@ export function SchematicEditorPanel({
   onSelectWire = () => {},
   onUpdateComponentPosition,
   onRotateComponent,
+  onMirrorComponent,
   onDeleteComponent,
   onAddWire,
   onDeleteWire,
@@ -92,9 +94,24 @@ export function SchematicEditorPanel({
   // Primary Tool Selection
   const [tool, setTool] = useState<SchematicTool>('select');
 
+  // Context Menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    type: 'component' | 'wire' | 'canvas';
+    targetId?: string;
+  } | null>(null);
+
+  // Ruler measurement state
+  const [rulerStart, setRulerStart] = useState<{ x: number; y: number } | null>(null);
+
   // Multi-Component Selection state
   const [internalSelectedCompIds, setInternalSelectedCompIds] = useState<string[]>([]);
   const selectedCompIds = externalSelectedCompIds || internalSelectedCompIds;
+
+  // Wire Selection state (internal fallback + prop sync)
+  const [internalSelectedWireId, setInternalSelectedWireId] = useState<string | null>(null);
+  const activeSelectedWireId = selectedWireId !== undefined && selectedWireId !== null ? selectedWireId : internalSelectedWireId;
 
   const updateSelectedCompIds = useCallback((ids: string[]) => {
     setInternalSelectedCompIds(ids);
@@ -367,6 +384,12 @@ export function SchematicEditorPanel({
     (e: React.MouseEvent, compId: string, pinId: string, wx: number, wy: number) => {
       e.stopPropagation();
 
+      // Tool: Eraser
+      if (tool === 'eraser') {
+        onDeleteComponent(compId);
+        return;
+      }
+
       // Tool: No-Connect marker
       if (tool === 'noconnect') {
         setNoConnects((prev) => [
@@ -376,8 +399,8 @@ export function SchematicEditorPanel({
         return;
       }
 
-      // Tool: Wire drawing
-      if (tool === 'wire') {
+      // Tool: Wire drawing or direct pin click-to-wire in Select/Bus/Wire mode
+      if (tool === 'wire' || tool === 'bus' || tool === 'select') {
         if (!activeWireStart) {
           setActiveWireStart({ compId, pinId, x: wx, y: wy });
           setWireWaypoints([]);
@@ -398,7 +421,9 @@ export function SchematicEditorPanel({
             }
             finalPoints.push({ x: wx, y: wy });
 
+            const newWireId = `wire_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
             onAddWire({
+              id: newWireId,
               fromCompId: activeWireStart.compId,
               fromPinId: activeWireStart.pinId,
               toCompId: compId,
@@ -407,6 +432,9 @@ export function SchematicEditorPanel({
               points: finalPoints,
               isManualEditorRoute: true,
             });
+            setInternalSelectedWireId(newWireId);
+            setWirePillPos({ x: wx, y: wy });
+            onSelectWire(newWireId);
           }
           setActiveWireStart(null);
           setWireWaypoints([]);
@@ -416,13 +444,21 @@ export function SchematicEditorPanel({
 
       onSelectComponent(compId);
     },
-    [tool, activeWireStart, wireWaypoints, onSelectComponent, onAddWire]
+    [tool, activeWireStart, wireWaypoints, wireElbowFlip, onSelectComponent, onAddWire, onDeleteComponent, onSelectWire]
   );
 
   // Wire click handler
   const handleWireClick = useCallback(
     (e: React.MouseEvent, wireId: string, hitX: number, hitY: number) => {
       e.stopPropagation();
+
+      // Tool: Eraser
+      if (tool === 'eraser') {
+        onDeleteWire(wireId);
+        setInternalSelectedWireId(null);
+        onSelectWire(null);
+        return;
+      }
 
       // Tool: Junction placement on wire
       if (tool === 'junction') {
@@ -449,10 +485,11 @@ export function SchematicEditorPanel({
       }
 
       setWirePillPos({ x: hitX, y: hitY });
+      setInternalSelectedWireId(wireId);
       onSelectWire(wireId);
       onSelectComponent(null);
     },
-    [tool, onSelectWire, onSelectComponent]
+    [tool, onSelectWire, onSelectComponent, onDeleteWire]
   );
 
   // Keyboard Shortcuts (V, H, W, J, N, P, Q, G, T, R, X, Y, Del, Ctrl+D, Ctrl+Z, Ctrl+Y, Space)
@@ -606,6 +643,8 @@ export function SchematicEditorPanel({
       } else if (e.key === 'Escape') {
         setActiveWireStart(null);
         setWireWaypoints([]);
+        setContextMenu(null);
+        setRulerStart(null);
         if (currentPlacingComp) {
           setLocalPlacingComponent(null);
           if (onCancelPlacing) onCancelPlacing();
@@ -638,6 +677,8 @@ export function SchematicEditorPanel({
 
   // Canvas Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
+    setContextMenu(null);
+
     // Middle-click or Pan tool activates canvas dragging
     if (e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey)) {
       setIsDraggingCanvas(true);
@@ -660,6 +701,12 @@ export function SchematicEditorPanel({
     }
 
     if (e.button === 0) {
+      // Ruler tool: start measurement line
+      if (tool === 'ruler') {
+        setRulerStart(wCoord);
+        return;
+      }
+
       // Placing mode: drop component at cursor
       if (currentPlacingComp) {
         const placed: CircuitComponent = {
@@ -717,6 +764,20 @@ export function SchematicEditorPanel({
         return;
       }
 
+      // Sheet Port placement
+      if (tool === 'sheetport') {
+        const newNl: SchematicNetLabel = {
+          id: `port_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          x: wCoord.x,
+          y: wCoord.y,
+          name: 'PORT_IO',
+        };
+        setNetLabels((prev) => [...prev, newNl]);
+        setInlineEditorTarget({ type: 'netlabel', netLabel: newNl });
+        setTool('select');
+        return;
+      }
+
       // Net Label placement on empty sheet
       if (tool === 'netlabel') {
         const newNl: SchematicNetLabel = {
@@ -731,8 +792,8 @@ export function SchematicEditorPanel({
         return;
       }
 
-      // Wire waypoint locking when drawing wire
-      if (tool === 'wire' && activeWireStart) {
+      // Wire waypoint locking when drawing wire (Wire, Bus, or Select mode with active wire)
+      if ((tool === 'wire' || tool === 'bus' || tool === 'select') && activeWireStart) {
         const lastPt =
           wireWaypoints.length > 0 ? wireWaypoints[wireWaypoints.length - 1] : activeWireStart;
         const corner = wireElbowFlip
@@ -917,6 +978,7 @@ export function SchematicEditorPanel({
     setDraggingItem(null);
     setResizingImage(null);
     setGroupDragStartPos(null);
+    setRulerStart(null);
 
     // Finalize Marquee Selection Box
     if (marqueeBox) {
@@ -1153,7 +1215,7 @@ export function SchematicEditorPanel({
         onPrintPdf={printSchematicSheet}
         selectedCompId={selectedCompId}
         selectedCompIds={selectedCompIds}
-        selectedWireId={selectedWireId}
+        selectedWireId={activeSelectedWireId}
         selectedItemId={selectedItemId}
       />
 
@@ -1179,15 +1241,20 @@ export function SchematicEditorPanel({
           className={`flex-1 h-full overflow-hidden relative ${
             tool === 'pan' || isDraggingCanvas
               ? 'cursor-grab active:cursor-grabbing'
-              : tool === 'wire' || currentPlacingComp || ['draw_rect', 'draw_line', 'draw_circle'].includes(tool)
+              : tool === 'wire' || currentPlacingComp || ['draw_rect', 'draw_line', 'draw_circle', 'ruler'].includes(tool)
               ? 'cursor-crosshair'
+              : tool === 'eraser'
+              ? 'cursor-pointer'
               : 'cursor-default'
           }`}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onWheel={handleWheel}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY, type: 'canvas' });
+          }}
         >
           {/* Engineering Sheet Transform Container */}
           <div
@@ -1287,10 +1354,24 @@ export function SchematicEditorPanel({
               {/* 90° Manhattan Orthogonal Wires Layer */}
               <g className="sch-wires-layer">
                 {routedWires.map((rw) => {
-                  const isSelected = selectedWireId === rw.wireId;
+                  const isSelected = activeSelectedWireId === rw.wireId;
                   const ptsStr = rw.points.map((p) => `${p.x},${p.y}`).join(' ');
                   return (
-                    <g key={rw.wireId} className="cursor-pointer">
+                    <g
+                      key={rw.wireId}
+                      className="cursor-pointer"
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onSelectWire(rw.wireId);
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          type: 'wire',
+                          targetId: rw.wireId,
+                        });
+                      }}
+                    >
                       {/* Generous Invisible Hover/Click Stroke (14px) */}
                       <polyline
                         data-testid={`sch-wire-hit-${rw.wireId}`}
@@ -1358,6 +1439,49 @@ export function SchematicEditorPanel({
                             />
                           );
                         })}
+                      {/* Draggable Midpoint Handles to slide or split fold lines */}
+                      {isSelected &&
+                        rw.points.slice(0, -1).map((pt, pIdx) => {
+                          const nextPt = rw.points[pIdx + 1];
+                          const midX = Math.round((pt.x + nextPt.x) / 2);
+                          const midY = Math.round((pt.y + nextPt.y) / 2);
+                          return (
+                            <circle
+                              key={`mid-${rw.wireId}-${pIdx}`}
+                              data-testid={`sch-wire-mid-${pIdx}`}
+                              cx={midX}
+                              cy={midY}
+                              r="4"
+                              fill="#F59E0B"
+                              stroke="#FFFFFF"
+                              strokeWidth="1.5"
+                              className="cursor-pointer hover:scale-125 transition-transform"
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                const targetWire = wires.find((w) => w.id === rw.wireId);
+                                if (targetWire) {
+                                  const currentPoints = targetWire.points || targetWire.editorWaypoints || rw.points;
+                                  const newPoints = [
+                                    ...currentPoints.slice(0, pIdx + 1),
+                                    { x: midX, y: midY },
+                                    ...currentPoints.slice(pIdx + 1),
+                                  ];
+                                  onUpdateWires(
+                                    wires.map((w) =>
+                                      w.id === targetWire.id
+                                        ? { ...w, points: newPoints, editorWaypoints: newPoints, isManualEditorRoute: true }
+                                        : w
+                                    )
+                                  );
+                                  setDraggingWireCorner({
+                                    wireId: rw.wireId,
+                                    pointIndex: pIdx + 1,
+                                  });
+                                }
+                              }}
+                            />
+                          );
+                        })}
                     </g>
                   );
                 })}
@@ -1396,14 +1520,30 @@ export function SchematicEditorPanel({
                   const isSingleSelected = selectedCompId === comp.id;
                   const isMultiSelected = selectedCompIds.includes(comp.id);
                   const isSelected = isSingleSelected || isMultiSelected;
-                  const posX = comp.editorPosition ? comp.editorPosition.x : comp.x;
-                  const posY = comp.editorPosition ? comp.editorPosition.y : comp.y;
+                  const posX = comp.x ?? comp.editorPosition?.x ?? 0;
+                  const posY = comp.y ?? comp.editorPosition?.y ?? 0;
 
                   return (
                     <g
                       key={comp.id}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onSelectComponent(comp.id);
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          type: 'component',
+                          targetId: comp.id,
+                        });
+                      }}
                       onMouseDown={(e) => {
-                        if (e.button === 0 && tool === 'select') {
+                        if (tool === 'eraser') {
+                          e.stopPropagation();
+                          onDeleteComponent(comp.id);
+                          return;
+                        }
+                        if (e.button === 0 && (tool === 'select' || tool === 'wire')) {
                           e.stopPropagation();
                           const wCoord = clientToWorld(e.clientX, e.clientY);
 
@@ -1425,8 +1565,8 @@ export function SchematicEditorPanel({
                             components.forEach((c) => {
                               if (selectedCompIds.includes(c.id)) {
                                 posMap.set(c.id, {
-                                  x: c.editorPosition ? c.editorPosition.x : c.x,
-                                  y: c.editorPosition ? c.editorPosition.y : c.y,
+                                  x: c.x ?? c.editorPosition?.x ?? 0,
+                                  y: c.y ?? c.editorPosition?.y ?? 0,
                                 });
                               }
                             });
@@ -1535,11 +1675,47 @@ export function SchematicEditorPanel({
                   />
                 </g>
               )}
+
+              {/* Interactive Ruler Dimension Preview */}
+              {rulerStart && (
+                <g className="sch-ruler-preview pointer-events-none">
+                  <line
+                    x1={rulerStart.x}
+                    y1={rulerStart.y}
+                    x2={mousePos.x}
+                    y2={mousePos.y}
+                    stroke="#F59E0B"
+                    strokeWidth="2"
+                    strokeDasharray="4 2"
+                  />
+                  <rect
+                    x={(rulerStart.x + mousePos.x) / 2 - 25}
+                    y={(rulerStart.y + mousePos.y) / 2 - 12}
+                    width="50"
+                    height="18"
+                    rx="3"
+                    fill="#0F172A"
+                    stroke="#F59E0B"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={(rulerStart.x + mousePos.x) / 2}
+                    y={(rulerStart.y + mousePos.y) / 2 + 1}
+                    textAnchor="middle"
+                    fill="#F59E0B"
+                    fontSize="9"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                  >
+                    {Math.round(Math.hypot(mousePos.x - rulerStart.x, mousePos.y - rulerStart.y))} px
+                  </text>
+                </g>
+              )}
             </svg>
           </div>
 
           {/* Floating Wire Action Pill (Inside sch-canvas-viewport, clamped cleanly) */}
-          {selectedWireId && (
+          {activeSelectedWireId && (
             <div
               data-testid="sch-wire-action-pill"
               className="absolute z-40 bg-slate-900 border border-slate-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1.5 text-xs font-mono"
@@ -1564,7 +1740,8 @@ export function SchematicEditorPanel({
                 data-testid="pill-delete-wire"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeleteWire(selectedWireId);
+                  onDeleteWire(activeSelectedWireId);
+                  setInternalSelectedWireId(null);
                   onSelectWire(null);
                 }}
                 className="text-rose-400 hover:text-rose-300 px-1.5 py-0.5 rounded hover:bg-rose-950/60 transition-colors flex items-center gap-1"
@@ -1595,7 +1772,7 @@ export function SchematicEditorPanel({
                     x: wirePillPos.x,
                     y: wirePillPos.y,
                     name: 'NET',
-                    wireId: selectedWireId,
+                    wireId: activeSelectedWireId,
                   };
                   setNetLabels((prev) => [...prev, newNl]);
                   setInlineEditorTarget({ type: 'netlabel', netLabel: newNl });
@@ -1608,12 +1785,216 @@ export function SchematicEditorPanel({
                 data-testid="pill-close-wire"
                 onClick={(e) => {
                   e.stopPropagation();
+                  setInternalSelectedWireId(null);
                   onSelectWire(null);
                 }}
                 className="text-slate-400 hover:text-white px-1"
               >
                 <X className="w-3 h-3" />
               </button>
+            </div>
+          )}
+
+          {/* Right-Click Context Menu */}
+          {contextMenu && (
+            <div
+              data-testid="sch-context-menu"
+              className="fixed z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-lg p-1.5 w-48 text-xs font-mono text-slate-200 select-none flex flex-col gap-0.5"
+              style={{
+                left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1000) - 200),
+                top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 200),
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {contextMenu.type === 'component' && (
+                <>
+                  <div className="px-2 py-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-800">
+                    Component Action
+                  </div>
+                  <button
+                    data-testid="ctx-rotate"
+                    onClick={() => {
+                      if (contextMenu.targetId) onRotateComponent(contextMenu.targetId);
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Rotate 90°</span>
+                    <span className="text-slate-500 text-[10px]">R</span>
+                  </button>
+                  <button
+                    data-testid="ctx-mirror"
+                    onClick={() => {
+                      if (contextMenu.targetId) {
+                        if (onMirrorComponent) onMirrorComponent(contextMenu.targetId);
+                        else {
+                          onUpdateComponents(
+                            components.map((c) =>
+                              c.id === contextMenu.targetId
+                                ? { ...c, mirrored: !c.mirrored, editorFlipX: !c.mirrored }
+                                : c
+                            )
+                          );
+                        }
+                      }
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Mirror H</span>
+                    <span className="text-slate-500 text-[10px]">X</span>
+                  </button>
+                  <button
+                    data-testid="ctx-duplicate"
+                    onClick={() => {
+                      if (contextMenu.targetId) {
+                        const comp = components.find((c) => c.id === contextMenu.targetId);
+                        if (comp) {
+                          const dupId = `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+                          const nx = (comp.x ?? comp.editorPosition?.x ?? 0) + 40;
+                          const ny = (comp.y ?? comp.editorPosition?.y ?? 0) + 40;
+                          onUpdateComponents([
+                            ...components,
+                            { ...comp, id: dupId, x: nx, y: ny, editorPosition: { x: nx, y: ny } },
+                          ]);
+                        }
+                      }
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Duplicate</span>
+                    <span className="text-slate-500 text-[10px]">Ctrl+D</span>
+                  </button>
+                  <div className="w-full h-[1px] bg-slate-800 my-0.5" />
+                  <button
+                    data-testid="ctx-delete"
+                    onClick={() => {
+                      if (contextMenu.targetId) onDeleteComponent(contextMenu.targetId);
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-rose-950/60 text-rose-400 flex items-center justify-between"
+                  >
+                    <span>Delete Component</span>
+                    <span className="text-rose-500 text-[10px]">Del</span>
+                  </button>
+                </>
+              )}
+              {contextMenu.type === 'wire' && (
+                <>
+                  <div className="px-2 py-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-800">
+                    Wire Action
+                  </div>
+                  <button
+                    data-testid="ctx-add-junction"
+                    onClick={() => {
+                      const wCoord = clientToWorld(contextMenu.x, contextMenu.y);
+                      setManualJunctions((prev) => [
+                        ...prev,
+                        { id: `mj_${Date.now()}`, x: wCoord.x, y: wCoord.y },
+                      ]);
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-cyan-400 flex items-center justify-between"
+                  >
+                    <span>Add Junction Dot</span>
+                    <span className="text-slate-500 text-[10px]">J</span>
+                  </button>
+                  <button
+                    data-testid="ctx-add-label"
+                    onClick={() => {
+                      const wCoord = clientToWorld(contextMenu.x, contextMenu.y);
+                      const newNl: SchematicNetLabel = {
+                        id: `nl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        x: wCoord.x,
+                        y: wCoord.y,
+                        name: 'NET',
+                        wireId: contextMenu.targetId,
+                      };
+                      setNetLabels((prev) => [...prev, newNl]);
+                      setInlineEditorTarget({ type: 'netlabel', netLabel: newNl });
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Add Net Label</span>
+                    <span className="text-slate-500 text-[10px]">N</span>
+                  </button>
+                  <div className="w-full h-[1px] bg-slate-800 my-0.5" />
+                  <button
+                    data-testid="ctx-delete-wire"
+                    onClick={() => {
+                      if (contextMenu.targetId) onDeleteWire(contextMenu.targetId);
+                      onSelectWire(null);
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-rose-950/60 text-rose-400 flex items-center justify-between"
+                  >
+                    <span>Delete Wire</span>
+                    <span className="text-rose-500 text-[10px]">Del</span>
+                  </button>
+                </>
+              )}
+              {contextMenu.type === 'canvas' && (
+                <>
+                  <div className="px-2 py-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-800">
+                    Schematic Sheet
+                  </div>
+                  <button
+                    data-testid="ctx-tool-select"
+                    onClick={() => {
+                      setTool('select');
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Select & Move</span>
+                    <span className="text-slate-500 text-[10px]">V</span>
+                  </button>
+                  <button
+                    data-testid="ctx-tool-wire"
+                    onClick={() => {
+                      setTool('wire');
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400 flex items-center justify-between"
+                  >
+                    <span>Route Wire</span>
+                    <span className="text-slate-500 text-[10px]">W</span>
+                  </button>
+                  <button
+                    data-testid="ctx-autotidy"
+                    onClick={() => {
+                      handleAutoTidy();
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400"
+                  >
+                    Auto-Tidy Layout
+                  </button>
+                  <button
+                    data-testid="ctx-run-erc"
+                    onClick={() => {
+                      handleRunErc();
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400"
+                  >
+                    Run Electrical Rules (ERC)
+                  </button>
+                  <button
+                    data-testid="ctx-zoom-fit"
+                    onClick={() => {
+                      setZoom(0.85);
+                      setPan({ x: 50, y: 40 });
+                      setContextMenu(null);
+                    }}
+                    className="px-2 py-1.5 rounded text-left hover:bg-slate-800 hover:text-emerald-400"
+                  >
+                    Fit Sheet to Viewport
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

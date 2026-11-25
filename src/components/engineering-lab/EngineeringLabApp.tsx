@@ -1680,14 +1680,7 @@ export function EngineeringLabApp() {
                 selectedWireId={selectedWireId}
                 placingComponent={editorPlacingComponent}
                 onFinishPlacing={(placedComp) => {
-                  const simX = placedComp.x || placedComp.editorPosition?.x || 200;
-                  const simY = placedComp.y || placedComp.editorPosition?.y || 160;
-                  handleAddComponent({
-                    ...placedComp,
-                    x: simX,
-                    y: simY,
-                    editorPosition: placedComp.editorPosition || { x: simX, y: simY },
-                  });
+                  handleAddComponent(placedComp);
                   setEditorPlacingComponent(null);
                 }}
                 onCancelPlacing={() => setEditorPlacingComponent(null)}
@@ -1699,27 +1692,15 @@ export function EngineeringLabApp() {
                   setSelectedWireId(id);
                   setSelectedCompId(null);
                 }}
-                onUpdateComponentPosition={handleUpdateEditorComponentPosition}
-                onRotateComponent={handleRotateEditorComponent}
+                onUpdateComponentPosition={handleUpdateComponentPosition}
+                onRotateComponent={handleRotateComponent}
+                onMirrorComponent={handleMirrorComponent}
                 onDeleteComponent={handleDeleteComponent}
                 onAddWire={handleAddWire}
                 onDeleteWire={handleDeleteWire}
                 onUpdateComponents={(comps) => {
                   recordHistory();
-                  setProject((prev) => {
-                    const oldMap = new Map(prev.components.map((c) => [c.id, c]));
-                    const guarded = comps.map((c) => {
-                      const old = oldMap.get(c.id);
-                      if (!old) return c;
-                      return {
-                        ...c,
-                        x: old.x,
-                        y: old.y,
-                        rotation: old.rotation,
-                      };
-                    });
-                    return { ...prev, components: guarded };
-                  });
+                  setProject((prev) => ({ ...prev, components: comps }));
                   setHasUnsavedChanges(true);
                 }}
                 onUpdateWires={(wires) => {

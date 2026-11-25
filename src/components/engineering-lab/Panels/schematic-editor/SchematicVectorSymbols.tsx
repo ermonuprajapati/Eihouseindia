@@ -30,8 +30,8 @@ export function SchematicVectorSymbol({
   onDoubleClick,
 }: SchematicVectorSymbolProps) {
   const { type, value } = component;
-  const rot = component.editorRotation ?? component.rotation ?? 0;
-  const flipX = Boolean(component.editorFlipX ?? component.mirrored);
+  const rot = component.rotation ?? component.editorRotation ?? 0;
+  const flipX = Boolean(component.mirrored ?? component.editorFlipX);
   const flipY = Boolean(component.editorFlipY);
   const designator = component.designator || component.label?.split(' ')[0] || component.type?.slice(0, 3) || 'U';
 
@@ -40,8 +40,8 @@ export function SchematicVectorSymbol({
   const pinColor = isSelected ? '#34D399' : theme === 'dark' ? '#38BDF8' : '#0284C7';
   const strokeWidth = isSelected ? 2.2 : 1.8;
 
-  const posX = component.editorPosition ? component.editorPosition.x : component.x;
-  const posY = component.editorPosition ? component.editorPosition.y : component.y;
+  const posX = component.x ?? component.editorPosition?.x ?? 0;
+  const posY = component.y ?? component.editorPosition?.y ?? 0;
 
   const isMcu = [
     'MCU_ARDUINO_UNO',
@@ -489,6 +489,12 @@ export function SchematicVectorSymbol({
               onMouseEnter={() => onPinHover && onPinHover(`${component.id}:${pin.id}`)}
               onMouseLeave={() => onPinHover && onPinHover(null)}
             >
+              {/* Large Invisible Hit Target for Pin (Radius 12) */}
+              <circle
+                r="12"
+                fill="transparent"
+                pointerEvents="all"
+              />
               {/* Visual Snap Target Ring */}
               <circle
                 r={isHovered ? 6 : 4}

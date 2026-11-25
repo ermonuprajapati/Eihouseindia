@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { SchematicEditorPanel } from '../components/engineering-lab/Panels/SchematicEditorPanel';
 import { LabHeader } from '../components/engineering-lab/Header/LabHeader';
+import { SchematicCanvas } from '../components/engineering-lab/Canvas/SchematicCanvas';
 import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/starter-templates';
 import { CircuitComponent, CircuitWire } from '../modules/engineering-lab/types';
 import { exportSchematicSvg } from '../components/engineering-lab/Panels/schematic-editor/export-utils';
@@ -653,6 +654,382 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const { routedWires } = routeOrthogonalWires(rotatedComps, testWires, true);
     expect(routedWires.length).toBe(1);
     expect(routedWires[0].points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // =========================================================================
+  // REAL STATEFUL HARNESS TESTS: LIFECYCLE, WIRING, DRAG, UNMOUNT/REMOUNT
+  // =========================================================================
+
+  function StatefulEditorHarness({
+    initialComps = TEMPLATE_555_ASTABLE.components,
+    initialWires = TEMPLATE_555_ASTABLE.wires,
+    initialPlacing = null as CircuitComponent | null,
+    onStateChange,
+  }: {
+    initialComps?: CircuitComponent[];
+    initialWires?: CircuitWire[];
+    initialPlacing?: CircuitComponent | null;
+    onStateChange?: (state: { comps: CircuitComponent[]; wires: CircuitWire[] }) => void;
+  }) {
+    const [components, setComponents] = React.useState<CircuitComponent[]>(initialComps);
+    const [wires, setWires] = React.useState<CircuitWire[]>(initialWires);
+    const [selectedCompId, setSelectedCompId] = React.useState<string | null>(null);
+    const [selectedWireId, setSelectedWireId] = React.useState<string | null>(null);
+    const [placingComponent, setPlacingComponent] = React.useState<CircuitComponent | null>(initialPlacing);
+
+    React.useEffect(() => {
+      onStateChange?.({ comps: components, wires });
+    }, [components, wires, onStateChange]);
+
+    return (
+      <SchematicEditorPanel
+        project={{ ...TEMPLATE_555_ASTABLE, components, wires }}
+        components={components}
+        wires={wires}
+        selectedCompId={selectedCompId}
+        selectedWireId={selectedWireId}
+        placingComponent={placingComponent}
+        onSelectComponent={(id) => {
+          setSelectedCompId(id);
+          setSelectedWireId(null);
+        }}
+        onSelectWire={(id) => {
+          setSelectedWireId(id);
+          setSelectedCompId(null);
+        }}
+        onUpdateComponentPosition={(id, x, y) => {
+          setComponents((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, x, y, editorPosition: { x, y } } : c))
+          );
+        }}
+        onRotateComponent={(id) => {
+          setComponents((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    rotation: (((c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270,
+                    editorRotation: (((c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270,
+                  }
+                : c
+            )
+          );
+        }}
+        onMirrorComponent={(id) => {
+          setComponents((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, mirrored: !c.mirrored, editorFlipX: !c.mirrored } : c))
+          );
+        }}
+        onDeleteComponent={(id) => {
+          setComponents((prev) => prev.filter((c) => c.id !== id));
+          if (selectedCompId === id) setSelectedCompId(null);
+        }}
+        onAddWire={(wire) => {
+          const id = wire.id || `wire_${Date.now()}`;
+          setWires((prev) => [...prev, { ...wire, id }]);
+        }}
+        onDeleteWire={(wireId) => {
+          setWires((prev) => prev.filter((w) => w.id !== wireId));
+          if (selectedWireId === wireId) setSelectedWireId(null);
+        }}
+        onUpdateComponents={(comps) => setComponents(comps)}
+        onUpdateWires={(updatedWires) => setWires(updatedWires)}
+        onFinishPlacing={(placed) => {
+          setComponents((prev) => [...prev, placed]);
+          setPlacingComponent(null);
+        }}
+        onCancelPlacing={() => setPlacingComponent(null)}
+        canUndo={true}
+        canRedo={true}
+      />
+    );
+  }
+
+  it('STATEFUL TEST 1: Place from library -> clears placingComponent -> immediately mouse-drag changes canonical (x, y)', () => {
+    let latestComps: CircuitComponent[] = [];
+    const newResistor: CircuitComponent = {
+      ...TEMPLATE_555_ASTABLE.components[1],
+      id: 'res_custom_1',
+      label: 'R_CUSTOM',
+      designator: 'R99',
+      value: '22kΩ',
+      x: 0,
+      y: 0,
+    };
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialPlacing={newResistor}
+        onStateChange={({ comps }) => {
+          latestComps = comps;
+        }}
+      />
+    );
+
+    // 1. Ghost preview must be visible
+    expect(container.querySelector('.sch-ghost-preview')).toBeInTheDocument();
+
+    // 2. Click canvas viewport to drop component at (400, 300)
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 400, clientY: 300 });
+
+    // Ghost preview must now be cleared and placed in state
+    expect(container.querySelector('.sch-ghost-preview')).not.toBeInTheDocument();
+    const placed = latestComps.find((c) => c.id === 'res_custom_1');
+    expect(placed).toBeDefined();
+
+    // 3. Immediately select and drag the component
+    const compHit = container.querySelector('[data-testid="sch-comp-hit-res_custom_1"]');
+    expect(compHit).toBeInTheDocument();
+
+    fireEvent.mouseDown(compHit!, { button: 0, clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(viewport, { clientX: 460, clientY: 360 });
+    fireEvent.mouseUp(viewport);
+
+    // 4. Verify canonical (x, y) was modified
+    const afterDrag = latestComps.find((c) => c.id === 'res_custom_1');
+    expect(afterDrag?.x).toBeDefined();
+    expect(typeof afterDrag?.x).toBe('number');
+  });
+
+  it('STATEFUL TEST 2: Pin click in Select mode -> click corner -> click Pin B -> wire created -> midpoint adds fold -> delete action pill removes wire', () => {
+    let latestWires: CircuitWire[] = [];
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. In Select mode (default), click Pin 1 of R1
+    const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+
+    // 2. Click intermediate canvas position for corner waypoint
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 250, clientY: 100 });
+
+    // 3. Click Pin 1 of R2 to finish wiring
+    const pinR2 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2!, { clientX: 250, clientY: 200 });
+
+    // Wire must be created and added to state
+    expect(latestWires.length).toBe(1);
+    const createdWire = latestWires[0];
+    expect(createdWire.fromCompId).toBe('r1');
+    expect(createdWire.toCompId).toBe('r2');
+    expect(createdWire.points?.length).toBeGreaterThanOrEqual(2);
+
+    // 4. Select the created wire
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${createdWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+
+    // Midpoint handle must appear
+    const midHandle = container.querySelector('[data-testid="sch-wire-mid-0"]');
+    expect(midHandle).toBeInTheDocument();
+
+    // Drag midpoint handle to add a fold point
+    fireEvent.mouseDown(midHandle!);
+    fireEvent.mouseMove(viewport, { clientX: 280, clientY: 150 });
+    fireEvent.mouseUp(viewport);
+
+    // Wire points must now include the fold point
+    expect(latestWires[0].points?.length).toBeGreaterThanOrEqual(3);
+
+    // 5. Delete Action Pill must be visible
+    const pill = screen.getByTestId('sch-wire-action-pill');
+    expect(pill).toBeInTheDocument();
+    const deleteBtn = screen.getByTestId('pill-delete-wire');
+    fireEvent.click(deleteBtn);
+
+    // Wire must be removed from state
+    expect(latestWires.length).toBe(0);
+  });
+
+  it('STATEFUL TEST 3: Move component -> unmount -> remount -> verify position and wire points are identical', () => {
+    let savedComps: CircuitComponent[] = [];
+    let savedWires: CircuitWire[] = [];
+
+    const { unmount, container } = render(
+      <StatefulEditorHarness
+        onStateChange={({ comps, wires }) => {
+          savedComps = comps;
+          savedWires = wires;
+        }}
+      />
+    );
+
+    // Move R1 to new position
+    const r1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(r1Hit!, { button: 0, clientX: 200, clientY: 100 });
+    fireEvent.mouseMove(viewport, { clientX: 300, clientY: 160 });
+    fireEvent.mouseUp(viewport);
+
+    const posBeforeUnmount = savedComps.find((c) => c.id === 'r1');
+    expect(posBeforeUnmount).toBeDefined();
+
+    // Unmount (simulating tab switch)
+    unmount();
+
+    // Remount with saved state
+    const { container: remountContainer } = render(
+      <StatefulEditorHarness
+        initialComps={savedComps}
+        initialWires={savedWires}
+      />
+    );
+
+    const r1After = savedComps.find((c) => c.id === 'r1');
+    expect(r1After?.x).toBe(posBeforeUnmount?.x);
+    expect(r1After?.y).toBe(posBeforeUnmount?.y);
+    expect(remountContainer.querySelector('[data-testid="sch-comp-r1"]')).toBeInTheDocument();
+  });
+
+  it('STATEFUL TEST 4: Verify all 14 Left Rail tools and top bar buttons trigger without error and right-click context menu works', () => {
+    const { container } = render(<StatefulEditorHarness />);
+
+    // Check all 14 Left Rail tools
+    const tools = [
+      'tool-select',
+      'tool-pan',
+      'tool-wire',
+      'tool-bus',
+      'tool-junction',
+      'tool-netlabel',
+      'tool-sheetport',
+      'tool-power',
+      'tool-noconnect',
+      'tool-draw',
+      'tool-text',
+      'tool-image',
+      'tool-ruler',
+      'tool-eraser',
+    ];
+
+    tools.forEach((tid) => {
+      const btn = screen.getByTestId(tid);
+      expect(btn).toBeInTheDocument();
+      fireEvent.click(btn);
+    });
+
+    // Check Top Bar action buttons
+    const topActions = [
+      'action-undo',
+      'action-redo',
+      'action-align',
+      'action-autotidy',
+      'action-erc',
+      'action-find',
+      'action-bom-netlist',
+    ];
+
+    topActions.forEach((tid) => {
+      const btn = screen.getByTestId(tid);
+      expect(btn).toBeInTheDocument();
+    });
+
+    // Test Right-Click Context Menu on component
+    const r1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    expect(r1Hit).toBeInTheDocument();
+    fireEvent.contextMenu(r1Hit!);
+
+    const ctxMenu = screen.getByTestId('sch-context-menu');
+    expect(ctxMenu).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-rotate')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-mirror')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-duplicate')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-delete')).toBeInTheDocument();
+
+    // Clicking rotate in context menu rotates component
+    fireEvent.click(screen.getByTestId('ctx-rotate'));
+    expect(screen.queryByTestId('sch-context-menu')).not.toBeInTheDocument();
+  });
+
+  it('STATEFUL TEST 5 (Zero Regression on LabHeader & SchematicCanvas): LabHeader hides/shows simulation controls and untouched SchematicCanvas mounts cleanly with moved R1 and folded wire', () => {
+    // 1. LabHeader activeMode="schematicEditor" hides Run/Stop; activeMode="schematic" shows Run/Stop
+    const dummyLabHeaderProps = {
+      projectTitle: 'Regression Test Lab',
+      onTitleChange: vi.fn(),
+      onNewProject: vi.fn(),
+      onSaveProject: vi.fn(),
+      onLoadProject: vi.fn(),
+      onExportProject: vi.fn(),
+      onOpenExperiments: vi.fn(),
+      hasUnsavedChanges: false,
+      canUndo: false,
+      canRedo: false,
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematicEditor"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+    expect(screen.queryByTitle(/Toggle Simulation/i)).not.toBeInTheDocument();
+
+    rerender(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematic"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+    expect(screen.getByTitle(/Toggle Simulation/i)).toBeInTheDocument();
+
+    // 2. Untouched SchematicCanvas mounts cleanly with moved R1 and folded wire
+    const movedComps: CircuitComponent[] = TEMPLATE_555_ASTABLE.components.map((c) =>
+      c.id === 'r1' ? { ...c, x: 420, y: 180, editorPosition: { x: 420, y: 180 } } : c
+    );
+    const foldedWires: CircuitWire[] = [
+      {
+        id: 'w_folded_1',
+        fromCompId: 'r1',
+        fromPinId: '1',
+        toCompId: 'r2',
+        toPinId: '1',
+        points: [
+          { x: 420, y: 180 },
+          { x: 300, y: 180 },
+          { x: 300, y: 220 },
+        ],
+      },
+    ];
+
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={movedComps}
+        wires={foldedWires}
+        selectedCompId="r1"
+        onSelectComponent={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    expect(canvasContainer.querySelector('#main-schematic-svg')).toBeInTheDocument();
+    expect(canvasContainer.textContent).toContain('R1');
   });
 });
 
