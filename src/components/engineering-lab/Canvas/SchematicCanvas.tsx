@@ -872,12 +872,6 @@ export function SchematicCanvas({
       dotMap.set(`${Math.round(d.x)},${Math.round(d.y)}`, d);
     });
     wires.forEach((w) => {
-      if (w.junctionPoint) {
-        const key = `${Math.round(w.junctionPoint.x)},${Math.round(w.junctionPoint.y)}`;
-        if (!dotMap.has(key)) {
-          dotMap.set(key, { x: Math.round(w.junctionPoint.x), y: Math.round(w.junctionPoint.y), netName: w.netName });
-        }
-      }
       if (w.tappedWireId) {
         const cVerts = getCanonicalWirePoints(w, components, wires);
         if (cVerts.length >= 2) {
@@ -886,6 +880,11 @@ export function SchematicCanvas({
           if (!dotMap.has(key)) {
             dotMap.set(key, { x: Math.round(endPt.x), y: Math.round(endPt.y), netName: w.netName });
           }
+        }
+      } else if (w.junctionPoint) {
+        const key = `${Math.round(w.junctionPoint.x)},${Math.round(w.junctionPoint.y)}`;
+        if (!dotMap.has(key)) {
+          dotMap.set(key, { x: Math.round(w.junctionPoint.x), y: Math.round(w.junctionPoint.y), netName: w.netName });
         }
       }
     });
@@ -1373,6 +1372,8 @@ export function SchematicCanvas({
                         y2={seg.p2.y}
                         stroke="transparent"
                         strokeWidth={14}
+                        pointerEvents={toolMode === 'select' ? 'stroke' : 'none'}
+                        style={{ pointerEvents: toolMode === 'select' ? 'stroke' : 'none' }}
                         className={
                           toolMode === 'select'
                             ? isH

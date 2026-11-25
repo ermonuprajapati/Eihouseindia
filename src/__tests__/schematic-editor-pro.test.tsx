@@ -2668,5 +2668,225 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
       expect(addedWire.junctionPoint).toBeDefined();
     }
   });
+
+  it('AUDIT BUG FIX Test 1: Direct Pin-to-Pin Auto-Trunk T-Junction in SchematicEditorPanel for Non-Aligned Diagonal Pins', () => {
+    const onAddWireMock = vi.fn();
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      label: 'A',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 300,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      label: 'B',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      label: 'C',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 200,
+      y: 220, // Non-aligned in Y with A or B -> generates an auto-elbow
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compA, compB, compC]}
+        wires={[wireBA]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Switch to Wire tool
+    const wireToolBtn = screen.getByTestId('tool-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Click Pin C via onMouseDown
+    const pinElC = container.querySelector('[data-testid="sch-pin-comp_C-1"]');
+    expect(pinElC).toBeInTheDocument();
+    fireEvent.mouseDown(pinElC!);
+
+    // Directly click Pin A via onMouseDown (0 manual corners clicked)
+    const pinElA = container.querySelector('[data-testid="sch-pin-comp_A-1"]');
+    expect(pinElA).toBeInTheDocument();
+    fireEvent.mouseDown(pinElA!);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    // Taps wire_B_A trunk at projected coordinate (200, 100)
+    expect(addedWire.tappedWireId).toBe('wire_B_A');
+    expect(addedWire.junctionPoint).toEqual({ x: 200, y: 100 });
+
+    // Wire action pill must be null immediately
+    const pill = container.querySelector('[data-testid="sch-wire-action-pill"]');
+    expect(pill).toBeNull();
+  });
+
+  it('AUDIT BUG FIX Test 2: No Orphan Ghost Junction Dot After Parent Component Move', () => {
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      label: 'A',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 300,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      label: 'B',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      label: 'C',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 200,
+      y: 220,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    const wireCA: CircuitWire = {
+      id: 'wire_C_A',
+      fromCompId: 'comp_C',
+      fromPinId: '1',
+      toCompId: 'comp_B',
+      toPinId: '1',
+      tappedWireId: 'wire_B_A',
+      junctionPoint: { x: 200, y: 100 }, // Initial static junction point
+    };
+
+    // Move parent components A and B by (0, +60)
+    const compAMoved = { ...compA, y: 160 };
+    const compBMoved = { ...compB, y: 160 };
+    const compsMoved = [compAMoved, compBMoved, compC];
+
+    const ptsBA = getCanonicalWirePoints(wireBA, compsMoved, [wireBA, wireCA]);
+    const ptsCA = getCanonicalWirePoints(wireCA, compsMoved, [wireBA, wireCA]);
+
+    const routedWires = [
+      { wireId: wireBA.id, points: ptsBA },
+      {
+        wireId: wireCA.id,
+        points: ptsCA,
+        tappedWireId: wireCA.tappedWireId,
+        junctionPoint: wireCA.junctionPoint, // stale static point (200, 100)
+      },
+    ];
+
+    const junctions = computeCanonicalJunctions(routedWires);
+
+    // Emits dot at the new live projected point (200, 160)
+    const hasLiveDot = junctions.some((j) => Math.hypot(j.x - 200, j.y - 160) < 2);
+    expect(hasLiveDot).toBe(true);
+
+    // ZERO orphan ghost dots at the old stale point (200, 100)
+    const hasStaleDot = junctions.some((j) => Math.hypot(j.x - 200, j.y - 100) < 2);
+    expect(hasStaleDot).toBe(false);
+  });
+
+  it('AUDIT BUG FIX Test 3: SchematicCanvas Segment <line> Has pointer-events="none" in Wire (W) Mode', () => {
+    const onAddWireMock = vi.fn();
+    const targetWire = defaultProps.wires[0];
+
+    const { container } = render(
+      <SchematicCanvas
+        components={defaultProps.components}
+        wires={defaultProps.wires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool
+    const wireToolBtn = screen.getByTitle(/Wire Tool/i);
+    fireEvent.click(wireToolBtn);
+
+    // Assert that per-segment hit lines have pointer-events="none" so they don't swallow clicks
+    const segLines = container.querySelectorAll('g[key*="seg_"] line, line[stroke="transparent"]');
+    expect(segLines.length).toBeGreaterThan(0);
+    segLines.forEach((line) => {
+      expect(line).toHaveStyle({ pointerEvents: 'none' });
+    });
+
+    // Start wire from comp pin (div with title^="Pin:")
+    const pinEl = container.querySelector('div[title^="Pin:"]');
+    expect(pinEl).toBeInTheDocument();
+    fireEvent.click(pinEl!);
+
+    // Click on targetWire path to tap it
+    const wirePath = container.querySelector(`path[stroke="transparent"]`);
+    expect(wirePath).toBeInTheDocument();
+    fireEvent.click(wirePath!, { clientX: 250, clientY: 150 });
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.tappedWireId).toBe(targetWire.id);
+  });
 });
 

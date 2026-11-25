@@ -480,6 +480,7 @@ export function SchematicEditorPanel({
 
             // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
             const interiorWaypoints = finalPoints.slice(1, -1);
+            const explicitManualWaypoints = wireWaypoints.length > 0 ? interiorWaypoints : undefined;
 
             const resolved = resolveShortestNetWire(
               activeWireStart.compId,
@@ -488,7 +489,7 @@ export function SchematicEditorPanel({
               pinId,
               components,
               wires,
-              interiorWaypoints,
+              explicitManualWaypoints,
               sheetConfig.gridStep
             );
 
@@ -502,11 +503,9 @@ export function SchematicEditorPanel({
                 toPinId: resolved.toPinId,
                 tappedWireId: resolved.tappedWireId,
                 junctionPoint: resolved.junctionPoint,
-                points: resolved.points,
+                points: resolved.points || (interiorWaypoints.length > 0 ? interiorWaypoints : undefined),
               });
-              setInternalSelectedWireId(newWireId);
-              setWirePillPos({ x: wx, y: wy });
-              onSelectWire(newWireId);
+              clearWireSelection();
             }
           }
           setActiveWireStart(null);
@@ -942,9 +941,11 @@ export function SchematicEditorPanel({
 
       // Clear wire selection on any empty canvas click when not currently drawing a wire
       clearWireSelection();
-      onSelectComponent(null);
-      updateSelectedCompIds([]);
-      setSelectedItemId(null);
+      if (tool !== 'select' || !e.shiftKey) {
+        onSelectComponent(null);
+        updateSelectedCompIds([]);
+        setSelectedItemId(null);
+      }
 
       // Marquee box selection start on empty canvas in Select mode
       if (tool === 'select') {

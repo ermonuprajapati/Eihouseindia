@@ -197,14 +197,13 @@ export function computeCanonicalJunctions(
   });
 
   routedWires.forEach((rw) => {
-    if (rw.junctionPoint) {
-      const key = `${Math.round(rw.junctionPoint.x)},${Math.round(rw.junctionPoint.y)}`;
-      dotMap.set(key, { x: Math.round(rw.junctionPoint.x), y: Math.round(rw.junctionPoint.y) });
-    }
     if (rw.tappedWireId && rw.points && rw.points.length >= 2) {
       const endPt = rw.points[rw.points.length - 1];
       const key = `${Math.round(endPt.x)},${Math.round(endPt.y)}`;
       dotMap.set(key, { x: Math.round(endPt.x), y: Math.round(endPt.y) });
+    } else if (rw.junctionPoint) {
+      const key = `${Math.round(rw.junctionPoint.x)},${Math.round(rw.junctionPoint.y)}`;
+      dotMap.set(key, { x: Math.round(rw.junctionPoint.x), y: Math.round(rw.junctionPoint.y) });
     }
   });
 
