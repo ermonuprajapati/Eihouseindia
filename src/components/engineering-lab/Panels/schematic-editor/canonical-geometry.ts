@@ -52,12 +52,17 @@ export function getCanonicalWirePoints(
   const fromPin = fromComp?.pins?.find((p) => p.id === wire.fromPinId);
   const toPin = toComp?.pins?.find((p) => p.id === wire.toPinId);
 
-  if (!fromComp || !toComp || !fromPin || !toPin) {
+  const isTapped = Boolean((wire.tappedWireId || wire.junctionPoint) && wire.junctionPoint);
+
+  if (!fromComp || !fromPin) {
+    return wire.points && wire.points.length > 0 ? wire.points : [];
+  }
+  if (!isTapped && (!toComp || !toPin)) {
     return wire.points && wire.points.length > 0 ? wire.points : [];
   }
 
   const p1 = getCanonicalPinWorldPos(fromComp, fromPin);
-  const p2 = getCanonicalPinWorldPos(toComp, toPin);
+  const p2 = isTapped && wire.junctionPoint ? wire.junctionPoint : getCanonicalPinWorldPos(toComp!, toPin!);
 
   // Interior-only contract: strip any accidental baked-in pin endpoints
   let interiorWaypoints: Point[] | undefined = undefined;
@@ -85,7 +90,7 @@ export function getCanonicalWirePoints(
  * and 3+ branch meetings, plus user manual junctions.
  */
 export function computeCanonicalJunctions(
-  routedWires: { wireId: string; points: { x: number; y: number }[]; netName?: string }[],
+  routedWires: { wireId: string; points: { x: number; y: number }[]; netName?: string; junctionPoint?: { x: number; y: number } }[],
   manualJunctions: { x: number; y: number }[] = []
 ): { x: number; y: number }[] {
   const validWires = (routedWires || []).filter(
@@ -108,6 +113,13 @@ export function computeCanonicalJunctions(
   manualJunctions.forEach((mj) => {
     const key = `${Math.round(mj.x)},${Math.round(mj.y)}`;
     dotMap.set(key, { x: Math.round(mj.x), y: Math.round(mj.y) });
+  });
+
+  routedWires.forEach((rw) => {
+    if (rw.junctionPoint) {
+      const key = `${Math.round(rw.junctionPoint.x)},${Math.round(rw.junctionPoint.y)}`;
+      dotMap.set(key, { x: Math.round(rw.junctionPoint.x), y: Math.round(rw.junctionPoint.y) });
+    }
   });
 
   return Array.from(dotMap.values());

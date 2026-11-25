@@ -982,7 +982,9 @@ export function EngineeringLabApp() {
     recordHistory();
     setProject((prev) => ({
       ...prev,
-      wires: prev.wires.filter((w) => w.id !== wireId),
+      wires: prev.wires
+        .filter((w) => w.id !== wireId)
+        .map((w) => (w.tappedWireId === wireId ? { ...w, tappedWireId: undefined } : w)),
     }));
     if (selectedWireId === wireId) {
       setSelectedWireId(null);

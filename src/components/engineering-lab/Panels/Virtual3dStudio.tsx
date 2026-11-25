@@ -782,6 +782,8 @@ export function Virtual3dStudio({
     );
 
     const outWires: Wire3D[] = [];
+    const seen3dPairs = new Set<string>();
+    const mcuPinConnected = new Set<string>();
     const occupancy = new BreadboardOccupancyMap();
 
     // PHASE 1: Reserve exact hole coordinates for ALL component leads on the breadboard
@@ -1260,6 +1262,23 @@ export function Virtual3dStudio({
       const isA_Breadboard = compA && !isDirectWireComponent(compA);
       const isB_Breadboard = compB && !isDirectWireComponent(compB);
 
+      if (isA_Breadboard && isB_Breadboard && compA && compB) {
+        const compHoleA = getBreadboardHoleForComponentPin(compA, w.fromPinId);
+        const compHoleB = getBreadboardHoleForComponentPin(compB, w.toPinId);
+        const tieGroupA = compHoleA ? getTieGroupForHole(compHoleA) : undefined;
+        const tieGroupB = compHoleB ? getTieGroupForHole(compHoleB) : undefined;
+        if (tieGroupA && tieGroupB && tieGroupA === tieGroupB) {
+          // Same column / rail on breadboard -> internally connected -> 0 jumper wires needed!
+          return;
+        }
+      }
+
+      // Degree penalty on MCU header pins: at most 1 single jumper wire per MCU pin
+      const fromIsMcu = compA && isDirectWireComponent(compA);
+      const toIsMcu = compB && isDirectWireComponent(compB);
+      if (fromIsMcu && mcuPinConnected.has(`${w.fromCompId}:${w.fromPinId}`)) return;
+      if (toIsMcu && mcuPinConnected.has(`${w.toCompId}:${w.toPinId}`)) return;
+
       let fromEnd: { compId: string; pinId: string } = {
         compId: w.fromCompId,
         pinId: compA ? normalizePinIdForComponent(compA, w.fromPinId) : w.fromPinId,
@@ -1288,6 +1307,14 @@ export function Virtual3dStudio({
           toEnd = { compId: 'breadboard', pinId: freeHole.id };
         }
       }
+
+      const endKey1 = `${fromEnd.compId}:${fromEnd.pinId}->${toEnd.compId}:${toEnd.pinId}`;
+      const endKey2 = `${toEnd.compId}:${toEnd.pinId}->${fromEnd.compId}:${fromEnd.pinId}`;
+      if (seen3dPairs.has(endKey1) || seen3dPairs.has(endKey2)) return;
+      seen3dPairs.add(endKey1);
+
+      if (fromIsMcu) mcuPinConnected.add(`${w.fromCompId}:${w.fromPinId}`);
+      if (toIsMcu) mcuPinConnected.add(`${w.toCompId}:${w.toPinId}`);
 
       outWires.push({
         id: w.id,
@@ -1610,7 +1637,7 @@ export function Virtual3dStudio({
         const isFromBb = w.fromPin.compId === 'breadboard' || w.fromPin.compId.startsWith('breadboard');
         const isToBb = w.toPin.compId === 'breadboard' || w.toPin.compId.startsWith('breadboard');
         if (isFromBb || isToBb) {
-          const resolved = resolve3DWireToSchematicConnections(w, curWires3d, nextComps3d, components);
+          const resolved = resolve3DWireToSchematicConnections(w, curWires3d, nextComps3d, components, wires);
           for (let idx = 0; idx < resolved.length; idx++) {
             const rw = resolved[idx];
             const resolvedId = `${w.id}_sch_${idx}`;
@@ -1630,7 +1657,9 @@ export function Virtual3dStudio({
                 fromPinId: rw.fromPinId,
                 toCompId: rw.toCompId,
                 toPinId: rw.toPinId,
-                color: rw.color || w.color,
+                color: rw.color,
+                tappedWireId: rw.tappedWireId,
+                junctionPoint: rw.junctionPoint,
               });
             }
           }
@@ -1689,8 +1718,25 @@ export function Virtual3dStudio({
 
   // Add 3D Wire handler
   const handleAddWire3D = useCallback((w3d: Wire3D) => {
+    const curWires3d = independentWires !== null ? independentWires : activeWires3d;
+    const isDup = curWires3d.some(
+      (w) =>
+        (w.fromPin.compId === w3d.fromPin.compId &&
+          w.fromPin.pinId === w3d.fromPin.pinId &&
+          w.toPin.compId === w3d.toPin.compId &&
+          w.toPin.pinId === w3d.toPin.pinId) ||
+        (w.fromPin.compId === w3d.toPin.compId &&
+          w.fromPin.pinId === w3d.toPin.pinId &&
+          w.toPin.compId === w3d.fromPin.compId &&
+          w.toPin.pinId === w3d.fromPin.pinId)
+    );
+    if (isDup) {
+      toast.info('Wire already connected between these points.');
+      return;
+    }
+
     record3DHistory(activeComponents3d, activeWires3d);
-    const nextWires3d = [...(independentWires !== null ? independentWires : activeWires3d), w3d];
+    const nextWires3d = [...curWires3d, w3d];
     setIndependentWires(nextWires3d);
 
     const isFromBb = w3d.fromPin.compId === 'breadboard' || w3d.fromPin.compId.startsWith('breadboard');
@@ -1712,7 +1758,8 @@ export function Virtual3dStudio({
         w3d,
         nextWires3d,
         activeComponents3d,
-        components
+        components,
+        wires
       );
 
       for (let idx = 0; idx < resolved.length; idx++) {
@@ -1724,12 +1771,14 @@ export function Virtual3dStudio({
           fromPinId: rw.fromPinId,
           toCompId: rw.toCompId,
           toPinId: rw.toPinId,
-          color: rw.color || w3d.color,
+          color: rw.color,
+          tappedWireId: rw.tappedWireId,
+          junctionPoint: rw.junctionPoint,
         });
       }
     }
     toast.success('Connected 3D Dupont jumper wire.');
-  }, [activeComponents3d, activeWires3d, independentWires, components, onAddWire, record3DHistory]);
+  }, [activeComponents3d, activeWires3d, independentWires, components, wires, onAddWire, record3DHistory]);
 
   // Delete 3D wire handler
   const handleDeleteWire3D = useCallback((wireId: string) => {
@@ -1782,7 +1831,8 @@ export function Virtual3dStudio({
         w3d,
         nextWires3d,
         activeComponents3d,
-        components
+        components,
+        wires
       );
 
       for (let idx = 0; idx < resolved.length; idx++) {
@@ -1795,6 +1845,8 @@ export function Virtual3dStudio({
           toCompId: rw.toCompId,
           toPinId: rw.toPinId,
           color: rw.color || w3d.color,
+          tappedWireId: rw.tappedWireId,
+          junctionPoint: rw.junctionPoint,
         });
       }
     }

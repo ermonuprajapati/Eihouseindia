@@ -1362,7 +1362,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
         type: 'LED',
         label: 'LED',
         value: 'Red',
-        parameters: { pinHoles: { a: 'bb_col_15_c', k: 'bb_col_16_c' } },
+        parameters: {},
         x3d: 0,
         y3d: 0,
         z3d: 0,
@@ -1554,6 +1554,272 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(ledState).toBeDefined();
     expect(ledState.current).toBeGreaterThanOrEqual(0);
     expect(ledState.current).toBeLessThanOrEqual(0.025);
+  });
+
+  it('GATE 5 Test 1 (3D Breadboard Zero Fan-Out & Net Union-Find): Jumper wire produces exactly 1 shortest-path schematic wire with 0 Cartesian explosion', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'mcu1',
+        type: 'arduino_uno',
+        label: 'Arduino',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: {},
+      },
+      {
+        id: 'led1',
+        type: 'led',
+        label: 'LED',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { 'a': 'bb_col_10_c', 'k': 'bb_rail_bot_neg_1' },
+      },
+      {
+        id: 'r1',
+        type: 'resistor',
+        label: 'Resistor',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_10_e', '2': 'bb_col_15_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'mcu1',
+        type: 'MCU',
+        designator: 'U1',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        value: 'Arduino',
+        footprint: 'Arduino_Uno',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [{ id: 'D13', name: 'D13', x: 20, y: 0, pinType: 'output' }],
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'D1',
+        label: 'Red LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_D5.0mm',
+        x: 200,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: 'a', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        designator: 'R1',
+        label: '1k Resistor',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 300,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    const jWire: Wire3D = {
+      id: 'w3d_jumper_1',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_b' },
+      color: '#3B82F6',
+    };
+
+    // When resolving, it should produce EXACTLY 1 wire connecting mcu1:D13 to the closest pin in column 10 (led1:a)
+    // NEVER a Cartesian product of 2x3 or all-to-all explosion!
+    const resolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, []);
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].fromCompId).toBe('mcu1');
+    expect(resolved[0].fromPinId).toBe('D13');
+    expect(resolved[0].toCompId).toBe('led1');
+    expect(resolved[0].toPinId).toBe('a');
+
+    // If mcu1:D13 and led1:a are ALREADY connected in schematicWires, resolving a duplicate jumper returns [] (0 redundant wires)
+    const existingWire: CircuitWire = {
+      id: 'w_existing',
+      fromCompId: 'mcu1',
+      fromPinId: 'D13',
+      toCompId: 'led1',
+      toPinId: 'a',
+    };
+    const redundantResolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, [existingWire]);
+    expect(redundantResolved.length).toBe(0);
+  });
+
+  it('GATE 5 Test 2 (Smart Shortest-Path Auto-Tap): Resolver taps existing wire segment when closer by >= 15px', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'compA',
+        type: 'resistor',
+        label: 'RA',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_5_a', '2': 'bb_col_5_e' },
+      },
+      {
+        id: 'compB',
+        type: 'resistor',
+        label: 'RB',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_20_a', '2': 'bb_col_20_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'compA',
+        type: 'RESISTOR',
+        designator: 'RA',
+        label: 'RA',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'compB',
+        type: 'RESISTOR',
+        designator: 'RB',
+        label: 'RB',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 500,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Wire passing between compB:1 (500, 100) and some other component at (100, 300)
+    // with a segment passing close to compA:1 (100, 100) -> segment from (120, 0) to (120, 200)
+    const existingWireB: CircuitWire = {
+      id: 'wire_bus_B',
+      fromCompId: 'compB',
+      fromPinId: '1',
+      toCompId: 'compB',
+      toPinId: '2',
+      points: [
+        { x: 500, y: 100 },
+        { x: 120, y: 100 },
+        { x: 120, y: 200 },
+      ],
+    };
+
+    const jWire: Wire3D = {
+      id: 'w3d_jumper_tap',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_5_b' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_b' },
+      color: '#10B981',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, [existingWireB]);
+    expect(resolved.length).toBe(1);
+    // Because the existing wire segment passes right at (120, 100), which is closer than compB (at 500, 100) by 380px:
+    expect(resolved[0].tappedWireId).toBe('wire_bus_B');
+    expect(resolved[0].junctionPoint).toBeDefined();
+    expect(resolved[0].junctionPoint?.x).toBe(150);
+    expect(resolved[0].junctionPoint?.y).toBe(100);
+  });
+
+  it('GATE 5 Test 3 (Empty-Canvas Deselect in Wire Mode & T-Junction Wire Tap): Clicking empty canvas in Wire mode clears selection, clicking wire completes tap', () => {
+    let latestWires: CircuitWire[] = [
+      {
+        id: 'test_wire_1',
+        fromCompId: 'r1',
+        fromPinId: '1',
+        toCompId: 'r2',
+        toPinId: '1',
+      },
+    ];
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={latestWires}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Select the wire
+    const wireHit = container.querySelector('[data-testid="sch-wire-hit-test_wire_1"]');
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+
+    expect(container.querySelector('.sch-wire-action-pill')).toBeInTheDocument();
+
+    // 2. Switch to Wire (W) mode while wire is selected
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    // 3. Click empty canvas in Wire mode -> MUST dismiss wire selection
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // 4. Start wire from pin R1-2 and tap into test_wire_1
+    const pinR1_2 = container.querySelector('[data-testid="sch-pin-r1-2"]');
+    expect(pinR1_2).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1_2!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1_2!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1_2!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeInTheDocument();
+
+    // Tap into test_wire_1
+    fireEvent.mouseDown(wireHit!, { clientX: 220, clientY: 100 });
+
+    // A tapped wire is created with tappedWireId and junctionPoint
+    const tapped = latestWires.find((w) => w.tappedWireId === 'test_wire_1');
+    expect(tapped).toBeDefined();
+    expect(tapped?.junctionPoint).toBeDefined();
   });
 });
 

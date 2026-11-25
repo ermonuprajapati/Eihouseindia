@@ -183,6 +183,8 @@ export interface CircuitWire {
   editorWaypoints?: { x: number; y: number }[];
   manualWaypoints?: { x: number; y: number }[];
   isManualEditorRoute?: boolean;
+  tappedWireId?: string;
+  junctionPoint?: { x: number; y: number };
 }
 
 export interface ComponentSimTelemetry {

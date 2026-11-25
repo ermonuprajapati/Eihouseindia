@@ -1,9 +1,13 @@
-import { CircuitComponent, Component3D, Wire3D } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/engineering-lab/types';
 import {
   START_X,
   PITCH_X,
   getTieGroupForHole as getTieGroupFromTopology,
 } from './breadboard-topology';
+import {
+  getCanonicalPinWorldPos,
+  getCanonicalWirePoints,
+} from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 
 export interface ResolvedSchematicWire {
   fromCompId: string;
@@ -11,6 +15,8 @@ export interface ResolvedSchematicWire {
   toCompId: string;
   toPinId: string;
   color?: string;
+  tappedWireId?: string;
+  junctionPoint?: { x: number; y: number };
 }
 
 /**
@@ -240,18 +246,64 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
   return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
 }
 
+// Disjoint Set / Union-Find for electrical nets
+class NetUnionFind {
+  private parent = new Map<string, string>();
+
+  find(i: string): string {
+    if (!this.parent.has(i)) this.parent.set(i, i);
+    if (this.parent.get(i) !== i) {
+      this.parent.set(i, this.find(this.parent.get(i)!));
+    }
+    return this.parent.get(i)!;
+  }
+
+  union(i: string, j: string) {
+    const rootI = this.find(i);
+    const rootJ = this.find(j);
+    if (rootI !== rootJ) {
+      this.parent.set(rootI, rootJ);
+    }
+  }
+
+  connected(i: string, j: string): boolean {
+    return this.find(i) === this.find(j);
+  }
+}
+
+// Project a point onto a line segment
+function projectPointToSegment(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): { x: number; y: number; dist: number } | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-4) return null;
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  if (t < 0.05 || t > 0.95) return null; // strictly interior, avoid right on corners
+  const projX = Math.round(a.x + t * dx);
+  const projY = Math.round(a.y + t * dy);
+  const dist = Math.hypot(p.x - projX, p.y - projY);
+  return { x: projX, y: projY, dist };
+}
+
 /**
  * Resolves a 3D jumper wire to its real component-to-component electrical connections.
- * Builds an electrical Union-Find graph across breadboard tieGroups to support:
- * 1. Direct component-to-component connections
- * 2. Component-to-breadboard-hole connections
- * 3. Breadboard-to-breadboard jumper multi-hops
+ * Enforces strict 1-edge shortest-path / MST net resolution:
+ * 1. Resolves candidate pins with priority to exact clicked breadboard column.
+ * 2. Skips wire creation if endpoints are already in the same electrical net (0 redundant parallel wires).
+ * 3. Chooses exactly 1 shortest Euclidean pair.
+ * 4. Auto-taps the closest existing wire segment of that net if closer by >= 15px.
+ * 5. Returns at most 1 wire, preserving clean default schematic wire color.
  */
 export function resolve3DWireToSchematicConnections(
   w3d: Wire3D,
   allWires3d: Wire3D[],
   components3d: Component3D[],
-  schematicComponents: CircuitComponent[]
+  schematicComponents: CircuitComponent[],
+  schematicWires: CircuitWire[] = []
 ): ResolvedSchematicWire[] {
   const parseEndpoint = (raw: unknown): { compId: string; pinId: string } | null => {
     if (!raw) return null;
@@ -381,26 +433,53 @@ export function resolve3DWireToSchematicConnections(
     return visited;
   };
 
-  // 3. Resolve endpoint candidates
-  const resolveEndpoint = (endpoint: { compId: string; pinId: string }): Array<{ compId: string; pinId: string }> => {
-    const isBb = endpoint.compId === 'breadboard' || endpoint.compId.startsWith('breadboard');
-    if (!isBb) {
-      // Direct component endpoint (e.g. Arduino D13 or GND)
-      return [{ compId: endpoint.compId, pinId: endpoint.pinId }];
-    }
-
-    const tg = getHoleTieGroup(endpoint.pinId);
-    if (!tg) return [];
-
-    const connectedTgs = getConnectedTieGroups(tg);
-    const reachablePins: Array<{ compId: string; pinId: string }> = [];
-    for (const group of connectedTgs) {
-      const pins = pinsByTieGroup.get(group);
-      if (pins) {
-        reachablePins.push(...pins);
+  // 3. Build Union-Find of ALL existing electrical nets from schematicWires
+  const uf = new NetUnionFind();
+  for (const sw of schematicWires) {
+    const k1 = `${sw.fromCompId}:${sw.fromPinId}`;
+    const k2 = `${sw.toCompId}:${sw.toPinId}`;
+    uf.union(k1, k2);
+    if (sw.tappedWireId) {
+      const parentWire = schematicWires.find((w) => w.id === sw.tappedWireId);
+      if (parentWire) {
+        uf.union(k1, `${parentWire.fromCompId}:${parentWire.fromPinId}`);
       }
     }
-    return reachablePins;
+  }
+
+  // 4. Resolve endpoint candidate pins, prioritizing exact clicked column
+  interface CandidatePin {
+    compId: string;
+    pinId: string;
+    isDirectHole: boolean;
+  }
+
+  const resolveEndpoint = (endpoint: { compId: string; pinId: string }): CandidatePin[] => {
+    const isBb = endpoint.compId === 'breadboard' || endpoint.compId.startsWith('breadboard');
+    if (!isBb) {
+      return [{ compId: endpoint.compId, pinId: endpoint.pinId, isDirectHole: true }];
+    }
+
+    const exactTg = getHoleTieGroup(endpoint.pinId);
+    if (!exactTg) return [];
+
+    const directPins: CandidatePin[] = (pinsByTieGroup.get(exactTg) || []).map((p) => ({
+      ...p,
+      isDirectHole: true,
+    }));
+
+    const connectedTgs = getConnectedTieGroups(exactTg);
+    const bridgedPins: CandidatePin[] = [];
+    for (const group of connectedTgs) {
+      if (group === exactTg) continue;
+      const pins = pinsByTieGroup.get(group);
+      if (pins) {
+        bridgedPins.push(...pins.map((p) => ({ ...p, isDirectHole: false })));
+      }
+    }
+
+    // Prioritize pins seated in the exact clicked column/hole tieGroup over multi-hop columns
+    return directPins.length > 0 ? directPins : bridgedPins;
   };
 
   const fromCandidates = resolveEndpoint(parsedFrom);
@@ -410,27 +489,106 @@ export function resolve3DWireToSchematicConnections(
     return [];
   }
 
-  const results: ResolvedSchematicWire[] = [];
-  const seenPairs = new Set<string>();
-
+  // Check if ANY pin on Side A is ALREADY in the same net as ANY pin on Side B
   for (const f of fromCandidates) {
+    const fKey = `${f.compId}:${f.pinId}`;
     for (const t of toCandidates) {
-      if (f.compId === t.compId && f.pinId === t.pinId) continue;
-
-      const pairKey1 = `${f.compId}:${f.pinId}->${t.compId}:${t.pinId}`;
-      const pairKey2 = `${t.compId}:${t.pinId}->${f.compId}:${f.pinId}`;
-      if (seenPairs.has(pairKey1) || seenPairs.has(pairKey2)) continue;
-      seenPairs.add(pairKey1);
-
-      results.push({
-        fromCompId: f.compId,
-        fromPinId: f.pinId,
-        toCompId: t.compId,
-        toPinId: t.pinId,
-        color: w3d.color,
-      });
+      const tKey = `${t.compId}:${t.pinId}`;
+      if (f.compId === t.compId && f.pinId === t.pinId) return [];
+      if (uf.connected(fKey, tKey)) {
+        return []; // Already electrically joined -> ZERO redundant parallel wires!
+      }
     }
   }
 
-  return results;
+  // Helper to get 2D schematic coordinates of a pin
+  const getPinPos = (compId: string, pinId: string): { x: number; y: number } => {
+    const schComp = schematicComponents?.find((c) => c.id === compId);
+    if (schComp) {
+      return getCanonicalPinWorldPos(schComp, pinId);
+    }
+    const c3d = components3d.find((c) => c.id === compId);
+    return { x: c3d?.x3d ?? 0, y: c3d?.z3d ?? 0 };
+  };
+
+  // 5. Pick EXACTLY ONE best pair (bestA, bestB)
+  let bestPair: { a: CandidatePin; b: CandidatePin; dist: number } | null = null;
+
+  for (const f of fromCandidates) {
+    const posA = getPinPos(f.compId, f.pinId);
+    for (const t of toCandidates) {
+      if (f.compId === t.compId && f.pinId === t.pinId) continue;
+      const posB = getPinPos(t.compId, t.pinId);
+      const dist = Math.hypot(posA.x - posB.x, posA.y - posB.y);
+
+      if (!bestPair) {
+        bestPair = { a: f, b: t, dist };
+        continue;
+      }
+
+      const curScore = (bestPair.a.isDirectHole ? 2 : 0) + (bestPair.b.isDirectHole ? 2 : 0);
+      const newScore = (f.isDirectHole ? 2 : 0) + (t.isDirectHole ? 2 : 0);
+
+      if (newScore > curScore) {
+        bestPair = { a: f, b: t, dist };
+      } else if (newScore === curScore && dist < bestPair.dist) {
+        bestPair = { a: f, b: t, dist };
+      }
+    }
+  }
+
+  if (!bestPair) return [];
+
+  const { a: bestA, b: bestB, dist: directDist } = bestPair;
+  const posA = getPinPos(bestA.compId, bestA.pinId);
+
+  // 6. Auto-Tap Nearest Existing Wire of That Net (Shortest Path Junction!)
+  let closestTap: { wireId: string; point: { x: number; y: number }; dist: number } | null = null;
+  const netRootB = uf.find(`${bestB.compId}:${bestB.pinId}`);
+
+  for (const sw of schematicWires) {
+    const swNet = uf.find(`${sw.fromCompId}:${sw.fromPinId}`);
+    if (swNet !== netRootB) continue;
+
+    const verts = getCanonicalWirePoints(sw, schematicComponents);
+    for (let i = 0; i < verts.length - 1; i++) {
+      const proj = projectPointToSegment(posA, verts[i], verts[i + 1]);
+      if (proj) {
+        const threshold = closestTap ? closestTap.dist : directDist - 15;
+        if (proj.dist < threshold) {
+          closestTap = { wireId: sw.id, point: { x: proj.x, y: proj.y }, dist: proj.dist };
+        }
+      }
+    }
+  }
+
+  // Preserve clean default schematic wire color (never force jarring red on normal signal wires)
+  let resolvedColor: string | undefined = undefined;
+  if (w3d.color && w3d.color !== '#EF4444' && w3d.color.toLowerCase() !== '#ff0000') {
+    resolvedColor = w3d.color;
+  }
+
+  if (closestTap) {
+    return [
+      {
+        fromCompId: bestA.compId,
+        fromPinId: bestA.pinId,
+        toCompId: bestB.compId,
+        toPinId: bestB.pinId,
+        color: resolvedColor,
+        tappedWireId: closestTap.wireId,
+        junctionPoint: closestTap.point,
+      },
+    ];
+  }
+
+  return [
+    {
+      fromCompId: bestA.compId,
+      fromPinId: bestA.pinId,
+      toCompId: bestB.compId,
+      toPinId: bestB.pinId,
+      color: resolvedColor,
+    },
+  ];
 }

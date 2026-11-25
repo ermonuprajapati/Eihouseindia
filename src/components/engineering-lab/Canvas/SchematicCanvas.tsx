@@ -49,6 +49,7 @@ import {
   slideWireSegment,
   dragWireCornerVertex,
   calculateJunctionDots,
+  WireJunction,
   simplifyCollinearPoints,
   computeOrthogonalVertices,
   compute45Vertices,
@@ -843,11 +844,15 @@ export function SchematicCanvas({
         const toComp = components.find((c) => c.id === w.toCompId);
         const fromPin = fromComp?.pins.find((p) => p.id === w.fromPinId);
         const toPin = toComp?.pins.find((p) => p.id === w.toPinId);
-        if (!fromComp || !toComp || !fromPin || !toPin) {
+        const isTapped = Boolean((w.tappedWireId || w.junctionPoint) && w.junctionPoint);
+        if (!fromComp || !fromPin) {
+          return { id: w.id, vertices: [] as Point[], netName: w.netName };
+        }
+        if (!isTapped && (!toComp || !toPin)) {
           return { id: w.id, vertices: [] as Point[], netName: w.netName };
         }
         const p1 = getPinWorldCoord(fromComp, fromPin);
-        const p2 = getPinWorldCoord(toComp, toPin);
+        const p2 = isTapped && w.junctionPoint ? w.junctionPoint : getPinWorldCoord(toComp!, toPin!);
         const vertices = getFullWireVertices(
           p1,
           p2,
@@ -859,7 +864,20 @@ export function SchematicCanvas({
       })
       .filter((w) => w.vertices.length > 0);
 
-    return calculateJunctionDots(wiresWithVertices);
+    const dots = calculateJunctionDots(wiresWithVertices);
+    const dotMap = new Map<string, WireJunction>();
+    dots.forEach((d) => {
+      dotMap.set(`${Math.round(d.x)},${Math.round(d.y)}`, d);
+    });
+    wires.forEach((w) => {
+      if (w.junctionPoint) {
+        const key = `${Math.round(w.junctionPoint.x)},${Math.round(w.junctionPoint.y)}`;
+        if (!dotMap.has(key)) {
+          dotMap.set(key, { x: Math.round(w.junctionPoint.x), y: Math.round(w.junctionPoint.y), netName: w.netName });
+        }
+      }
+    });
+    return Array.from(dotMap.values());
   }, [wires, components, activeRoutingStyle, elbowOrientation]);
 
   return (
@@ -1216,14 +1234,17 @@ export function SchematicCanvas({
           {wires.map((wire) => {
             const fromComp = components.find((c) => c.id === wire.fromCompId);
             const toComp = components.find((c) => c.id === wire.toCompId);
-            if (!fromComp || !toComp) return null;
+            const isTapped = Boolean((wire.tappedWireId || wire.junctionPoint) && wire.junctionPoint);
+            if (!fromComp) return null;
+            if (!isTapped && !toComp) return null;
 
             const fromPin = fromComp.pins.find((p) => p.id === wire.fromPinId);
-            const toPin = toComp.pins.find((p) => p.id === wire.toPinId);
-            if (!fromPin || !toPin) return null;
+            const toPin = toComp?.pins.find((p) => p.id === wire.toPinId);
+            if (!fromPin) return null;
+            if (!isTapped && !toPin) return null;
 
             const p1 = getPinWorldCoord(fromComp, fromPin);
-            const p2 = getPinWorldCoord(toComp, toPin);
+            const p2 = isTapped && wire.junctionPoint ? wire.junctionPoint : getPinWorldCoord(toComp!, toPin!);
 
             const isShorted = ercViolations.some(
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)
@@ -1258,6 +1279,26 @@ export function SchematicCanvas({
                       onDeleteWire(wire.id);
                     } else if (toolMode === 'net_highlight') {
                       setHighlightedNetId(wire.id);
+                    } else if (toolMode === 'wire' && activeWireStart) {
+                      const rect = containerRef.current?.getBoundingClientRect();
+                      const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : e.clientX;
+                      const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : e.clientY;
+                      const snapX = Math.round(curX / 10) * 10;
+                      const snapY = Math.round(curY / 10) * 10;
+                      const cleanedWaypoints =
+                        activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
+                      onAddWire({
+                        fromCompId: activeWireStart.compId,
+                        fromPinId: activeWireStart.pinId,
+                        toCompId: wire.fromCompId,
+                        toPinId: wire.fromPinId,
+                        tappedWireId: wire.id,
+                        junctionPoint: { x: snapX, y: snapY },
+                        points: cleanedWaypoints && cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
+                        style: activeRoutingStyle,
+                      });
+                      setActiveWireStart(null);
+                      setActiveWaypoints([]);
                     } else {
                       setWireSelected(wire.id);
                       onSelectComponent(null);

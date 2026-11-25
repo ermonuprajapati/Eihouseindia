@@ -286,6 +286,7 @@ export function SchematicEditorPanel({
         wireId: w.id,
         points: pts,
         netName: w.netName || 'NET',
+        junctionPoint: w.junctionPoint,
       };
     });
   }, [wires, components]);
@@ -538,12 +539,52 @@ export function SchematicEditorPanel({
         return;
       }
 
+      // Wire tap when in Wire or Bus mode and routing an active wire
+      if ((tool === 'wire' || tool === 'bus') && activeWireStart) {
+        const targetWire = wires.find((w) => w.id === wireId);
+        if (targetWire) {
+          const startPt = { x: activeWireStart.x, y: activeWireStart.y };
+          const lastPt = wireWaypoints.length > 0 ? wireWaypoints[wireWaypoints.length - 1] : startPt;
+          const corner = wireElbowFlip
+            ? { x: lastPt.x, y: hitY }
+            : { x: hitX, y: lastPt.y };
+
+          const finalPoints: { x: number; y: number }[] = [startPt, ...wireWaypoints];
+          if (
+            (corner.x !== lastPt.x || corner.y !== lastPt.y) &&
+            (corner.x !== hitX || corner.y !== hitY)
+          ) {
+            finalPoints.push(corner);
+          }
+          finalPoints.push({ x: hitX, y: hitY });
+
+          const interiorWaypoints = finalPoints.slice(1, -1);
+          const newWireId = `wire_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          onAddWire({
+            id: newWireId,
+            fromCompId: activeWireStart.compId,
+            fromPinId: activeWireStart.pinId,
+            toCompId: targetWire.fromCompId,
+            toPinId: targetWire.fromPinId,
+            tappedWireId: wireId,
+            junctionPoint: { x: hitX, y: hitY },
+            points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
+          });
+          setInternalSelectedWireId(newWireId);
+          setWirePillPos({ x: hitX, y: hitY });
+          onSelectWire(newWireId);
+          setActiveWireStart(null);
+          setWireWaypoints([]);
+          return;
+        }
+      }
+
       setWirePillPos({ x: hitX, y: hitY });
       setInternalSelectedWireId(wireId);
       onSelectWire(wireId);
       onSelectComponent(null);
     },
-    [tool, onSelectWire, onSelectComponent, onDeleteWire]
+    [tool, activeWireStart, wireWaypoints, wireElbowFlip, wires, onAddWire, onSelectWire, onSelectComponent, onDeleteWire]
   );
 
   // Keyboard Shortcuts (V, H, W, J, N, P, Q, G, T, R, X, Y, Del, Ctrl+D, Ctrl+Z, Ctrl+Y, Space)
@@ -867,12 +908,14 @@ export function SchematicEditorPanel({
         return;
       }
 
+      // Clear wire selection on any empty canvas click when not currently drawing a wire
+      clearWireSelection();
+
       // Marquee box selection start on empty canvas in Select mode
       if (tool === 'select') {
         if (!e.shiftKey) {
           onSelectComponent(null);
           updateSelectedCompIds([]);
-          clearWireSelection();
           setSelectedItemId(null);
         }
         setMarqueeBox({ x1: wCoord.x, y1: wCoord.y, x2: wCoord.x, y2: wCoord.y });
