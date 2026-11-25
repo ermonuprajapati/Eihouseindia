@@ -8,6 +8,7 @@ interface SchematicVectorSymbolProps {
   isSelected?: boolean;
   theme?: 'dark' | 'light';
   isGhost?: boolean;
+  isWiringMode?: boolean;
   onPinClick?: (e: React.MouseEvent, compId: string, pinId: string, worldX: number, worldY: number) => void;
   onPinHover?: (pinId: string | null) => void;
   hoveredPinId?: string | null;
@@ -24,6 +25,7 @@ export function SchematicVectorSymbol({
   isSelected = false,
   theme = 'dark',
   isGhost = false,
+  isWiringMode = true,
   onPinClick,
   onPinHover,
   hoveredPinId,
@@ -543,26 +545,26 @@ export function SchematicVectorSymbol({
               data-local-x={pin.x}
               data-local-y={pin.y}
               transform={`translate(${pin.x}, ${pin.y})`}
-              className="cursor-pointer group/pin"
+              className={isWiringMode ? "cursor-pointer group/pin" : "group/pin"}
               onMouseDown={(e) => {
-                if (onPinClick) {
+                if (isWiringMode && onPinClick) {
                   e.stopPropagation();
                   onPinClick(e, component.id, pin.id, wx, wy);
                 }
               }}
               onClick={(e) => {
-                // Bug 1 Fix: ONLY stopPropagation. Real browsers fire mousedown -> mouseup -> click!
-                // Never call onPinClick here to prevent immediate cancellation of wire routing!
-                e.stopPropagation();
+                if (isWiringMode) {
+                  e.stopPropagation();
+                }
               }}
               onMouseEnter={() => onPinHover && onPinHover(`${component.id}:${pin.id}`)}
               onMouseLeave={() => onPinHover && onPinHover(null)}
             >
-              {/* Large Invisible Hit Target for Pin (Radius 12) */}
+              {/* Transparent Hit Target for Pin (Radius 11 active in wiring mode, none in select mode) */}
               <circle
-                r="12"
+                r={isWiringMode ? 11 : 0}
                 fill="transparent"
-                pointerEvents="all"
+                pointerEvents={isWiringMode ? "all" : "none"}
               />
               {/* Visual Snap Target Ring */}
               <circle
@@ -570,6 +572,7 @@ export function SchematicVectorSymbol({
                 fill={isHovered ? '#10B981' : theme === 'dark' ? '#0F172A' : '#ECE8DC'}
                 stroke={isHovered ? '#D97706' : pinColor}
                 strokeWidth={isHovered ? 2.5 : 1.6}
+                pointerEvents={isWiringMode ? "all" : "none"}
                 className="transition-all"
               />
               {/* Hover Tooltip Flag */}

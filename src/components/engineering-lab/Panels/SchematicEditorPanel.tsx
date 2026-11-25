@@ -22,6 +22,12 @@ import {
   getCanonicalWirePoints,
   computeCanonicalJunctions,
 } from './schematic-editor/canonical-geometry';
+import {
+  extractWireSegments,
+  slideWireSegment,
+  dragWireCornerVertex,
+  Point,
+} from '@/modules/engineering-lab/circuit-engine/wire-router';
 
 import { SchematicLeftRail, SchematicTool } from './schematic-editor/SchematicLeftRail';
 import { SchematicTopBar } from './schematic-editor/SchematicTopBar';
@@ -152,11 +158,26 @@ export function SchematicEditorPanel({
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
   const [compDragOffset, setCompDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Wire Segment Dragging State (Orthogonal sliding)
+  const [draggingSegment, setDraggingSegment] = useState<{
+    wireId: string;
+    segmentIndex: number;
+    isHorizontal: boolean;
+    initialVertices: Point[];
+  } | null>(null);
+
   // Wire Corner Dragging State
   const [draggingWireCorner, setDraggingWireCorner] = useState<{
     wireId: string;
     pointIndex: number;
+    initialVertices?: Point[];
   } | null>(null);
+
+  // Wire Selection Clearer Helper
+  const clearWireSelection = useCallback(() => {
+    setInternalSelectedWireId(null);
+    onSelectWire(null);
+  }, [onSelectWire]);
 
   // Wire Drawing State
   const [activeWireStart, setActiveWireStart] = useState<{ compId: string; pinId: string; x: number; y: number } | null>(null);
@@ -423,8 +444,16 @@ export function SchematicEditorPanel({
         return;
       }
 
-      // Tool: Wire drawing or direct pin click-to-wire in Select/Bus/Wire mode
-      if (tool === 'wire' || tool === 'bus' || tool === 'select') {
+      // In Select mode, pin clicks never start wiring; bubble up to select component cleanly
+      if (tool === 'select') {
+        onSelectComponent(compId);
+        updateSelectedCompIds([compId]);
+        clearWireSelection();
+        return;
+      }
+
+      // Tool: Wire drawing or direct pin click-to-wire in Wire or Bus mode ONLY
+      if (tool === 'wire' || tool === 'bus') {
         if (!activeWireStart) {
           setActiveWireStart({ compId, pinId, x: wx, y: wy });
           setWireWaypoints([]);
@@ -638,7 +667,10 @@ export function SchematicEditorPanel({
           updateSelectedCompIds([]);
           onSelectComponent(null);
         } else if (selectedCompId) onDeleteComponent(selectedCompId);
-        else if (selectedWireId) onDeleteWire(selectedWireId);
+        else if (activeSelectedWireId) {
+          onDeleteWire(activeSelectedWireId);
+          clearWireSelection();
+        }
         else if (selectedItemId) {
           setShapes((prev) => prev.filter((s) => s.id !== selectedItemId));
           setTextNotes((prev) => prev.filter((t) => t.id !== selectedItemId));
@@ -664,6 +696,10 @@ export function SchematicEditorPanel({
         setWireWaypoints([]);
         setContextMenu(null);
         setRulerStart(null);
+        clearWireSelection();
+        onSelectComponent(null);
+        updateSelectedCompIds([]);
+        setSelectedItemId(null);
         if (currentPlacingComp) {
           setLocalPlacingComponent(null);
           if (onCancelPlacing) onCancelPlacing();
@@ -836,7 +872,7 @@ export function SchematicEditorPanel({
         if (!e.shiftKey) {
           onSelectComponent(null);
           updateSelectedCompIds([]);
-          onSelectWire(null);
+          clearWireSelection();
           setSelectedItemId(null);
         }
         setMarqueeBox({ x1: wCoord.x, y1: wCoord.y, x2: wCoord.x, y2: wCoord.y });
@@ -888,29 +924,47 @@ export function SchematicEditorPanel({
         ? Math.round((wCoord.y - compDragOffset.y) / sheetConfig.gridStep) * sheetConfig.gridStep
         : wCoord.y - compDragOffset.y;
       onUpdateComponentPosition(draggingCompId, newX, newY);
-    } else if (draggingWireCorner) {
-      const targetWire = wires.find((w) => w.id === draggingWireCorner.wireId);
-      if (targetWire) {
-        const rw = routedWires.find((r) => r.wireId === targetWire.id);
-        const fullPoints = rw ? [...rw.points] : [
-          { x: 0, y: 0 },
-          { x: 100, y: 100 },
-        ];
-        const updatedFull =
-          fullPoints.length > draggingWireCorner.pointIndex
-            ? fullPoints.map((pt, idx) =>
-                idx === draggingWireCorner.pointIndex ? { x: wCoord.x, y: wCoord.y } : pt
-              )
-            : [...fullPoints, { x: wCoord.x, y: wCoord.y }];
-
-        // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
-        const interiorWaypoints = updatedFull.slice(1, -1);
+    } else if (draggingSegment) {
+      const targetWire = wires.find((w) => w.id === draggingSegment.wireId);
+      if (targetWire && draggingSegment.initialVertices && draggingSegment.initialVertices.length >= 2) {
+        const targetCoord = draggingSegment.isHorizontal ? wCoord.y : wCoord.x;
+        const updatedWaypoints = slideWireSegment(
+          draggingSegment.initialVertices,
+          draggingSegment.segmentIndex,
+          targetCoord,
+          sheetConfig.snapToGrid ? sheetConfig.gridStep : 10
+        );
         onUpdateWires(
           wires.map((w) =>
             w.id === targetWire.id
               ? {
                   ...w,
-                  points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
+                  points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+                }
+              : w
+          )
+        );
+      }
+    } else if (draggingWireCorner) {
+      const targetWire = wires.find((w) => w.id === draggingWireCorner.wireId);
+      if (targetWire) {
+        const rw = routedWires.find((r) => r.wireId === targetWire.id);
+        const fullPoints = draggingWireCorner.initialVertices || (rw ? [...rw.points] : [
+          { x: 0, y: 0 },
+          { x: 100, y: 100 },
+        ]);
+        const updatedWaypoints = dragWireCornerVertex(
+          fullPoints,
+          draggingWireCorner.pointIndex,
+          wCoord,
+          sheetConfig.snapToGrid ? sheetConfig.gridStep : 10
+        );
+        onUpdateWires(
+          wires.map((w) =>
+            w.id === targetWire.id
+              ? {
+                  ...w,
+                  points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
                 }
               : w
           )
@@ -995,6 +1049,7 @@ export function SchematicEditorPanel({
     setIsDraggingCanvas(false);
     setDraggingCompId(null);
     setDraggingWireCorner(null);
+    setDraggingSegment(null);
     setDraggingItem(null);
     setResizingImage(null);
     setGroupDragStartPos(null);
@@ -1378,7 +1433,10 @@ export function SchematicEditorPanel({
 
               {/* 90° Manhattan Orthogonal Wires Layer */}
               <g className="sch-wires-layer">
-                {routedWires.map((rw) => {
+                {routedWires
+                  .filter((rw) => Array.isArray(rw.points) && rw.points.length >= 2)
+                  .map((rw) => {
+                    const segments = extractWireSegments(rw.wireId, rw.points);
                   const isSelected = activeSelectedWireId === rw.wireId;
                   const ptsStr = rw.points.map((p) => `${p.x},${p.y}`).join(' ');
                   return (
@@ -1417,6 +1475,57 @@ export function SchematicEditorPanel({
                           e.stopPropagation();
                         }}
                       />
+                      {/* Per-Segment 14px Hit Strokes for interactive segment sliding */}
+                      {segments.map((seg, sIdx) => {
+                        const isH = seg.isHorizontal;
+                        const isV = seg.isVertical;
+                        const segMidX = Math.round((seg.p1.x + seg.p2.x) / 2);
+                        const segMidY = Math.round((seg.p1.y + seg.p2.y) / 2);
+
+                        return (
+                          <line
+                            key={`seg-hit-${rw.wireId}-${sIdx}`}
+                            x1={seg.p1.x}
+                            y1={seg.p1.y}
+                            x2={seg.p2.x}
+                            y2={seg.p2.y}
+                            stroke="transparent"
+                            strokeWidth={14}
+                            pointerEvents="stroke"
+                            strokeLinecap="round"
+                            className={
+                              tool === 'select'
+                                ? isH
+                                  ? 'cursor-ns-resize'
+                                  : isV
+                                  ? 'cursor-ew-resize'
+                                  : 'cursor-pointer'
+                                : 'cursor-pointer'
+                            }
+                            onMouseDown={(e) => {
+                              if (e.button === 0 && tool === 'select') {
+                                e.stopPropagation();
+                                setInternalSelectedWireId(rw.wireId);
+                                onSelectWire(rw.wireId);
+                                onSelectComponent(null);
+                                setWirePillPos({ x: segMidX, y: segMidY });
+                                setDraggingSegment({
+                                  wireId: rw.wireId,
+                                  segmentIndex: sIdx,
+                                  isHorizontal: isH,
+                                  initialVertices: [...rw.points],
+                                });
+                              } else {
+                                handleWireClick(e, rw.wireId, segMidX, segMidY);
+                              }
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
+                          />
+                        );
+                      })}
+
                       {/* Visible Copper Track Line */}
                       <polyline
                         data-testid={`sch-wire-${rw.wireId}`}
@@ -1457,54 +1566,48 @@ export function SchematicEditorPanel({
                                 setDraggingWireCorner({
                                   wireId: rw.wireId,
                                   pointIndex: pIdx,
+                                  initialVertices: [...rw.points],
                                 });
                               }}
                             />
                           );
                         })}
-                      {/* Draggable Midpoint Handles to slide or split fold lines */}
+                      {/* Draggable Midpoint Handles to slide wire segments */}
                       {isSelected &&
-                        rw.points.slice(0, -1).map((pt, pIdx) => {
-                          const nextPt = rw.points[pIdx + 1];
-                          const midX = Math.round((pt.x + nextPt.x) / 2);
-                          const midY = Math.round((pt.y + nextPt.y) / 2);
+                        segments.map((seg, sIdx) => {
+                          const isH = seg.isHorizontal;
+                          const segMidX = Math.round((seg.p1.x + seg.p2.x) / 2);
+                          const segMidY = Math.round((seg.p1.y + seg.p2.y) / 2);
                           return (
                             <circle
-                              key={`mid-${rw.wireId}-${pIdx}`}
-                              data-testid={`sch-wire-mid-${pIdx}`}
-                              cx={midX}
-                              cy={midY}
+                              key={`mid-${rw.wireId}-${sIdx}`}
+                              data-testid={`sch-wire-mid-${sIdx}`}
+                              cx={segMidX}
+                              cy={segMidY}
                               r="4"
                               fill="#F59E0B"
                               stroke="#FFFFFF"
                               strokeWidth="1.5"
-                              className="cursor-pointer hover:scale-125 transition-transform"
+                              className={
+                                isH
+                                  ? 'cursor-ns-resize hover:scale-150 transition-transform'
+                                  : 'cursor-ew-resize hover:scale-150 transition-transform'
+                              }
                               onMouseDown={(e) => {
                                 e.stopPropagation();
-                                const targetWire = wires.find((w) => w.id === rw.wireId);
-                                if (targetWire) {
-                                  const fullPoints = [...rw.points];
-                                  const newFullPoints = [
-                                    ...fullPoints.slice(0, pIdx + 1),
-                                    { x: midX, y: midY },
-                                    ...fullPoints.slice(pIdx + 1),
-                                  ];
-                                  // Bug 2 Contract: store ONLY interior waypoints (strip start pin & end pin)
-                                  const interiorWaypoints = newFullPoints.slice(1, -1);
-                                  onUpdateWires(
-                                    wires.map((w) =>
-                                      w.id === targetWire.id
-                                        ? { ...w, points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined }
-                                        : w
-                                    )
-                                  );
-                                  setDraggingWireCorner({
-                                    wireId: rw.wireId,
-                                    pointIndex: pIdx + 1,
-                                  });
-                                }
+                                setDraggingSegment({
+                                  wireId: rw.wireId,
+                                  segmentIndex: sIdx,
+                                  isHorizontal: isH,
+                                  initialVertices: [...rw.points],
+                                });
                               }}
-                            />
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                            >
+                              <title>Drag to slide wire segment</title>
+                            </circle>
                           );
                         })}
                     </g>
@@ -1601,6 +1704,7 @@ export function SchematicEditorPanel({
                             // Single component selection & drag
                             onSelectComponent(comp.id);
                             updateSelectedCompIds([comp.id]);
+                            clearWireSelection();
                             setDraggingCompId(comp.id);
                             setCompDragOffset({
                               x: wCoord.x - posX,
@@ -1614,6 +1718,7 @@ export function SchematicEditorPanel({
                         component={comp}
                         isSelected={isSelected}
                         theme={sheetConfig.theme}
+                        isWiringMode={tool === 'wire' || tool === 'bus' || tool === 'noconnect'}
                         onPinClick={handlePinClick}
                         onPinHover={setHoveredPinId}
                         hoveredPinId={hoveredPinId}
@@ -1737,86 +1842,155 @@ export function SchematicEditorPanel({
             </svg>
           </div>
 
-          {/* Floating Wire Action Pill (Inside sch-canvas-viewport, clamped cleanly) */}
-          {activeSelectedWireId && (
-            <div
-              data-testid="sch-wire-action-pill"
-              className="absolute z-40 bg-slate-900 border border-slate-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1.5 text-xs font-mono"
-              style={{
-                left: Math.max(
-                  10,
-                  Math.min(
-                    (containerRef.current?.clientWidth || sheetDimensions.width) - 260,
-                    wirePillPos.x * zoom + pan.x
-                  )
-                ),
-                top: Math.max(
-                  10,
-                  Math.min(
-                    (containerRef.current?.clientHeight || sheetDimensions.height) - 45,
-                    wirePillPos.y * zoom + pan.y - 32
-                  )
-                ),
-              }}
-            >
-              <button
-                data-testid="pill-delete-wire"
+          {/* Bottom-Center Docked Wire Action Bar */}
+          {(() => {
+            if (
+              !activeSelectedWireId ||
+              draggingSegment ||
+              draggingWireCorner ||
+              draggingCompId ||
+              isDraggingCanvas ||
+              marqueeBox !== null
+            ) {
+              return null;
+            }
+            const targetWire = wires.find((w) => w.id === activeSelectedWireId);
+            if (!targetWire) return null;
+
+            return (
+              <div
+                data-testid="sch-wire-action-pill"
+                className="sch-wire-action-pill absolute bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-[#0B1528]/95 border border-slate-700/90 px-3.5 py-1.5 rounded-xl shadow-2xl backdrop-blur font-mono text-xs select-none pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-150"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDeleteWire(activeSelectedWireId);
-                  setInternalSelectedWireId(null);
-                  onSelectWire(null);
                 }}
-                className="text-rose-400 hover:text-rose-300 px-1.5 py-0.5 rounded hover:bg-rose-950/60 transition-colors flex items-center gap-1"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>Delete Wire</span>
-              </button>
-              <div className="w-[1px] h-3 bg-slate-700" />
-              <button
-                data-testid="pill-add-junction"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setManualJunctions((prev) => [
-                    ...prev,
-                    { id: `mj_${Date.now()}`, x: wirePillPos.x, y: wirePillPos.y },
-                  ]);
-                }}
-                className="text-cyan-400 hover:text-cyan-300 px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors"
-              >
-                +Junc
-              </button>
-              <button
-                data-testid="pill-add-label"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newNl: SchematicNetLabel = {
-                    id: `nl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                    x: wirePillPos.x,
-                    y: wirePillPos.y,
-                    name: 'NET',
-                    wireId: activeSelectedWireId,
-                  };
-                  setNetLabels((prev) => [...prev, newNl]);
-                  setInlineEditorTarget({ type: 'netlabel', netLabel: newNl });
-                }}
-                className="text-emerald-400 hover:text-emerald-300 px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors"
-              >
-                +Label
-              </button>
-              <button
-                data-testid="pill-close-wire"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInternalSelectedWireId(null);
-                  onSelectWire(null);
-                }}
-                className="text-slate-400 hover:text-white px-1"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
+                {/* Delete Wire */}
+                <button
+                  type="button"
+                  data-testid="pill-delete-wire"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteWire(activeSelectedWireId);
+                    clearWireSelection();
+                  }}
+                  className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-600/70 text-amber-200 rounded flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  title="Delete selected wire"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Delete Wire</span>
+                </button>
+
+                <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+                {/* 5 Wire Color Swatches */}
+                <div className="flex items-center gap-1 px-1">
+                  {[
+                    { label: 'Green (Signal)', hex: '#10B981' },
+                    { label: 'Red (+5V)', hex: '#EF4444' },
+                    { label: 'Blue (Bus)', hex: '#3B82F6' },
+                    { label: 'Yellow (Clock)', hex: '#FBBF24' },
+                    { label: 'Slate (GND)', hex: '#64748B' },
+                  ].map((c) => (
+                    <button
+                      key={c.hex}
+                      type="button"
+                      data-testid={`pill-color-${c.hex.replace('#', '')}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateWires(
+                          wires.map((w) =>
+                            w.id === activeSelectedWireId ? { ...w, color: c.hex } : w
+                          )
+                        );
+                      }}
+                      className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
+                        (targetWire.color || '#10B981') === c.hex
+                          ? 'border-white scale-125 ring-1 ring-white/50'
+                          : 'border-slate-600 hover:scale-110'
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                      title={`Set color: ${c.label}`}
+                    />
+                  ))}
+                </div>
+
+                <div className="h-4 w-px bg-slate-700 mx-0.5" />
+
+                {/* +Junction */}
+                <button
+                  type="button"
+                  data-testid="pill-add-junction"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rw = routedWires.find((r) => r.wireId === activeSelectedWireId);
+                    const mid = rw?.points && rw.points.length >= 2
+                      ? rw.points[Math.floor(rw.points.length / 2)]
+                      : wirePillPos;
+                    setManualJunctions((prev) => [
+                      ...prev,
+                      { id: `mj_${Date.now()}`, x: mid.x, y: mid.y },
+                    ]);
+                  }}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded flex items-center gap-1 text-xs transition-colors cursor-pointer"
+                  title="Add manual electrical junction dot"
+                >
+                  <span>+Junction</span>
+                </button>
+
+                {/* Net Label */}
+                <button
+                  type="button"
+                  data-testid="pill-net-label"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rw = routedWires.find((r) => r.wireId === activeSelectedWireId);
+                    const mid = rw?.points && rw.points.length >= 2
+                      ? rw.points[Math.floor(rw.points.length / 2)]
+                      : wirePillPos;
+                    const newNl: SchematicNetLabel = {
+                      id: `nl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                      x: mid.x,
+                      y: mid.y,
+                      name: targetWire.netName || 'NET',
+                      wireId: activeSelectedWireId,
+                    };
+                    setNetLabels((prev) => [...prev, newNl]);
+                    setInlineEditorTarget({ type: 'netlabel', netLabel: newNl });
+                  }}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded flex items-center gap-1 text-xs transition-colors cursor-pointer"
+                  title="Assign Net Label (e.g. VCC, RESET, SDA)"
+                >
+                  <span>Net Label</span>
+                </button>
+
+                {/* Close */}
+                <button
+                  type="button"
+                  data-testid="pill-close-wire"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearWireSelection();
+                  }}
+                  className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Deselect wire"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Right-Click Context Menu */}
           {contextMenu && (

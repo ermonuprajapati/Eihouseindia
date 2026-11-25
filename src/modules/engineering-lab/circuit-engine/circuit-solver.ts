@@ -1702,6 +1702,7 @@ export class CircuitSolver {
           const resetPin = this.netMap.get(`${comp.id}:4`) || this.netMap.get(`${comp.id}:reset`) || this.netMap.get(`${comp.id}:rst`);
           const threshPin = this.netMap.get(`${comp.id}:6`);
           const dischPin = this.netMap.get(`${comp.id}:7`);
+          const ctrlPin = this.netMap.get(`${comp.id}:5`) || this.netMap.get(`${comp.id}:ctrl`) || this.netMap.get(`${comp.id}:cv`);
 
           const vcc = vccPin ? (nodeVoltages[vccPin] ?? 0.0) : 0.0;
           const gnd = gndPin ? (nodeVoltages[gndPin] ?? 0.0) : 0.0;
@@ -1731,8 +1732,18 @@ export class CircuitSolver {
             continue;
           }
 
-          const upperThresh = gnd + (2 / 3) * vSpan;
-          const lowerThresh = gnd + (1 / 3) * vSpan;
+          // NE555 Internal 5k-5k-5k Divider (Pin 5 CTRL voltage)
+          if (ctrlPin && !fixedNodes.has(ctrlPin)) {
+            const g5k = 1.0 / 5000.0;
+            const g10k = 1.0 / 10000.0;
+            sumGV[ctrlPin] += g5k * vcc + g10k * gnd;
+            sumG[ctrlPin] += g5k + g10k;
+          }
+
+          const upperThresh = ctrlPin && nodeVoltages[ctrlPin] !== undefined
+            ? nodeVoltages[ctrlPin]
+            : gnd + (2 / 3) * vSpan;
+          const lowerThresh = gnd + (upperThresh - gnd) * 0.5;
 
           const vTrig = trigPin ? (nodeVoltages[trigPin] ?? 0) : vcc;
           const vThresh = threshPin ? (nodeVoltages[threshPin] ?? 0) : 0;
@@ -1787,6 +1798,9 @@ export class CircuitSolver {
         break;
       }
     }
+
+    // Snapshot dynamic state from previous time step before updating
+    const prevCapacitorVoltages = new Map(this.capacitorVoltages);
 
     // Update dynamic capacitor state from solved node voltages for next time step
     for (const comp of components) {
@@ -1947,8 +1961,10 @@ export class CircuitSolver {
               current = 0;
               on = false;
             } else {
-              current = (comp.parameters?.capacitance ? Number(comp.parameters.capacitance) : 0.0000001) * absVc / Math.max(dt, 0.00001);
-              on = Math.abs(current) > 0.0001;
+              const cVal = comp.parameters?.capacitance ? Number(comp.parameters.capacitance) : 0.0000001;
+              const prevVc = prevCapacitorVoltages.get(comp.id) ?? 0;
+              current = (cVal * (vDiff - prevVc)) / Math.max(dt, 0.000001);
+              on = Math.abs(current) > 0.00001;
               if (absVc > 0.85 * vRated) {
                 status = 'WARNING';
                 faultState = 'WARNING';

@@ -13,6 +13,7 @@ import {
   computeComponentGroundElevation,
   flipComponent3D,
 } from '@/modules/engineering-lab/studio-3d/breadboard-topology';
+import { resolve3DWireToSchematicConnections } from '@/modules/engineering-lab/studio-3d/breadboard-wire-resolver';
 import { createComponentInstance, COMPONENT_CATALOG } from '@/modules/engineering-lab/circuit-engine/component-catalog';
 import { TEMPLATE_555_ASTABLE } from '@/modules/engineering-lab/templates/starter-templates';
 import { Box, FilePlus, RefreshCw, Save, RotateCcw, RotateCw, Sliders, FlipHorizontal, Usb } from 'lucide-react';
@@ -1599,8 +1600,44 @@ export function Virtual3dStudio({
           rotZ: c3d.rotZ ?? comp.parameters?.rotZ ?? 0,
         },
       });
+
+      // When component moves on the breadboard, resolve newly completed connections with plugged-in wires
+      const nextComps3d = (independentComponents !== null ? independentComponents : activeComponents3d).map((c) =>
+        c.id === c3d.id ? { ...c, ...c3d } : c
+      );
+      const curWires3d = independentWires !== null ? independentWires : activeWires3d;
+      for (const w of curWires3d) {
+        const isFromBb = w.fromPin.compId === 'breadboard' || w.fromPin.compId.startsWith('breadboard');
+        const isToBb = w.toPin.compId === 'breadboard' || w.toPin.compId.startsWith('breadboard');
+        if (isFromBb || isToBb) {
+          const resolved = resolve3DWireToSchematicConnections(w, curWires3d, nextComps3d, components);
+          for (let idx = 0; idx < resolved.length; idx++) {
+            const rw = resolved[idx];
+            const resolvedId = `${w.id}_sch_${idx}`;
+            if (
+              !wires.some(
+                (sw) =>
+                  sw.id === resolvedId ||
+                  (sw.fromCompId === rw.fromCompId &&
+                    sw.fromPinId === rw.fromPinId &&
+                    sw.toCompId === rw.toCompId &&
+                    sw.toPinId === rw.toPinId)
+              )
+            ) {
+              onAddWire({
+                id: resolvedId,
+                fromCompId: rw.fromCompId,
+                fromPinId: rw.fromPinId,
+                toCompId: rw.toCompId,
+                toPinId: rw.toPinId,
+                color: rw.color || w.color,
+              });
+            }
+          }
+        }
+      }
     }
-  }, [activeComponents3d, components, onUpdateComponent, onUpdateComponent3DPosition]);
+  }, [activeComponents3d, activeWires3d, independentComponents, independentWires, components, wires, onAddWire, onUpdateComponent, onUpdateComponent3DPosition]);
 
   const handleMirrorSelected = useCallback(() => {
     if (!selectedCompId) return;
@@ -1653,21 +1690,46 @@ export function Virtual3dStudio({
   // Add 3D Wire handler
   const handleAddWire3D = useCallback((w3d: Wire3D) => {
     record3DHistory(activeComponents3d, activeWires3d);
-    setIndependentWires((prev) => {
-      const current = prev !== null ? prev : activeWires3d;
-      return [...current, w3d];
-    });
+    const nextWires3d = [...(independentWires !== null ? independentWires : activeWires3d), w3d];
+    setIndependentWires(nextWires3d);
 
-    onAddWire({
-      id: w3d.id,
-      fromCompId: w3d.fromPin.compId,
-      fromPinId: w3d.fromPin.pinId,
-      toCompId: w3d.toPin.compId,
-      toPinId: w3d.toPin.pinId,
-      color: w3d.color,
-    });
+    const isFromBb = w3d.fromPin.compId === 'breadboard' || w3d.fromPin.compId.startsWith('breadboard');
+    const isToBb = w3d.toPin.compId === 'breadboard' || w3d.toPin.compId.startsWith('breadboard');
+
+    if (!isFromBb && !isToBb) {
+      // Direct component-to-component connection
+      onAddWire({
+        id: w3d.id,
+        fromCompId: w3d.fromPin.compId,
+        fromPinId: w3d.fromPin.pinId,
+        toCompId: w3d.toPin.compId,
+        toPinId: w3d.toPin.pinId,
+        color: w3d.color,
+      });
+    } else {
+      // Breadboard column/rail electrical resolution
+      const resolved = resolve3DWireToSchematicConnections(
+        w3d,
+        nextWires3d,
+        activeComponents3d,
+        components
+      );
+
+      for (let idx = 0; idx < resolved.length; idx++) {
+        const rw = resolved[idx];
+        const resolvedId = `${w3d.id}_sch_${idx}`;
+        onAddWire({
+          id: resolvedId,
+          fromCompId: rw.fromCompId,
+          fromPinId: rw.fromPinId,
+          toCompId: rw.toCompId,
+          toPinId: rw.toPinId,
+          color: rw.color || w3d.color,
+        });
+      }
+    }
     toast.success('Connected 3D Dupont jumper wire.');
-  }, [activeComponents3d, activeWires3d, onAddWire, record3DHistory]);
+  }, [activeComponents3d, activeWires3d, independentWires, components, onAddWire, record3DHistory]);
 
   // Delete 3D wire handler
   const handleDeleteWire3D = useCallback((wireId: string) => {
@@ -1676,27 +1738,67 @@ export function Virtual3dStudio({
       const current = prev !== null ? prev : activeWires3d;
       return current.filter((w) => w.id !== wireId);
     });
-    onDeleteWire(wireId);
-  }, [activeComponents3d, activeWires3d, onDeleteWire, record3DHistory]);
+    if (onDeleteWire) {
+      onDeleteWire(wireId);
+      wires.forEach((w) => {
+        if (w.id.startsWith(`${wireId}_sch_`)) {
+          onDeleteWire(w.id);
+        }
+      });
+    }
+  }, [activeComponents3d, activeWires3d, wires, onDeleteWire, record3DHistory]);
 
   // Update 3D Wire handler (e.g. color change)
   const handleUpdateWire3D = useCallback((w3d: Wire3D) => {
     record3DHistory(activeComponents3d, activeWires3d);
-    setIndependentWires((prev) => {
-      const current = prev !== null ? prev : activeWires3d;
-      return current.map((w) => (w.id === w3d.id ? w3d : w));
-    });
+    const nextWires3d = (independentWires !== null ? independentWires : activeWires3d).map((w) =>
+      w.id === w3d.id ? w3d : w
+    );
+    setIndependentWires(nextWires3d);
 
-    onDeleteWire(w3d.id);
-    onAddWire({
-      id: w3d.id,
-      fromCompId: w3d.fromPin.compId,
-      fromPinId: w3d.fromPin.pinId,
-      toCompId: w3d.toPin.compId,
-      toPinId: w3d.toPin.pinId,
-      color: w3d.color,
-    });
-  }, [activeComponents3d, activeWires3d, onDeleteWire, onAddWire, record3DHistory]);
+    if (onDeleteWire) {
+      onDeleteWire(w3d.id);
+      wires.forEach((w) => {
+        if (w.id.startsWith(`${w3d.id}_sch_`)) {
+          onDeleteWire(w.id);
+        }
+      });
+    }
+
+    const isFromBb = w3d.fromPin.compId === 'breadboard' || w3d.fromPin.compId.startsWith('breadboard');
+    const isToBb = w3d.toPin.compId === 'breadboard' || w3d.toPin.compId.startsWith('breadboard');
+
+    if (!isFromBb && !isToBb) {
+      onAddWire({
+        id: w3d.id,
+        fromCompId: w3d.fromPin.compId,
+        fromPinId: w3d.fromPin.pinId,
+        toCompId: w3d.toPin.compId,
+        toPinId: w3d.toPin.pinId,
+        color: w3d.color,
+      });
+    } else {
+      const resolved = resolve3DWireToSchematicConnections(
+        w3d,
+        nextWires3d,
+        activeComponents3d,
+        components
+      );
+
+      for (let idx = 0; idx < resolved.length; idx++) {
+        const rw = resolved[idx];
+        const resolvedId = `${w3d.id}_sch_${idx}`;
+        onAddWire({
+          id: resolvedId,
+          fromCompId: rw.fromCompId,
+          fromPinId: rw.fromPinId,
+          toCompId: rw.toCompId,
+          toPinId: rw.toPinId,
+          color: rw.color || w3d.color,
+        });
+      }
+    }
+  }, [activeComponents3d, activeWires3d, independentWires, components, wires, onDeleteWire, onAddWire, record3DHistory]);
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#070D18] select-none overflow-hidden">

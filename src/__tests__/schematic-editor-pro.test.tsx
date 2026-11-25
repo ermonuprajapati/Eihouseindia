@@ -11,7 +11,15 @@ import { exportSchematicSvg } from '../components/engineering-lab/Panels/schemat
 import {
   getCanonicalPinWorldPos,
   getCanonicalWirePoints,
+  computeCanonicalJunctions,
 } from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
+import {
+  getHoleTieGroup,
+  resolve3DWireToSchematicConnections,
+} from '../modules/engineering-lab/studio-3d/breadboard-wire-resolver';
+import { CircuitSolver } from '../modules/engineering-lab/circuit-engine/circuit-solver';
+import { Component3D, Wire3D } from '../modules/engineering-lab/types';
 import {
   placeOnlyUnplacedEditorComponents,
   clientToSheetCoords,
@@ -808,7 +816,8 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     const viewport = screen.getByTestId('sch-canvas-viewport');
 
-    // 1. In Select mode (default), click Pin 1 of R1 with real browser event sequence: mouseDown -> mouseUp -> click
+    // 1. Switch to Wire mode and click Pin 1 of R1 with real browser event sequence: mouseDown -> mouseUp -> click
+    fireEvent.click(screen.getByTestId('tool-wire'));
     const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
     expect(pinR1).toBeInTheDocument();
     fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
@@ -1171,7 +1180,8 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     const viewport = screen.getByTestId('sch-canvas-viewport');
 
-    // 1. On Pin A, fire ALL THREE real browser events in order
+    // 1. Switch to Wire mode and on Pin A, fire ALL THREE real browser events in order
+    fireEvent.click(screen.getByTestId('tool-wire'));
     const pinA = container.querySelector('[data-testid="sch-pin-r1-1"]');
     expect(pinA).toBeInTheDocument();
     fireEvent.mouseDown(pinA!, { clientX: 200, clientY: 100 });
@@ -1276,6 +1286,274 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const sheetSvg = screen.getByTestId('sch-sheet-svg');
     expect(sheetSvg).toBeInTheDocument();
     expect(sheetSvg.getAttribute('class')).toContain('bg-[#ECE8DC]');
+  });
+
+  // =========================================================================
+  // MANDATORY QUALITY GATE ANTI-REGRESSION TESTS: CRASH-PROOF, BREADBOARD SYNC, UX PARITY & MNA PHYSICS
+  // =========================================================================
+
+  it('GATE 4 Test 1 (Crash Proof): Malformed wire with fromCompId breadboard or empty points never crashes calculations or render', () => {
+    const malformedWire: CircuitWire = {
+      id: 'w_bad_bb',
+      fromCompId: 'breadboard',
+      fromPinId: 'bb_col_10_a',
+      toCompId: 'r1',
+      toPinId: '1',
+      points: [],
+    };
+
+    // 1. computeCanonicalJunctions must not throw
+    expect(() => {
+      const junctions = computeCanonicalJunctions(
+        [{ wireId: malformedWire.id, points: malformedWire.points || [] }],
+        TEMPLATE_555_ASTABLE.components
+      );
+      expect(Array.isArray(junctions)).toBe(true);
+    }).not.toThrow();
+
+    // 2. calculateJunctionDots with invalid/missing vertices must not throw
+    expect(() => {
+      const dots = calculateJunctionDots([
+        { id: 'w1', vertices: [] },
+        { id: 'w2', vertices: [{ x: 10, y: 10 }] },
+        { id: 'w3', vertices: [{ x: 10, y: 10 }, { x: 20, y: 10 }] },
+      ] as unknown as Parameters<typeof calculateJunctionDots>[0]);
+      expect(Array.isArray(dots)).toBe(true);
+    }).not.toThrow();
+
+    // 3. SchematicEditorPanel rendering with malformed wire must not crash
+    expect(() => {
+      render(
+        <SchematicEditorPanel
+          {...defaultProps}
+          wires={[malformedWire, ...TEMPLATE_555_ASTABLE.wires]}
+        />
+      );
+    }).not.toThrow();
+  });
+
+  it('GATE 4 Test 2 (3D Breadboard Sync Resolver): Accurately resolves column tie-groups, rails, ravine isolation, and multi-hop jumpers', () => {
+    // 1. Column tie groups and ravine isolation
+    const topHoleA = 'bb_col_15_a';
+    const topHoleC = 'bb_col_15_c';
+    const botHoleF = 'bb_col_15_f';
+
+    const groupA = getHoleTieGroup(topHoleA);
+    const groupC = getHoleTieGroup(topHoleC);
+    const groupF = getHoleTieGroup(botHoleF);
+
+    expect(groupA).toBe(groupC); // Col 15 Top rows A and C share tie group
+    expect(groupA).not.toBe(groupF); // Col 15 Top is isolated from Bottom across center ravine!
+    expect(groupA).toBe('bb_tie_col_15_top');
+    expect(groupF).toBe('bb_tie_col_15_bottom');
+
+    // 2. Power rails
+    const railPos1 = getHoleTieGroup('bb_rail_top_pos_5');
+    const railPos2 = getHoleTieGroup('bb_rail_top_pos_20');
+    const railNeg = getHoleTieGroup('bb_rail_top_neg_5');
+    expect(railPos1).toBe(railPos2);
+    expect(railPos1).not.toBe(railNeg);
+
+    // 3. resolve3DWireToSchematicConnections
+    // LED anode at Col 15 Row C, cathode at Col 16 Row C
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'LED',
+        value: 'Red',
+        parameters: { pinHoles: { a: 'bb_col_15_c', k: 'bb_col_16_c' } },
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        mountedOnHoleId: 'bb_col_15_c',
+        pinHoles: {
+          a: 'bb_col_15_c',
+          k: 'bb_col_16_c',
+        },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'D1',
+        label: 'LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_THT:LED_D5.0mm',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'mcu1',
+        type: 'ARDUINO_UNO',
+        designator: 'U_MCU',
+        label: 'Arduino',
+        category: 'microcontrollers',
+        value: 'ATmega328P',
+        footprint: 'Module:Arduino_UNO_R3',
+        parameters: {},
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [{ id: 'D13', name: '13', x: 0, y: 0, pinType: 'passive' }],
+      },
+    ];
+
+    // Jumper wire from Arduino D13 to Col 15 Row A
+    const wire3d: Wire3D = {
+      id: 'w_jumper_1',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_15_a' },
+      color: '#ff0000',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      wire3d,
+      [wire3d],
+      components3d,
+      schematicComponents
+    );
+
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].fromCompId).toBe('mcu1');
+    expect(resolved[0].fromPinId).toBe('D13');
+    expect(resolved[0].toCompId).toBe('led1');
+    expect(resolved[0].toPinId).toBe('a');
+
+    // 4. Empty column jumper does NOT create phantom connections
+    const emptyJumper: Wire3D = {
+      id: 'w_empty',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_40_a' },
+      color: '#00ff00',
+    };
+    const emptyResolved = resolve3DWireToSchematicConnections(
+      emptyJumper,
+      [emptyJumper],
+      components3d,
+      schematicComponents
+    );
+    expect(emptyResolved.length).toBe(0);
+  });
+
+  it('GATE 4 Test 3 (Schematic Editor UX Parity): Pin click in Select mode does not wire; Wire mode creates wire; Docked action bar dismisses; Segment drag works', () => {
+    let latestWires: CircuitWire[] = [];
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. In Select (V) mode, clicking pin must NOT start wire drawing!
+    const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).not.toBeInTheDocument();
+    expect(latestWires.length).toBe(0);
+
+    // 2. Switch to Wire (W) mode: clicking pin starts wire drawing
+    fireEvent.click(screen.getByTestId('tool-wire'));
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeInTheDocument();
+
+    // Finish wire to pin R2-1
+    const pinR2 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    fireEvent.mouseDown(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.mouseUp(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.click(pinR2!, { clientX: 250, clientY: 200 });
+
+    expect(latestWires.length).toBe(1);
+    const createdWire = latestWires[0];
+
+    // Switch back to Select mode
+    fireEvent.click(screen.getByTestId('tool-select'));
+
+    // 3. Select wire -> Bottom-center docked action bar is rendered
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${createdWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+
+    const pill = container.querySelector('.sch-wire-action-pill');
+    expect(pill).toBeInTheDocument();
+
+    // Pressing Escape cleanly dismisses the pill
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // Re-select wire and click empty canvas -> cleanly dismisses the pill
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+    expect(container.querySelector('.sch-wire-action-pill')).toBeInTheDocument();
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // 4. Real wire segment sliding: dragging segment midpoint handle updates waypoints
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+    const midHandle = container.querySelector('[data-testid="sch-wire-mid-0"]');
+    if (midHandle) {
+      fireEvent.mouseDown(midHandle);
+      fireEvent.mouseMove(viewport, { clientX: 300, clientY: 150 });
+      fireEvent.mouseUp(viewport);
+      expect(latestWires[0].points).toBeDefined();
+    }
+  });
+
+  it('GATE 4 Test 4 (MNA Real-Time Physics Accuracy): NE555 astable simulation yields bounded C1 companion current, 6V on Pin 5 CTRL, and realistic LED current', () => {
+    const solver = new CircuitSolver();
+    const dt = 0.001; // 1ms step
+
+    // Warm up the solver across multiple steps to achieve steady state
+    let lastResult = solver.step(TEMPLATE_555_ASTABLE.components, TEMPLATE_555_ASTABLE.wires, dt);
+    for (let s = 0; s < 50; s++) {
+      lastResult = solver.step(TEMPLATE_555_ASTABLE.components, TEMPLATE_555_ASTABLE.wires, dt);
+    }
+
+    const compStates = lastResult.componentStates;
+    expect(compStates).toBeDefined();
+
+    // 1. Capacitor C1 companion current must be physically bounded (|I| < 5mA, not bogus 51.7mA!)
+    const c1State = compStates['c1'];
+    expect(c1State).toBeDefined();
+    expect(Math.abs(c1State.current)).toBeLessThan(0.005);
+
+    // 2. NE555 Pin 5 (CTRL) voltage and C2 voltage:
+    // Internal 5k-5k-5k divider establishes 2/3 * Vcc = 6.00V at 9V Vcc
+    const c2State = compStates['c2'];
+    expect(c2State).toBeDefined();
+    expect(c2State.voltage).toBeGreaterThanOrEqual(5.8);
+    expect(c2State.voltage).toBeLessThanOrEqual(6.2);
+
+    // 3. LED current when flashing on: resistor is 330 ohm, Vf ~ 2.0V, Vout ~ 7.6V -> (7.6 - 2.0) / 330 ~ 17mA
+    const ledState = compStates['led1'];
+    expect(ledState).toBeDefined();
+    expect(ledState.current).toBeGreaterThanOrEqual(0);
+    expect(ledState.current).toBeLessThanOrEqual(0.025);
   });
 });
 

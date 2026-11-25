@@ -88,7 +88,10 @@ export function computeCanonicalJunctions(
   routedWires: { wireId: string; points: { x: number; y: number }[]; netName?: string }[],
   manualJunctions: { x: number; y: number }[] = []
 ): { x: number; y: number }[] {
-  const wiresWithVertices = routedWires.map((rw) => ({
+  const validWires = (routedWires || []).filter(
+    (rw) => rw && Array.isArray(rw.points) && rw.points.length >= 2
+  );
+  const wiresWithVertices = validWires.map((rw) => ({
     id: rw.wireId,
     vertices: rw.points as Point[],
     netName: rw.netName,
