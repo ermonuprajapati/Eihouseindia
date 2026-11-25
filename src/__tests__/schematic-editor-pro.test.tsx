@@ -16,7 +16,12 @@ import {
   computeCanonicalSchematicGeometry,
   polylineManhattanLength,
 } from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
-import { Virtual3dStudio } from '../components/engineering-lab/Panels/Virtual3dStudio';
+import {
+  Virtual3dStudio,
+  findFreeSchematicSlot,
+  uncommittedWires3dCache,
+  clearUncommittedWires3dCache,
+} from '../components/engineering-lab/Panels/Virtual3dStudio';
 import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
 import {
   getHoleTieGroup,
@@ -3509,6 +3514,256 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const panelDot = panelContainer.querySelector('circle[cx="250"][cy="200"]');
     expect(canvasDot).toBeInTheDocument();
     expect(panelDot).toBeInTheDocument();
+  });
+
+  it('GATE 4 Test 1: Order-independent maxSpan trunk selection + L-shape collinear intermediate-pin trim', () => {
+    const compGnd: CircuitComponent = {
+      id: 'gnd_hub',
+      type: 'GROUND',
+      label: 'GND',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 80,
+      y: 360,
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compR1: CircuitComponent = {
+      id: 'r_collinear_1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 380,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compR2: CircuitComponent = {
+      id: 'r_collinear_2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 500,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wire1: CircuitWire = {
+      id: 'wire_collinear_1',
+      fromCompId: 'r_collinear_1',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wire2: CircuitWire = {
+      id: 'wire_collinear_2',
+      fromCompId: 'r_collinear_2',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    // Order 1: wire1 first, wire2 second
+    const geom1 = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Order 2: wire2 first, wire1 second
+    const geom2 = computeCanonicalSchematicGeometry(
+      [wire2, wire1],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Both orders must produce a junction dot at (380, 360)
+    const j1 = geom1.junctionDots.find((j) => Math.hypot(j.x - 380, j.y - 360) < 2);
+    const j2 = geom2.junctionDots.find((j) => Math.hypot(j.x - 380, j.y - 360) < 2);
+    expect(j1).toBeDefined();
+    expect(j2).toBeDefined();
+
+    // In both orders, total Manhattan length across the routed wires is exactly 420 (no redundant overlapping wire)
+    const totalLen1 = geom1.routedWires.reduce((sum, rw) => sum + polylineManhattanLength(rw.points), 0);
+    const totalLen2 = geom2.routedWires.reduce((sum, rw) => sum + polylineManhattanLength(rw.points), 0);
+    expect(totalLen1).toBe(420);
+    expect(totalLen2).toBe(420);
+  });
+
+  it('GATE 4 Test 2: 3D Studio power-rail & bridged-MCU wire resolution', () => {
+    const schComps: CircuitComponent[] = [
+      {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: 'BAT1',
+        value: '9V',
+        parameters: {},
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'p', name: '+', x: 0, y: 0, pinType: 'power' },
+          { id: 'n', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        category: 'sources',
+        footprint: '',
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        value: 'Red',
+        parameters: {},
+        x: 200,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 0, y: 20, pinType: 'passive' },
+        ],
+        category: 'semiconductors',
+        footprint: '',
+      },
+      {
+        id: 'mcu1',
+        type: 'ARDUINO_UNO',
+        label: 'U1',
+        value: 'ATmega328P',
+        parameters: {},
+        x: 400,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: '13', name: 'D13', x: 0, y: 0, pinType: 'output' },
+          { id: 'GND', name: 'GND', x: 0, y: 20, pinType: 'power' },
+        ],
+        category: 'microcontrollers',
+        footprint: '',
+      },
+    ];
+
+    const comp3dList: Component3D[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+        parameters: {},
+        pinHoles: { a: 'bb_col_10_top_a', k: 'bb_col_10_top_b' },
+      } as Component3D,
+    ];
+
+    const wireToRail: Wire3D = {
+      id: 'wRail1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_10' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_top_c' },
+      color: '#EF4444',
+    };
+
+    const resolvedRail = resolve3DWireToSchematicConnections(wireToRail, [wireToRail], comp3dList, schComps, []);
+    expect(resolvedRail.length).toBe(1);
+    expect(resolvedRail[0].fromCompId).toBe('bat1');
+    expect(resolvedRail[0].fromPinId).toBe('p');
+    expect(resolvedRail[0].toCompId).toBe('led1');
+    expect(resolvedRail[0].toPinId).toBe('a');
+
+    const existingBridgedWire: Wire3D = {
+      id: 'wBridgeMcu',
+      fromPin: { compId: 'mcu1', pinId: '13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_top_a' },
+      color: '#3B82F6',
+    };
+
+    const wireJumper: Wire3D = {
+      id: 'wJumper1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_20_top_b' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_top_c' },
+      color: '#3B82F6',
+    };
+
+    const resolvedMcu = resolve3DWireToSchematicConnections(
+      wireJumper,
+      [existingBridgedWire, wireJumper],
+      comp3dList,
+      schComps,
+      []
+    );
+    expect(resolvedMcu.length).toBe(1);
+    expect(
+      (resolvedMcu[0].fromCompId === 'mcu1' && resolvedMcu[0].toCompId === 'led1') ||
+      (resolvedMcu[0].fromCompId === 'led1' && resolvedMcu[0].toCompId === 'mcu1')
+    ).toBe(true);
+  });
+
+  it('GATE 4 Test 3: 3D Studio uncommitted wire cache, non-overlapping slot allocation, and position persistence', () => {
+    clearUncommittedWires3dCache();
+    expect(uncommittedWires3dCache.size).toBe(0);
+
+    const danglingWire: Wire3D = {
+      id: 'wDangling',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_1_top_a' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_2_top_a' },
+      color: '#10B981',
+    };
+    uncommittedWires3dCache.set(danglingWire.id, danglingWire);
+    expect(uncommittedWires3dCache.has('wDangling')).toBe(true);
+    clearUncommittedWires3dCache();
+    expect(uncommittedWires3dCache.size).toBe(0);
+
+    const existing: CircuitComponent[] = [
+      {
+        id: 'c1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        parameters: {},
+        x: 300,
+        y: 200,
+        rotation: 0,
+        pins: [],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'c2',
+        type: 'RESISTOR',
+        label: 'R2',
+        value: '1k',
+        parameters: {},
+        x: 440,
+        y: 200,
+        rotation: 0,
+        pins: [],
+        category: 'passive',
+        footprint: '',
+      },
+    ];
+
+    const slot = findFreeSchematicSlot(existing);
+    expect(slot.x).toBeGreaterThanOrEqual(440 + 120);
+    const hasCollision = existing.some((c) => Math.abs(slot.x - c.x) < 110 && Math.abs(slot.y - c.y) < 90);
+    expect(hasCollision).toBe(false);
+
+    const defaultSlot = findFreeSchematicSlot([]);
+    expect(defaultSlot).toEqual({ x: 260, y: 200 });
   });
 });
 

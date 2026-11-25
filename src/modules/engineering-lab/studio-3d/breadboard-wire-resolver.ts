@@ -56,11 +56,18 @@ export function getHoleTieGroup(holeId: string): string | null {
   }
 
   // 3. Pattern match terminal columns: col_{N}_{Row} or hole_bb{N}_{Row}{Col}
-  const colRowMatch = cleanId.match(/col_(\d+)_([A-Ja-j])/i);
+  const colRowMatch = cleanId.match(/col_(\d+)_(?:top_|bottom_)?([A-Ja-j])/i);
   if (colRowMatch) {
     const col = parseInt(colRowMatch[1], 10);
     const row = colRowMatch[2].toUpperCase();
-    const isTop = ['A', 'B', 'C', 'D', 'E'].includes(row);
+    const isTop = cleanId.toLowerCase().includes('top') || ['A', 'B', 'C', 'D', 'E'].includes(row);
+    return `${prefix}tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
+  }
+
+  const colOnlyMatch = cleanId.match(/col_(\d+)_(top|bottom)/i);
+  if (colOnlyMatch) {
+    const col = parseInt(colOnlyMatch[1], 10);
+    const isTop = colOnlyMatch[2].toLowerCase() === 'top';
     return `${prefix}tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
   }
 
@@ -99,9 +106,9 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
   if (!comp || !pinId) return null;
 
   // Direct pinHoles map check if explicitly assigned
-  const customComp = comp as ComponentWithPinHoles;
-  if (customComp.pinHoles) {
-    const ph = customComp.pinHoles;
+  const customComp = comp as ComponentWithPinHoles & { parameters?: { pinHoles?: Record<string, string> } };
+  const ph = customComp.pinHoles || customComp.parameters?.pinHoles;
+  if (ph) {
     if (ph[pinId]) return ph[pinId];
     if (ph[pinId.toLowerCase()]) return ph[pinId.toLowerCase()];
     if (pinId === 'a' && ph.anode) return ph.anode;
@@ -383,10 +390,15 @@ export function resolve3DWireToSchematicConnections(
     if (!validCompIds.has(comp3d.id)) continue;
 
     // Check possible pin IDs
+    const schComp = schematicComponents?.find((c) => c.id === comp3d.id);
     const pinsToCheck: string[] = [];
-    const customComp = comp3d as ComponentWithPinHoles;
-    if (customComp.pinHoles) {
-      for (const k of Object.keys(customComp.pinHoles)) {
+    if (schComp?.pins && schComp.pins.length > 0) {
+      pinsToCheck.push(...schComp.pins.map((sp) => sp.id));
+    }
+    const customComp = comp3d as ComponentWithPinHoles & { parameters?: { pinHoles?: Record<string, string> } };
+    const ph = customComp.pinHoles || customComp.parameters?.pinHoles;
+    if (ph) {
+      for (const k of Object.keys(ph)) {
         pinsToCheck.push(k);
       }
     }
@@ -405,7 +417,6 @@ export function resolve3DWireToSchematicConnections(
       if (!tg) continue;
 
       // Canonicalize pinId if component is in schematicComponents
-      const schComp = schematicComponents?.find((c) => c.id === comp3d.id);
       let canonicalPinId = p;
       if (schComp?.pins && schComp.pins.length > 0) {
         const matchingPin = schComp.pins.find(
@@ -434,6 +445,79 @@ export function resolve3DWireToSchematicConnections(
     }
   }
 
+  // 1b. Seed Power Rails (+ / -)
+  const gndComp = schematicComponents?.find((c) => c.type === 'GROUND' || c.id.toLowerCase().startsWith('gnd'));
+  const batComp = schematicComponents?.find((c) => c.type === 'BATTERY' || c.type === 'BATTERY_9V' || c.id.toLowerCase().startsWith('bat'));
+  const prefixes = ['bb_', 'bb2_', 'bb3_'];
+  for (const prefix of prefixes) {
+    if (batComp) {
+      const posPin = batComp.pins?.find((p) => ['p', '+', 'pos'].includes(p.id.toLowerCase()))?.id || 'p';
+      for (const rail of [`${prefix}tie_rail_top_pos`, `${prefix}tie_rail_bottom_pos`]) {
+        const list = pinsByTieGroup.get(rail) || [];
+        if (!list.some((item) => item.compId === batComp.id && item.pinId === posPin)) {
+          list.push({ compId: batComp.id, pinId: posPin });
+          pinsByTieGroup.set(rail, list);
+        }
+      }
+    }
+    const negComp = gndComp || batComp;
+    if (negComp) {
+      const negPin = gndComp
+        ? (gndComp.pins?.[0]?.id || '1')
+        : (batComp?.pins?.find((p) => ['n', '-', 'neg'].includes(p.id.toLowerCase()))?.id || 'n');
+      for (const rail of [`${prefix}tie_rail_top_neg`, `${prefix}tie_rail_bottom_neg`]) {
+        const list = pinsByTieGroup.get(rail) || [];
+        if (!list.some((item) => item.compId === negComp.id && item.pinId === negPin)) {
+          list.push({ compId: negComp.id, pinId: negPin });
+          pinsByTieGroup.set(rail, list);
+        }
+      }
+    }
+  }
+
+  // 1c. Seed Existing Bridged Off-Board Pins (Arduino / Battery / Modules already plugged into breadboard holes)
+  const allWires = allWires3d || [w3d];
+  for (const wire of allWires) {
+    if (wire === w3d || (wire.id && w3d.id && wire.id === w3d.id)) continue;
+    const wFrom = parseEndpoint(wire?.fromPin || (wire as WireWithHoles)?.fromHole);
+    const wTo = parseEndpoint(wire?.toPin || (wire as WireWithHoles)?.toHole);
+    if (!wFrom || !wTo) continue;
+
+    const fromIsBb = wFrom.compId === 'breadboard' || wFrom.compId.startsWith('breadboard');
+    const toIsBb = wTo.compId === 'breadboard' || wTo.compId.startsWith('breadboard');
+
+    let compEnd: { compId: string; pinId: string } | null = null;
+    let holeEnd: { compId: string; pinId: string } | null = null;
+    if (!fromIsBb && validCompIds.has(wFrom.compId) && toIsBb) {
+      compEnd = wFrom;
+      holeEnd = wTo;
+    } else if (!toIsBb && validCompIds.has(wTo.compId) && fromIsBb) {
+      compEnd = wTo;
+      holeEnd = wFrom;
+    }
+
+    if (compEnd && holeEnd) {
+      const tg = getHoleTieGroup(holeEnd.pinId);
+      if (tg) {
+        let canonicalPinId = compEnd.pinId;
+        const schComp = schematicComponents?.find((c) => c.id === compEnd!.compId);
+        if (schComp?.pins && schComp.pins.length > 0) {
+          const matchingPin = schComp.pins.find(
+            (sp) => sp.id.toLowerCase() === compEnd!.pinId.toLowerCase() || sp.name?.toLowerCase() === compEnd!.pinId.toLowerCase()
+          );
+          if (matchingPin) {
+            canonicalPinId = matchingPin.id;
+          }
+        }
+        const list = pinsByTieGroup.get(tg) || [];
+        if (!list.some((item) => item.compId === compEnd!.compId && item.pinId === canonicalPinId)) {
+          list.push({ compId: compEnd!.compId, pinId: canonicalPinId });
+          pinsByTieGroup.set(tg, list);
+        }
+      }
+    }
+  }
+
   // 2. Build tieGroup adjacency graph using breadboard-to-breadboard jumper wires
   const tieGroupGraph = new Map<string, Set<string>>();
   const addEdge = (a: string, b: string) => {
@@ -444,7 +528,6 @@ export function resolve3DWireToSchematicConnections(
     tieGroupGraph.get(b)!.add(a);
   };
 
-  const allWires = allWires3d || [w3d];
   for (const wire of allWires) {
     const wFrom = parseEndpoint(wire?.fromPin || (wire as WireWithHoles)?.fromHole);
     const wTo = parseEndpoint(wire?.toPin || (wire as WireWithHoles)?.toHole);
