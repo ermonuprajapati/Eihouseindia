@@ -19,10 +19,9 @@ import {
 import { runElectricalRulesCheck, ErcViolation, autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 import { autoLayoutCircuit } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
 import {
-  getCanonicalWirePoints,
-  computeCanonicalJunctions,
   projectPointOntoPolyline,
   resolveShortestNetWire,
+  computeCanonicalSchematicGeometry,
 } from './schematic-editor/canonical-geometry';
 import {
   extractWireSegments,
@@ -282,23 +281,12 @@ export function SchematicEditorPanel({
   }, [sheetConfig.size]);
 
   // Compute canonical wire points and junctions matching SchematicCanvas.tsx 1-to-1
-  const routedWires = useMemo(() => {
-    return wires.map((w) => {
-      const pts = getCanonicalWirePoints(w, components, wires);
-      return {
-        wireId: w.id,
-        points: pts,
-        netName: w.netName || 'NET',
-        tappedWireId: w.tappedWireId,
-        junctionPoint: w.junctionPoint,
-      };
-    });
-  }, [wires, components]);
-
-  // Combine auto-computed junction dots with manual junction dots
-  const allJunctions = useMemo(() => {
-    return computeCanonicalJunctions(routedWires, manualJunctions);
-  }, [routedWires, manualJunctions]);
+  const canonicalGeom = useMemo(
+    () => computeCanonicalSchematicGeometry(wires, components, manualJunctions, sheetConfig.gridStep),
+    [wires, components, manualJunctions, sheetConfig.gridStep]
+  );
+  const routedWires = canonicalGeom.routedWires;
+  const allJunctions = canonicalGeom.junctionDots;
 
   // Unique electrical nets count
   const netCount = useMemo(() => {
@@ -1009,15 +997,32 @@ export function SchematicEditorPanel({
           targetCoord,
           sheetConfig.snapToGrid ? sheetConfig.gridStep : 10
         );
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
+          ...targetWire,
+          points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
         onUpdateWires(
-          wires.map((w) =>
-            w.id === targetWire.id
-              ? {
-                  ...w,
-                  points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-                }
-              : w
-          )
+          wires.map((w) => (w.id === targetWire.id ? wireToCommit : w))
         );
       }
     } else if (draggingWireCorner) {
@@ -1034,15 +1039,32 @@ export function SchematicEditorPanel({
           wCoord,
           sheetConfig.snapToGrid ? sheetConfig.gridStep : 10
         );
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
+          ...targetWire,
+          points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
         onUpdateWires(
-          wires.map((w) =>
-            w.id === targetWire.id
-              ? {
-                  ...w,
-                  points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-                }
-              : w
-          )
+          wires.map((w) => (w.id === targetWire.id ? wireToCommit : w))
         );
       }
     } else if (draggingItem) {
@@ -1538,23 +1560,43 @@ export function SchematicEditorPanel({
                       }}
                     >
                       {/* Visible Copper Track Line rendered FIRST below interactive hit strokes */}
-                      <polyline
-                        data-testid={`sch-wire-${rw.wireId}`}
-                        points={ptsStr}
-                        fill="none"
-                        stroke={
-                          isSelected
-                            ? '#B45309'
-                            : wires.find((w) => w.id === rw.wireId)?.color ||
-                              (sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54')
-                        }
-                        strokeWidth={isSelected ? '3' : '2'}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        pointerEvents="none"
-                        style={{ pointerEvents: 'none' }}
-                        className="transition-colors hover:stroke-emerald-400"
-                      />
+                      {rw.hasCrossingHops ? (
+                        <path
+                          data-testid={`sch-wire-${rw.wireId}`}
+                          d={rw.svgPath}
+                          fill="none"
+                          stroke={
+                            isSelected
+                              ? '#B45309'
+                              : wires.find((w) => w.id === rw.wireId)?.color ||
+                                (sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54')
+                          }
+                          strokeWidth={isSelected ? '3' : '2'}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          pointerEvents="none"
+                          style={{ pointerEvents: 'none' }}
+                          className="transition-colors hover:stroke-emerald-400"
+                        />
+                      ) : (
+                        <polyline
+                          data-testid={`sch-wire-${rw.wireId}`}
+                          points={ptsStr}
+                          fill="none"
+                          stroke={
+                            isSelected
+                              ? '#B45309'
+                              : wires.find((w) => w.id === rw.wireId)?.color ||
+                                (sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54')
+                          }
+                          strokeWidth={isSelected ? '3' : '2'}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          pointerEvents="none"
+                          style={{ pointerEvents: 'none' }}
+                          className="transition-colors hover:stroke-emerald-400"
+                        />
+                      )}
 
                       {/* Per-Segment 14px Hit Strokes for interactive segment sliding and selection */}
                       {segments.map((seg, sIdx) => {

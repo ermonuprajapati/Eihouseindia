@@ -45,6 +45,7 @@ import {
   projectPointOntoPolyline,
   getCanonicalWirePoints,
   resolveShortestNetWire,
+  computeCanonicalSchematicGeometry,
 } from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 import {
   Point,
@@ -53,8 +54,6 @@ import {
   extractWireSegments,
   slideWireSegment,
   dragWireCornerVertex,
-  calculateJunctionDots,
-  WireJunction,
   simplifyCollinearPoints,
   computeOrthogonalVertices,
   compute45Vertices,
@@ -279,6 +278,13 @@ export function SchematicCanvas({
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
+
+  // Unified Canonical Schematic Geometry & Junction Dots
+  const canonicalGeom = useMemo(
+    () => computeCanonicalSchematicGeometry(wires, components, [], 10),
+    [wires, components]
+  );
+  const junctionDots = canonicalGeom.junctionDots;
 
   // Synchronize single selection with parent prop
   useEffect(() => {
@@ -704,10 +710,31 @@ export function SchematicCanvas({
           targetCoord,
           10
         );
-        scheduleWireUpdate({
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
           ...targetWire,
           points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-        });
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
+        scheduleWireUpdate(wireToCommit);
         return;
       }
     }
@@ -722,10 +749,31 @@ export function SchematicCanvas({
           { x: curCanvasX, y: curCanvasY },
           10
         );
-        scheduleWireUpdate({
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
           ...targetWire,
           points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-        });
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
+        scheduleWireUpdate(wireToCommit);
         return;
       }
     }
@@ -856,40 +904,6 @@ export function SchematicCanvas({
     onUpdateWire({ ...wire, color });
     setWireContextMenu(null);
   };
-
-  // Calculate Electrical Solder Junction Dots (T-junctions & 3+ wire meeting nodes)
-  const junctionDots = useMemo(() => {
-    const wiresWithVertices = wires
-      .map((w) => {
-        const canonicalVerts = getCanonicalWirePoints(w, components, wires);
-        return { id: w.id, vertices: canonicalVerts as Point[], netName: w.netName };
-      })
-      .filter((w) => w.vertices.length > 0);
-
-    const dots = calculateJunctionDots(wiresWithVertices);
-    const dotMap = new Map<string, WireJunction>();
-    dots.forEach((d) => {
-      dotMap.set(`${Math.round(d.x)},${Math.round(d.y)}`, d);
-    });
-    wires.forEach((w) => {
-      if (w.tappedWireId) {
-        const cVerts = getCanonicalWirePoints(w, components, wires);
-        if (cVerts.length >= 2) {
-          const endPt = cVerts[cVerts.length - 1];
-          const key = `${Math.round(endPt.x)},${Math.round(endPt.y)}`;
-          if (!dotMap.has(key)) {
-            dotMap.set(key, { x: Math.round(endPt.x), y: Math.round(endPt.y), netName: w.netName });
-          }
-        }
-      } else if (w.junctionPoint) {
-        const key = `${Math.round(w.junctionPoint.x)},${Math.round(w.junctionPoint.y)}`;
-        if (!dotMap.has(key)) {
-          dotMap.set(key, { x: Math.round(w.junctionPoint.x), y: Math.round(w.junctionPoint.y), netName: w.netName });
-        }
-      }
-    });
-    return Array.from(dotMap.values());
-  }, [wires, components]);
 
   return (
     <div
@@ -1254,19 +1268,24 @@ export function SchematicCanvas({
             if (!fromPin) return null;
             if (!isTapped && !toPin) return null;
 
-            const p1 = getPinWorldCoord(fromComp, fromPin);
+            const routed = canonicalGeom.wireMap.get(wire.id);
+            const p1Raw = getPinWorldCoord(fromComp, fromPin);
             const canonicalVerts = getCanonicalWirePoints(wire, components, wires);
-            const p2 = canonicalVerts.length >= 2
+            const p2Raw = canonicalVerts.length >= 2
               ? canonicalVerts[canonicalVerts.length - 1]
-              : (isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y }));
+              : (isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1Raw.x, y: p1Raw.y }));
 
             const isShorted = ercViolations.some(
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)
             );
             const routingStyle = wire.style || activeRoutingStyle;
-            const fullVertices = canonicalVerts.length >= 2 ? (canonicalVerts as Point[]) : getFullWireVertices(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const fullVertices = routed && routed.points.length >= 2
+              ? (routed.points as Point[])
+              : (canonicalVerts.length >= 2 ? (canonicalVerts as Point[]) : getFullWireVertices(p1Raw, p2Raw, wire.points, routingStyle, elbowOrientation));
+            const p1 = fullVertices[0];
+            const p2 = fullVertices[fullVertices.length - 1];
             const segments = extractWireSegments(wire.id, fullVertices);
-            const pathData = verticesToSvgPath(fullVertices);
+            const pathData = routed?.svgPath || verticesToSvgPath(fullVertices);
             const isWireSelected = selectedWireId === wire.id || selectedWireIds.has(wire.id);
             const isHighlighted = highlightedNetId === wire.id;
             const wireBaseColor = isShorted
@@ -1276,7 +1295,7 @@ export function SchematicCanvas({
             const midPoint =
               wire.points && wire.points.length > 0
                 ? wire.points[Math.floor(wire.points.length / 2)]
-                : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+                : (fullVertices.length >= 2 ? fullVertices[Math.floor(fullVertices.length / 2)] : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
 
             return (
               <g key={wire.id} className="group">

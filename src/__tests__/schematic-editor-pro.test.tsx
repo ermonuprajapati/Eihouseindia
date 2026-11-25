@@ -13,6 +13,7 @@ import {
   getCanonicalWirePoints,
   computeCanonicalJunctions,
   resolveShortestNetWire,
+  computeCanonicalSchematicGeometry,
 } from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 import { Virtual3dStudio } from '../components/engineering-lab/Panels/Virtual3dStudio';
 import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
@@ -2933,6 +2934,386 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(onAddWireMock).toHaveBeenCalledTimes(1);
     const addedWire = onAddWireMock.mock.calls[0][0];
     expect(addedWire.tappedWireId).toBe(targetWire.id);
+  });
+
+  // =========================================================================
+  // GATE 3: ANTI-REGRESSION TESTS: SHARED-TRUNK MERGER & BRIDGE HOP ARCS
+  // =========================================================================
+
+  it('GATE 3 Test 1: TEMPLATE_555_ASTABLE Shared-Trunk Merge + Junction Dots', () => {
+    // Add U2:GND -> gnd1:1 to test full multi-pin GND net as well
+    const compU2: CircuitComponent = {
+      id: 'u2',
+      type: 'MCU_ARDUINO_UNO',
+      label: 'Arduino Uno',
+      value: 'Uno',
+      category: 'active',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 600,
+      y: 400,
+      pins: [{ id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const wireU2Gnd: CircuitWire = {
+      id: 'w_u2_gnd',
+      fromCompId: 'u2',
+      fromPinId: 'GND',
+      toCompId: 'gnd1',
+      toPinId: '1',
+    };
+
+    const comps = [...TEMPLATE_555_ASTABLE.components, compU2];
+    const wires = [...TEMPLATE_555_ASTABLE.wires, wireU2Gnd];
+
+    const geom = computeCanonicalSchematicGeometry(wires, comps, [], 10);
+
+    // VCC Net (w2, w4)
+    // bat1:p (BT1:+) should only have 1 wire endpoint terminating at it
+    const batPPos = getCanonicalPinWorldPos(
+      comps.find((c) => c.id === 'bat1')!,
+      'p'
+    );
+    const wiresTouchingBatP = geom.routedWires.filter((rw) => {
+      const p1 = rw.points[0];
+      const p2 = rw.points[rw.points.length - 1];
+      return (
+        Math.hypot(p1.x - batPPos.x, p1.y - batPPos.y) < 2 ||
+        Math.hypot(p2.x - batPPos.x, p2.y - batPPos.y) < 2
+      );
+    });
+    // ONLY 1 wire endpoint terminates at bat1:p!
+    expect(wiresTouchingBatP.length).toBe(1);
+    expect(wiresTouchingBatP[0].wireId).toBe('w2');
+
+    // w4 merges onto w2 with autoTappedReversed === true and autoJunctionPoint
+    const w4Routed = geom.wireMap.get('w4')!;
+    expect(w4Routed).toBeDefined();
+    expect(w4Routed.autoTappedWireId).toBe('w2');
+    expect(w4Routed.autoTappedReversed).toBe(true);
+    expect(w4Routed.autoJunctionPoint).toBeDefined();
+
+    // junctionDots contains w4.autoJunctionPoint
+    const hasW4Junc = geom.junctionDots.some(
+      (j) =>
+        Math.hypot(
+          j.x - w4Routed.autoJunctionPoint!.x,
+          j.y - w4Routed.autoJunctionPoint!.y
+        ) < 2
+    );
+    expect(hasW4Junc).toBe(true);
+
+    // GND Net: branches merge onto shared trunk with solid junction dots
+    const gndPinPos = getCanonicalPinWorldPos(
+      comps.find((c) => c.id === 'gnd1')!,
+      '1'
+    );
+    const gndWiresTouchingGndPin = geom.routedWires.filter((rw) => {
+      const p1 = rw.points[0];
+      const p2 = rw.points[rw.points.length - 1];
+      return (
+        Math.hypot(p1.x - gndPinPos.x, p1.y - gndPinPos.y) < 2 ||
+        Math.hypot(p2.x - gndPinPos.x, p2.y - gndPinPos.y) < 2
+      );
+    });
+    // Must NOT be 6 separate parallel wires running to gnd1:1!
+    expect(gndWiresTouchingGndPin.length).toBeLessThan(6);
+
+    // GND branches (like w16, w10, w_u2_gnd) merged onto trunk have junction dots
+    const gndAutoTapped = geom.routedWires.filter(
+      (rw) => rw.autoTappedWireId && rw.autoJunctionPoint
+    );
+    expect(gndAutoTapped.length).toBeGreaterThan(0);
+    gndAutoTapped.forEach((gw) => {
+      const hasDot = geom.junctionDots.some(
+        (j) =>
+          Math.hypot(j.x - gw.autoJunctionPoint!.x, j.y - gw.autoJunctionPoint!.y) < 2
+      );
+      expect(hasDot).toBe(true);
+    });
+  });
+
+  it('GATE 3 Test 2: Saved/Dragged Same-Net Wires Crossing on Way to Destination Pin', () => {
+    // 2 same-net wires with explicit points that physically cross at (250, 200) on their way to BT1:+
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BT1',
+      value: '9V',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: 'p', name: '+', x: 0, y: -25, pinType: 'power' }], // (100, 175)
+    };
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }], // (400, 100)
+    };
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }], // (250, 300)
+    };
+
+    // Wire 1: R1:1 -> BT1:+ going through (250, 200)
+    const wire1: CircuitWire = {
+      id: 'wire1',
+      fromCompId: 'r1',
+      fromPinId: '1',
+      toCompId: 'bat1',
+      toPinId: 'p',
+      points: [{ x: 250, y: 200 }],
+    };
+    // Wire 2: R2:1 -> BT1:+ vertical through (250, 200)
+    const wire2: CircuitWire = {
+      id: 'wire2',
+      fromCompId: 'r2',
+      fromPinId: '1',
+      toCompId: 'bat1',
+      toPinId: 'p',
+      points: [{ x: 250, y: 200 }],
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compBat, compR1, compR2],
+      [],
+      10
+    );
+
+    // Assert second wire truncates RIGHT at (250, 200)
+    const r2 = geom.wireMap.get('wire2')!;
+    expect(r2).toBeDefined();
+    expect(r2.autoJunctionPoint).toEqual({ x: 250, y: 200 });
+    const lastPt = r2.points[r2.points.length - 1];
+    expect(Math.hypot(lastPt.x - 250, lastPt.y - 200)).toBeLessThan(2);
+
+    // AND junctionDots contains (250, 200)
+    const hasDot = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDot).toBe(true);
+  });
+
+  it('GATE 3 Test 3: Different-Net Crossing -> ZERO Junction Dot + Semicircular Bridge Hop Arc', () => {
+    // Wire A: Net 1, horizontal (100, 200) -> (400, 200)
+    // Wire B: Net 2, vertical (250, 100) -> (250, 300)
+    const compA1: CircuitComponent = {
+      id: 'cA1',
+      type: 'RESISTOR',
+      label: 'A1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compA2: CircuitComponent = {
+      id: 'cA2',
+      type: 'RESISTOR',
+      label: 'A2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB1: CircuitComponent = {
+      id: 'cB1',
+      type: 'RESISTOR',
+      label: 'B1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB2: CircuitComponent = {
+      id: 'cB2',
+      type: 'RESISTOR',
+      label: 'B2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireA: CircuitWire = {
+      id: 'wireA',
+      fromCompId: 'cA1',
+      fromPinId: '1',
+      toCompId: 'cA2',
+      toPinId: '1',
+    };
+    const wireB: CircuitWire = {
+      id: 'wireB',
+      fromCompId: 'cB1',
+      fromPinId: '1',
+      toCompId: 'cB2',
+      toPinId: '1',
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wireA, wireB],
+      [compA1, compA2, compB1, compB2],
+      [],
+      10
+    );
+
+    // ZERO junction dots at (250, 200)!
+    const hasDotAtCrossing = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDotAtCrossing).toBe(false);
+
+    // Wire A has hasCrossingHops === true and svgPath contains 'A 5 5 0 0 1' at x = 250
+    const rA = geom.wireMap.get('wireA')!;
+    expect(rA).toBeDefined();
+    expect(rA.hasCrossingHops).toBe(true);
+    expect(rA.svgPath).toContain('A 5 5 0 0 1');
+    expect(rA.svgPath).toContain('245 200'); // L cx-5 y
+    expect(rA.svgPath).toContain('255 200'); // cx+5 y
+  });
+
+  it('GATE 3 Test 4: 1-to-1 Parity Between SchematicCanvas and SchematicEditorPanel', () => {
+    const compA1: CircuitComponent = {
+      id: 'cA1',
+      type: 'RESISTOR',
+      label: 'A1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compA2: CircuitComponent = {
+      id: 'cA2',
+      type: 'RESISTOR',
+      label: 'A2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB1: CircuitComponent = {
+      id: 'cB1',
+      type: 'RESISTOR',
+      label: 'B1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB2: CircuitComponent = {
+      id: 'cB2',
+      type: 'RESISTOR',
+      label: 'B2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireA: CircuitWire = {
+      id: 'wireA',
+      fromCompId: 'cA1',
+      fromPinId: '1',
+      toCompId: 'cA2',
+      toPinId: '1',
+    };
+    const wireB: CircuitWire = {
+      id: 'wireB',
+      fromCompId: 'cB1',
+      fromPinId: '1',
+      toCompId: 'cB2',
+      toPinId: '1',
+    };
+
+    const testComps = [compA1, compA2, compB1, compB2];
+    const testWires = [wireA, wireB];
+
+    // Render SchematicCanvas
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={testComps}
+        wires={testWires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Render SchematicEditorPanel
+    const { container: panelContainer } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={testComps}
+        wires={testWires}
+      />
+    );
+
+    // Assert wireA has SVG bridge arc in BOTH
+    const canvasWirePath = canvasContainer.querySelector('path[d*="A 5 5 0 0 1"]');
+    const panelWirePath = panelContainer.querySelector('path[d*="A 5 5 0 0 1"]');
+    expect(canvasWirePath).toBeInTheDocument();
+    expect(panelWirePath).toBeInTheDocument();
+    expect(canvasWirePath?.getAttribute('d')).toBe(panelWirePath?.getAttribute('d'));
   });
 });
 
