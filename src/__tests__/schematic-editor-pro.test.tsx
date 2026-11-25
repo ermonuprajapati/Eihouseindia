@@ -38,22 +38,25 @@ import {
 } from '../modules/engineering-lab/schematic-engine/schematic-sync-layout';
 
 vi.mock('@/modules/engineering-lab/studio-3d/Studio3DCanvas', () => ({
-  Studio3DCanvas: (props: { wires?: Wire3D[]; children?: React.ReactNode }) => (
-    <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(props.wires || [])}>
-      {(props.wires || []).map((w: Wire3D) => (
-        <div
-          key={w.id}
-          data-testid={`wire3d-${w.id}`}
-          data-from-comp={w.fromPin?.compId}
-          data-from-pin={w.fromPin?.pinId}
-          data-to-comp={w.toPin?.compId}
-          data-to-pin={w.toPin?.pinId}
-          data-color={w.color}
-        />
-      ))}
-      {props.children}
-    </div>
-  ),
+  Studio3DCanvas: (props: { wires?: Wire3D[]; wires3d?: Wire3D[]; children?: React.ReactNode }) => {
+    const wireList = props.wires3d || props.wires || [];
+    return (
+      <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(wireList)}>
+        {wireList.map((w: Wire3D) => (
+          <div
+            key={w.id}
+            data-testid={`wire3d-${w.id}`}
+            data-from-comp={w.fromPin?.compId}
+            data-from-pin={w.fromPin?.pinId}
+            data-to-comp={w.toPin?.compId}
+            data-to-pin={w.toPin?.pinId}
+            data-color={w.color}
+          />
+        ))}
+        {props.children}
+      </div>
+    );
+  },
 }));
 
 describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering Suite', () => {
@@ -3764,6 +3767,147 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     const defaultSlot = findFreeSchematicSlot([]);
     expect(defaultSlot).toEqual({ x: 260, y: 200 });
+  });
+
+  it('Test 1 (L-Shaped Trunk Closer to Corner 120px vs Hub 300px): trunk trims cleanly with 0px overlap', () => {
+    const comps: CircuitComponent[] = [
+      {
+        id: 'compHub',
+        type: 'RESISTOR',
+        label: 'Hub',
+        value: '1k',
+        parameters: {},
+        x: 500,
+        y: 200,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'compA',
+        type: 'RESISTOR',
+        label: 'A',
+        value: '1k',
+        parameters: {},
+        x: 80,
+        y: 360,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'compB',
+        type: 'RESISTOR',
+        label: 'B',
+        value: '1k',
+        parameters: {},
+        x: 380,
+        y: 360,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+    ];
+
+    const trunk1: CircuitWire = {
+      id: 'trunk1',
+      fromCompId: 'compHub',
+      fromPinId: '1',
+      toCompId: 'compA',
+      toPinId: '1',
+      points: [{ x: 500, y: 360 }],
+    };
+
+    const w1: CircuitWire = {
+      id: 'w1',
+      fromCompId: 'compB',
+      fromPinId: '1',
+      toCompId: 'compA',
+      toPinId: '1',
+    };
+
+    const result = computeCanonicalSchematicGeometry([trunk1, w1], comps);
+    expect(result.routedWires.length).toBe(2);
+
+    const trunkEntry = result.routedWires.find((w) => w.wireId === 'trunk1');
+    const w1Entry = result.routedWires.find((w) => w.wireId === 'w1');
+
+    expect(trunkEntry).toBeDefined();
+    expect(w1Entry).toBeDefined();
+
+    // trunk1 trims to [(500,200), (500,360), (380,360)]
+    expect(trunkEntry?.points).toEqual([
+      { x: 500, y: 200 },
+      { x: 500, y: 360 },
+      { x: 380, y: 360 },
+    ]);
+
+    // w1 stays [(380,360), (80,360)] (NOT backwards to (500,360)!)
+    expect(w1Entry?.points).toEqual([
+      { x: 380, y: 360 },
+      { x: 80, y: 360 },
+    ]);
+
+    // junctionDots contains (380,360)
+    const hasJunctionAt380_360 = result.junctionDots.some(
+      (j) => Math.hypot(j.x - 380, j.y - 360) < 2
+    );
+    expect(hasJunctionAt380_360).toBe(true);
+  });
+
+  it('Test 2 (getHoleTieGroup Bottom Column Isolation): isolates bottom columns and rows cleanly', () => {
+    expect(getHoleTieGroup('bb_col_10_bottom')).toBe('bb_tie_col_10_bottom');
+    expect(getHoleTieGroup('bb_col_10_bottom_F')).toBe('bb_tie_col_10_bottom');
+    expect(getHoleTieGroup('bb_col_10_top')).toBe('bb_tie_col_10_top');
+  });
+
+  it('Test 3 (Uncommitted Wire From Unconnected Arduino Survives Virtual3dStudio Remount + Sibling Tapped Drop Safe): preserves uncommitted wire and prevents premature deletion', () => {
+    clearUncommittedWires3dCache();
+    const uncWire: Wire3D = {
+      id: 'wire3d_test_uncomm',
+      fromPin: { compId: 'u2', pinId: 'D9' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_A' },
+      color: '#3B82F6',
+    };
+    uncommittedWires3dCache.set('wire3d_test_uncomm', uncWire);
+
+    const compU2: CircuitComponent = {
+      id: 'u2',
+      type: 'ARDUINO_UNO',
+      label: 'Arduino Uno',
+      value: 'Uno R3',
+      parameters: {},
+      x: 200,
+      y: 200,
+      rotation: 0,
+      pins: [{ id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'output' }],
+      category: 'microcontrollers',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compU2]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const wireEl = screen.getByTestId('wire3d-wire3d_test_uncomm');
+    expect(wireEl).toBeInTheDocument();
+    expect(wireEl.getAttribute('data-from-comp')).toBe('u2');
+    expect(wireEl.getAttribute('data-from-pin')).toBe('D9');
+
+    clearUncommittedWires3dCache();
   });
 });
 

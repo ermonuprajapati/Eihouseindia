@@ -56,18 +56,20 @@ export function getHoleTieGroup(holeId: string): string | null {
   }
 
   // 3. Pattern match terminal columns: col_{N}_{Row} or hole_bb{N}_{Row}{Col}
-  const colRowMatch = cleanId.match(/col_(\d+)_(?:top_|bottom_)?([A-Ja-j])/i);
-  if (colRowMatch) {
-    const col = parseInt(colRowMatch[1], 10);
-    const row = colRowMatch[2].toUpperCase();
-    const isTop = cleanId.toLowerCase().includes('top') || ['A', 'B', 'C', 'D', 'E'].includes(row);
-    return `${prefix}tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
-  }
-
-  const colOnlyMatch = cleanId.match(/col_(\d+)_(top|bottom)/i);
+  const colOnlyMatch = cleanId.match(/^col_(\d+)_(top|bottom)$/i);
   if (colOnlyMatch) {
     const col = parseInt(colOnlyMatch[1], 10);
     const isTop = colOnlyMatch[2].toLowerCase() === 'top';
+    return `${prefix}tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
+  }
+
+  const colRowMatch = cleanId.match(/col_(\d+)_(?:(top|bottom)_)?([A-Ja-j])(?:$|_)/i);
+  if (colRowMatch) {
+    const col = parseInt(colRowMatch[1], 10);
+    const row = colRowMatch[3].toUpperCase();
+    const isTop = colRowMatch[2]
+      ? colRowMatch[2].toLowerCase() === 'top'
+      : ['A', 'B', 'C', 'D', 'E'].includes(row);
     return `${prefix}tie_col_${col}_${isTop ? 'top' : 'bottom'}`;
   }
 

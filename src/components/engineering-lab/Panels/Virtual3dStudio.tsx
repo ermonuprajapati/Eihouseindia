@@ -1357,7 +1357,7 @@ export function Virtual3dStudio({
                 const hTo = getBreadboardHoleForComponentPin(comps3d.find((c) => c.id === sw.toCompId), sw.toPinId);
                 const tgFrom = hFrom ? getTieGroupForHole(hFrom) : undefined;
                 const tgTo = hTo ? getTieGroupForHole(hTo) : undefined;
-                if (tgFrom === tg || tgTo === tg) {
+                if (tgFrom === tg || (!sw.tappedWireId && tgTo === tg)) {
                   dropSrcIds.push(sw.id);
                 }
               }
@@ -1404,11 +1404,13 @@ export function Virtual3dStudio({
               color: isGndNet ? '#1E293B' : '#EF4444',
             });
             const mcuSrcIds = srcWires
-              .filter(
-                (sw) =>
-                  (sw.fromCompId === leaf.compId && (sw.fromPinId === leaf.pinId || sw.fromPinId === leaf.rawPinId)) ||
-                  (sw.toCompId === leaf.compId && (sw.toPinId === leaf.pinId || sw.toPinId === leaf.rawPinId))
-              )
+              .filter((sw) => {
+                const k1 = getPinKey(sw.fromCompId, sw.fromPinId);
+                const k2 = getPinKey(sw.toCompId, sw.toPinId);
+                const inNet = uf.find(k1) === root || uf.find(k2) === root;
+                if (!inNet) return false;
+                return k1 === leaf.netKey || (!sw.tappedWireId && k2 === leaf.netKey);
+              })
               .map((sw) => sw.id);
             if (mcuSrcIds.length > 0) {
               nextSourceMap.set(wireId, mcuSrcIds);
@@ -1549,8 +1551,8 @@ export function Virtual3dStudio({
             const mcuLeafIds = netWires
               .filter(
                 (sw) =>
-                  (sw.fromCompId === leaf.compId && (sw.fromPinId === leaf.pinId || sw.fromPinId === leaf.rawPinId)) ||
-                  (sw.toCompId === leaf.compId && (sw.toPinId === leaf.pinId || sw.toPinId === leaf.rawPinId))
+                  getPinKey(sw.fromCompId, sw.fromPinId) === leaf.netKey ||
+                  (!sw.tappedWireId && getPinKey(sw.toCompId, sw.toPinId) === leaf.netKey)
               )
               .map((sw) => sw.id);
             if (mcuLeafIds.length > 0) {
@@ -1616,6 +1618,7 @@ export function Virtual3dStudio({
       if (w.id.startsWith('wire_bat_') || w.id.startsWith('wire_rail_bridge') || w.id.startsWith('wire_bb')) {
         return batteryIsConnected;
       }
+      if (uncommittedWires3dCache.has(w.id)) return true;
       if (w.fromPin.compId !== 'breadboard' && !connectedCompIds.has(w.fromPin.compId)) return false;
       if (w.toPin.compId !== 'breadboard' && !connectedCompIds.has(w.toPin.compId)) return false;
       return true;

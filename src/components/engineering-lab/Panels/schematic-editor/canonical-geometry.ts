@@ -537,6 +537,70 @@ export function computeCanonicalSchematicGeometry(
         const P_old = walkPts[walkPts.length - 1];
         const hasUserWaypoints = Array.isArray(w.points) && w.points.length > 0;
 
+        // L-Shape-Safe Order-Independent Intermediate-Pin Trim
+        let intermediateTrimDone = false;
+        for (const hitEntry of routedWireEntries) {
+          if (hitEntry.netId !== netId || hitEntry.points.length < 2) continue;
+          const proj = projectPointOntoPolyline(P_new, hitEntry.points, 1);
+          if (
+            proj &&
+            proj.distance < 1.5 &&
+            Math.hypot(P_new.x - hitEntry.points[0].x, P_new.y - hitEntry.points[0].y) > 4 &&
+            Math.hypot(P_new.x - hitEntry.points[hitEntry.points.length - 1].x, P_new.y - hitEntry.points[hitEntry.points.length - 1].y) > 4
+          ) {
+            const endIsOld = Math.hypot(hitEntry.points[hitEntry.points.length - 1].x - P_old.x, hitEntry.points[hitEntry.points.length - 1].y - P_old.y) < 2;
+            const startIsOld = !endIsOld && Math.hypot(hitEntry.points[0].x - P_old.x, hitEntry.points[0].y - P_old.y) < 2;
+
+            if (endIsOld || startIsOld) {
+              const trimmedPts = endIsOld
+                ? deduplicatePoints([...hitEntry.points.slice(0, proj.segmentIndex + 1), P_new])
+                : deduplicatePoints([...hitEntry.points.slice(proj.segmentIndex + 1).reverse(), P_new]);
+
+              const hitOrigWire = wires.find((ow) => ow.id === hitEntry.wireId);
+              let hitFromPos: { x: number; y: number } | null = null;
+              if (hitOrigWire) {
+                const fc = components.find((c) => c.id === hitOrigWire.fromCompId);
+                if (fc) hitFromPos = getCanonicalPinWorldPos(fc, hitOrigWire.fromPinId);
+              }
+
+              hitEntry.autoTappedReversed = Boolean(hitFromPos && Math.hypot(hitFromPos.x - P_old.x, hitFromPos.y - P_old.y) < 2);
+              hitEntry.points = trimmedPts;
+              hitEntry.autoTappedWireId = w.id;
+              hitEntry.autoJunctionPoint = P_new;
+
+              // Replace hitEntry's segments in netTreeSegments
+              for (let i = netTreeSegments.length - 1; i >= 0; i--) {
+                if (netTreeSegments[i].wireId === hitEntry.wireId) {
+                  netTreeSegments.splice(i, 1);
+                }
+              }
+              for (let i = 0; i < trimmedPts.length - 1; i++) {
+                netTreeSegments.push({ wireId: hitEntry.wireId, p1: trimmedPts[i], p2: trimmedPts[i + 1] });
+              }
+
+              connectedPins.add(P_new_key);
+              for (let i = 0; i < rawPts.length - 1; i++) {
+                netTreeSegments.push({ wireId: w.id, p1: rawPts[i], p2: rawPts[i + 1] });
+              }
+              routedWireEntries.push({
+                wireId: w.id,
+                points: rawPts,
+                svgPath: '',
+                hasCrossingHops: false,
+                netId,
+                netName: w.netName,
+              });
+
+              intermediateTrimDone = true;
+              break;
+            }
+          }
+        }
+
+        if (intermediateTrimDone) {
+          continue;
+        }
+
         // Candidate A: Geometric Intersection / First-Touch Collinear Truncation along walkPts
         let candA: { pts: { x: number; y: number }[]; len: number; hitWireId: string; junctionPt: { x: number; y: number } } | null = null;
         for (let segIdx = 0; segIdx < walkPts.length - 1; segIdx++) {
@@ -744,70 +808,6 @@ export function computeCanonicalSchematicGeometry(
             autoJunctionPoint: chosen.junctionPt,
             autoTappedReversed: isReversed,
           });
-          continue;
-        }
-
-        // L-Shape-Safe Order-Independent Intermediate-Pin Trim
-        let intermediateTrimDone = false;
-        for (const hitEntry of routedWireEntries) {
-          if (hitEntry.netId !== netId || hitEntry.points.length < 2) continue;
-          const proj = projectPointOntoPolyline(P_new, hitEntry.points, 1);
-          if (
-            proj &&
-            proj.distance < 1.5 &&
-            Math.hypot(P_new.x - hitEntry.points[0].x, P_new.y - hitEntry.points[0].y) > 4 &&
-            Math.hypot(P_new.x - hitEntry.points[hitEntry.points.length - 1].x, P_new.y - hitEntry.points[hitEntry.points.length - 1].y) > 4
-          ) {
-            const endIsOld = Math.hypot(hitEntry.points[hitEntry.points.length - 1].x - P_old.x, hitEntry.points[hitEntry.points.length - 1].y - P_old.y) < 2;
-            const startIsOld = !endIsOld && Math.hypot(hitEntry.points[0].x - P_old.x, hitEntry.points[0].y - P_old.y) < 2;
-
-            if (endIsOld || startIsOld) {
-              const trimmedPts = endIsOld
-                ? deduplicatePoints([...hitEntry.points.slice(0, proj.segmentIndex + 1), P_new])
-                : deduplicatePoints([...hitEntry.points.slice(proj.segmentIndex + 1).reverse(), P_new]);
-
-              const hitOrigWire = wires.find((ow) => ow.id === hitEntry.wireId);
-              let hitFromPos: { x: number; y: number } | null = null;
-              if (hitOrigWire) {
-                const fc = components.find((c) => c.id === hitOrigWire.fromCompId);
-                if (fc) hitFromPos = getCanonicalPinWorldPos(fc, hitOrigWire.fromPinId);
-              }
-
-              hitEntry.autoTappedReversed = Boolean(hitFromPos && Math.hypot(hitFromPos.x - P_old.x, hitFromPos.y - P_old.y) < 2);
-              hitEntry.points = trimmedPts;
-              hitEntry.autoTappedWireId = w.id;
-              hitEntry.autoJunctionPoint = P_new;
-
-              // Replace hitEntry's segments in netTreeSegments
-              for (let i = netTreeSegments.length - 1; i >= 0; i--) {
-                if (netTreeSegments[i].wireId === hitEntry.wireId) {
-                  netTreeSegments.splice(i, 1);
-                }
-              }
-              for (let i = 0; i < trimmedPts.length - 1; i++) {
-                netTreeSegments.push({ wireId: hitEntry.wireId, p1: trimmedPts[i], p2: trimmedPts[i + 1] });
-              }
-
-              connectedPins.add(P_new_key);
-              for (let i = 0; i < rawPts.length - 1; i++) {
-                netTreeSegments.push({ wireId: w.id, p1: rawPts[i], p2: rawPts[i + 1] });
-              }
-              routedWireEntries.push({
-                wireId: w.id,
-                points: rawPts,
-                svgPath: '',
-                hasCrossingHops: false,
-                netId,
-                netName: w.netName,
-              });
-
-              intermediateTrimDone = true;
-              break;
-            }
-          }
-        }
-
-        if (intermediateTrimDone) {
           continue;
         }
 
