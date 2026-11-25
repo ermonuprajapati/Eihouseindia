@@ -1295,6 +1295,21 @@ export function SchematicCanvas({
                     } else if (toolMode === 'net_highlight') {
                       setHighlightedNetId(wire.id);
                     } else if (toolMode === 'wire' && activeWireStart) {
+                      const resolvedCheck = resolveShortestNetWire(
+                        activeWireStart.compId,
+                        activeWireStart.pinId,
+                        wire.fromCompId,
+                        wire.fromPinId,
+                        components,
+                        wires
+                      );
+                      if (resolvedCheck.skipDuplicate) {
+                        toast.info('Pins are already electrically connected on the same net.');
+                        setActiveWireStart(null);
+                        setActiveWaypoints([]);
+                        return;
+                      }
+
                       const rect = containerRef.current?.getBoundingClientRect();
                       const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : e.clientX;
                       const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : e.clientY;

@@ -687,10 +687,10 @@ export function Virtual3dStudio({
         colOffset = -colOffset;
       } else if (rotY === 90) {
         colOffset = 0;
-        rowLetter = pinId === '1' ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+        rowLetter = pinId === '1' ? 'E' : 'F';
       } else if (rotY === 270) {
         colOffset = 0;
-        rowLetter = pinId === '1' ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+        rowLetter = pinId === '1' ? 'F' : 'E';
       }
       const col = centerCol + colOffset;
       return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -704,10 +704,10 @@ export function Virtual3dStudio({
         colOffset = -colOffset;
       } else if (rotY === 90) {
         colOffset = 0;
-        rowLetter = isPin1 ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+        rowLetter = isPin1 ? 'E' : 'F';
       } else if (rotY === 270) {
         colOffset = 0;
-        rowLetter = isPin1 ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+        rowLetter = isPin1 ? 'F' : 'E';
       }
       const col = centerCol + colOffset;
       return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -722,10 +722,10 @@ export function Virtual3dStudio({
         colOffset = -colOffset;
       } else if (rotY === 90) {
         colOffset = 0;
-        rowLetter = isAnode ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+        rowLetter = isAnode ? 'E' : 'F';
       } else if (rotY === 270) {
         colOffset = 0;
-        rowLetter = isAnode ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+        rowLetter = isAnode ? 'F' : 'E';
       }
       const col = centerCol + colOffset;
       return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -739,10 +739,10 @@ export function Virtual3dStudio({
         colOffset = -colOffset;
       } else if (rotY === 90) {
         colOffset = 0;
-        rowLetter = isAnode ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+        rowLetter = isAnode ? 'E' : 'F';
       } else if (rotY === 270) {
         colOffset = 0;
-        rowLetter = isAnode ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+        rowLetter = isAnode ? 'F' : 'E';
       }
       const col = centerCol + colOffset;
       return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -1222,20 +1222,8 @@ export function Virtual3dStudio({
     const vccRoot = uf.find('__GLOBAL_VCC__');
 
     netsByRoot.forEach((netPins, root) => {
-      const isGndNet =
-        root === gndRoot ||
-        netPins.some((p) => {
-          const u = p.pinId.toUpperCase();
-          return u === 'GND' || u === 'GROUND' || u.startsWith('GND') || u === '-';
-        });
-
-      const isPosNet =
-        !isGndNet &&
-        (root === vccRoot ||
-          netPins.some((p) => {
-            const u = p.pinId.toUpperCase();
-            return u === 'VCC' || u === '5V' || u === '3V3' || u === 'VIN' || u === '+';
-          }));
+      const isGndNet = Boolean(battery && batteryIsConnected && root === gndRoot);
+      const isPosNet = Boolean(battery && batteryIsConnected && root === vccRoot);
 
       // Collect unique breadboard tieGroups and MCU leaves for this net
       const tieGroupSet = new Set<string>();

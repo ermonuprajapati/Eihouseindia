@@ -205,10 +205,10 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
       colOffset = -colOffset;
     } else if (rotY === 90) {
       colOffset = 0;
-      rowLetter = pinId === '1' ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+      rowLetter = pinId === '1' ? 'E' : 'F';
     } else if (rotY === 270) {
       colOffset = 0;
-      rowLetter = pinId === '1' ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+      rowLetter = pinId === '1' ? 'F' : 'E';
     }
     const col = centerCol + colOffset;
     return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -226,10 +226,10 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
       colOffset = -colOffset;
     } else if (rotY === 90) {
       colOffset = 0;
-      rowLetter = isPin1 ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+      rowLetter = isPin1 ? 'E' : 'F';
     } else if (rotY === 270) {
       colOffset = 0;
-      rowLetter = isPin1 ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+      rowLetter = isPin1 ? 'F' : 'E';
     }
     const col = centerCol + colOffset;
     return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -244,10 +244,10 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
       colOffset = -colOffset;
     } else if (rotY === 90) {
       colOffset = 0;
-      rowLetter = isAnode ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+      rowLetter = isAnode ? 'E' : 'F';
     } else if (rotY === 270) {
       colOffset = 0;
-      rowLetter = isAnode ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+      rowLetter = isAnode ? 'F' : 'E';
     }
     const col = centerCol + colOffset;
     return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
@@ -261,10 +261,10 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
       colOffset = -colOffset;
     } else if (rotY === 90) {
       colOffset = 0;
-      rowLetter = isAnode ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+      rowLetter = isAnode ? 'E' : 'F';
     } else if (rotY === 270) {
       colOffset = 0;
-      rowLetter = isAnode ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+      rowLetter = isAnode ? 'F' : 'E';
     }
     const col = centerCol + colOffset;
     return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;

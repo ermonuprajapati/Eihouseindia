@@ -561,6 +561,21 @@ export function SchematicEditorPanel({
       if ((tool === 'wire' || tool === 'bus') && activeWireStart) {
         const targetWire = wires.find((w) => w.id === wireId);
         if (targetWire) {
+          const resolvedCheck = resolveShortestNetWire(
+            activeWireStart.compId,
+            activeWireStart.pinId,
+            targetWire.fromCompId,
+            targetWire.fromPinId,
+            components,
+            wires
+          );
+          if (resolvedCheck.skipDuplicate) {
+            setActiveWireStart(null);
+            setWireWaypoints([]);
+            clearWireSelection();
+            return;
+          }
+
           const startPt = { x: activeWireStart.x, y: activeWireStart.y };
           const lastPt = wireWaypoints.length > 0 ? wireWaypoints[wireWaypoints.length - 1] : startPt;
           const corner = wireElbowFlip
@@ -1103,8 +1118,8 @@ export function SchematicEditorPanel({
   };
 
   // Canvas Mouse Up
-  const handleMouseUp = (e?: React.MouseEvent) => {
-    if (isDraggingCanvas && dragStartClient && e) {
+  const handleMouseUp = (e?: React.MouseEvent | MouseEvent) => {
+    if (isDraggingCanvas && dragStartClient && e && typeof e.clientX === 'number') {
       const dist = Math.hypot(e.clientX - dragStartClient.x, e.clientY - dragStartClient.y);
       if (dist < 4) {
         clearWireSelection();
@@ -1525,7 +1540,12 @@ export function SchematicEditorPanel({
                         data-testid={`sch-wire-${rw.wireId}`}
                         points={ptsStr}
                         fill="none"
-                        stroke={isSelected ? '#B45309' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54'}
+                        stroke={
+                          isSelected
+                            ? '#B45309'
+                            : wires.find((w) => w.id === rw.wireId)?.color ||
+                              (sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54')
+                        }
                         strokeWidth={isSelected ? '3' : '2'}
                         strokeLinecap="round"
                         strokeLinejoin="round"
