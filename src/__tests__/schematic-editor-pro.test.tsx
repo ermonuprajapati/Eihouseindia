@@ -14,6 +14,7 @@ import {
   computeCanonicalJunctions,
   resolveShortestNetWire,
   computeCanonicalSchematicGeometry,
+  polylineManhattanLength,
 } from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 import { Virtual3dStudio } from '../components/engineering-lab/Panels/Virtual3dStudio';
 import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
@@ -3314,6 +3315,200 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(canvasWirePath).toBeInTheDocument();
     expect(panelWirePath).toBeInTheDocument();
     expect(canvasWirePath?.getAttribute('d')).toBe(panelWirePath?.getAttribute('d'));
+  });
+
+  it('GATE 3 Test 5: Collinear Overlapping Same-Net Wires Sharing Destination Pin Truncates at Earliest Contact', () => {
+    // Wire 1: (380, 360) -> (80, 360)
+    // Wire 2: (500, 360) -> (80, 360) on same net
+    const compGnd: CircuitComponent = {
+      id: 'gnd_hub',
+      type: 'GROUND',
+      label: 'GND',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 80,
+      y: 360,
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compR1: CircuitComponent = {
+      id: 'r_collinear_1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 380,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compR2: CircuitComponent = {
+      id: 'r_collinear_2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 500,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wire1: CircuitWire = {
+      id: 'wire_collinear_1',
+      fromCompId: 'r_collinear_1',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wire2: CircuitWire = {
+      id: 'wire_collinear_2',
+      fromCompId: 'r_collinear_2',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Assert Wire 2 truncates cleanly at (380, 360)
+    const r2 = geom.wireMap.get('wire_collinear_2')!;
+    expect(r2).toBeDefined();
+    expect(r2.autoJunctionPoint).toEqual({ x: 380, y: 360 });
+    const wire2Len = polylineManhattanLength(r2.points);
+    expect(wire2Len).toBe(120); // (500 - 380) = 120, NOT 420!
+
+    // Assert junctionDots contains (380, 360)
+    const hasDot = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 380, j.y - 360) < 2
+    );
+    expect(hasDot).toBe(true);
+  });
+
+  it('GATE 3 Test 6: 100% Pixel-Exact Parity at Odd-10 Pin Coord x = 250 With 20px Sheet Grid', () => {
+    // Component at x = 250 dropping onto horizontal trunk at y = 200
+    const compTrunkL: CircuitComponent = {
+      id: 'cTL',
+      type: 'RESISTOR',
+      label: 'TL',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compTrunkR: CircuitComponent = {
+      id: 'cTR',
+      type: 'GROUND',
+      label: 'TR',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compBranch: CircuitComponent = {
+      id: 'cB',
+      type: 'RESISTOR',
+      label: 'B',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireTrunk: CircuitWire = {
+      id: 'wireTrunk',
+      fromCompId: 'cTL',
+      fromPinId: '1',
+      toCompId: 'cTR',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wireBranch: CircuitWire = {
+      id: 'wireBranch',
+      fromCompId: 'cB',
+      fromPinId: '1',
+      toCompId: 'cTR',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    const testComps = [compTrunkL, compTrunkR, compBranch];
+    const testWires = [wireTrunk, wireBranch];
+
+    // Render SchematicCanvas
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={testComps}
+        wires={testWires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Render SchematicEditorPanel
+    const { container: panelContainer } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={testComps}
+        wires={testWires}
+      />
+    );
+
+    // Assert wireBranch renders clean 2-point vertical drop [(250, 100), (250, 200)] in BOTH
+    const canvasWire = canvasContainer.querySelector('polyline[data-testid="sch-wire-wireBranch"]') ||
+      canvasContainer.querySelector('path[data-testid="sch-wire-wireBranch"]');
+    const panelWire = panelContainer.querySelector('polyline[data-testid="sch-wire-wireBranch"]') ||
+      panelContainer.querySelector('path[data-testid="sch-wire-wireBranch"]');
+
+    expect(canvasWire).toBeInTheDocument();
+    expect(panelWire).toBeInTheDocument();
+
+    const canvasD = canvasWire?.getAttribute('d');
+    const panelPoints = panelWire?.getAttribute('points');
+
+    // Both must match and be exactly 250,100 -> 250,200 (NO crooked jog to 260!)
+    expect(canvasD).toBe('M 250 100 L 250 200');
+    expect(panelPoints).toBe('250,100 250,200');
+
+    // Assert junction dot at (250, 200) exists in both
+    const canvasDot = canvasContainer.querySelector('circle[cx="250"][cy="200"]');
+    const panelDot = panelContainer.querySelector('circle[cx="250"][cy="200"]');
+    expect(canvasDot).toBeInTheDocument();
+    expect(panelDot).toBeInTheDocument();
   });
 });
 

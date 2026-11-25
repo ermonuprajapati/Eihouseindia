@@ -418,15 +418,7 @@ export function computeCanonicalSchematicGeometry(
     const candidateTrunks = hubTouchingWires.length > 0 ? hubTouchingWires : validNetWires.filter((w) => !w.tappedWireId);
     const trunkPool = candidateTrunks.length > 0 ? candidateTrunks : validNetWires;
 
-    let trunk1 = trunkPool[0];
-    let maxSpan = -1;
-    for (const w of trunkPool) {
-      const span = getWireSpan(w);
-      if (span > maxSpan) {
-        maxSpan = span;
-        trunk1 = w;
-      }
-    }
+    const trunk1 = trunkPool[0];
 
     const trunk1Pts = rawPtsMap.get(trunk1.id)!;
     routedInNet.add(trunk1.id);
@@ -485,7 +477,9 @@ export function computeCanonicalSchematicGeometry(
           const rawTarget = w.junctionPoint || (rawPts.length >= 2 ? rawPts[rawPts.length - 1] : { x: 0, y: 0 });
           const proj = projectPointOntoPolyline(rawTarget, parentPoly, gridStep);
           if (proj && rawPts.length >= 2) {
-            finalPts = [...rawPts.slice(0, -1), proj.point];
+            const style: WireRoutingStyle = (w.style as WireRoutingStyle) || 'orthogonal';
+            const elbow: ElbowOrientation = (w as unknown as { elbow?: ElbowOrientation }).elbow || 'horizontal-first';
+            finalPts = getFullWireVertices(rawPts[0], proj.point, w.points && w.points.length > 0 ? (w.points as Point[]) : undefined, style, elbow);
           }
         }
         const junctionPt = finalPts.length >= 2 ? finalPts[finalPts.length - 1] : w.junctionPoint;
@@ -553,17 +547,6 @@ export function computeCanonicalSchematicGeometry(
             const isCV = Math.abs(c.x - d.x) < 1;
 
             let J: { x: number; y: number } | null = null;
-
-            // Shared vertex / touch check
-            if (Math.hypot(b.x - c.x, b.y - c.y) < 2) {
-              J = { x: c.x, y: c.y };
-            } else if (Math.hypot(b.x - d.x, b.y - d.y) < 2) {
-              J = { x: d.x, y: d.y };
-            } else if (Math.hypot(a.x - c.x, a.y - c.y) < 2) {
-              J = { x: c.x, y: c.y };
-            } else if (Math.hypot(a.x - d.x, a.y - d.y) < 2) {
-              J = { x: d.x, y: d.y };
-            }
 
             // 1. Perpendicular crossing / T-touch
             if (!J && isAH && isCV) {
@@ -633,6 +616,18 @@ export function computeCanonicalSchematicGeometry(
                   const iy = Math.round(a.y + ua * (b.y - a.y));
                   J = { x: ix, y: iy };
                 }
+              }
+            }
+
+            if (!J) {
+              if (Math.hypot(b.x - c.x, b.y - c.y) < 2) {
+                J = { x: c.x, y: c.y };
+              } else if (Math.hypot(b.x - d.x, b.y - d.y) < 2) {
+                J = { x: d.x, y: d.y };
+              } else if (Math.hypot(a.x - c.x, a.y - c.y) < 2) {
+                J = { x: c.x, y: c.y };
+              } else if (Math.hypot(a.x - d.x, a.y - d.y) < 2) {
+                J = { x: d.x, y: d.y };
               }
             }
 

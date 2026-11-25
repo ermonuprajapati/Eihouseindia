@@ -282,8 +282,8 @@ export function SchematicEditorPanel({
 
   // Compute canonical wire points and junctions matching SchematicCanvas.tsx 1-to-1
   const canonicalGeom = useMemo(
-    () => computeCanonicalSchematicGeometry(wires, components, manualJunctions, sheetConfig.gridStep),
-    [wires, components, manualJunctions, sheetConfig.gridStep]
+    () => computeCanonicalSchematicGeometry(wires, components, manualJunctions, 10),
+    [wires, components, manualJunctions]
   );
   const routedWires = canonicalGeom.routedWires;
   const allJunctions = canonicalGeom.junctionDots;

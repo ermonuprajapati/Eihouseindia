@@ -1270,7 +1270,9 @@ export function SchematicCanvas({
 
             const routed = canonicalGeom.wireMap.get(wire.id);
             const p1Raw = getPinWorldCoord(fromComp, fromPin);
-            const canonicalVerts = getCanonicalWirePoints(wire, components, wires);
+            const canonicalVerts = (!routed || routed.points.length < 2)
+              ? getCanonicalWirePoints(wire, components, wires)
+              : routed.points;
             const p2Raw = canonicalVerts.length >= 2
               ? canonicalVerts[canonicalVerts.length - 1]
               : (isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1Raw.x, y: p1Raw.y }));
@@ -1369,6 +1371,7 @@ export function SchematicCanvas({
                 )}
 
                 <path
+                  data-testid={`sch-wire-${wire.id}`}
                   d={pathData}
                   fill="none"
                   stroke={wireBaseColor}
