@@ -7,6 +7,7 @@ interface SchematicVectorSymbolProps {
   component: CircuitComponent;
   isSelected?: boolean;
   theme?: 'dark' | 'light';
+  isGhost?: boolean;
   onPinClick?: (e: React.MouseEvent, compId: string, pinId: string, worldX: number, worldY: number) => void;
   onPinHover?: (pinId: string | null) => void;
   hoveredPinId?: string | null;
@@ -22,12 +23,16 @@ export function SchematicVectorSymbol({
   component,
   isSelected = false,
   theme = 'dark',
+  isGhost = false,
   onPinClick,
   onPinHover,
   hoveredPinId,
   onDoubleClick,
 }: SchematicVectorSymbolProps) {
-  const { type, value, rotation = 0, mirrored = false } = component;
+  const { type, value } = component;
+  const rot = component.editorRotation ?? component.rotation ?? 0;
+  const flipX = Boolean(component.editorFlipX ?? component.mirrored);
+  const flipY = Boolean(component.editorFlipY);
   const designator = component.designator || component.label?.split(' ')[0] || component.type?.slice(0, 3) || 'U';
 
   const strokeColor = isSelected ? '#10B981' : theme === 'dark' ? '#94A3B8' : '#334155';
@@ -376,26 +381,23 @@ export function SchematicVectorSymbol({
       data-testid={`sch-comp-${component.id}`}
       data-comp-id={component.id}
       data-comp-type={type}
-      transform={`translate(${posX}, ${posY}) rotate(${rotation}) ${mirrored ? 'scale(-1, 1)' : ''}`}
-      className={`sch-component cursor-move select-none ${isSelected ? 'sch-selected' : ''}`}
-      onMouseDown={(e) => {
-        // Prevent background viewport from stealing selection
-        e.stopPropagation();
-      }}
-      onDoubleClick={(e) => onDoubleClick && onDoubleClick(e, component)}
+      transform={`translate(${posX}, ${posY}) rotate(${rot}) scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`}
+      className={`sch-component ${isGhost ? 'pointer-events-none' : 'cursor-move'} select-none ${isSelected ? 'sch-selected' : ''}`}
+      onDoubleClick={(e) => !isGhost && onDoubleClick && onDoubleClick(e, component)}
     >
       {/* Transparent Click Hit-Box covering entire component footprint */}
       <rect
+        data-testid={`sch-comp-hit-${component.id}`}
         x={-halfW - 6}
         y={-halfH - 6}
         width={compW + 12}
         height={compH + 12}
         fill="transparent"
-        pointerEvents="all"
+        pointerEvents={isGhost ? 'none' : 'all'}
       />
 
       {/* Selection Glow / Reticle */}
-      {isSelected && (
+      {isSelected && !isGhost && (
         <rect
           x={-halfW - 8}
           y={-halfH - 8}
@@ -413,8 +415,8 @@ export function SchematicVectorSymbol({
       {/* Real Vector Schematic Symbol Graphic */}
       {renderSymbolGraphic()}
 
-      {/* Reference Designator (U1, R1, C1, LED1, BT1) - Placed cleanly above symbol */}
-      <g transform={`rotate(${-rotation})`}>
+      {/* Reference Designator (U1, R1, C1, LED1, BT1) - Keep upright & unmirrored */}
+      <g transform={`scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1}) rotate(${-rot})`}>
         <text
           data-testid={`sch-designator-${component.id}`}
           x="0"
@@ -448,59 +450,82 @@ export function SchematicVectorSymbol({
       </g>
 
       {/* Interactive Pin Connection Terminals */}
-      {component.pins?.map((pin) => {
-        const isHovered = hoveredPinId === `${component.id}:${pin.id}`;
-        return (
-          <g
-            key={pin.id}
-            data-testid={`sch-pin-${component.id}-${pin.id}`}
-            data-pin-id={pin.id}
-            data-comp-id={component.id}
-            data-local-x={pin.x}
-            data-local-y={pin.y}
-            transform={`translate(${pin.x}, ${pin.y})`}
-            className="cursor-pointer group/pin"
-            onClick={(e) => onPinClick && onPinClick(e, component.id, pin.id, posX + pin.x, posY + pin.y)}
-            onMouseEnter={() => onPinHover && onPinHover(`${component.id}:${pin.id}`)}
-            onMouseLeave={() => onPinHover && onPinHover(null)}
-          >
-            {/* Visual Snap Target Ring */}
-            <circle
-              r={isHovered ? 6 : 4}
-              fill={isHovered ? '#10B981' : theme === 'dark' ? '#0F172A' : '#FFFFFF'}
-              stroke={isHovered ? '#34D399' : pinColor}
-              strokeWidth={isHovered ? 2.5 : 1.6}
-              className="transition-all"
-            />
-            {/* Hover Tooltip Flag */}
-            {isHovered && (
-              <g transform="translate(0, -14)" className="pointer-events-none">
-                <rect
-                  x="-20"
-                  y="-10"
-                  width="40"
-                  height="14"
-                  rx="3"
-                  fill="#0B1528"
-                  stroke="#38BDF8"
-                  strokeWidth="1"
-                />
-                <text
-                  x="0"
-                  y="0"
-                  textAnchor="middle"
-                  fill="#38BDF8"
-                  fontSize="8"
-                  fontWeight="bold"
-                  fontFamily="monospace"
-                >
-                  {pin.name || pin.id}
-                </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
+      {!isGhost &&
+        component.pins?.map((pin) => {
+          const isHovered = hoveredPinId === `${component.id}:${pin.id}`;
+          // Compute rotated & flipped world coordinates
+          let px = pin.x;
+          let py = pin.y;
+          if (flipX) px = -px;
+          if (flipY) py = -py;
+          const rad = (rot * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const wx = Math.round(posX + px * cos - py * sin);
+          const wy = Math.round(posY + px * sin + py * cos);
+
+          return (
+            <g
+              key={pin.id}
+              data-testid={`sch-pin-${component.id}-${pin.id}`}
+              data-pin-id={pin.id}
+              data-comp-id={component.id}
+              data-local-x={pin.x}
+              data-local-y={pin.y}
+              transform={`translate(${pin.x}, ${pin.y})`}
+              className="cursor-pointer group/pin"
+              onMouseDown={(e) => {
+                if (onPinClick) {
+                  e.stopPropagation();
+                  onPinClick(e, component.id, pin.id, wx, wy);
+                }
+              }}
+              onClick={(e) => {
+                if (onPinClick) {
+                  e.stopPropagation();
+                  onPinClick(e, component.id, pin.id, wx, wy);
+                }
+              }}
+              onMouseEnter={() => onPinHover && onPinHover(`${component.id}:${pin.id}`)}
+              onMouseLeave={() => onPinHover && onPinHover(null)}
+            >
+              {/* Visual Snap Target Ring */}
+              <circle
+                r={isHovered ? 6 : 4}
+                fill={isHovered ? '#10B981' : theme === 'dark' ? '#0F172A' : '#FFFFFF'}
+                stroke={isHovered ? '#34D399' : pinColor}
+                strokeWidth={isHovered ? 2.5 : 1.6}
+                className="transition-all"
+              />
+              {/* Hover Tooltip Flag */}
+              {isHovered && (
+                <g transform="translate(0, -14)" className="pointer-events-none">
+                  <rect
+                    x="-20"
+                    y="-10"
+                    width="40"
+                    height="14"
+                    rx="3"
+                    fill="#0B1528"
+                    stroke="#38BDF8"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x="0"
+                    y="0"
+                    textAnchor="middle"
+                    fill="#38BDF8"
+                    fontSize="8"
+                    fontWeight="bold"
+                    fontFamily="monospace"
+                  >
+                    {pin.name || pin.id}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
     </g>
   );
 }

@@ -1,5 +1,34 @@
 import { CircuitComponent, CircuitWire, ComponentPin } from '../types';
-import { getPinWorldCoord } from '../circuit-engine/schematic-erc';
+import { getPinWorldCoord as getErcPinWorldCoord } from '../circuit-engine/schematic-erc';
+
+/**
+ * Calculates rotated, mirrored, and flipped world coordinates for a component's pin terminal.
+ * Supports both simulation (x, y, rotation, mirrored) and editor-decoupled coordinates (editorPosition, editorRotation, editorFlipX, editorFlipY).
+ */
+export function getPinWorldCoord(
+  comp: CircuitComponent,
+  pin: { x: number; y: number },
+  useEditor = false
+): { x: number; y: number } {
+  const posX = useEditor && comp.editorPosition ? comp.editorPosition.x : comp.x;
+  const posY = useEditor && comp.editorPosition ? comp.editorPosition.y : comp.y;
+  const rot = useEditor ? (comp.editorRotation ?? comp.rotation ?? 0) : (comp.rotation ?? 0);
+  const flipX = useEditor ? Boolean(comp.editorFlipX ?? comp.mirrored) : Boolean(comp.mirrored);
+  const flipY = useEditor ? Boolean(comp.editorFlipY) : false;
+
+  let px = pin.x;
+  let py = pin.y;
+  if (flipX) px = -px;
+  if (flipY) py = -py;
+
+  const rad = ((rot || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const rx = Math.round(px * cos - py * sin);
+  const ry = Math.round(px * sin + py * cos);
+
+  return { x: posX + rx, y: posY + ry };
+}
 
 export interface BoundingBox {
   minX: number;
@@ -361,13 +390,23 @@ export function placeOnlyUnplacedEditorComponents(
 /**
  * Determine pin exit outward normal vector.
  */
-function getPinExitVector(pin: ComponentPin, comp: CircuitComponent): { dx: number; dy: number } {
-  // Rotate local pin coordinates by component rotation
-  const rad = ((comp.rotation || 0) * Math.PI) / 180;
+function getPinExitVector(
+  pin: ComponentPin,
+  comp: CircuitComponent,
+  useEditor = false
+): { dx: number; dy: number } {
+  const rot = useEditor ? (comp.editorRotation ?? comp.rotation ?? 0) : (comp.rotation ?? 0);
+  const flipX = useEditor ? Boolean(comp.editorFlipX ?? comp.mirrored) : Boolean(comp.mirrored);
+  const flipY = useEditor ? Boolean(comp.editorFlipY) : false;
+
+  const rad = ((rot || 0) * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
-  const px = comp.mirrored ? -pin.x : pin.x;
-  const py = pin.y;
+  let px = pin.x;
+  let py = pin.y;
+  if (flipX) px = -px;
+  if (flipY) py = -py;
+
   const rx = px * cos - py * sin;
   const ry = px * sin + py * cos;
 
@@ -514,8 +553,8 @@ export function routeOrthogonalWires(
     const fromPos = useEditorPos && fromComp.editorPosition ? fromComp.editorPosition : { x: fromComp.x, y: fromComp.y };
     const toPos = useEditorPos && toComp.editorPosition ? toComp.editorPosition : { x: toComp.x, y: toComp.y };
 
-    const p1 = getPinWorldCoord({ ...fromComp, x: fromPos.x, y: fromPos.y }, fromPin);
-    const p2 = getPinWorldCoord({ ...toComp, x: toPos.x, y: toPos.y }, toPin);
+    const p1 = getPinWorldCoord(fromComp, fromPin, useEditorPos);
+    const p2 = getPinWorldCoord(toComp, toPin, useEditorPos);
 
     const wireNet = getWireNetName(wire);
 
@@ -548,8 +587,8 @@ export function routeOrthogonalWires(
       return;
     }
 
-    const fromExit = getPinExitVector(fromPin, fromComp);
-    const toExit = getPinExitVector(toPin, toComp);
+    const fromExit = getPinExitVector(fromPin, fromComp, useEditorPos);
+    const toExit = getPinExitVector(toPin, toComp, useEditorPos);
 
     const stubLen = gridStep;
     const stub1 = {

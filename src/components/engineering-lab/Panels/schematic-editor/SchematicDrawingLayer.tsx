@@ -10,6 +10,7 @@ import {
   SchematicNetLabel,
   SchematicPowerPort,
 } from '@/modules/engineering-lab/types';
+import { Lock, Unlock, Trash2 } from 'lucide-react';
 
 interface SchematicDrawingLayerProps {
   shapes?: SchematicGraphicShape[];
@@ -24,11 +25,15 @@ interface SchematicDrawingLayerProps {
   onSelectItem?: (id: string | null) => void;
   onDoubleClickItem?: (item: { type: string; id: string; data: unknown }) => void;
   onUpdateImage?: (image: SchematicAttachedImage) => void;
+  onDeleteImage?: (id: string) => void;
+  onItemMouseDown?: (e: React.MouseEvent, type: string, id: string) => void;
+  onImageHandleMouseDown?: (e: React.MouseEvent, imageId: string, handle: string) => void;
 }
 
 /**
  * Pure SVG Rendering Layer for User Engineering Annotations:
  * Shapes (lines/rects/circles), Text Notes, Embedded Images, Net Labels, Power Ports, No-Connects.
+ * Fully interactive with selection, dragging, and image controls.
  */
 export function SchematicDrawingLayer({
   shapes = [],
@@ -43,6 +48,9 @@ export function SchematicDrawingLayer({
   onSelectItem,
   onDoubleClickItem,
   onUpdateImage,
+  onDeleteImage,
+  onItemMouseDown,
+  onImageHandleMouseDown,
 }: SchematicDrawingLayerProps) {
   return (
     <g className="sch-drawing-layer">
@@ -51,7 +59,8 @@ export function SchematicDrawingLayer({
         const isSelected = selectedItemId === s.id;
         const stroke = s.stroke || (theme === 'dark' ? '#38BDF8' : '#0284C7');
         const fill = s.fill || 'none';
-        const strokeDasharray = s.strokeDash === 'dashed' ? '6 4' : s.strokeDash === 'dotted' ? '2 3' : undefined;
+        const strokeDasharray =
+          s.strokeDash === 'dashed' ? '6 4' : s.strokeDash === 'dotted' ? '2 3' : undefined;
 
         if (s.type === 'rect') {
           const x = Math.min(s.x1, s.x2);
@@ -72,6 +81,11 @@ export function SchematicDrawingLayer({
               strokeDasharray={strokeDasharray}
               fill={fill}
               className="cursor-pointer"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onSelectItem?.(s.id);
+                onItemMouseDown?.(e, 'shape', s.id);
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelectItem?.(s.id);
@@ -94,6 +108,11 @@ export function SchematicDrawingLayer({
               strokeDasharray={strokeDasharray}
               fill={fill}
               className="cursor-pointer"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onSelectItem?.(s.id);
+                onItemMouseDown?.(e, 'shape', s.id);
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelectItem?.(s.id);
@@ -115,6 +134,11 @@ export function SchematicDrawingLayer({
               strokeDasharray={strokeDasharray}
               strokeLinecap="round"
               className="cursor-pointer"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onSelectItem?.(s.id);
+                onItemMouseDown?.(e, 'shape', s.id);
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelectItem?.(s.id);
@@ -133,6 +157,11 @@ export function SchematicDrawingLayer({
             data-testid={`sch-image-${img.id}`}
             transform={`translate(${img.x}, ${img.y})`}
             className="cursor-move select-none"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onSelectItem?.(img.id);
+              onItemMouseDown?.(e, 'image', img.id);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectItem?.(img.id);
@@ -147,7 +176,7 @@ export function SchematicDrawingLayer({
               className="rounded"
             />
             {isSelected && (
-              <g className="image-handles pointer-events-none">
+              <g className="image-handles">
                 <rect
                   x="0"
                   y="0"
@@ -157,11 +186,61 @@ export function SchematicDrawingLayer({
                   stroke="#10B981"
                   strokeWidth="2"
                   strokeDasharray="4 2"
+                  pointerEvents="none"
                 />
-                <circle cx="0" cy="0" r="4" fill="#10B981" />
-                <circle cx={img.width} cy="0" r="4" fill="#10B981" />
-                <circle cx="0" cy={img.height} r="4" fill="#10B981" />
-                <circle cx={img.width} cy={img.height} r="4" fill="#10B981" />
+                {/* 4 Interactive Resize Handles */}
+                <circle
+                  cx="0"
+                  cy="0"
+                  r="5"
+                  fill="#10B981"
+                  stroke="#FFFFFF"
+                  strokeWidth="1.5"
+                  className="cursor-nwse-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onImageHandleMouseDown?.(e, img.id, 'nw');
+                  }}
+                />
+                <circle
+                  cx={img.width}
+                  cy="0"
+                  r="5"
+                  fill="#10B981"
+                  stroke="#FFFFFF"
+                  strokeWidth="1.5"
+                  className="cursor-nesw-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onImageHandleMouseDown?.(e, img.id, 'ne');
+                  }}
+                />
+                <circle
+                  cx="0"
+                  cy={img.height}
+                  r="5"
+                  fill="#10B981"
+                  stroke="#FFFFFF"
+                  strokeWidth="1.5"
+                  className="cursor-nesw-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onImageHandleMouseDown?.(e, img.id, 'sw');
+                  }}
+                />
+                <circle
+                  cx={img.width}
+                  cy={img.height}
+                  r="5"
+                  fill="#10B981"
+                  stroke="#FFFFFF"
+                  strokeWidth="1.5"
+                  className="cursor-nwse-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onImageHandleMouseDown?.(e, img.id, 'se');
+                  }}
+                />
               </g>
             )}
           </g>
@@ -180,6 +259,11 @@ export function SchematicDrawingLayer({
             data-testid={`sch-text-${note.id}`}
             transform={`translate(${note.x}, ${note.y})`}
             className="cursor-pointer select-none"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onSelectItem?.(note.id);
+              onItemMouseDown?.(e, 'text', note.id);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectItem?.(note.id);
@@ -225,6 +309,11 @@ export function SchematicDrawingLayer({
             data-testid={`sch-netlabel-${nl.id}`}
             transform={`translate(${nl.x}, ${nl.y})`}
             className="cursor-pointer select-none"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onSelectItem?.(nl.id);
+              onItemMouseDown?.(e, 'netlabel', nl.id);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectItem?.(nl.id);
@@ -265,6 +354,11 @@ export function SchematicDrawingLayer({
             data-testid={`sch-powerport-${pp.id}`}
             transform={`translate(${pp.x}, ${pp.y}) rotate(${pp.rotation || 0})`}
             className="cursor-pointer select-none"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onSelectItem?.(pp.id);
+              onItemMouseDown?.(e, 'powerport', pp.id);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectItem?.(pp.id);
@@ -277,7 +371,15 @@ export function SchematicDrawingLayer({
                 <line x1="-10" y1="10" x2="10" y2="10" stroke="#38BDF8" strokeWidth="2.5" />
                 <line x1="-6" y1="14" x2="6" y2="14" stroke="#38BDF8" strokeWidth="2" />
                 <line x1="-2" y1="18" x2="2" y2="18" stroke="#38BDF8" strokeWidth="1.5" />
-                <text x="0" y="27" textAnchor="middle" fill="#38BDF8" fontSize="8" fontWeight="bold" fontFamily="monospace">
+                <text
+                  x="0"
+                  y="27"
+                  textAnchor="middle"
+                  fill="#38BDF8"
+                  fontSize="8"
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                >
                   GND
                 </text>
               </g>
@@ -286,7 +388,15 @@ export function SchematicDrawingLayer({
               <g>
                 <line x1="0" y1="0" x2="0" y2="-10" stroke="#EF4444" strokeWidth="2" />
                 <polygon points="0,-16 -6,-10 6,-10" fill="#EF4444" stroke="#EF4444" />
-                <text x="0" y="-19" textAnchor="middle" fill="#EF4444" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                <text
+                  x="0"
+                  y="-19"
+                  textAnchor="middle"
+                  fill="#EF4444"
+                  fontSize="9"
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                >
                   {pp.portType}
                 </text>
               </g>
@@ -302,6 +412,11 @@ export function SchematicDrawingLayer({
           data-testid={`sch-noconnect-${nc.id}`}
           transform={`translate(${nc.x}, ${nc.y})`}
           className="cursor-pointer select-none"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onSelectItem?.(nc.id);
+            onItemMouseDown?.(e, 'noconnect', nc.id);
+          }}
           onClick={(e) => {
             e.stopPropagation();
             onSelectItem?.(nc.id);
@@ -324,6 +439,11 @@ export function SchematicDrawingLayer({
           stroke="#0284C7"
           strokeWidth="1.2"
           className="cursor-pointer"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onSelectItem?.(mj.id);
+            onItemMouseDown?.(e, 'junction', mj.id);
+          }}
           onClick={(e) => {
             e.stopPropagation();
             onSelectItem?.(mj.id);

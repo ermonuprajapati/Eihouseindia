@@ -51,7 +51,9 @@ interface SchematicTopBarProps {
   onExportPng: () => void;
   onPrintPdf: () => void;
   selectedCompId?: string | null;
+  selectedWireId?: string | null;
   selectedItemId?: string | null;
+  selectedCompIds?: string[];
 }
 
 /**
@@ -84,11 +86,14 @@ export function SchematicTopBar({
   onExportPng,
   onPrintPdf,
   selectedCompId,
+  selectedWireId,
   selectedItemId,
+  selectedCompIds = [],
 }: SchematicTopBarProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showAlignMenu, setShowAlignMenu] = useState(false);
-  const hasSelection = Boolean(selectedCompId || selectedItemId);
+  const hasCompSelection = Boolean(selectedCompId || selectedCompIds.length > 0);
+  const hasDeleteSelection = Boolean(selectedCompId || selectedWireId || selectedItemId || selectedCompIds.length > 0);
 
   return (
     <div
@@ -127,9 +132,9 @@ export function SchematicTopBar({
         <button
           data-testid="action-rotate"
           onClick={onRotate}
-          disabled={!hasSelection}
+          disabled={!hasCompSelection}
           className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
-            hasSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
+            hasCompSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
           }`}
           title="Rotate 90° (R)"
         >
@@ -139,9 +144,9 @@ export function SchematicTopBar({
         <button
           data-testid="action-mirror-h"
           onClick={onMirrorH}
-          disabled={!hasSelection}
+          disabled={!hasCompSelection}
           className={`p-1.5 rounded transition-colors ${
-            hasSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
+            hasCompSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
           }`}
           title="Mirror Horizontal (X)"
         >
@@ -151,9 +156,9 @@ export function SchematicTopBar({
         <button
           data-testid="action-mirror-v"
           onClick={onMirrorV}
-          disabled={!hasSelection}
+          disabled={!hasCompSelection}
           className={`p-1.5 rounded transition-colors ${
-            hasSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
+            hasCompSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
           }`}
           title="Mirror Vertical (Y)"
         >
@@ -163,9 +168,9 @@ export function SchematicTopBar({
         <button
           data-testid="action-duplicate"
           onClick={onDuplicate}
-          disabled={!hasSelection}
+          disabled={!hasCompSelection}
           className={`p-1.5 rounded transition-colors ${
-            hasSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
+            hasCompSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
           }`}
           title="Duplicate (Ctrl+D)"
         >
@@ -175,9 +180,9 @@ export function SchematicTopBar({
         <button
           data-testid="action-delete"
           onClick={onDelete}
-          disabled={!hasSelection}
+          disabled={!hasDeleteSelection}
           className={`p-1.5 rounded transition-colors ${
-            hasSelection ? 'text-rose-400 hover:bg-rose-950/60' : 'text-slate-600 cursor-not-allowed'
+            hasDeleteSelection ? 'text-rose-400 hover:bg-rose-950/60' : 'text-slate-600 cursor-not-allowed'
           }`}
           title="Delete Selection (Del / Backspace)"
         >

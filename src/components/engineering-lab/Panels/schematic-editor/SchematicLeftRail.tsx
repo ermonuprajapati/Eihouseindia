@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MousePointer,
   Hand,
@@ -40,16 +40,10 @@ interface SchematicLeftRailProps {
 
 /**
  * Slim Left Vertical EDA Tool Rail (40px wide, scrollable if short, crisp icons + tooltips with shortcuts).
- * 1. Select / Box-Select (V)
- * 2. Pan (H)
- * 3. Wire (W)
- * 4. Junction (J)
- * 5. Net Label (N)
- * 6. Power / GND Port (P)
- * 7. No-Connect Flag (Q)
- * 8. Draw Graphics (G) [Rect, Line, Circle]
- * 9. Text Note (T)
- * 10. Attach Image (Img)
+ * Clean popover toggle logic:
+ * Opening Power (P) closes Draw (G) and vice versa.
+ * Selecting any other tool closes both flyouts.
+ * Clicking outside closes open popovers.
  */
 export function SchematicLeftRail({
   activeTool,
@@ -60,18 +54,38 @@ export function SchematicLeftRail({
 }: SchematicLeftRailProps) {
   const [showPowerMenu, setShowPowerMenu] = useState(false);
   const [showDrawMenu, setShowDrawMenu] = useState(false);
+  const railRef = useRef<HTMLDivElement>(null);
 
   const isDrawing = ['draw_rect', 'draw_line', 'draw_circle'].includes(activeTool);
 
+  // Close popovers when clicking outside the left rail
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (railRef.current && !railRef.current.contains(e.target as Node)) {
+        setShowPowerMenu(false);
+        setShowDrawMenu(false);
+      }
+    };
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => window.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const handleToolSelect = (tool: SchematicTool) => {
+    if (tool !== 'power') setShowPowerMenu(false);
+    if (!['draw_rect', 'draw_line', 'draw_circle'].includes(tool)) setShowDrawMenu(false);
+    onSelectTool(tool);
+  };
+
   return (
     <div
+      ref={railRef}
       data-testid="sch-left-rail"
       className="w-10 bg-slate-950 border-r border-slate-800 flex flex-col items-center py-2 z-50 shrink-0 gap-1 overflow-visible select-none"
     >
       {/* 1. Select / Box-Select (V) */}
       <button
         data-testid="tool-select"
-        onClick={() => onSelectTool('select')}
+        onClick={() => handleToolSelect('select')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'select'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -85,7 +99,7 @@ export function SchematicLeftRail({
       {/* 2. Pan (H) */}
       <button
         data-testid="tool-pan"
-        onClick={() => onSelectTool('pan')}
+        onClick={() => handleToolSelect('pan')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'pan'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -99,7 +113,7 @@ export function SchematicLeftRail({
       {/* 3. Wire (W) */}
       <button
         data-testid="tool-wire"
-        onClick={() => onSelectTool('wire')}
+        onClick={() => handleToolSelect('wire')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'wire'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -115,7 +129,7 @@ export function SchematicLeftRail({
       {/* 4. Junction (J) */}
       <button
         data-testid="tool-junction"
-        onClick={() => onSelectTool('junction')}
+        onClick={() => handleToolSelect('junction')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'junction'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -129,7 +143,7 @@ export function SchematicLeftRail({
       {/* 5. Net Label (N) */}
       <button
         data-testid="tool-netlabel"
-        onClick={() => onSelectTool('netlabel')}
+        onClick={() => handleToolSelect('netlabel')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'netlabel'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -145,8 +159,9 @@ export function SchematicLeftRail({
         <button
           data-testid="tool-power"
           onClick={() => {
-            onSelectTool('power');
+            setShowDrawMenu(false);
             setShowPowerMenu((prev) => !prev);
+            onSelectTool('power');
           }}
           className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
             activeTool === 'power'
@@ -183,7 +198,7 @@ export function SchematicLeftRail({
       {/* 7. No-Connect Flag (Q) */}
       <button
         data-testid="tool-noconnect"
-        onClick={() => onSelectTool('noconnect')}
+        onClick={() => handleToolSelect('noconnect')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'noconnect'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -201,6 +216,7 @@ export function SchematicLeftRail({
         <button
           data-testid="tool-draw"
           onClick={() => {
+            setShowPowerMenu(false);
             if (!isDrawing) onSelectTool('draw_rect');
             setShowDrawMenu((prev) => !prev);
           }}
@@ -256,7 +272,7 @@ export function SchematicLeftRail({
       {/* 9. Text Note (T) */}
       <button
         data-testid="tool-text"
-        onClick={() => onSelectTool('text')}
+        onClick={() => handleToolSelect('text')}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
           activeTool === 'text'
             ? 'bg-emerald-600 text-white shadow-md'
@@ -271,7 +287,7 @@ export function SchematicLeftRail({
       <button
         data-testid="tool-image"
         onClick={() => {
-          onSelectTool('image');
+          handleToolSelect('image');
           onAttachImageClick?.();
         }}
         className={`w-7 h-7 rounded flex items-center justify-center transition-all ${

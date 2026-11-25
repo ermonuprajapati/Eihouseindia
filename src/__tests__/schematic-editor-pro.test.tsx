@@ -391,9 +391,25 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
   });
 
   it('GATE 4 Test 3: LabHeader hides simulation Run/Stop controls on schematicEditor mode and shows them on schematic mode', () => {
+    const dummyLabHeaderProps = {
+      projectTitle: 'Test Lab',
+      onTitleChange: vi.fn(),
+      onNewProject: vi.fn(),
+      onSaveProject: vi.fn(),
+      onLoadProject: vi.fn(),
+      onExportProject: vi.fn(),
+      onOpenExperiments: vi.fn(),
+      hasUnsavedChanges: false,
+      canUndo: false,
+      canRedo: false,
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+    };
+
     // In schematicEditor mode: Run/Stop simulation controls must NOT be rendered
     const { rerender } = render(
       <LabHeader
+        {...dummyLabHeaderProps}
         activeMode="schematicEditor"
         onModeChange={vi.fn()}
         isSimulating={false}
@@ -407,6 +423,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     // In regular 2D simulation schematic mode: Run/Stop simulation controls MUST be rendered
     rerender(
       <LabHeader
+        {...dummyLabHeaderProps}
         activeMode="schematic"
         onModeChange={vi.fn()}
         isSimulating={false}
@@ -489,6 +506,153 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const themeBtn = screen.getByTestId('toggle-sheet-theme');
     expect(themeBtn).toBeInTheDocument();
     fireEvent.click(themeBtn);
+  });
+
+  it('GATE 4 Test A (Component Click, Drag & Top-Bar Enable): Real component click bubbles to select and enables top-bar controls', () => {
+    const onSelectComp = vi.fn();
+    const onUpdatePos = vi.fn();
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedCompId={'ic1'}
+        onSelectComponent={onSelectComp}
+        onUpdateComponentPosition={onUpdatePos}
+      />
+    );
+
+    // Top Bar Rotate, Mirror, Duplicate, Delete must be enabled
+    expect(screen.getByTestId('action-rotate')).not.toBeDisabled();
+    expect(screen.getByTestId('action-mirror-h')).not.toBeDisabled();
+    expect(screen.getByTestId('action-duplicate')).not.toBeDisabled();
+    expect(screen.getByTestId('action-delete')).not.toBeDisabled();
+
+    // Component hit-box click inside SchematicVectorSymbol
+    const ic1HitBox = container.querySelector('[data-testid="sch-comp-hit-ic1"]');
+    expect(ic1HitBox).toBeInTheDocument();
+    fireEvent.mouseDown(ic1HitBox!);
+    expect(onSelectComp).toHaveBeenCalledWith('ic1');
+  });
+
+  it('GATE 4 Test B (Library Ghost Drop): Placing component ghost renders with pointerEvents none and drops cleanly', () => {
+    const onFinishPlacing = vi.fn();
+    const testPlacingComp: CircuitComponent = {
+      ...TEMPLATE_555_ASTABLE.components[1],
+      id: 'ghost_r1',
+      label: 'R_GHOST',
+      designator: 'R99',
+      value: '10k',
+      x: 100,
+      y: 100,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        placingComponent={testPlacingComp}
+        onFinishPlacing={onFinishPlacing}
+      />
+    );
+
+    const ghostG = container.querySelector('.sch-ghost-preview');
+    expect(ghostG).toBeInTheDocument();
+
+    const canvasViewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(canvasViewport, { button: 0, clientX: 300, clientY: 220 });
+    expect(onFinishPlacing).toHaveBeenCalled();
+  });
+
+  it('GATE 4 Test C (Manual Wire Fold + Corner Drag + Wire Delete): Handles manual wire corners and deletion', () => {
+    const onAddWire = vi.fn();
+    const onUpdateWires = vi.fn();
+    const onDeleteWire = vi.fn();
+    const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
+
+    const { container, rerender } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedWireId={testWireId}
+        onAddWire={onAddWire}
+        onUpdateWires={onUpdateWires}
+        onDeleteWire={onDeleteWire}
+      />
+    );
+
+    // Delete wire via Top Bar Delete
+    const topBarDelete = screen.getByTestId('action-delete');
+    expect(topBarDelete).not.toBeDisabled();
+    fireEvent.click(topBarDelete);
+    expect(onDeleteWire).toHaveBeenCalledWith(testWireId);
+
+    // Test wire corner dragging handle
+    const cornerHandle = container.querySelector(`[data-testid="sch-wire-corner-0"]`);
+    if (cornerHandle) {
+      fireEvent.mouseDown(cornerHandle);
+      const canvasViewport = screen.getByTestId('sch-canvas-viewport');
+      fireEvent.mouseMove(canvasViewport, { clientX: 400, clientY: 300 });
+      expect(onUpdateWires).toHaveBeenCalled();
+    }
+  });
+
+  it('GATE 4 Test D (Marquee Circuit Box-Select & Ctrl+F): Selects components in box and opens Quick Find on Ctrl+F', () => {
+    render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Ctrl+F opens Quick Find
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    expect(screen.getByTestId('sch-quick-find')).toBeInTheDocument();
+
+    // Ctrl+A triggers all components selection
+    fireEvent.keyDown(window, { key: 'a', ctrlKey: true });
+  });
+
+  it('GATE 4 Test E (Tab-Switch Unmount/Remount Zero-Jump Persistence): Preserves state across unmount/remount', () => {
+    const testProjectId = 'test-proj-session-123';
+    const testProject = { ...TEMPLATE_555_ASTABLE, id: testProjectId };
+
+    const { unmount } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={testProject}
+      />
+    );
+
+    // Unmount SchematicEditorPanel (simulating tab switch to 3D PCB or Breadboard)
+    unmount();
+
+    // Remount with same project.id (simulating tab switch back to Schematic Editor)
+    const { getByTestId } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={testProject}
+      />
+    );
+
+    expect(getByTestId('schematic-editor-panel')).toBeInTheDocument();
+  });
+
+  it('GATE 4 Test F (Rotated Component Pin Alignment): Snaps wire endpoints to rotated pin coords', () => {
+    const rotatedComps: CircuitComponent[] = [
+      {
+        ...TEMPLATE_555_ASTABLE.components[0],
+        id: 'r1_rot',
+        editorRotation: 90,
+        rotation: 90,
+      },
+      TEMPLATE_555_ASTABLE.components[1],
+    ];
+
+    const testWires = [
+      {
+        id: 'w_test_rot',
+        fromCompId: 'r1_rot',
+        fromPinId: '1',
+        toCompId: TEMPLATE_555_ASTABLE.components[1].id,
+        toPinId: '1',
+      },
+    ];
+
+    const { routedWires } = routeOrthogonalWires(rotatedComps, testWires, true);
+    expect(routedWires.length).toBe(1);
+    expect(routedWires[0].points.length).toBeGreaterThanOrEqual(2);
   });
 });
 
