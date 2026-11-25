@@ -289,6 +289,7 @@ export function SchematicEditorPanel({
         wireId: w.id,
         points: pts,
         netName: w.netName || 'NET',
+        tappedWireId: w.tappedWireId,
         junctionPoint: w.junctionPoint,
       };
     });
@@ -503,7 +504,7 @@ export function SchematicEditorPanel({
                 toPinId: resolved.toPinId,
                 tappedWireId: resolved.tappedWireId,
                 junctionPoint: resolved.junctionPoint,
-                points: resolved.points || (interiorWaypoints.length > 0 ? interiorWaypoints : undefined),
+                points: resolved.tappedWireId || resolved.fromCompId !== activeWireStart.compId ? resolved.points : (resolved.points || (interiorWaypoints.length > 0 ? interiorWaypoints : undefined)),
               });
               clearWireSelection();
             }

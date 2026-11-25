@@ -2719,7 +2719,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
       toPinId: '1',
     };
 
-    const { container } = render(
+    const { container, rerender } = render(
       <SchematicEditorPanel
         {...defaultProps}
         components={[compA, compB, compC]}
@@ -2747,10 +2747,56 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     // Taps wire_B_A trunk at projected coordinate (200, 100)
     expect(addedWire.tappedWireId).toBe('wire_B_A');
     expect(addedWire.junctionPoint).toEqual({ x: 200, y: 100 });
+    // HARD ASSERT: No stale pre-tap corner [(300, 220)] leaked into wire.points!
+    expect(addedWire.points).toBeUndefined();
 
     // Wire action pill must be null immediately
     const pill = container.querySelector('[data-testid="sch-wire-action-pill"]');
     expect(pill).toBeNull();
+
+    // Re-render with the newly added wire
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compA, compB, compC]}
+        wires={[wireBA, addedWire]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Assert rendered SVG polyline goes cleanly from (200, 220) to (200, 100) without detouring to x = 300
+    const wirePolyline = container.querySelector(`[data-testid="sch-wire-${addedWire.id}"]`);
+    expect(wirePolyline).toBeInTheDocument();
+    expect(wirePolyline?.getAttribute('points')).toBe('200,220 200,100');
+    expect(wirePolyline?.getAttribute('points')?.includes('300')).toBe(false);
+
+    // Initial junction dot at (200, 100)
+    expect(container.querySelector('[data-testid="sch-junction-200-100"]')).toBeInTheDocument();
+
+    // Move parent components compA and compB by (0, +60)
+    const compAMoved: CircuitComponent = { ...compA, y: 160 };
+    const compBMoved: CircuitComponent = { ...compB, y: 160 };
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compAMoved, compBMoved, compC]}
+        wires={[wireBA, addedWire]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Live junction dot updates dynamically to (200, 160)
+    const movedDot = container.querySelector('[data-testid="sch-junction-200-160"]');
+    expect(movedDot).toBeInTheDocument();
+
+    // 0 junction dots left at (200, 100)
+    const staleDot = container.querySelector('[data-testid="sch-junction-200-100"]');
+    expect(staleDot).toBeNull();
+    const allJunctions = Array.from(container.querySelectorAll('circle[data-testid^="sch-junction-"]'));
+    const staleJunctions = allJunctions.filter(
+      (c) => c.getAttribute('cx') === '200' && c.getAttribute('cy') === '100'
+    );
+    expect(staleJunctions.length).toBe(0);
   });
 
   it('AUDIT BUG FIX Test 2: No Orphan Ghost Junction Dot After Parent Component Move', () => {
