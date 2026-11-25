@@ -57,7 +57,7 @@ export function SchematicDrawingLayer({
       {/* 1. Graphic Shapes (Lines, Rectangles, Circles) */}
       {shapes.map((s) => {
         const isSelected = selectedItemId === s.id;
-        const stroke = s.stroke || (theme === 'dark' ? '#38BDF8' : '#0284C7');
+        const stroke = s.stroke || (theme === 'dark' ? '#38BDF8' : '#0F6B54');
         const fill = s.fill || 'none';
         const strokeDasharray =
           s.strokeDash === 'dashed' ? '6 4' : s.strokeDash === 'dotted' ? '2 3' : undefined;
@@ -250,7 +250,7 @@ export function SchematicDrawingLayer({
       {/* 3. Text Notes & Engineering Labels */}
       {textNotes.map((note) => {
         const isSelected = selectedItemId === note.id;
-        const color = note.color || (theme === 'dark' ? '#F8FAFC' : '#0F172A');
+        const color = note.color || (theme === 'dark' ? '#F8FAFC' : '#1E242B');
         const fontSize = note.fontSize || 12;
 
         return (
@@ -326,14 +326,14 @@ export function SchematicDrawingLayer({
             {/* KiCad/Altium style net flag polygon */}
             <polygon
               points={`0,0 8,-8 ${labelW},-8 ${labelW},8 8,8`}
-              fill={theme === 'dark' ? '#0F172A' : '#F1F5F9'}
-              stroke={isSelected ? '#10B981' : '#38BDF8'}
+              fill={theme === 'dark' ? '#0F172A' : '#E3DFD2'}
+              stroke={isSelected ? '#10B981' : theme === 'dark' ? '#38BDF8' : '#0F6B54'}
               strokeWidth="1.6"
             />
             <text
               x={12}
               y="3"
-              fill={theme === 'dark' ? '#38BDF8' : '#0369A1'}
+              fill={theme === 'dark' ? '#38BDF8' : '#1E242B'}
               fontSize="9"
               fontWeight="bold"
               fontFamily="monospace"
@@ -348,6 +348,7 @@ export function SchematicDrawingLayer({
       {powerPorts.map((pp) => {
         const isSelected = selectedItemId === pp.id;
         const isGnd = pp.portType === 'GND';
+        const portColor = theme === 'dark' ? (isGnd ? '#38BDF8' : '#EF4444') : '#7C1D1D';
         return (
           <g
             key={pp.id}
@@ -367,15 +368,15 @@ export function SchematicDrawingLayer({
             {isGnd ? (
               // KiCad style GND port symbol
               <g>
-                <line x1="0" y1="0" x2="0" y2="10" stroke="#38BDF8" strokeWidth="2" />
-                <line x1="-10" y1="10" x2="10" y2="10" stroke="#38BDF8" strokeWidth="2.5" />
-                <line x1="-6" y1="14" x2="6" y2="14" stroke="#38BDF8" strokeWidth="2" />
-                <line x1="-2" y1="18" x2="2" y2="18" stroke="#38BDF8" strokeWidth="1.5" />
+                <line x1="0" y1="0" x2="0" y2="10" stroke={portColor} strokeWidth="2" />
+                <line x1="-10" y1="10" x2="10" y2="10" stroke={portColor} strokeWidth="2.5" />
+                <line x1="-6" y1="14" x2="6" y2="14" stroke={portColor} strokeWidth="2" />
+                <line x1="-2" y1="18" x2="2" y2="18" stroke={portColor} strokeWidth="1.5" />
                 <text
                   x="0"
                   y="27"
                   textAnchor="middle"
-                  fill="#38BDF8"
+                  fill={portColor}
                   fontSize="8"
                   fontWeight="bold"
                   fontFamily="monospace"
@@ -386,13 +387,13 @@ export function SchematicDrawingLayer({
             ) : (
               // KiCad style VCC / Power arrow symbol
               <g>
-                <line x1="0" y1="0" x2="0" y2="-10" stroke="#EF4444" strokeWidth="2" />
-                <polygon points="0,-16 -6,-10 6,-10" fill="#EF4444" stroke="#EF4444" />
+                <line x1="0" y1="0" x2="0" y2="-10" stroke={portColor} strokeWidth="2" />
+                <polygon points="0,-16 -6,-10 6,-10" fill={portColor} stroke={portColor} />
                 <text
                   x="0"
                   y="-19"
                   textAnchor="middle"
-                  fill="#EF4444"
+                  fill={portColor}
                   fontSize="9"
                   fontWeight="bold"
                   fontFamily="monospace"
@@ -422,8 +423,8 @@ export function SchematicDrawingLayer({
             onSelectItem?.(nc.id);
           }}
         >
-          <line x1="-5" y1="-5" x2="5" y2="5" stroke="#06B6D4" strokeWidth="2.2" strokeLinecap="round" />
-          <line x1="-5" y1="5" x2="5" y2="-5" stroke="#06B6D4" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="-5" y1="-5" x2="5" y2="5" stroke={theme === 'dark' ? '#06B6D4' : '#B91C1C'} strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="-5" y1="5" x2="5" y2="-5" stroke={theme === 'dark' ? '#06B6D4' : '#B91C1C'} strokeWidth="2.2" strokeLinecap="round" />
         </g>
       ))}
 
@@ -435,8 +436,8 @@ export function SchematicDrawingLayer({
           cx={mj.x}
           cy={mj.y}
           r="4"
-          fill="#38BDF8"
-          stroke="#0284C7"
+          fill={theme === 'dark' ? '#38BDF8' : '#047857'}
+          stroke={theme === 'dark' ? '#0284C7' : '#ECE8DC'}
           strokeWidth="1.2"
           className="cursor-pointer"
           onMouseDown={(e) => {

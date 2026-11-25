@@ -445,6 +445,9 @@ export function SchematicEditorPanel({
             }
             finalPoints.push({ x: wx, y: wy });
 
+            // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
+            const interiorWaypoints = finalPoints.slice(1, -1);
+
             const newWireId = `wire_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
             onAddWire({
               id: newWireId,
@@ -452,7 +455,7 @@ export function SchematicEditorPanel({
               fromPinId: activeWireStart.pinId,
               toCompId: compId,
               toPinId: pinId,
-              points: finalPoints,
+              points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
             });
             setInternalSelectedWireId(newWireId);
             setWirePillPos({ x: wx, y: wy });
@@ -888,23 +891,26 @@ export function SchematicEditorPanel({
     } else if (draggingWireCorner) {
       const targetWire = wires.find((w) => w.id === draggingWireCorner.wireId);
       if (targetWire) {
-        const currentPoints = targetWire.points || [
+        const rw = routedWires.find((r) => r.wireId === targetWire.id);
+        const fullPoints = rw ? [...rw.points] : [
           { x: 0, y: 0 },
           { x: 100, y: 100 },
         ];
-        const updatedPoints =
-          currentPoints.length > draggingWireCorner.pointIndex
-            ? currentPoints.map((pt, idx) =>
+        const updatedFull =
+          fullPoints.length > draggingWireCorner.pointIndex
+            ? fullPoints.map((pt, idx) =>
                 idx === draggingWireCorner.pointIndex ? { x: wCoord.x, y: wCoord.y } : pt
               )
-            : [...currentPoints, { x: wCoord.x, y: wCoord.y }];
+            : [...fullPoints, { x: wCoord.x, y: wCoord.y }];
 
+        // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
+        const interiorWaypoints = updatedFull.slice(1, -1);
         onUpdateWires(
           wires.map((w) =>
             w.id === targetWire.id
               ? {
                   ...w,
-                  points: updatedPoints,
+                  points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
                 }
               : w
           )
@@ -1407,9 +1413,8 @@ export function SchematicEditorPanel({
                           handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                         onClick={(e) => {
+                          // Bug 1 Fix: ONLY stopPropagation. Never double-invoke handleWireClick!
                           e.stopPropagation();
-                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
-                          handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                       />
                       {/* Visible Copper Track Line */}
@@ -1428,9 +1433,8 @@ export function SchematicEditorPanel({
                           handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                         onClick={(e) => {
+                          // Bug 1 Fix: ONLY stopPropagation. Never double-invoke handleWireClick!
                           e.stopPropagation();
-                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
-                          handleWireClick(e, rw.wireId, mid.x, mid.y);
                         }}
                       />
                       {/* Draggable Corner Handles when selected */}
@@ -1479,16 +1483,18 @@ export function SchematicEditorPanel({
                                 e.stopPropagation();
                                 const targetWire = wires.find((w) => w.id === rw.wireId);
                                 if (targetWire) {
-                                  const currentPoints = targetWire.points || rw.points;
-                                  const newPoints = [
-                                    ...currentPoints.slice(0, pIdx + 1),
+                                  const fullPoints = [...rw.points];
+                                  const newFullPoints = [
+                                    ...fullPoints.slice(0, pIdx + 1),
                                     { x: midX, y: midY },
-                                    ...currentPoints.slice(pIdx + 1),
+                                    ...fullPoints.slice(pIdx + 1),
                                   ];
+                                  // Bug 2 Contract: store ONLY interior waypoints (strip start pin & end pin)
+                                  const interiorWaypoints = newFullPoints.slice(1, -1);
                                   onUpdateWires(
                                     wires.map((w) =>
                                       w.id === targetWire.id
-                                        ? { ...w, points: newPoints }
+                                        ? { ...w, points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined }
                                         : w
                                     )
                                   );
@@ -1522,6 +1528,7 @@ export function SchematicEditorPanel({
                 {/* Live Rubberband Wire Preview (When actively routing wire) */}
                 {activeWireStart && (
                   <polyline
+                    data-testid="sch-rubberband-wire"
                     points={rubberbandPoints}
                     fill="none"
                     stroke="#F59E0B"

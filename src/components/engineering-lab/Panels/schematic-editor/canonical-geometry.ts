@@ -1,5 +1,10 @@
-import { CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
-import { calculateJunctionDots, Point } from '@/modules/engineering-lab/circuit-engine/wire-router';
+import { CircuitComponent, CircuitWire, WireRoutingStyle } from '@/modules/engineering-lab/types';
+import {
+  calculateJunctionDots,
+  Point,
+  getFullWireVertices,
+  ElbowOrientation,
+} from '@/modules/engineering-lab/circuit-engine/wire-router';
 
 /**
  * Canonical Pin World Position calculation
@@ -34,9 +39,9 @@ export function getCanonicalPinWorldPos(
 }
 
 /**
- * Returns canonical wire polyline points [p1, ...waypoints, p2].
- * If wire has manual waypoints (wire.points), uses them.
- * Otherwise uses exact default orthogonal Manhattan routing from SchematicCanvas.tsx.
+ * Returns canonical wire polyline points [p1, ...interiorWaypoints, p2].
+ * Respects wire.points (interior waypoints only) and wire.style ('straight' | 'diagonal45' | 'orthogonal').
+ * Uses exact getFullWireVertices from wire-router.ts for 100% parity with SchematicCanvas.tsx.
  */
 export function getCanonicalWirePoints(
   wire: CircuitWire,
@@ -54,19 +59,25 @@ export function getCanonicalWirePoints(
   const p1 = getCanonicalPinWorldPos(fromComp, fromPin);
   const p2 = getCanonicalPinWorldPos(toComp, toPin);
 
+  // Interior-only contract: strip any accidental baked-in pin endpoints
+  let interiorWaypoints: Point[] | undefined = undefined;
   if (wire.points && wire.points.length > 0) {
-    return [p1, ...wire.points, p2];
+    let pts = [...wire.points];
+    if (pts.length >= 2 && Math.abs(pts[0].x - p1.x) <= 1 && Math.abs(pts[0].y - p1.y) <= 1) {
+      pts = pts.slice(1);
+    }
+    if (pts.length >= 1 && Math.abs(pts[pts.length - 1].x - p2.x) <= 1 && Math.abs(pts[pts.length - 1].y - p2.y) <= 1) {
+      pts = pts.slice(0, -1);
+    }
+    if (pts.length > 0) {
+      interiorWaypoints = pts as Point[];
+    }
   }
 
-  // Exact default Manhattan routing from SchematicCanvas.tsx
-  const elbow = (wire as unknown as { elbow?: string }).elbow;
-  if (elbow === 'vertical-first') {
-    const midY = (p1.y + p2.y) / 2;
-    return [p1, { x: p1.x, y: midY }, { x: p2.x, y: midY }, p2];
-  }
+  const style: WireRoutingStyle = (wire.style as WireRoutingStyle) || 'orthogonal';
+  const elbow: ElbowOrientation = (wire as unknown as { elbow?: ElbowOrientation }).elbow || 'horizontal-first';
 
-  const midX = (p1.x + p2.x) / 2;
-  return [p1, { x: midX, y: p1.y }, { x: midX, y: p2.y }, p2];
+  return getFullWireVertices(p1, p2, interiorWaypoints, style, elbow);
 }
 
 /**

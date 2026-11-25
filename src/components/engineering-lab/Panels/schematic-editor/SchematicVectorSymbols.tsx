@@ -71,21 +71,36 @@ export function SchematicVectorSymbol({
       type.includes('LOGIC') ||
       (component.pins && component.pins.length >= 4));
 
-  const compW = component.width
+  // Derive pin boundary coordinates to prevent IC boxes burying pins & ensure 0.0px lead-to-pin stubs
+  const pinXs = component.pins && component.pins.length > 0 ? component.pins.map((p) => p.x) : [0];
+  const pinYs = component.pins && component.pins.length > 0 ? component.pins.map((p) => p.y) : [0];
+  const pinMinX = Math.min(...pinXs);
+  const pinMaxX = Math.max(...pinXs);
+  const pinMinY = Math.min(...pinYs);
+  const pinMaxY = Math.max(...pinYs);
+  const pinSpanX = pinMaxX - pinMinX;
+  const pinSpanY = pinMaxY - pinMinY;
+  const hasPins = Boolean(component.pins && component.pins.length >= 2);
+
+  const baseW = component.width
     ? Math.max(isMcu ? 140 : isIC ? 126 : 60, component.width)
     : isMcu ? 140 : isIC ? 126 : 60;
-  const compH = component.height
+  const baseH = component.height
     ? Math.max(isMcu ? 180 : isIC ? 90 : 40, component.height)
     : isMcu ? 180 : isIC ? 90 : 40;
+
+  const compW = hasPins ? Math.max(baseW, pinSpanX + 24) : baseW;
+  const compH = hasPins ? Math.max(baseH, pinSpanY + 24) : baseH;
   const halfW = compW / 2;
   const halfH = compH / 2;
 
   // Render symbol-specific vector graphics inside pure SVG
   const renderSymbolGraphic = () => {
     if (isGround) {
+      const p = component.pins?.[0] || { x: 0, y: -15 };
       return (
         <g className="sch-symbol-ground">
-          <line x1="0" y1="-15" x2="0" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+          <line x1={p.x} y1={p.y} x2={0} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           <line x1="-16" y1="0" x2="16" y2="0" stroke={strokeColor} strokeWidth={2.4} strokeLinecap="round" />
           <line x1="-10" y1="5" x2="10" y2="5" stroke={strokeColor} strokeWidth={2.0} strokeLinecap="round" />
           <line x1="-4" y1="10" x2="4" y2="10" stroke={strokeColor} strokeWidth={1.8} strokeLinecap="round" />
@@ -94,32 +109,47 @@ export function SchematicVectorSymbol({
     }
 
     switch (type) {
-      case 'RESISTOR':
+      case 'RESISTOR': {
+        const p1 = component.pins?.[0] || { x: -30, y: 0 };
+        const p2 = component.pins?.[1] || { x: 30, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-resistor">
+            {/* Left lead to -18 */}
+            <line x1={leftX} y1={0} x2={-18} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Standard IEEE Resistor Zigzag */}
             <path
-              d="M -30,0 L -18,0 L -14,-7 L -8,7 L -2,-7 L 4,7 L 10,-7 L 14,7 L 18,0 L 30,0"
+              d="M -18,0 L -14,-7 L -8,7 L -2,-7 L 4,7 L 10,-7 L 14,7 L 18,0"
               stroke={strokeColor}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
             />
+            {/* Right lead from 18 to rightX */}
+            <line x1={18} y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           </g>
         );
+      }
 
-      case 'POTENTIOMETER':
+      case 'POTENTIOMETER': {
+        const p1 = component.pins?.[0] || { x: -30, y: 0 };
+        const p2 = component.pins?.[1] || { x: 30, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-potentiometer">
+            <line x1={leftX} y1={0} x2={-18} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <path
-              d="M -30,0 L -18,0 L -14,-7 L -8,7 L -2,-7 L 4,7 L 10,-7 L 14,7 L 18,0 L 30,0"
+              d="M -18,0 L -14,-7 L -8,7 L -2,-7 L 4,7 L 10,-7 L 14,7 L 18,0"
               stroke={strokeColor}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
               fill="none"
             />
+            <line x1={18} y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Wiper Arrow */}
             <path
               d="M 0,20 L 0,8 M -4,12 L 0,8 L 4,12"
@@ -131,15 +161,20 @@ export function SchematicVectorSymbol({
             />
           </g>
         );
+      }
 
       case 'CAPACITOR':
       case 'CAPACITOR_ELECTROLYTIC': {
         const isElectrolytic = type === 'CAPACITOR_ELECTROLYTIC' || Boolean(component.parameters?.polarized);
+        const p1 = component.pins?.[0] || { x: -25, y: 0 };
+        const p2 = component.pins?.[1] || { x: 25, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-capacitor">
             {/* Leads */}
-            <line x1="-25" y1="0" x2="-6" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
-            <line x1="6" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={leftX} y1={0} x2={-6} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={6} y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Left Plate */}
             <line x1="-6" y1="-14" x2="-6" y2="14" stroke={strokeColor} strokeWidth={2.4} strokeLinecap="round" />
             {/* Right Plate (Curved for electrolytic, straight for ceramic) */}
@@ -158,10 +193,14 @@ export function SchematicVectorSymbol({
         );
       }
 
-      case 'INDUCTOR':
+      case 'INDUCTOR': {
+        const p1 = component.pins?.[0] || { x: -25, y: 0 };
+        const p2 = component.pins?.[1] || { x: 25, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-inductor">
-            <line x1="-25" y1="0" x2="-18" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={leftX} y1={0} x2={-18} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <path
               d="M -18,0 A 4.5,4.5 0 0,1 -9,0 A 4.5,4.5 0 0,1 0,0 A 4.5,4.5 0 0,1 9,0 A 4.5,4.5 0 0,1 18,0"
               stroke={strokeColor}
@@ -169,17 +208,22 @@ export function SchematicVectorSymbol({
               fill="none"
               strokeLinecap="round"
             />
-            <line x1="18" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={18} y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           </g>
         );
+      }
 
       case 'BATTERY':
-      case 'DC_VOLTAGE':
+      case 'DC_VOLTAGE': {
+        const p1 = component.pins?.[0] || { x: 0, y: -25 };
+        const p2 = component.pins?.[1] || { x: 0, y: 25 };
+        const topY = Math.min(p1.y, p2.y);
+        const botY = Math.max(p1.y, p2.y);
         return (
           <g className="sch-symbol-battery">
-            {/* Leads */}
-            <line x1="0" y1="-25" x2="0" y2="-12" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
-            <line x1="0" y1="12" x2="0" y2="25" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            {/* Leads connecting body to exact pin coordinates */}
+            <line x1={0} y1={topY} x2={0} y2={-12} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={0} y1={12} x2={0} y2={botY} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Positive Long Plate */}
             <line x1="-16" y1="-12" x2="16" y2="-12" stroke={strokeColor} strokeWidth={2.5} strokeLinecap="round" />
             {/* Negative Short Plate */}
@@ -192,77 +236,98 @@ export function SchematicVectorSymbol({
             </text>
           </g>
         );
+      }
 
       case 'GROUND':
-      case 'GND':
+      case 'GND': {
+        const p = component.pins?.[0] || { x: 0, y: -15 };
         return (
           <g className="sch-symbol-ground">
-            <line x1="0" y1="-15" x2="0" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={p.x} y1={p.y} x2={0} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <line x1="-14" y1="0" x2="14" y2="0" stroke={strokeColor} strokeWidth={2.2} strokeLinecap="round" />
             <line x1="-9" y1="5" x2="9" y2="5" stroke={strokeColor} strokeWidth={2.0} strokeLinecap="round" />
             <line x1="-4" y1="10" x2="4" y2="10" stroke={strokeColor} strokeWidth={1.8} strokeLinecap="round" />
           </g>
         );
+      }
 
       case 'DIODE':
       case 'DIODE_1N4007':
       case 'ZENER_DIODE':
-      case 'SCHOTTKY_DIODE':
+      case 'SCHOTTKY_DIODE': {
+        const p1 = component.pins?.[0] || { x: -25, y: 0 };
+        const p2 = component.pins?.[1] || { x: 25, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-diode">
-            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={leftX} y1={0} x2={-8} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <polygon points="-8,-8 8,0 -8,8" fill={fillColor} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinejoin="round" />
             <line x1="8" y1="-8" x2="8" y2="8" stroke={strokeColor} strokeWidth={2.4} strokeLinecap="round" />
-            <line x1="8" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="8" y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           </g>
         );
+      }
 
-      case 'LED':
+      case 'LED': {
+        const p1 = component.pins?.[0] || { x: -25, y: 0 };
+        const p2 = component.pins?.[1] || { x: 25, y: 0 };
+        const leftX = Math.min(p1.x, p2.x);
+        const rightX = Math.max(p1.x, p2.x);
         return (
           <g className="sch-symbol-led">
-            <line x1="-25" y1="0" x2="-8" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={leftX} y1={0} x2={-8} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <polygon points="-8,-8 8,0 -8,8" fill={fillColor} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinejoin="round" />
             <line x1="8" y1="-8" x2="8" y2="8" stroke={strokeColor} strokeWidth={2.4} strokeLinecap="round" />
-            <line x1="8" y1="0" x2="25" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="8" y1={0} x2={rightX} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Emission Arrows */}
             <path d="M 0,-10 L 6,-16 M 2,-16 L 6,-16 L 6,-12" stroke="#F59E0B" strokeWidth="1.6" strokeLinecap="round" fill="none" />
             <path d="M 6,-6 L 12,-12 M 8,-12 L 12,-12 L 12,-8" stroke="#F59E0B" strokeWidth="1.6" strokeLinecap="round" fill="none" />
           </g>
         );
+      }
 
       case 'BJT_NPN':
-      case 'TRANSISTOR_NPN':
+      case 'TRANSISTOR_NPN': {
+        const basePin = component.pins?.find((p) => p.id === 'B' || p.x < 0) || { x: -25, y: 0 };
+        const colPin = component.pins?.find((p) => p.id === 'C' || (p.x > 0 && p.y < 0)) || { x: 10, y: -25 };
+        const emPin = component.pins?.find((p) => p.id === 'E' || (p.x > 0 && p.y > 0)) || { x: 10, y: 25 };
         return (
           <g className="sch-symbol-npn">
             <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="1.4" fill={fillColor} />
-            <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={basePin.x} y1={basePin.y} x2={-10} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <line x1="-10" y1="-12" x2="-10" y2="12" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
             {/* Collector */}
-            <line x1="-10" y1="-6" x2="10" y2="-16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
-            <line x1="10" y1="-16" x2="10" y2="-25" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="-10" y1="-6" x2={colPin.x} y2="-16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={colPin.x} y1="-16" x2={colPin.x} y2={colPin.y} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Emitter with Arrow pointing OUT */}
-            <line x1="-10" y1="6" x2="10" y2="16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
-            <polygon points="10,16 5,11 8,9" fill={strokeColor} stroke={strokeColor} />
-            <line x1="10" y1="16" x2="10" y2="25" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="-10" y1="6" x2={emPin.x} y2="16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <polygon points={`${emPin.x},16 ${emPin.x - 5},11 ${emPin.x - 2},9`} fill={strokeColor} stroke={strokeColor} />
+            <line x1={emPin.x} y1="16" x2={emPin.x} y2={emPin.y} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           </g>
         );
+      }
 
       case 'BJT_PNP':
-      case 'TRANSISTOR_PNP':
+      case 'TRANSISTOR_PNP': {
+        const basePin = component.pins?.find((p) => p.id === 'B' || p.x < 0) || { x: -25, y: 0 };
+        const colPin = component.pins?.find((p) => p.id === 'C' || (p.x > 0 && p.y < 0)) || { x: 10, y: -25 };
+        const emPin = component.pins?.find((p) => p.id === 'E' || (p.x > 0 && p.y > 0)) || { x: 10, y: 25 };
         return (
           <g className="sch-symbol-pnp">
             <circle cx="0" cy="0" r="18" stroke={strokeColor} strokeWidth="1.4" fill={fillColor} />
-            <line x1="-25" y1="0" x2="-10" y2="0" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={basePin.x} y1={basePin.y} x2={-10} y2={0} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <line x1="-10" y1="-12" x2="-10" y2="12" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" />
             {/* Collector */}
-            <line x1="-10" y1="6" x2="10" y2="16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
-            <line x1="10" y1="16" x2="10" y2="25" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="-10" y1="6" x2={colPin.x} y2="16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={colPin.x} y1="16" x2={colPin.x} y2={colPin.y} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             {/* Emitter with Arrow pointing IN */}
-            <line x1="-10" y1="-6" x2="10" y2="-16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1="-10" y1="-6" x2={emPin.x} y2="-16" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             <polygon points="-8,-5 -3,-10 -2,-7" fill={strokeColor} stroke={strokeColor} />
-            <line x1="10" y1="-16" x2="10" y2="-25" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
+            <line x1={emPin.x} y1="-16" x2={emPin.x} y2={emPin.y} stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
           </g>
         );
+      }
 
       case 'TIMER_555':
       case 'OPAMP_LM358':
@@ -281,10 +346,16 @@ export function SchematicVectorSymbol({
       case 'IC_L293D':
       default: {
         // Multi-Pin Integrated Circuit or MCU Module
-        const icW = compW;
-        const icH = compH;
-        const icHalfW = icW / 2;
-        const icHalfH = icH / 2;
+        // Derive package body span from pin coordinates so IC box NEVER grows wider than pinMaxX - pinMinX and buries pins!
+        const leadLen = 14;
+        const icHalfW = hasPins && pinSpanX > 0
+          ? Math.max(22, Math.min(compW / 2, pinSpanX / 2 - leadLen))
+          : Math.max(22, compW / 2 - 20);
+        const icW = icHalfW * 2;
+        const icHalfH = hasPins && pinSpanY > 0
+          ? Math.max(28, Math.max(compH / 2, pinSpanY / 2 + 10))
+          : compH / 2;
+        const icH = icHalfH * 2;
 
         return (
           <g className="sch-symbol-ic">
@@ -328,7 +399,7 @@ export function SchematicVectorSymbol({
               const isTop = pin.y < 0 && Math.abs(pin.y) > icHalfH - 5;
               const isBottom = pin.y > 0 && pin.y > icHalfH - 5;
 
-              // Lead stub connecting package boundary to terminal
+              // Lead stub connecting package boundary directly to terminal (0.0px gap)
               let stubX1 = 0;
               let stubY1 = pin.y;
               if (isLeft) stubX1 = -icHalfW;
@@ -422,7 +493,7 @@ export function SchematicVectorSymbol({
           x="0"
           y={-halfH - 8}
           textAnchor="middle"
-          fill="#34D399"
+          fill={theme === 'dark' ? '#34D399' : '#0F5132'}
           fontSize="11"
           fontWeight="bold"
           fontFamily="monospace"
@@ -480,10 +551,9 @@ export function SchematicVectorSymbol({
                 }
               }}
               onClick={(e) => {
-                if (onPinClick) {
-                  e.stopPropagation();
-                  onPinClick(e, component.id, pin.id, wx, wy);
-                }
+                // Bug 1 Fix: ONLY stopPropagation. Real browsers fire mousedown -> mouseup -> click!
+                // Never call onPinClick here to prevent immediate cancellation of wire routing!
+                e.stopPropagation();
               }}
               onMouseEnter={() => onPinHover && onPinHover(`${component.id}:${pin.id}`)}
               onMouseLeave={() => onPinHover && onPinHover(null)}

@@ -808,30 +808,38 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     const viewport = screen.getByTestId('sch-canvas-viewport');
 
-    // 1. In Select mode (default), click Pin 1 of R1
+    // 1. In Select mode (default), click Pin 1 of R1 with real browser event sequence: mouseDown -> mouseUp -> click
     const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
     expect(pinR1).toBeInTheDocument();
     fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
 
     // 2. Click intermediate canvas position for corner waypoint
     fireEvent.mouseDown(viewport, { button: 0, clientX: 250, clientY: 100 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 250, clientY: 100 });
+    fireEvent.click(viewport, { button: 0, clientX: 250, clientY: 100 });
 
-    // 3. Click Pin 1 of R2 to finish wiring
+    // 3. Click Pin 1 of R2 with real browser event sequence: mouseDown -> mouseUp -> click to finish wiring
     const pinR2 = container.querySelector('[data-testid="sch-pin-r2-1"]');
     expect(pinR2).toBeInTheDocument();
     fireEvent.mouseDown(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.mouseUp(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.click(pinR2!, { clientX: 250, clientY: 200 });
 
     // Wire must be created and added to state
     expect(latestWires.length).toBe(1);
     const createdWire = latestWires[0];
     expect(createdWire.fromCompId).toBe('r1');
     expect(createdWire.toCompId).toBe('r2');
-    expect(createdWire.points?.length).toBeGreaterThanOrEqual(2);
+    expect(createdWire.points?.length).toBeGreaterThanOrEqual(1);
 
-    // 4. Select the created wire
+    // 4. Select the created wire with real browser event sequence
     const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${createdWire.id}"]`);
     expect(wireHit).toBeInTheDocument();
     fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
 
     // Midpoint handle must appear
     const midHandle = container.querySelector('[data-testid="sch-wire-mid-0"]');
@@ -843,7 +851,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     fireEvent.mouseUp(viewport);
 
     // Wire points must now include the fold point
-    expect(latestWires[0].points?.length).toBeGreaterThanOrEqual(3);
+    expect(latestWires[0].points?.length).toBeGreaterThanOrEqual(2);
 
     // 5. Delete Action Pill must be visible
     const pill = screen.getByTestId('sch-wire-action-pill');
@@ -1145,6 +1153,129 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     expect(canvasContainer.querySelector('#main-schematic-svg')).toBeInTheDocument();
     expect(canvasContainer.textContent).toContain('R1');
+  });
+
+  it('Test 1 (Real Browser Pin Click Sequence): Real browser pin click sequence keeps rubberband active, saves interior-only points, and moves endpoints with component', () => {
+    let latestWires: CircuitWire[] = [];
+    let latestComps: CircuitComponent[] = [...TEMPLATE_555_ASTABLE.components];
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires, comps }) => {
+          latestWires = wires;
+          latestComps = comps;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. On Pin A, fire ALL THREE real browser events in order
+    const pinA = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinA).toBeInTheDocument();
+    fireEvent.mouseDown(pinA!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinA!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinA!, { clientX: 200, clientY: 100 });
+
+    // Assert rubberband wire preview IS STILL ACTIVE (NOT canceled by double-fire!)
+    const rubberband = screen.getByTestId('sch-rubberband-wire');
+    expect(rubberband).toBeInTheDocument();
+
+    // 2. Click intermediate canvas position for corner waypoint (260, 140)
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 260, clientY: 140 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 260, clientY: 140 });
+    fireEvent.click(viewport, { button: 0, clientX: 260, clientY: 140 });
+
+    // 3. Fire mouseDown + mouseUp + click on Pin B
+    const pinB = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinB).toBeInTheDocument();
+    fireEvent.mouseDown(pinB!, { clientX: 260, clientY: 200 });
+    fireEvent.mouseUp(pinB!, { clientX: 260, clientY: 200 });
+    fireEvent.click(pinB!, { clientX: 260, clientY: 200 });
+
+    // Assert new wire saved in wires AND wire.points contains ONLY interior waypoints (NOT duplicate p1/p2!)
+    expect(latestWires.length).toBe(1);
+    const newWire = latestWires[0];
+    expect(newWire.fromCompId).toBe('r1');
+    expect(newWire.toCompId).toBe('r2');
+
+    const r1CompInitial = latestComps.find((c) => c.id === 'r1')!;
+    const r2CompInitial = latestComps.find((c) => c.id === 'r2')!;
+    const p1WorldInitial = { x: r1CompInitial.x + r1CompInitial.pins![0].x, y: r1CompInitial.y + r1CompInitial.pins![0].y };
+    const p2WorldInitial = { x: r2CompInitial.x + r2CompInitial.pins![0].x, y: r2CompInitial.y + r2CompInitial.pins![0].y };
+
+    if (newWire.points && newWire.points.length > 0) {
+      expect(newWire.points[0]).not.toEqual(p1WorldInitial);
+      expect(newWire.points[newWire.points.length - 1]).not.toEqual(p2WorldInitial);
+    }
+
+    // Move component R1 by +40px
+    const compR1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    expect(compR1Hit).toBeInTheDocument();
+    fireEvent.mouseDown(compR1Hit!, { clientX: r1CompInitial.x, clientY: r1CompInitial.y });
+    fireEvent.mouseMove(viewport, { clientX: r1CompInitial.x + 40, clientY: r1CompInitial.y });
+    fireEvent.mouseUp(viewport);
+
+    // Wire endpoint moves cleanly with R1's pin
+    const r1CompMoved = latestComps.find((c) => c.id === 'r1')!;
+    expect(r1CompMoved.x).toBe(r1CompInitial.x + 40);
+    const canonicalWirePts = getCanonicalWirePoints(newWire, latestComps);
+    expect(canonicalWirePts[0].x).toBe(r1CompMoved.x + r1CompMoved.pins![0].x);
+    expect(canonicalWirePts[0].y).toBe(r1CompMoved.y + r1CompMoved.pins![0].y);
+  });
+
+  it('Test 2 (Real Browser Wire Junction Click Sequence): Activate Junction (J) -> fire mouseDown + mouseUp + click on wire -> assert EXACTLY 1 manual junction added', () => {
+    const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
+    const { container } = render(<SchematicEditorPanel {...defaultProps} selectedWireId={testWireId} />);
+
+    // Activate Junction (J)
+    const toolJunc = screen.getByTestId('tool-junction');
+    fireEvent.click(toolJunc);
+
+    // Fire mouseDown + mouseUp + click on a wire
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${testWireId}"]`);
+    expect(wireHit).toBeInTheDocument();
+
+    fireEvent.mouseDown(wireHit!, { clientX: 220, clientY: 150 });
+    fireEvent.mouseUp(wireHit!, { clientX: 220, clientY: 150 });
+    fireEvent.click(wireHit!, { clientX: 220, clientY: 150 });
+
+    // Assert EXACTLY 1 manual junction added (NOT 2 duplicates!)
+    const juncDots = container.querySelectorAll('[data-testid^="sch-manual-junction-"]');
+    expect(juncDots.length).toBe(1);
+  });
+
+  it('Test 3 (Light Theme Contrast Check): Toggle to warm light theme -> assert designator text fill is dark (#0F5132) and sheet is #ECE8DC', () => {
+    const isolatedProject = {
+      ...TEMPLATE_555_ASTABLE,
+      id: `proj_contrast_${Date.now()}`,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={isolatedProject}
+      />
+    );
+
+    // Toggle theme to warm light theme
+    const themeBtn = screen.getByTestId('toggle-sheet-theme');
+    const sheetSvgBefore = screen.getByTestId('sch-sheet-svg');
+    const beforeClass = sheetSvgBefore.getAttribute('class') || '';
+    if (beforeClass.includes('bg-[#09101E]')) {
+      fireEvent.click(themeBtn);
+    }
+
+    // Assert designator text fill is dark (#0F5132, NOT #34D399)
+    const designator = container.querySelector('[data-testid="sch-designator-r1"]');
+    expect(designator).toBeInTheDocument();
+    expect(designator?.getAttribute('fill')).toBe('#0F5132');
+
+    // Assert sheet is #ECE8DC
+    const sheetSvg = screen.getByTestId('sch-sheet-svg');
+    expect(sheetSvg).toBeInTheDocument();
+    expect(sheetSvg.getAttribute('class')).toContain('bg-[#ECE8DC]');
   });
 });
 
