@@ -9,6 +9,10 @@ import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/start
 import { CircuitComponent, CircuitWire } from '../modules/engineering-lab/types';
 import { exportSchematicSvg } from '../components/engineering-lab/Panels/schematic-editor/export-utils';
 import {
+  getCanonicalPinWorldPos,
+  getCanonicalWirePoints,
+} from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import {
   placeOnlyUnplacedEditorComponents,
   clientToSheetCoords,
   routeOrthogonalWires,
@@ -568,7 +572,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const onDeleteWire = vi.fn();
     const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
 
-    const { container, rerender } = render(
+    const { container } = render(
       <SchematicEditorPanel
         {...defaultProps}
         selectedWireId={testWireId}
@@ -699,7 +703,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
         }}
         onUpdateComponentPosition={(id, x, y) => {
           setComponents((prev) =>
-            prev.map((c) => (c.id === id ? { ...c, x, y, editorPosition: { x, y } } : c))
+            prev.map((c) => (c.id === id ? { ...c, x, y } : c))
           );
         }}
         onRotateComponent={(id) => {
@@ -709,7 +713,6 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
                 ? {
                     ...c,
                     rotation: (((c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270,
-                    editorRotation: (((c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270,
                   }
                 : c
             )
@@ -717,7 +720,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
         }}
         onMirrorComponent={(id) => {
           setComponents((prev) =>
-            prev.map((c) => (c.id === id ? { ...c, mirrored: !c.mirrored, editorFlipX: !c.mirrored } : c))
+            prev.map((c) => (c.id === id ? { ...c, mirrored: !c.mirrored } : c))
           );
         }}
         onDeleteComponent={(id) => {
@@ -892,6 +895,111 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(remountContainer.querySelector('[data-testid="sch-comp-r1"]')).toBeInTheDocument();
   });
 
+  it('INVARIANT 1 (ZERO Auto-Change on Tab Switch): Mount -> unmount -> remount causes 0 updates and byte-for-byte identical state', () => {
+    const onUpdateComponents = vi.fn();
+    const onUpdateWires = vi.fn();
+    const onUpdateComponentPosition = vi.fn();
+
+    const initialCompsStr = JSON.stringify(TEMPLATE_555_ASTABLE.components);
+    const initialWiresStr = JSON.stringify(TEMPLATE_555_ASTABLE.wires);
+
+    const { unmount } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={TEMPLATE_555_ASTABLE}
+        components={TEMPLATE_555_ASTABLE.components}
+        wires={TEMPLATE_555_ASTABLE.wires}
+        onUpdateComponents={onUpdateComponents}
+        onUpdateWires={onUpdateWires}
+        onUpdateComponentPosition={onUpdateComponentPosition}
+      />
+    );
+
+    unmount();
+
+    render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={TEMPLATE_555_ASTABLE}
+        components={TEMPLATE_555_ASTABLE.components}
+        wires={TEMPLATE_555_ASTABLE.wires}
+        onUpdateComponents={onUpdateComponents}
+        onUpdateWires={onUpdateWires}
+        onUpdateComponentPosition={onUpdateComponentPosition}
+      />
+    );
+
+    expect(onUpdateComponents).toHaveBeenCalledTimes(0);
+    expect(onUpdateWires).toHaveBeenCalledTimes(0);
+    expect(onUpdateComponentPosition).toHaveBeenCalledTimes(0);
+    expect(JSON.stringify(TEMPLATE_555_ASTABLE.components)).toBe(initialCompsStr);
+    expect(JSON.stringify(TEMPLATE_555_ASTABLE.wires)).toBe(initialWiresStr);
+  });
+
+  it('INVARIANT 2 (0.0px Pin-to-Wire Connection Proof): Wire endpoints match pin terminal positions <= 0.5px including rotated components', () => {
+    const rotatedComps = TEMPLATE_555_ASTABLE.components.map((c) =>
+      c.id === 'r1' ? { ...c, rotation: 90 as const } : c
+    );
+
+    TEMPLATE_555_ASTABLE.wires.forEach((w) => {
+      const fromComp = rotatedComps.find((c) => c.id === w.fromCompId);
+      const toComp = rotatedComps.find((c) => c.id === w.toCompId);
+      if (!fromComp || !toComp) return;
+
+      const pts = getCanonicalWirePoints(w, rotatedComps);
+      expect(pts.length).toBeGreaterThanOrEqual(2);
+
+      const wireStart = pts[0];
+      const wireEnd = pts[pts.length - 1];
+
+      const pinStart = getCanonicalPinWorldPos(fromComp, w.fromPinId);
+      const pinEnd = getCanonicalPinWorldPos(toComp, w.toPinId);
+
+      const distStart = Math.hypot(wireStart.x - pinStart.x, wireStart.y - pinStart.y);
+      const distEnd = Math.hypot(wireEnd.x - pinEnd.x, wireEnd.y - pinEnd.y);
+
+      expect(distStart).toBeLessThanOrEqual(0.5);
+      expect(distEnd).toBeLessThanOrEqual(0.5);
+    });
+  });
+
+  it('INVARIANT 4 (Eye-Comfort Warm Light Theme): Sheet SVG uses #ECE8DC (not white), surround uses #D8D4C8, and wire uses #0F6B54', () => {
+    const isolatedProject = {
+      ...TEMPLATE_555_ASTABLE,
+      id: `proj_theme_test_${Date.now()}`,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={isolatedProject}
+        components={isolatedProject.components}
+        wires={isolatedProject.wires}
+      />
+    );
+
+    const themeToggle = screen.getByTestId('toggle-sheet-theme');
+    const sheetSvgBefore = screen.getByTestId('sch-sheet-svg');
+    const beforeClass = sheetSvgBefore.getAttribute('class') || '';
+    if (beforeClass.includes('bg-[#09101E]')) {
+      fireEvent.click(themeToggle);
+    }
+
+    const sheetSvg = screen.getByTestId('sch-sheet-svg');
+    const svgClass = sheetSvg.getAttribute('class') || '';
+    expect(svgClass).toContain('bg-[#ECE8DC]');
+    expect(svgClass).not.toContain('bg-[#FAFCFF]');
+    expect(svgClass).not.toContain('bg-[#FFFFFF]');
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    expect(viewport.className).toContain('bg-[#D8D4C8]');
+
+    const wire = container.querySelector('[data-testid^="sch-wire-"]:not([data-testid*="hit"])');
+    if (wire) {
+      expect(wire.getAttribute('stroke')).toBe('#0F6B54');
+    }
+  });
+
   it('STATEFUL TEST 4: Verify all 14 Left Rail tools and top bar buttons trigger without error and right-click context menu works', () => {
     const { container } = render(<StatefulEditorHarness />);
 
@@ -923,16 +1031,23 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const topActions = [
       'action-undo',
       'action-redo',
+      'action-rotate',
+      'action-rotate-ccw',
       'action-align',
       'action-autotidy',
+      'action-auto-annotate',
       'action-erc',
       'action-find',
       'action-bom-netlist',
+      'toggle-show-grid',
+      'toggle-grid-snap',
+      'toggle-sheet-theme',
     ];
 
     topActions.forEach((tid) => {
       const btn = screen.getByTestId(tid);
       expect(btn).toBeInTheDocument();
+      fireEvent.click(btn);
     });
 
     // Test Right-Click Context Menu on component
@@ -995,7 +1110,7 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
 
     // 2. Untouched SchematicCanvas mounts cleanly with moved R1 and folded wire
     const movedComps: CircuitComponent[] = TEMPLATE_555_ASTABLE.components.map((c) =>
-      c.id === 'r1' ? { ...c, x: 420, y: 180, editorPosition: { x: 420, y: 180 } } : c
+      c.id === 'r1' ? { ...c, x: 420, y: 180 } : c
     );
     const foldedWires: CircuitWire[] = [
       {

@@ -16,11 +16,12 @@ import {
   SchematicTitleBlock,
   SchematicEditorSheetConfig,
 } from '@/modules/engineering-lab/types';
-import { runElectricalRulesCheck, ErcViolation } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+import { runElectricalRulesCheck, ErcViolation, autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
+import { autoLayoutCircuit } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
 import {
-  autoLayoutCircuit,
-  routeOrthogonalWires,
-} from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
+  getCanonicalWirePoints,
+  computeCanonicalJunctions,
+} from './schematic-editor/canonical-geometry';
 
 import { SchematicLeftRail, SchematicTool } from './schematic-editor/SchematicLeftRail';
 import { SchematicTopBar } from './schematic-editor/SchematicTopBar';
@@ -139,6 +140,7 @@ export function SchematicEditorPanel({
     gridStep: initialSession.sheetConfig?.gridStep || project.schematicEditorSheet?.gridStep || project.schematicEditorAnnotations?.sheet?.gridStep || 20,
     snapToGrid: initialSession.sheetConfig?.snapToGrid ?? project.schematicEditorSheet?.snapToGrid ?? true,
   }));
+  const [showGrid, setShowGrid] = useState(true);
 
   // Canvas Viewport Pan & Zoom
   const [zoom, setZoom] = useState<number>(initialSession.zoom);
@@ -255,21 +257,22 @@ export function SchematicEditorPanel({
     }
   }, [sheetConfig.size]);
 
-  // Compute 90° Manhattan routed wires and junctions
-  const { routedWires, junctions: autoJunctions } = useMemo(() => {
-    return routeOrthogonalWires(components, wires, true, sheetConfig.gridStep);
-  }, [components, wires, sheetConfig.gridStep]);
+  // Compute canonical wire points and junctions matching SchematicCanvas.tsx 1-to-1
+  const routedWires = useMemo(() => {
+    return wires.map((w) => {
+      const pts = getCanonicalWirePoints(w, components);
+      return {
+        wireId: w.id,
+        points: pts,
+        netName: w.netName || 'NET',
+      };
+    });
+  }, [wires, components]);
 
   // Combine auto-computed junction dots with manual junction dots
   const allJunctions = useMemo(() => {
-    const combined = [...autoJunctions];
-    manualJunctions.forEach((mj) => {
-      if (!combined.some((j) => Math.hypot(j.x - mj.x, j.y - mj.y) < 5)) {
-        combined.push({ x: mj.x, y: mj.y, netName: mj.netName || 'NET' });
-      }
-    });
-    return combined;
-  }, [autoJunctions, manualJunctions]);
+    return computeCanonicalJunctions(routedWires, manualJunctions);
+  }, [routedWires, manualJunctions]);
 
   // Unique electrical nets count
   const netCount = useMemo(() => {
@@ -304,46 +307,70 @@ export function SchematicEditorPanel({
     onUpdateWires(layout.wires);
   }, [components, wires, sheetConfig.gridStep, onUpdateComponents, onUpdateWires]);
 
+  // Rotate Counter-Clockwise handler (Shift+R)
+  const handleRotateCcw = useCallback(() => {
+    if (selectedCompIds.length > 0) {
+      onUpdateComponents(
+        components.map((c) => {
+          if (!selectedCompIds.includes(c.id)) return c;
+          const nextRot = (((c.rotation ?? 0) + 270) % 360) as 0 | 90 | 180 | 270;
+          return { ...c, rotation: nextRot };
+        })
+      );
+    } else if (selectedCompId) {
+      const comp = components.find((c) => c.id === selectedCompId);
+      if (comp) {
+        const nextRot = (((comp.rotation ?? 0) + 270) % 360) as 0 | 90 | 180 | 270;
+        onUpdateComponents(
+          components.map((c) => (c.id === comp.id ? { ...c, rotation: nextRot } : c))
+        );
+      }
+    }
+  }, [selectedCompIds, selectedCompId, components, onUpdateComponents]);
+
+  // Auto-Annotate components handler
+  const handleAutoAnnotate = useCallback(() => {
+    const annotated = autoAnnotateComponents(components);
+    onUpdateComponents(annotated);
+  }, [components, onUpdateComponents]);
+
   // Align Components handler
   const handleAlign = useCallback(
     (type: 'left' | 'top' | 'center' | 'distribute') => {
       if (components.length < 2) return;
       const sorted = [...components];
       if (type === 'left') {
-        const minX = Math.min(...sorted.map((c) => (c.editorPosition ? c.editorPosition.x : c.x)));
+        const minX = Math.min(...sorted.map((c) => c.x));
         onUpdateComponents(
           components.map((c) => ({
             ...c,
-            editorPosition: { x: minX, y: c.editorPosition ? c.editorPosition.y : c.y },
+            x: minX,
           }))
         );
       } else if (type === 'top') {
-        const minY = Math.min(...sorted.map((c) => (c.editorPosition ? c.editorPosition.y : c.y)));
+        const minY = Math.min(...sorted.map((c) => c.y));
         onUpdateComponents(
           components.map((c) => ({
             ...c,
-            editorPosition: { x: c.editorPosition ? c.editorPosition.x : c.x, y: minY },
+            y: minY,
           }))
         );
       } else if (type === 'center') {
         const avgX =
-          sorted.reduce((sum, c) => sum + (c.editorPosition ? c.editorPosition.x : c.x), 0) /
+          sorted.reduce((sum, c) => sum + c.x, 0) /
           sorted.length;
         onUpdateComponents(
           components.map((c) => ({
             ...c,
-            editorPosition: { x: Math.round(avgX / 20) * 20, y: c.editorPosition ? c.editorPosition.y : c.y },
+            x: Math.round(avgX / 20) * 20,
           }))
         );
       } else if (type === 'distribute') {
-        sorted.sort(
-          (a, b) =>
-            (a.editorPosition ? a.editorPosition.x : a.x) - (b.editorPosition ? b.editorPosition.x : b.x)
-        );
+        sorted.sort((a, b) => a.x - b.x);
         const first = sorted[0];
         const last = sorted[sorted.length - 1];
-        const minX = first?.editorPosition ? first.editorPosition.x : first?.x ?? 0;
-        const maxX = last?.editorPosition ? last.editorPosition.x : last?.x ?? 0;
+        const minX = first?.x ?? 0;
+        const maxX = last?.x ?? 0;
         const step = (maxX - minX) / (sorted.length - 1 || 1);
         const posMap = new Map<string, number>();
         sorted.forEach((c, idx) => {
@@ -352,10 +379,7 @@ export function SchematicEditorPanel({
         onUpdateComponents(
           components.map((c) => ({
             ...c,
-            editorPosition: {
-              x: posMap.get(c.id) ?? (c.editorPosition ? c.editorPosition.x : c.x),
-              y: c.editorPosition ? c.editorPosition.y : c.y,
-            },
+            x: posMap.get(c.id) ?? c.x,
           }))
         );
       }
@@ -428,9 +452,7 @@ export function SchematicEditorPanel({
               fromPinId: activeWireStart.pinId,
               toCompId: compId,
               toPinId: pinId,
-              editorWaypoints: finalPoints,
               points: finalPoints,
-              isManualEditorRoute: true,
             });
             setInternalSelectedWireId(newWireId);
             setWirePillPos({ x: wx, y: wy });
@@ -535,7 +557,9 @@ export function SchematicEditorPanel({
       else if (e.key === 'g' || e.key === 'G') setTool('draw_rect');
       else if (e.key === 't' || e.key === 'T') setTool('text');
       else if (e.key === 'r' || e.key === 'R') {
-        if (currentPlacingComp) {
+        if (e.shiftKey) {
+          handleRotateCcw();
+        } else if (currentPlacingComp) {
           setGhostRotation((prev) => (((prev + 90) % 360) as 0 | 90 | 180 | 270));
         } else if (selectedCompIds.length > 0) {
           selectedCompIds.forEach((id) => onRotateComponent(id));
@@ -549,7 +573,7 @@ export function SchematicEditorPanel({
           const idSet = new Set(selectedCompIds);
           onUpdateComponents(
             components.map((c) =>
-              idSet.has(c.id) ? { ...c, mirrored: !c.mirrored, editorFlipX: !c.editorFlipX } : c
+              idSet.has(c.id) ? { ...c, mirrored: !c.mirrored } : c
             )
           );
         } else if (selectedCompId) {
@@ -579,12 +603,8 @@ export function SchematicEditorPanel({
               dups.push({
                 ...c,
                 id: dupId,
-                x: (c.editorPosition ? c.editorPosition.x : c.x) + 40,
-                y: (c.editorPosition ? c.editorPosition.y : c.y) + 40,
-                editorPosition: {
-                  x: (c.editorPosition ? c.editorPosition.x : c.x) + 40,
-                  y: (c.editorPosition ? c.editorPosition.y : c.y) + 40,
-                },
+                x: c.x + 40,
+                y: c.y + 40,
               });
             }
           });
@@ -598,12 +618,8 @@ export function SchematicEditorPanel({
             const dup: CircuitComponent = {
               ...comp,
               id: dupId,
-              x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
-              y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
-              editorPosition: {
-                x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
-                y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
-              },
+              x: comp.x + 40,
+              y: comp.y + 40,
             };
             onUpdateComponents([...components, dup]);
             onSelectComponent(dupId);
@@ -664,10 +680,13 @@ export function SchematicEditorPanel({
     selectedItemId,
     components,
     onRotateComponent,
+    handleRotateCcw,
     onDeleteComponent,
     onDeleteWire,
     onUpdateComponents,
     onSelectComponent,
+    selectedCompIds,
+    updateSelectedCompIds,
     onCancelPlacing,
     onUndo,
     onRedo,
@@ -713,10 +732,6 @@ export function SchematicEditorPanel({
           ...currentPlacingComp,
           x: wCoord.x,
           y: wCoord.y,
-          editorPosition: { x: wCoord.x, y: wCoord.y },
-          editorRotation: ghostRotation,
-          editorFlipX: ghostMirrored,
-          editorFlipY: false,
           rotation: ghostRotation,
           mirrored: ghostMirrored,
         };
@@ -855,7 +870,8 @@ export function SchematicEditorPanel({
               : rawY;
             return {
               ...c,
-              editorPosition: { x: newX, y: newY },
+              x: newX,
+              y: newY,
             };
           }
           return c;
@@ -872,7 +888,7 @@ export function SchematicEditorPanel({
     } else if (draggingWireCorner) {
       const targetWire = wires.find((w) => w.id === draggingWireCorner.wireId);
       if (targetWire) {
-        const currentPoints = targetWire.editorWaypoints || targetWire.points || [
+        const currentPoints = targetWire.points || [
           { x: 0, y: 0 },
           { x: 100, y: 100 },
         ];
@@ -888,9 +904,7 @@ export function SchematicEditorPanel({
             w.id === targetWire.id
               ? {
                   ...w,
-                  editorWaypoints: updatedPoints,
                   points: updatedPoints,
-                  isManualEditorRoute: true,
                 }
               : w
           )
@@ -990,8 +1004,8 @@ export function SchematicEditorPanel({
       // Only select if dragged more than 5px
       if (Math.hypot(maxX - minX, maxY - minY) > 5) {
         const boxed = components.filter((c) => {
-          const posX = c.editorPosition ? c.editorPosition.x : c.x;
-          const posY = c.editorPosition ? c.editorPosition.y : c.y;
+          const posX = c.x;
+          const posY = c.y;
           return posX >= minX - 40 && posX <= maxX + 40 && posY >= minY - 40 && posY <= maxY + 40;
         });
         const boxedIds = boxed.map((c) => c.id);
@@ -1098,13 +1112,15 @@ export function SchematicEditorPanel({
             onRotateComponent(selectedCompId);
           }
         }}
+        onRotateCcw={handleRotateCcw}
+        onAutoAnnotate={handleAutoAnnotate}
         onMirrorH={() => {
           if (selectedCompIds.length > 0) {
             const idSet = new Set(selectedCompIds);
             onUpdateComponents(
               components.map((c) =>
                 idSet.has(c.id)
-                  ? { ...c, editorFlipX: !c.editorFlipX, mirrored: !c.mirrored }
+                  ? { ...c, mirrored: !c.mirrored }
                   : c
               )
             );
@@ -1112,7 +1128,7 @@ export function SchematicEditorPanel({
             onUpdateComponents(
               components.map((c) =>
                 c.id === selectedCompId
-                  ? { ...c, editorFlipX: !c.editorFlipX, mirrored: !c.mirrored }
+                  ? { ...c, mirrored: !c.mirrored }
                   : c
               )
             );
@@ -1123,13 +1139,13 @@ export function SchematicEditorPanel({
             const idSet = new Set(selectedCompIds);
             onUpdateComponents(
               components.map((c) =>
-                idSet.has(c.id) ? { ...c, editorFlipY: !c.editorFlipY } : c
+                idSet.has(c.id) ? { ...c, mirrored: !c.mirrored } : c
               )
             );
           } else if (selectedCompId) {
             onUpdateComponents(
               components.map((c) =>
-                c.id === selectedCompId ? { ...c, editorFlipY: !c.editorFlipY } : c
+                c.id === selectedCompId ? { ...c, mirrored: !c.mirrored } : c
               )
             );
           }
@@ -1146,12 +1162,8 @@ export function SchematicEditorPanel({
                 dups.push({
                   ...c,
                   id: dupId,
-                  x: (c.editorPosition ? c.editorPosition.x : c.x) + 40,
-                  y: (c.editorPosition ? c.editorPosition.y : c.y) + 40,
-                  editorPosition: {
-                    x: (c.editorPosition ? c.editorPosition.x : c.x) + 40,
-                    y: (c.editorPosition ? c.editorPosition.y : c.y) + 40,
-                  },
+                  x: c.x + 40,
+                  y: c.y + 40,
                 });
               }
             });
@@ -1165,12 +1177,8 @@ export function SchematicEditorPanel({
               const dup: CircuitComponent = {
                 ...comp,
                 id: dupId,
-                x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
-                y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
-                editorPosition: {
-                  x: (comp.editorPosition ? comp.editorPosition.x : comp.x) + 40,
-                  y: (comp.editorPosition ? comp.editorPosition.y : comp.y) + 40,
-                },
+                x: comp.x + 40,
+                y: comp.y + 40,
               };
               onUpdateComponents([...components, dup]);
               // Keep original selected component active unless no component was selected
@@ -1208,8 +1216,11 @@ export function SchematicEditorPanel({
           setZoom(0.85);
           setPan({ x: 50, y: 40 });
         }}
-        sheetConfig={sheetConfig}
-        onUpdateSheetConfig={(cfg) => setSheetConfig((prev) => ({ ...prev, ...cfg }))}
+        sheetConfig={{ ...sheetConfig, showGrid }}
+        onUpdateSheetConfig={(cfg) => {
+          if (cfg.showGrid !== undefined) setShowGrid(cfg.showGrid);
+          setSheetConfig((prev) => ({ ...prev, ...cfg }));
+        }}
         onExportSvg={() => exportSchematicSvg(svgRef.current, `${project.title || 'schematic'}.svg`)}
         onExportPng={() => exportSchematicPng(svgRef.current, `${project.title || 'schematic'}.png`, 2)}
         onPrintPdf={printSchematicSheet}
@@ -1239,6 +1250,8 @@ export function SchematicEditorPanel({
           ref={containerRef}
           data-testid="sch-canvas-viewport"
           className={`flex-1 h-full overflow-hidden relative ${
+            sheetConfig.theme === 'dark' ? 'bg-[#060B14]' : 'bg-[#D8D4C8]'
+          } ${
             tool === 'pan' || isDraggingCanvas
               ? 'cursor-grab active:cursor-grabbing'
               : tool === 'wire' || currentPlacingComp || ['draw_rect', 'draw_line', 'draw_circle', 'ruler'].includes(tool)
@@ -1273,7 +1286,7 @@ export function SchematicEditorPanel({
               height={sheetDimensions.height}
               viewBox={`0 0 ${sheetDimensions.width} ${sheetDimensions.height}`}
               className={`overflow-visible shadow-2xl select-none ${
-                sheetConfig.theme === 'dark' ? 'bg-[#09101E]' : 'bg-[#FAFCFF]'
+                sheetConfig.theme === 'dark' ? 'bg-[#09101E]' : 'bg-[#ECE8DC]'
               }`}
             >
               {/* Subtle Engineering Dot Grid */}
@@ -1288,11 +1301,17 @@ export function SchematicEditorPanel({
                     cx="1"
                     cy="1"
                     r="0.85"
-                    fill={sheetConfig.theme === 'dark' ? '#334155' : '#CBD5E1'}
+                    fill={sheetConfig.theme === 'dark' ? '#334155' : '#C0BCAE'}
                   />
                 </pattern>
               </defs>
-              <rect width="100%" height="100%" fill="url(#sch-grid-pattern)" pointerEvents="none" />
+              <rect
+                width="100%"
+                height="100%"
+                fill="url(#sch-grid-pattern)"
+                pointerEvents="none"
+                opacity={showGrid ? 1 : 0}
+              />
 
               {/* Standard Engineering Sheet Frame Border & Bottom-Right Title Block */}
               <SchematicTitleBlockView
@@ -1398,7 +1417,7 @@ export function SchematicEditorPanel({
                         data-testid={`sch-wire-${rw.wireId}`}
                         points={ptsStr}
                         fill="none"
-                        stroke={isSelected ? '#10B981' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0284C7'}
+                        stroke={isSelected ? '#B45309' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54'}
                         strokeWidth={isSelected ? '3' : '2'}
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1460,7 +1479,7 @@ export function SchematicEditorPanel({
                                 e.stopPropagation();
                                 const targetWire = wires.find((w) => w.id === rw.wireId);
                                 if (targetWire) {
-                                  const currentPoints = targetWire.points || targetWire.editorWaypoints || rw.points;
+                                  const currentPoints = targetWire.points || rw.points;
                                   const newPoints = [
                                     ...currentPoints.slice(0, pIdx + 1),
                                     { x: midX, y: midY },
@@ -1469,7 +1488,7 @@ export function SchematicEditorPanel({
                                   onUpdateWires(
                                     wires.map((w) =>
                                       w.id === targetWire.id
-                                        ? { ...w, points: newPoints, editorWaypoints: newPoints, isManualEditorRoute: true }
+                                        ? { ...w, points: newPoints }
                                         : w
                                     )
                                   );
@@ -1494,8 +1513,8 @@ export function SchematicEditorPanel({
                     cx={j.x}
                     cy={j.y}
                     r="4.5"
-                    fill="#34D399"
-                    stroke="#0F172A"
+                    fill={sheetConfig.theme === 'dark' ? '#34D399' : '#047857'}
+                    stroke={sheetConfig.theme === 'dark' ? '#0F172A' : '#ECE8DC'}
                     strokeWidth="1.5"
                   />
                 ))}
@@ -1520,8 +1539,8 @@ export function SchematicEditorPanel({
                   const isSingleSelected = selectedCompId === comp.id;
                   const isMultiSelected = selectedCompIds.includes(comp.id);
                   const isSelected = isSingleSelected || isMultiSelected;
-                  const posX = comp.x ?? comp.editorPosition?.x ?? 0;
-                  const posY = comp.y ?? comp.editorPosition?.y ?? 0;
+                  const posX = comp.x ?? 0;
+                  const posY = comp.y ?? 0;
 
                   return (
                     <g
@@ -1565,8 +1584,8 @@ export function SchematicEditorPanel({
                             components.forEach((c) => {
                               if (selectedCompIds.includes(c.id)) {
                                 posMap.set(c.id, {
-                                  x: c.x ?? c.editorPosition?.x ?? 0,
-                                  y: c.y ?? c.editorPosition?.y ?? 0,
+                                  x: c.x ?? 0,
+                                  y: c.y ?? 0,
                                 });
                               }
                             });
@@ -1606,9 +1625,6 @@ export function SchematicEditorPanel({
                       ...currentPlacingComp,
                       x: mousePos.x,
                       y: mousePos.y,
-                      editorPosition: { x: mousePos.x, y: mousePos.y },
-                      editorRotation: ghostRotation,
-                      editorFlipX: ghostMirrored,
                       rotation: ghostRotation,
                       mirrored: ghostMirrored,
                     }}
@@ -1831,7 +1847,7 @@ export function SchematicEditorPanel({
                           onUpdateComponents(
                             components.map((c) =>
                               c.id === contextMenu.targetId
-                                ? { ...c, mirrored: !c.mirrored, editorFlipX: !c.mirrored }
+                                ? { ...c, mirrored: !c.mirrored }
                                 : c
                             )
                           );
@@ -1851,11 +1867,11 @@ export function SchematicEditorPanel({
                         const comp = components.find((c) => c.id === contextMenu.targetId);
                         if (comp) {
                           const dupId = `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-                          const nx = (comp.x ?? comp.editorPosition?.x ?? 0) + 40;
-                          const ny = (comp.y ?? comp.editorPosition?.y ?? 0) + 40;
+                          const nx = (comp.x ?? 0) + 40;
+                          const ny = (comp.y ?? 0) + 40;
                           onUpdateComponents([
                             ...components,
-                            { ...comp, id: dupId, x: nx, y: ny, editorPosition: { x: nx, y: ny } },
+                            { ...comp, id: dupId, x: nx, y: ny },
                           ]);
                         }
                       }
@@ -2075,8 +2091,8 @@ export function SchematicEditorPanel({
                   key={c.id}
                   onClick={() => {
                     onSelectComponent(c.id);
-                    const posX = c.editorPosition ? c.editorPosition.x : c.x;
-                    const posY = c.editorPosition ? c.editorPosition.y : c.y;
+                    const posX = c.x;
+                    const posY = c.y;
                     setPan({ x: 400 - posX * zoom, y: 300 - posY * zoom });
                     setIsFindOpen(false);
                   }}

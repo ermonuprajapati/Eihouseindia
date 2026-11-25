@@ -15,7 +15,6 @@ import { CircuitSolver, SolverStepResult } from '@/modules/engineering-lab/circu
 import { VirtualMcuRuntime, GpioState } from '@/modules/engineering-lab/embedded-engine/virtual-mcu-runtime';
 import { PcbGenerator } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { autoAnnotateComponents } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
-import { placeOnlyUnplacedEditorComponents } from '@/modules/engineering-lab/schematic-engine/schematic-sync-layout';
 
 import { LabHeader, ExportFormat } from './Header/LabHeader';
 import { SchematicCanvas } from './Canvas/SchematicCanvas';
@@ -213,19 +212,6 @@ export function EngineeringLabApp() {
       newMode === 'studio3d' ? 'virtual3d' :
       newMode === 'mcu' ? 'firmware' : newMode;
     setActiveMode(normalizedMode);
-
-    if (newMode === 'schematicEditor') {
-      setProject((prev) => {
-        const hasUnplaced = prev.components.some((c) => !c.editorPosition);
-        if (hasUnplaced) {
-          return {
-            ...prev,
-            components: placeOnlyUnplacedEditorComponents(prev.components, prev.wires),
-          };
-        }
-        return prev;
-      });
-    }
 
     if (newMode === 'pcb2d' || newMode === 'pcb3d') {
       setProject((prev) => {
@@ -819,13 +805,9 @@ export function EngineeringLabApp() {
   // ----------------------------------------------------------------
   const handleAddComponent = (newComp: CircuitComponent) => {
     recordHistory();
-    const compWithEditor: CircuitComponent = {
-      ...newComp,
-      editorPosition: newComp.editorPosition || { x: newComp.x || 200, y: newComp.y || 160 },
-    };
     setProject((prev) => ({
       ...prev,
-      components: [...prev.components, compWithEditor],
+      components: [...prev.components, newComp],
     }));
     setSelectedCompId(newComp.id);
     toast.success(`Added ${newComp.label}`);
@@ -845,28 +827,6 @@ export function EngineeringLabApp() {
       components: prev.components.map((c) => (c.id === id ? { ...c, x, y } : c)),
     }));
   };
-
-  const handleUpdateEditorComponentPosition = (id: string, x: number, y: number) => {
-    setProject((prev) => ({
-      ...prev,
-      components: prev.components.map((c) =>
-        c.id === id ? { ...c, editorPosition: { x, y } } : c
-      ),
-    }));
-  };
-
-  const handleRotateEditorComponent = useCallback((id: string) => {
-    recordHistory();
-    setProject((prev) => ({
-      ...prev,
-      components: prev.components.map((c) => {
-        if (c.id !== id) return c;
-        const curRot = c.editorRotation ?? c.rotation ?? 0;
-        const nextRot = ((curRot + 90) % 360) as 0 | 90 | 180 | 270;
-        return { ...c, editorRotation: nextRot };
-      }),
-    }));
-  }, [recordHistory]);
 
   const handleUpdateComponent3DPosition = (id: string, x3d: number, y3d: number, z3d: number) => {
     setProject((prev) => ({

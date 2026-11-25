@@ -50,7 +50,7 @@ export function SchematicTitleBlockView({
         width={sheetWidth - 20}
         height={sheetHeight - 20}
         fill="none"
-        stroke={isDark ? '#334155' : '#94A3B8'}
+        stroke={isDark ? '#334155' : '#6E695C'}
         strokeWidth="2"
       />
 
@@ -61,7 +61,7 @@ export function SchematicTitleBlockView({
         width={sheetWidth - 40}
         height={sheetHeight - 40}
         fill="none"
-        stroke={isDark ? '#1E293B' : '#CBD5E1'}
+        stroke={isDark ? '#1E293B' : '#A8A29E'}
         strokeWidth="1"
       />
 
@@ -71,10 +71,10 @@ export function SchematicTitleBlockView({
         const coordX = 20 + stepX * (idx + 0.5);
         return (
           <g key={`num_${num}`}>
-            <text x={coordX} y="17" textAnchor="middle" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontFamily="monospace">
+            <text x={coordX} y="17" textAnchor="middle" fill={isDark ? '#64748B' : '#78716C'} fontSize="8" fontFamily="monospace">
               {num}
             </text>
-            <text x={coordX} y={sheetHeight - 12} textAnchor="middle" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontFamily="monospace">
+            <text x={coordX} y={sheetHeight - 12} textAnchor="middle" fill={isDark ? '#64748B' : '#78716C'} fontSize="8" fontFamily="monospace">
               {num}
             </text>
           </g>
@@ -87,10 +87,10 @@ export function SchematicTitleBlockView({
         const coordY = 20 + stepY * (idx + 0.5);
         return (
           <g key={`letter_${letter}`}>
-            <text x="14" y={coordY} textAnchor="middle" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontFamily="monospace">
+            <text x="14" y={coordY} textAnchor="middle" fill={isDark ? '#64748B' : '#78716C'} fontSize="8" fontFamily="monospace">
               {letter}
             </text>
-            <text x={sheetWidth - 14} y={coordY} textAnchor="middle" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontFamily="monospace">
+            <text x={sheetWidth - 14} y={coordY} textAnchor="middle" fill={isDark ? '#64748B' : '#78716C'} fontSize="8" fontFamily="monospace">
               {letter}
             </text>
           </g>
@@ -109,39 +109,39 @@ export function SchematicTitleBlockView({
           y="0"
           width={blockW}
           height={blockH}
-          fill={isDark ? '#09101E' : '#FFFFFF'}
-          stroke={isDark ? '#475569' : '#94A3B8'}
+          fill={isDark ? '#09101E' : '#E3DFD2'}
+          stroke={isDark ? '#475569' : '#6E695C'}
           strokeWidth="1.6"
           rx="2"
         />
 
         {/* Top Header Row: Project Title & Revision */}
-        <line x1="0" y1="28" x2={blockW} y2="28" stroke={isDark ? '#334155' : '#E2E8F0'} strokeWidth="1" />
-        <line x1={blockW - 70} y1="0" x2={blockW - 70} y2="28" stroke={isDark ? '#334155' : '#E2E8F0'} strokeWidth="1" />
+        <line x1="0" y1="28" x2={blockW} y2="28" stroke={isDark ? '#334155' : '#C7C2B4'} strokeWidth="1" />
+        <line x1={blockW - 70} y1="0" x2={blockW - 70} y2="28" stroke={isDark ? '#334155' : '#C7C2B4'} strokeWidth="1" />
 
-        <text x="10" y="18" fill={isDark ? '#F1F5F9' : '#0F172A'} fontSize="11" fontWeight="bold" fontFamily="monospace">
+        <text x="10" y="18" fill={isDark ? '#F1F5F9' : '#25231D'} fontSize="11" fontWeight="bold" fontFamily="monospace">
           {title.slice(0, 50)}
         </text>
-        <text x={blockW - 60} y="18" fill="#10B981" fontSize="10" fontWeight="bold" fontFamily="monospace">
+        <text x={blockW - 60} y="18" fill={isDark ? '#10B981' : '#047857'} fontSize="10" fontWeight="bold" fontFamily="monospace">
           REV {rev}
         </text>
 
         {/* Middle Row: Company & Sheet */}
-        <line x1="0" y1="56" x2={blockW} y2="56" stroke={isDark ? '#334155' : '#E2E8F0'} strokeWidth="1" />
-        <line x1={blockW - 70} y1="28" x2={blockW - 70} y2="56" stroke={isDark ? '#334155' : '#E2E8F0'} strokeWidth="1" />
+        <line x1="0" y1="56" x2={blockW} y2="56" stroke={isDark ? '#334155' : '#C7C2B4'} strokeWidth="1" />
+        <line x1={blockW - 70} y1="28" x2={blockW - 70} y2="56" stroke={isDark ? '#334155' : '#C7C2B4'} strokeWidth="1" />
 
-        <text x="10" y="44" fill={isDark ? '#94A3B8' : '#64748B'} fontSize="9" fontFamily="monospace">
-          COMPANY: <tspan fill={isDark ? '#E2E8F0' : '#1E293B'} fontWeight="bold">{company.slice(0, 26)}</tspan>
+        <text x="10" y="44" fill={isDark ? '#94A3B8' : '#44403C'} fontSize="9" fontFamily="monospace">
+          COMPANY: <tspan fill={isDark ? '#E2E8F0' : '#25231D'} fontWeight="bold">{company.slice(0, 26)}</tspan>
         </text>
-        <text x={blockW - 60} y="44" fill={isDark ? '#94A3B8' : '#64748B'} fontSize="9" fontFamily="monospace">
+        <text x={blockW - 60} y="44" fill={isDark ? '#94A3B8' : '#44403C'} fontSize="9" fontFamily="monospace">
           SH: {sheet}
         </text>
 
         {/* Bottom Row: Stats & Author */}
-        <text x="10" y="74" fill={isDark ? '#94A3B8' : '#64748B'} fontSize="8" fontFamily="monospace">
-          AUTHOR: <tspan fill={isDark ? '#CBD5E1' : '#334155'}>{author.slice(0, 16)}</tspan> | DATE: {date}
+        <text x="10" y="74" fill={isDark ? '#94A3B8' : '#44403C'} fontSize="8" fontFamily="monospace">
+          AUTHOR: <tspan fill={isDark ? '#CBD5E1' : '#25231D'}>{author.slice(0, 16)}</tspan> | DATE: {date}
         </text>
-        <text x={blockW - 110} y="74" fill={isDark ? '#38BDF8' : '#0284C7'} fontSize="8" fontWeight="bold" fontFamily="monospace">
+        <text x={blockW - 110} y="74" fill={isDark ? '#38BDF8' : '#0F6B54'} fontSize="8" fontWeight="bold" fontFamily="monospace">
           COMPS: {componentCount} | NETS: {netCount}
         </text>
       </g>

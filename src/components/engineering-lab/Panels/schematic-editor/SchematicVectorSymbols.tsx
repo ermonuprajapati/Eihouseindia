@@ -30,18 +30,18 @@ export function SchematicVectorSymbol({
   onDoubleClick,
 }: SchematicVectorSymbolProps) {
   const { type, value } = component;
-  const rot = component.rotation ?? component.editorRotation ?? 0;
-  const flipX = Boolean(component.mirrored ?? component.editorFlipX);
-  const flipY = Boolean(component.editorFlipY);
+  const rot = component.rotation ?? 0;
+  const flipX = Boolean(component.mirrored);
+  const flipY = false;
   const designator = component.designator || component.label?.split(' ')[0] || component.type?.slice(0, 3) || 'U';
 
-  const strokeColor = isSelected ? '#10B981' : theme === 'dark' ? '#94A3B8' : '#334155';
-  const fillColor = theme === 'dark' ? '#0F172A' : '#F8FAFC';
-  const pinColor = isSelected ? '#34D399' : theme === 'dark' ? '#38BDF8' : '#0284C7';
+  const strokeColor = isSelected ? '#10B981' : theme === 'dark' ? '#94A3B8' : '#7C1D1D';
+  const fillColor = theme === 'dark' ? '#0F172A' : '#ECE8DC';
+  const pinColor = isSelected ? '#34D399' : theme === 'dark' ? '#38BDF8' : '#9A3412';
   const strokeWidth = isSelected ? 2.2 : 1.8;
 
-  const posX = component.x ?? component.editorPosition?.x ?? 0;
-  const posY = component.y ?? component.editorPosition?.y ?? 0;
+  const posX = component.x ?? 0;
+  const posY = component.y ?? 0;
 
   const isMcu = [
     'MCU_ARDUINO_UNO',
@@ -438,7 +438,7 @@ export function SchematicVectorSymbol({
             x="0"
             y={halfH + 16}
             textAnchor="middle"
-            fill={theme === 'dark' ? '#CBD5E1' : '#334155'}
+            fill={theme === 'dark' ? '#CBD5E1' : '#1E242B'}
             fontSize="10"
             fontWeight="600"
             fontFamily="monospace"
@@ -455,9 +455,8 @@ export function SchematicVectorSymbol({
           const isHovered = hoveredPinId === `${component.id}:${pin.id}`;
           // Compute rotated & flipped world coordinates
           let px = pin.x;
-          let py = pin.y;
+          const py = pin.y;
           if (flipX) px = -px;
-          if (flipY) py = -py;
           const rad = (rot * Math.PI) / 180;
           const cos = Math.cos(rad);
           const sin = Math.sin(rad);
@@ -498,8 +497,8 @@ export function SchematicVectorSymbol({
               {/* Visual Snap Target Ring */}
               <circle
                 r={isHovered ? 6 : 4}
-                fill={isHovered ? '#10B981' : theme === 'dark' ? '#0F172A' : '#FFFFFF'}
-                stroke={isHovered ? '#34D399' : pinColor}
+                fill={isHovered ? '#10B981' : theme === 'dark' ? '#0F172A' : '#ECE8DC'}
+                stroke={isHovered ? '#D97706' : pinColor}
                 strokeWidth={isHovered ? 2.5 : 1.6}
                 className="transition-all"
               />

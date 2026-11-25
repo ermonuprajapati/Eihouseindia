@@ -5,6 +5,7 @@ import {
   Undo,
   Redo,
   RotateCw,
+  RotateCcw,
   FlipHorizontal,
   FlipVertical,
   Copy,
@@ -22,6 +23,8 @@ import {
   AlignLeft,
   Search,
   FileSpreadsheet,
+  Tag,
+  Eye,
 } from 'lucide-react';
 import { SchematicEditorSheetConfig } from '@/modules/engineering-lab/types';
 
@@ -31,11 +34,13 @@ interface SchematicTopBarProps {
   onUndo?: () => void;
   onRedo?: () => void;
   onRotate?: () => void;
+  onRotateCcw?: () => void;
   onMirrorH?: () => void;
   onMirrorV?: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
   onAutoTidy?: () => void;
+  onAutoAnnotate?: () => void;
   onRunErc?: () => void;
   onAlign?: (alignment: 'left' | 'top' | 'center' | 'distribute') => void;
   onOpenFind?: () => void;
@@ -45,8 +50,8 @@ interface SchematicTopBarProps {
   onZoomOut: () => void;
   onZoomReset: () => void;
   onZoomFit: () => void;
-  sheetConfig: SchematicEditorSheetConfig;
-  onUpdateSheetConfig: (config: Partial<SchematicEditorSheetConfig>) => void;
+  sheetConfig: SchematicEditorSheetConfig & { showGrid?: boolean };
+  onUpdateSheetConfig: (config: Partial<SchematicEditorSheetConfig & { showGrid?: boolean }>) => void;
   onExportSvg: () => void;
   onExportPng: () => void;
   onPrintPdf: () => void;
@@ -66,11 +71,13 @@ export function SchematicTopBar({
   onUndo,
   onRedo,
   onRotate,
+  onRotateCcw,
   onMirrorH,
   onMirrorV,
   onDuplicate,
   onDelete,
   onAutoTidy,
+  onAutoAnnotate,
   onRunErc,
   onAlign,
   onOpenFind,
@@ -139,6 +146,18 @@ export function SchematicTopBar({
           title="Rotate 90° (R)"
         >
           <RotateCw className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          data-testid="action-rotate-ccw"
+          onClick={onRotateCcw}
+          disabled={!hasCompSelection}
+          className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
+            hasCompSelection ? 'text-slate-200 hover:bg-slate-800 hover:text-emerald-400' : 'text-slate-600 cursor-not-allowed'
+          }`}
+          title="Rotate CCW (Shift+R)"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
         </button>
 
         <button
@@ -284,6 +303,16 @@ export function SchematicTopBar({
         </button>
 
         <button
+          data-testid="action-auto-annotate"
+          onClick={onAutoAnnotate}
+          className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white flex items-center gap-1 text-[11px] font-mono border border-slate-700 transition-colors"
+          title="Auto-Annotate: Sequential component designators"
+        >
+          <Tag className="w-3 h-3 text-cyan-400" />
+          <span>Annotate</span>
+        </button>
+
+        <button
           data-testid="action-erc"
           onClick={onRunErc}
           className="px-2 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/60 flex items-center gap-1 text-[11px] font-mono transition-colors"
@@ -324,6 +353,18 @@ export function SchematicTopBar({
           <option value="40">40px Grid</option>
         </select>
 
+        {/* Show/Hide Grid Toggle */}
+        <button
+          data-testid="toggle-show-grid"
+          onClick={() => onUpdateSheetConfig({ showGrid: sheetConfig.showGrid === false ? true : false })}
+          className={`p-1 rounded transition-colors ${
+            sheetConfig.showGrid !== false ? 'bg-cyan-600/80 text-white' : 'text-slate-400 hover:bg-slate-800'
+          }`}
+          title={`Show/Hide Grid: ${sheetConfig.showGrid !== false ? 'ON' : 'OFF'}`}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </button>
+
         {/* Grid Snap Toggle */}
         <button
           data-testid="toggle-grid-snap"
@@ -335,13 +376,19 @@ export function SchematicTopBar({
         >
           <GridIcon className="w-3.5 h-3.5" />
         </button>
+        <button
+          data-testid="toggle-snap"
+          onClick={() => onUpdateSheetConfig({ snapToGrid: !sheetConfig.snapToGrid })}
+          className="hidden"
+          aria-hidden="true"
+        />
 
-        {/* Sheet Theme Toggle (Dark Blueprint / Classic Light Paper) */}
+        {/* Sheet Theme Toggle (Dark Blueprint / Eye-Comfort Light Paper) */}
         <button
           data-testid="toggle-sheet-theme"
           onClick={() => onUpdateSheetConfig({ theme: sheetConfig.theme === 'dark' ? 'light' : 'dark' })}
           className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title={`Theme: ${sheetConfig.theme === 'dark' ? 'Dark Blueprint' : 'Classic Light Paper'}`}
+          title={`Theme: ${sheetConfig.theme === 'dark' ? 'Dark Blueprint' : 'Eye-Comfort Warm Light Paper'}`}
         >
           {sheetConfig.theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-cyan-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
         </button>
