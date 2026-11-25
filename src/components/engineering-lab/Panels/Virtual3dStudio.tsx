@@ -136,14 +136,16 @@ export function Virtual3dStudio({
   const [undoStack3D, setUndoStack3D] = useState<Studio3DHistoryState[]>([]);
   const [redoStack3D, setRedoStack3D] = useState<Studio3DHistoryState[]>([]);
   const [breadboardCount, setBreadboardCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const savedCount = localStorage.getItem('ei_house_virtual3d_breadboard_count');
-      if (savedCount !== null) {
-        const parsed = parseInt(savedCount, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
-      }
-      const saved = localStorage.getItem('ei_house_virtual3d_has_breadboard');
-      if (saved !== null) return saved === 'true' ? 1 : 0;
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && localStorage) {
+      try {
+        const savedCount = localStorage.getItem('ei_house_virtual3d_breadboard_count');
+        if (savedCount !== null) {
+          const parsed = parseInt(savedCount, 10);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
+        }
+        const saved = localStorage.getItem('ei_house_virtual3d_has_breadboard');
+        if (saved !== null) return saved === 'true' ? 1 : 0;
+      } catch {}
     }
     return 1;
   });
@@ -676,29 +678,74 @@ export function Virtual3dStudio({
     const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
     const isTop = (comp.z3d ?? 0) <= boardCenterZ;
     const row = isTop ? 'C' : 'H';
+    const rotY = comp.rotY !== undefined ? (((Math.round(comp.rotY) % 360) + 360) % 360) : 0;
 
     if (comp.type === 'RESISTOR') {
-      const col = pinId === '1' ? centerCol - 2 : centerCol + 2;
-      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+      let colOffset = pinId === '1' ? -2 : 2;
+      let rowLetter = row;
+      if (rotY === 180) {
+        colOffset = -colOffset;
+      } else if (rotY === 90) {
+        colOffset = 0;
+        rowLetter = pinId === '1' ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+      } else if (rotY === 270) {
+        colOffset = 0;
+        rowLetter = pinId === '1' ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+      }
+      const col = centerCol + colOffset;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
     }
 
     if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
       const isPin1 = pinId === '1' || pinId === '+' || pinId.toLowerCase().includes('pos') || pinId.toLowerCase().includes('anode');
-      const col = isPin1 ? centerCol - 1 : centerCol + 1;
-      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+      let colOffset = isPin1 ? -1 : 1;
+      let rowLetter = row;
+      if (rotY === 180) {
+        colOffset = -colOffset;
+      } else if (rotY === 90) {
+        colOffset = 0;
+        rowLetter = isPin1 ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+      } else if (rotY === 270) {
+        colOffset = 0;
+        rowLetter = isPin1 ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+      }
+      const col = centerCol + colOffset;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
     }
 
     if (comp.type === 'LED') {
       const p = pinId.toLowerCase();
       const isAnode = p === 'anode' || p === 'a' || p === '1' || p === '+';
-      const col = isAnode ? centerCol - 1 : centerCol + 1;
-      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+      let colOffset = isAnode ? -1 : 1;
+      let rowLetter = row;
+      if (rotY === 180) {
+        colOffset = -colOffset;
+      } else if (rotY === 90) {
+        colOffset = 0;
+        rowLetter = isAnode ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+      } else if (rotY === 270) {
+        colOffset = 0;
+        rowLetter = isAnode ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+      }
+      const col = centerCol + colOffset;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
     }
 
     if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
       const isAnode = pinId === '1' || pinId === 'anode' || pinId === 'a';
-      const col = isAnode ? centerCol - 2 : centerCol + 2;
-      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+      let colOffset = isAnode ? -2 : 2;
+      let rowLetter = row;
+      if (rotY === 180) {
+        colOffset = -colOffset;
+      } else if (rotY === 90) {
+        colOffset = 0;
+        rowLetter = isAnode ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+      } else if (rotY === 270) {
+        colOffset = 0;
+        rowLetter = isAnode ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+      }
+      const col = centerCol + colOffset;
+      return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
     }
 
     if (comp.type === 'LED_RGB' || comp.type === 'ACTUATOR_RGB_LED' || comp.parameters?.model3d === 'led_rgb_5mm') {
@@ -783,7 +830,6 @@ export function Virtual3dStudio({
 
     const outWires: Wire3D[] = [];
     const seen3dPairs = new Set<string>();
-    const mcuPinConnected = new Set<string>();
     const occupancy = new BreadboardOccupancyMap();
 
     // PHASE 1: Reserve exact hole coordinates for ALL component leads on the breadboard
@@ -1059,270 +1105,360 @@ export function Virtual3dStudio({
       return pin;
     };
 
-    // 3. Circuit Jumper Wires & Power Drops
+    // 3. Circuit Jumper Wires & Power Drops via True Net-Based Minimum Spanning Tree (MST)
+    class NetUnionFind {
+      private parent = new Map<string, string>();
+      find(x: string): string {
+        if (!this.parent.has(x)) this.parent.set(x, x);
+        if (this.parent.get(x) !== x) {
+          this.parent.set(x, this.find(this.parent.get(x)!));
+        }
+        return this.parent.get(x)!;
+      }
+      union(x: string, y: string) {
+        const rx = this.find(x);
+        const ry = this.find(y);
+        if (rx !== ry) this.parent.set(rx, ry);
+      }
+      connected(x: string, y: string): boolean {
+        return this.find(x) === this.find(y);
+      }
+    }
+
+    const uf = new NetUnionFind();
+
+    const getPinKey = (compId: string, pinId: string): string => {
+      if (gndCompIds.has(compId)) return '__GLOBAL_GND__';
+      if (battery && compId === battery.id) {
+        const p = (pinId || '').trim().toLowerCase();
+        if (p === '-' || p === 'n') return '__GLOBAL_GND__';
+        if (p === '+' || p === 'p') return '__GLOBAL_VCC__';
+      }
+      const comp = comps3d.find((c) => c.id === compId);
+      const normPin = comp ? normalizePinIdForComponent(comp, pinId) : pinId;
+      const pUpper = normPin.trim().toUpperCase();
+      if (pUpper === 'GND' || pUpper === 'GROUND' || pUpper.startsWith('GND')) {
+        return `${compId}:GND`;
+      }
+      return `${compId}:${normPin}`;
+    };
+
+    gndCompIds.forEach((gndId) => {
+      uf.union('__GLOBAL_GND__', `${gndId}:1`);
+    });
+
+    if (battery && batteryIsConnected) {
+      uf.union('__GLOBAL_GND__', `${battery.id}:-`);
+      uf.union('__GLOBAL_VCC__', `${battery.id}:+`);
+    }
+
     srcWires.forEach((w) => {
-      const fromIsBat = battery && w.fromCompId === battery.id;
-      const toIsBat = battery && w.toCompId === battery.id;
-      const fromIsGnd = gndCompIds.has(w.fromCompId);
-      const toIsGnd = gndCompIds.has(w.toCompId);
-
-      const fPin = (w.fromPinId || '').toLowerCase();
-      const tPin = (w.toPinId || '').toLowerCase();
-
-      // Skip direct battery-to-gnd wires since battery - is already connected to blue rail
-      if ((fromIsBat && toIsGnd) || (toIsBat && fromIsGnd)) return;
-      if ((fromIsBat && (fPin === 'n' || fPin === '-')) || (toIsBat && (tPin === 'n' || tPin === '-'))) return;
-
-      // Positive Power Drop from closest unoccupied Red (+) rail hole
-      if (fromIsBat && (fPin === 'p' || fPin === '+')) {
-        const toComp = comps3d.find((c) => c.id === w.toCompId);
-        if (!toComp) return;
-        const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const toBoardPrefix = (toComp.z3d !== undefined && toComp.z3d < -90) ? 'bb3_' : (toComp.z3d !== undefined && toComp.z3d < -30) ? 'bb2_' : 'bb_';
-        const toBoardCenterZ = (toComp.z3d !== undefined && toComp.z3d < -90) ? -120.0 : (toComp.z3d !== undefined && toComp.z3d < -30) ? -60.0 : 0.0;
-        const isTop = (toComp.z3d ?? -8) <= toBoardCenterZ;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', toBoardPrefix);
-
-        if (isDirectWireComponent(toComp)) {
-          if (railHole) {
-            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-            outWires.push({
-              id: w.id,
-              fromPin: { compId: 'breadboard', pinId: railHole.id },
-              toPin: { compId: toComp.id, pinId: normalizePinIdForComponent(toComp, w.toPinId) },
-              color: '#EF4444',
-              current: w.current,
-            });
-          }
-          return;
-        }
-
-        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole && railHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-          outWires.push({
-            id: w.id,
-            fromPin: { compId: 'breadboard', pinId: railHole.id },
-            toPin: { compId: 'breadboard', pinId: freeHole.id },
-            color: '#EF4444',
-            current: w.current,
-          });
-        }
-        return;
-      }
-      if (toIsBat && (tPin === 'p' || tPin === '+')) {
-        const fromComp = comps3d.find((c) => c.id === w.fromCompId);
-        if (!fromComp) return;
-        const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const fromBoardPrefix = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? 'bb3_' : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? 'bb2_' : 'bb_';
-        const fromBoardCenterZ = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? -120.0 : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? -60.0 : 0.0;
-        const isTop = (fromComp.z3d ?? -8) <= fromBoardCenterZ;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_pos' : 'rail_bottom_pos', fromBoardPrefix);
-
-        if (isDirectWireComponent(fromComp)) {
-          if (railHole) {
-            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-            outWires.push({
-              id: w.id,
-              fromPin: { compId: fromComp.id, pinId: normalizePinIdForComponent(fromComp, w.fromPinId) },
-              toPin: { compId: 'breadboard', pinId: railHole.id },
-              color: '#EF4444',
-              current: w.current,
-            });
-          }
-          return;
-        }
-
-        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole && railHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-          outWires.push({
-            id: w.id,
-            fromPin: { compId: 'breadboard', pinId: railHole.id },
-            toPin: { compId: 'breadboard', pinId: freeHole.id },
-            color: '#EF4444',
-            current: w.current,
-          });
-        }
-        return;
-      }
-
-      // Ground Drop from closest unoccupied Blue (-) ground rail hole
-      if (fromIsGnd) {
-        const toComp = comps3d.find((c) => c.id === w.toCompId);
-        if (!toComp) return;
-        const col = toComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((toComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const toBoardPrefix = (toComp.z3d !== undefined && toComp.z3d < -90) ? 'bb3_' : (toComp.z3d !== undefined && toComp.z3d < -30) ? 'bb2_' : 'bb_';
-        const toBoardCenterZ = (toComp.z3d !== undefined && toComp.z3d < -90) ? -120.0 : (toComp.z3d !== undefined && toComp.z3d < -30) ? -60.0 : 0.0;
-        const isTop = (toComp.z3d ?? -8) <= toBoardCenterZ;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', toBoardPrefix);
-
-        if (isDirectWireComponent(toComp)) {
-          if (railHole) {
-            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-            outWires.push({
-              id: w.id,
-              fromPin: { compId: 'breadboard', pinId: railHole.id },
-              toPin: { compId: toComp.id, pinId: normalizePinIdForComponent(toComp, w.toPinId) },
-              color: '#1E293B',
-              current: w.current,
-            });
-          }
-          return;
-        }
-
-        const compHole = getBreadboardHoleForComponentPin(toComp, w.toPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole && railHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-          outWires.push({
-            id: w.id,
-            fromPin: { compId: 'breadboard', pinId: railHole.id },
-            toPin: { compId: 'breadboard', pinId: freeHole.id },
-            color: '#1E293B',
-            current: w.current,
-          });
-        }
-        return;
-      }
-      if (toIsGnd) {
-        const fromComp = comps3d.find((c) => c.id === w.fromCompId);
-        if (!fromComp) return;
-        const col = fromComp.x3d !== undefined ? Math.max(1, Math.min(63, Math.round((fromComp.x3d - START_X) / PITCH_X) + 1)) : 25;
-        const fromBoardPrefix = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? 'bb3_' : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? 'bb2_' : 'bb_';
-        const fromBoardCenterZ = (fromComp.z3d !== undefined && fromComp.z3d < -90) ? -120.0 : (fromComp.z3d !== undefined && fromComp.z3d < -30) ? -60.0 : 0.0;
-        const isTop = (fromComp.z3d ?? -8) <= fromBoardCenterZ;
-        const railHole = occupancy.findFreeRailHole(col, isTop ? 'rail_top_neg' : 'rail_bottom_neg', fromBoardPrefix);
-
-        if (isDirectWireComponent(fromComp)) {
-          if (railHole) {
-            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-            outWires.push({
-              id: w.id,
-              fromPin: { compId: fromComp.id, pinId: normalizePinIdForComponent(fromComp, w.fromPinId) },
-              toPin: { compId: 'breadboard', pinId: railHole.id },
-              color: '#1E293B',
-              current: w.current,
-            });
-          }
-          return;
-        }
-
-        const compHole = getBreadboardHoleForComponentPin(fromComp, w.fromPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole && railHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: w.id });
-          outWires.push({
-            id: w.id,
-            fromPin: { compId: 'breadboard', pinId: railHole.id },
-            toPin: { compId: 'breadboard', pinId: freeHole.id },
-            color: '#1E293B',
-            current: w.current,
-          });
-        }
-        return;
-      }
-
-      // Signal Jumper between two circuit components
-      let wireColor = w.color;
-      if (!wireColor || wireColor === '#EF4444') {
-        if (fPin.includes('gnd') || tPin.includes('gnd') || fPin === '-' || tPin === '-') {
-          wireColor = '#1E293B';
-        } else if (
-          fPin.includes('vcc') || tPin.includes('vcc') ||
-          fPin.includes('5v') || tPin.includes('5v') ||
-          fPin.includes('3v3') || tPin.includes('3v3') ||
-          fPin.includes('vin') || tPin.includes('vin') ||
-          fPin === '+' || tPin === '+'
-        ) {
-          wireColor = '#EF4444';
-        } else if ((fPin === '2' && tPin === '6') || (fPin === '6' && tPin === '2')) {
-          wireColor = '#EAB308';
-        } else if ((fPin === '4' && tPin === '8') || (fPin === '8' && tPin === '4')) {
-          wireColor = '#EF4444';
-        } else {
-          wireColor = SIGNAL_COLORS[sigColorIdx % SIGNAL_COLORS.length];
-          sigColorIdx++;
+      const k1 = getPinKey(w.fromCompId, w.fromPinId);
+      const k2 = getPinKey(w.toCompId, w.toPinId);
+      uf.union(k1, k2);
+      if (w.tappedWireId) {
+        const parent = srcWires.find((sw) => sw.id === w.tappedWireId);
+        if (parent) {
+          const kp = getPinKey(parent.fromCompId, parent.fromPinId);
+          uf.union(k1, kp);
         }
       }
+    });
 
-      const compA = comps3d.find((c) => c.id === w.fromCompId);
-      const compB = comps3d.find((c) => c.id === w.toCompId);
+    interface CircuitPinRef {
+      compId: string;
+      pinId: string;
+      rawPinId: string;
+      netKey: string;
+      comp: Component3D;
+    }
 
-      const isA_Breadboard = compA && !isDirectWireComponent(compA);
-      const isB_Breadboard = compB && !isDirectWireComponent(compB);
+    const pinRefs: CircuitPinRef[] = [];
+    const seenPins = new Set<string>();
 
-      if (isA_Breadboard && isB_Breadboard && compA && compB) {
-        const compHoleA = getBreadboardHoleForComponentPin(compA, w.fromPinId);
-        const compHoleB = getBreadboardHoleForComponentPin(compB, w.toPinId);
-        const tieGroupA = compHoleA ? getTieGroupForHole(compHoleA) : undefined;
-        const tieGroupB = compHoleB ? getTieGroupForHole(compHoleB) : undefined;
-        if (tieGroupA && tieGroupB && tieGroupA === tieGroupB) {
-          // Same column / rail on breadboard -> internally connected -> 0 jumper wires needed!
-          return;
-        }
-      }
-
-      // Degree penalty on MCU header pins: at most 1 single jumper wire per MCU pin
-      const fromIsMcu = compA && isDirectWireComponent(compA);
-      const toIsMcu = compB && isDirectWireComponent(compB);
-      if (fromIsMcu && mcuPinConnected.has(`${w.fromCompId}:${w.fromPinId}`)) return;
-      if (toIsMcu && mcuPinConnected.has(`${w.toCompId}:${w.toPinId}`)) return;
-
-      let fromEnd: { compId: string; pinId: string } = {
-        compId: w.fromCompId,
-        pinId: compA ? normalizePinIdForComponent(compA, w.fromPinId) : w.fromPinId,
-      };
-      let toEnd: { compId: string; pinId: string } = {
-        compId: w.toCompId,
-        pinId: compB ? normalizePinIdForComponent(compB, w.toPinId) : w.toPinId,
-      };
-
-      if (isA_Breadboard && compA) {
-        const compHole = getBreadboardHoleForComponentPin(compA, w.fromPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          fromEnd = { compId: 'breadboard', pinId: freeHole.id };
-        }
-      }
-
-      if (isB_Breadboard && compB) {
-        const compHole = getBreadboardHoleForComponentPin(compB, w.toPinId);
-        const tieGroup = compHole ? getTieGroupForHole(compHole) : undefined;
-        const freeHole = tieGroup ? occupancy.findFreeHoleInTieGroup(tieGroup) : null;
-        if (freeHole) {
-          occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: w.id });
-          toEnd = { compId: 'breadboard', pinId: freeHole.id };
-        }
-      }
-
-      const endKey1 = `${fromEnd.compId}:${fromEnd.pinId}->${toEnd.compId}:${toEnd.pinId}`;
-      const endKey2 = `${toEnd.compId}:${toEnd.pinId}->${fromEnd.compId}:${fromEnd.pinId}`;
-      if (seen3dPairs.has(endKey1) || seen3dPairs.has(endKey2)) return;
-      seen3dPairs.add(endKey1);
-
-      if (fromIsMcu) mcuPinConnected.add(`${w.fromCompId}:${w.fromPinId}`);
-      if (toIsMcu) mcuPinConnected.add(`${w.toCompId}:${w.toPinId}`);
-
-      outWires.push({
-        id: w.id,
-        fromPin: fromEnd,
-        toPin: toEnd,
-        color: wireColor,
-        current: w.current,
+    const registerPin = (compId: string, pinId: string) => {
+      if (gndCompIds.has(compId)) return;
+      if (battery && compId === battery.id) return;
+      const comp = comps3d.find((c) => c.id === compId);
+      if (!comp) return;
+      const normPin = normalizePinIdForComponent(comp, pinId);
+      const key = `${compId}:${normPin}`;
+      if (seenPins.has(key)) return;
+      seenPins.add(key);
+      pinRefs.push({
+        compId,
+        pinId: normPin,
+        rawPinId: pinId,
+        netKey: getPinKey(compId, pinId),
+        comp,
       });
+    };
+
+    srcWires.forEach((w) => {
+      registerPin(w.fromCompId, w.fromPinId);
+      registerPin(w.toCompId, w.toPinId);
+    });
+
+    const netsByRoot = new Map<string, CircuitPinRef[]>();
+    pinRefs.forEach((ref) => {
+      const root = uf.find(ref.netKey);
+      if (!netsByRoot.has(root)) netsByRoot.set(root, []);
+      netsByRoot.get(root)!.push(ref);
+    });
+
+    const getTgCoord = (tg: string) => {
+      let col = 25;
+      const m = tg.match(/col_(\d+)/);
+      if (m) col = parseInt(m[1], 10);
+      const x = START_X + (Math.max(1, Math.min(63, col)) - 1) * PITCH_X;
+      const isTop = tg.includes('top');
+      let z = isTop ? -8.0 : 8.0;
+      if (tg.startsWith('bb3_')) z -= 120.0;
+      else if (tg.startsWith('bb2_')) z -= 60.0;
+      return { x, z };
+    };
+
+    const gndRoot = uf.find('__GLOBAL_GND__');
+    const vccRoot = uf.find('__GLOBAL_VCC__');
+
+    netsByRoot.forEach((netPins, root) => {
+      const isGndNet =
+        root === gndRoot ||
+        netPins.some((p) => {
+          const u = p.pinId.toUpperCase();
+          return u === 'GND' || u === 'GROUND' || u.startsWith('GND') || u === '-';
+        });
+
+      const isPosNet =
+        !isGndNet &&
+        (root === vccRoot ||
+          netPins.some((p) => {
+            const u = p.pinId.toUpperCase();
+            return u === 'VCC' || u === '5V' || u === '3V3' || u === 'VIN' || u === '+';
+          }));
+
+      // Collect unique breadboard tieGroups and MCU leaves for this net
+      const tieGroupSet = new Set<string>();
+      const mcuLeaves: CircuitPinRef[] = [];
+
+      netPins.forEach((ref) => {
+        if (isDirectWireComponent(ref.comp)) {
+          mcuLeaves.push(ref);
+        } else {
+          const compHole = getBreadboardHoleForComponentPin(ref.comp, ref.rawPinId);
+          const tg = compHole ? getTieGroupForHole(compHole) : undefined;
+          if (tg) {
+            tieGroupSet.add(tg);
+          }
+        }
+      });
+
+      const uniqueTieGroups = Array.from(tieGroupSet);
+
+      if (isGndNet || isPosNet) {
+        // Power (+) / Ground (-) net: connect each unique tieGroup and each MCU pin to nearest rail hole
+        uniqueTieGroups.forEach((tg) => {
+          let col = 25;
+          const m = tg.match(/col_(\d+)/);
+          if (m) col = parseInt(m[1], 10);
+          const boardPrefix = tg.startsWith('bb3_') ? 'bb3_' : tg.startsWith('bb2_') ? 'bb2_' : 'bb_';
+          const isTop = tg.includes('top');
+          const railType = isGndNet
+            ? isTop
+              ? 'rail_top_neg'
+              : 'rail_bottom_neg'
+            : isTop
+            ? 'rail_top_pos'
+            : 'rail_bottom_pos';
+          const railHole = occupancy.findFreeRailHole(col, railType, boardPrefix);
+          const compHole = occupancy.findFreeHoleInTieGroup(tg);
+          if (railHole && compHole) {
+            const wireId = `wire_drop_${isGndNet ? 'gnd' : 'pos'}_${tg}`;
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: wireId });
+            occupancy.occupy(compHole.id, { type: 'wire_end', ownerId: wireId });
+            outWires.push({
+              id: wireId,
+              fromPin: { compId: 'breadboard', pinId: railHole.id },
+              toPin: { compId: 'breadboard', pinId: compHole.id },
+              color: isGndNet ? '#1E293B' : '#EF4444',
+            });
+          }
+        });
+
+        mcuLeaves.forEach((leaf) => {
+          const col =
+            leaf.comp.x3d !== undefined
+              ? Math.max(1, Math.min(63, Math.round((leaf.comp.x3d - START_X) / PITCH_X) + 1))
+              : 25;
+          const boardPrefix =
+            leaf.comp.z3d !== undefined && leaf.comp.z3d < -90
+              ? 'bb3_'
+              : leaf.comp.z3d !== undefined && leaf.comp.z3d < -30
+              ? 'bb2_'
+              : 'bb_';
+          const boardCenterZ =
+            leaf.comp.z3d !== undefined && leaf.comp.z3d < -90
+              ? -120.0
+              : leaf.comp.z3d !== undefined && leaf.comp.z3d < -30
+              ? -60.0
+              : 0.0;
+          const isTop = (leaf.comp.z3d ?? -8) <= boardCenterZ;
+          const railType = isGndNet
+            ? isTop
+              ? 'rail_top_neg'
+              : 'rail_bottom_neg'
+            : isTop
+            ? 'rail_top_pos'
+            : 'rail_bottom_pos';
+          const railHole = occupancy.findFreeRailHole(col, railType, boardPrefix);
+          if (railHole) {
+            const wireId = `wire_mcu_${isGndNet ? 'gnd' : 'pos'}_${leaf.compId}_${leaf.pinId}`;
+            occupancy.occupy(railHole.id, { type: 'wire_end', ownerId: wireId });
+            outWires.push({
+              id: wireId,
+              fromPin: { compId: 'breadboard', pinId: railHole.id },
+              toPin: { compId: leaf.compId, pinId: leaf.pinId },
+              color: isGndNet ? '#1E293B' : '#EF4444',
+            });
+          }
+        });
+        return;
+      }
+
+      // Signal Net: Minimum Spanning Tree
+      const totalPhysicalNodes = uniqueTieGroups.length + mcuLeaves.length;
+      if (totalPhysicalNodes <= 1) {
+        return; // 0 jumpers needed!
+      }
+
+      // Pick wire color
+      let wireColor: string = SIGNAL_COLORS[sigColorIdx % SIGNAL_COLORS.length];
+      const netWires = srcWires.filter((w) => {
+        const k1 = getPinKey(w.fromCompId, w.fromPinId);
+        const k2 = getPinKey(w.toCompId, w.toPinId);
+        return uf.find(k1) === root || uf.find(k2) === root;
+      });
+      const customColorWire = netWires.find(
+        (w) => w.color && w.color !== '#EF4444' && w.color !== '#1E293B'
+      );
+      if (customColorWire && customColorWire.color) {
+        wireColor = customColorWire.color;
+      } else {
+        sigColorIdx++;
+      }
+
+      // 1. Connect all breadboard tieGroup nodes first via shortest column-to-column jumpers (MST)
+      if (uniqueTieGroups.length >= 2) {
+        interface TgEdge {
+          tgA: string;
+          tgB: string;
+          dist: number;
+        }
+        const edges: TgEdge[] = [];
+        for (let i = 0; i < uniqueTieGroups.length; i++) {
+          const posA = getTgCoord(uniqueTieGroups[i]);
+          for (let j = i + 1; j < uniqueTieGroups.length; j++) {
+            const posB = getTgCoord(uniqueTieGroups[j]);
+            edges.push({
+              tgA: uniqueTieGroups[i],
+              tgB: uniqueTieGroups[j],
+              dist: Math.hypot(posA.x - posB.x, posA.z - posB.z),
+            });
+          }
+        }
+        edges.sort((a, b) => a.dist - b.dist);
+
+        const tgUf = new NetUnionFind();
+        let edgeIdx = 0;
+        for (const e of edges) {
+          if (!tgUf.connected(e.tgA, e.tgB)) {
+            tgUf.union(e.tgA, e.tgB);
+            const holeA = occupancy.findFreeHoleInTieGroup(e.tgA);
+            const holeB = occupancy.findFreeHoleInTieGroup(e.tgB);
+            if (holeA && holeB) {
+              const wireId = `wire_jumper_mst_${e.tgA}_${e.tgB}_${edgeIdx++}`;
+              occupancy.occupy(holeA.id, { type: 'wire_end', ownerId: wireId });
+              occupancy.occupy(holeB.id, { type: 'wire_end', ownerId: wireId });
+              outWires.push({
+                id: wireId,
+                fromPin: { compId: 'breadboard', pinId: holeA.id },
+                toPin: { compId: 'breadboard', pinId: holeB.id },
+                color: wireColor,
+                current: netWires[0]?.current,
+              });
+            }
+          }
+        }
+      }
+
+      // 2. Attach EACH isMcuLeaf node with EXACTLY ONE single jumper wire
+      for (const leaf of mcuLeaves) {
+        const leafPos = {
+          x: leaf.comp.x3d ?? 0,
+          z: leaf.comp.z3d ?? 0,
+        };
+
+        if (uniqueTieGroups.length > 0) {
+          // Connect to nearest breadboard tieGroup
+          let bestTg = uniqueTieGroups[0];
+          let bestDist = Math.hypot(
+            leafPos.x - getTgCoord(bestTg).x,
+            leafPos.z - getTgCoord(bestTg).z
+          );
+          for (let i = 1; i < uniqueTieGroups.length; i++) {
+            const tg = uniqueTieGroups[i];
+            const d = Math.hypot(
+              leafPos.x - getTgCoord(tg).x,
+              leafPos.z - getTgCoord(tg).z
+            );
+            if (d < bestDist) {
+              bestDist = d;
+              bestTg = tg;
+            }
+          }
+
+          const freeHole = occupancy.findFreeHoleInTieGroup(bestTg);
+          if (freeHole) {
+            const wireId = `wire_mcu_leaf_${leaf.compId}_${leaf.pinId}`;
+            occupancy.occupy(freeHole.id, { type: 'wire_end', ownerId: wireId });
+            outWires.push({
+              id: wireId,
+              fromPin: { compId: leaf.compId, pinId: leaf.pinId },
+              toPin: { compId: 'breadboard', pinId: freeHole.id },
+              color: wireColor,
+              current: netWires[0]?.current,
+            });
+          }
+        } else {
+          // No breadboard tieGroup in this net; connect leaves directly
+          let otherLeaf: CircuitPinRef | null = null;
+          let bestDist = Infinity;
+          for (const ol of mcuLeaves) {
+            if (ol.compId === leaf.compId && ol.pinId === leaf.pinId) continue;
+            const posOl = { x: ol.comp.x3d ?? 0, z: ol.comp.z3d ?? 0 };
+            const d = Math.hypot(leafPos.x - posOl.x, leafPos.z - posOl.z);
+            if (d < bestDist) {
+              bestDist = d;
+              otherLeaf = ol;
+            }
+          }
+          if (otherLeaf) {
+            const pairKey1 = `${leaf.compId}:${leaf.pinId}->${otherLeaf.compId}:${otherLeaf.pinId}`;
+            const pairKey2 = `${otherLeaf.compId}:${otherLeaf.pinId}->${leaf.compId}:${leaf.pinId}`;
+            if (!seen3dPairs.has(pairKey1) && !seen3dPairs.has(pairKey2)) {
+              seen3dPairs.add(pairKey1);
+              const wireId = `wire_leaf_leaf_${leaf.compId}_${otherLeaf.compId}`;
+              outWires.push({
+                id: wireId,
+                fromPin: { compId: leaf.compId, pinId: leaf.pinId },
+                toPin: { compId: otherLeaf.compId, pinId: otherLeaf.pinId },
+                color: wireColor,
+                current: netWires[0]?.current,
+              });
+            }
+          }
+        }
+      }
     });
 
     // Strict phantom wire filter: Any component with 0 connections in srcWires must have 0 wires attached
@@ -1633,25 +1769,30 @@ export function Virtual3dStudio({
         c.id === c3d.id ? { ...c, ...c3d } : c
       );
       const curWires3d = independentWires !== null ? independentWires : activeWires3d;
-      for (const w of curWires3d) {
+      const userWires3d = curWires3d.filter((w) => w.id.startsWith('wire3d_'));
+      const runningWires = [...wires];
+      for (const w of userWires3d) {
         const isFromBb = w.fromPin.compId === 'breadboard' || w.fromPin.compId.startsWith('breadboard');
         const isToBb = w.toPin.compId === 'breadboard' || w.toPin.compId.startsWith('breadboard');
         if (isFromBb || isToBb) {
-          const resolved = resolve3DWireToSchematicConnections(w, curWires3d, nextComps3d, components, wires);
+          const resolved = resolve3DWireToSchematicConnections(w, curWires3d, nextComps3d, components, runningWires);
           for (let idx = 0; idx < resolved.length; idx++) {
             const rw = resolved[idx];
             const resolvedId = `${w.id}_sch_${idx}`;
-            if (
-              !wires.some(
-                (sw) =>
-                  sw.id === resolvedId ||
-                  (sw.fromCompId === rw.fromCompId &&
-                    sw.fromPinId === rw.fromPinId &&
-                    sw.toCompId === rw.toCompId &&
-                    sw.toPinId === rw.toPinId)
-              )
-            ) {
-              onAddWire({
+            const exists = runningWires.some(
+              (sw) =>
+                sw.id === resolvedId ||
+                (sw.fromCompId === rw.fromCompId &&
+                  sw.fromPinId === rw.fromPinId &&
+                  sw.toCompId === rw.toCompId &&
+                  sw.toPinId === rw.toPinId) ||
+                (sw.fromCompId === rw.toCompId &&
+                  sw.fromPinId === rw.toPinId &&
+                  sw.toCompId === rw.fromCompId &&
+                  sw.toPinId === rw.fromPinId)
+            );
+            if (!exists) {
+              const newWire: CircuitWire = {
                 id: resolvedId,
                 fromCompId: rw.fromCompId,
                 fromPinId: rw.fromPinId,
@@ -1660,7 +1801,9 @@ export function Virtual3dStudio({
                 color: rw.color,
                 tappedWireId: rw.tappedWireId,
                 junctionPoint: rw.junctionPoint,
-              });
+              };
+              runningWires.push(newWire);
+              onAddWire(newWire);
             }
           }
         }
@@ -1739,43 +1882,28 @@ export function Virtual3dStudio({
     const nextWires3d = [...curWires3d, w3d];
     setIndependentWires(nextWires3d);
 
-    const isFromBb = w3d.fromPin.compId === 'breadboard' || w3d.fromPin.compId.startsWith('breadboard');
-    const isToBb = w3d.toPin.compId === 'breadboard' || w3d.toPin.compId.startsWith('breadboard');
+    // Route BOTH breadboard wires AND direct component-to-component 3D wires through resolve3DWireToSchematicConnections
+    const resolved = resolve3DWireToSchematicConnections(
+      w3d,
+      nextWires3d,
+      activeComponents3d,
+      components,
+      wires
+    );
 
-    if (!isFromBb && !isToBb) {
-      // Direct component-to-component connection
+    for (let idx = 0; idx < resolved.length; idx++) {
+      const rw = resolved[idx];
+      const resolvedId = `${w3d.id}_sch_${idx}`;
       onAddWire({
-        id: w3d.id,
-        fromCompId: w3d.fromPin.compId,
-        fromPinId: w3d.fromPin.pinId,
-        toCompId: w3d.toPin.compId,
-        toPinId: w3d.toPin.pinId,
-        color: w3d.color,
+        id: resolvedId,
+        fromCompId: rw.fromCompId,
+        fromPinId: rw.fromPinId,
+        toCompId: rw.toCompId,
+        toPinId: rw.toPinId,
+        color: rw.color,
+        tappedWireId: rw.tappedWireId,
+        junctionPoint: rw.junctionPoint,
       });
-    } else {
-      // Breadboard column/rail electrical resolution
-      const resolved = resolve3DWireToSchematicConnections(
-        w3d,
-        nextWires3d,
-        activeComponents3d,
-        components,
-        wires
-      );
-
-      for (let idx = 0; idx < resolved.length; idx++) {
-        const rw = resolved[idx];
-        const resolvedId = `${w3d.id}_sch_${idx}`;
-        onAddWire({
-          id: resolvedId,
-          fromCompId: rw.fromCompId,
-          fromPinId: rw.fromPinId,
-          toCompId: rw.toCompId,
-          toPinId: rw.toPinId,
-          color: rw.color,
-          tappedWireId: rw.tappedWireId,
-          junctionPoint: rw.junctionPoint,
-        });
-      }
     }
     toast.success('Connected 3D Dupont jumper wire.');
   }, [activeComponents3d, activeWires3d, independentWires, components, wires, onAddWire, record3DHistory]);
@@ -1814,41 +1942,28 @@ export function Virtual3dStudio({
       });
     }
 
-    const isFromBb = w3d.fromPin.compId === 'breadboard' || w3d.fromPin.compId.startsWith('breadboard');
-    const isToBb = w3d.toPin.compId === 'breadboard' || w3d.toPin.compId.startsWith('breadboard');
+    // Route BOTH breadboard wires AND direct component-to-component 3D wires through resolve3DWireToSchematicConnections
+    const resolved = resolve3DWireToSchematicConnections(
+      w3d,
+      nextWires3d,
+      activeComponents3d,
+      components,
+      wires
+    );
 
-    if (!isFromBb && !isToBb) {
+    for (let idx = 0; idx < resolved.length; idx++) {
+      const rw = resolved[idx];
+      const resolvedId = `${w3d.id}_sch_${idx}`;
       onAddWire({
-        id: w3d.id,
-        fromCompId: w3d.fromPin.compId,
-        fromPinId: w3d.fromPin.pinId,
-        toCompId: w3d.toPin.compId,
-        toPinId: w3d.toPin.pinId,
-        color: w3d.color,
+        id: resolvedId,
+        fromCompId: rw.fromCompId,
+        fromPinId: rw.fromPinId,
+        toCompId: rw.toCompId,
+        toPinId: rw.toPinId,
+        color: rw.color,
+        tappedWireId: rw.tappedWireId,
+        junctionPoint: rw.junctionPoint,
       });
-    } else {
-      const resolved = resolve3DWireToSchematicConnections(
-        w3d,
-        nextWires3d,
-        activeComponents3d,
-        components,
-        wires
-      );
-
-      for (let idx = 0; idx < resolved.length; idx++) {
-        const rw = resolved[idx];
-        const resolvedId = `${w3d.id}_sch_${idx}`;
-        onAddWire({
-          id: resolvedId,
-          fromCompId: rw.fromCompId,
-          fromPinId: rw.fromPinId,
-          toCompId: rw.toCompId,
-          toPinId: rw.toPinId,
-          color: rw.color || w3d.color,
-          tappedWireId: rw.tappedWireId,
-          junctionPoint: rw.junctionPoint,
-        });
-      }
     }
   }, [activeComponents3d, activeWires3d, independentWires, components, wires, onDeleteWire, onAddWire, record3DHistory]);
 

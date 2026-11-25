@@ -6,7 +6,7 @@ import {
 } from './breadboard-topology';
 import {
   getCanonicalPinWorldPos,
-  getCanonicalWirePoints,
+  resolveShortestNetWire,
 } from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 
 export interface ResolvedSchematicWire {
@@ -196,10 +196,22 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
   const centerCol = Math.round((comp.x3d - START_X) / PITCH_X) + 1;
   const isTop = (comp.z3d ?? 0) <= boardCenterZ;
   const row = isTop ? 'C' : 'H';
+  const rotY = comp.rotY !== undefined ? (((Math.round(comp.rotY) % 360) + 360) % 360) : 0;
 
   if (comp.type === 'RESISTOR') {
-    const col = pinId === '1' ? centerCol - 2 : centerCol + 2;
-    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+    let colOffset = pinId === '1' ? -2 : 2;
+    let rowLetter = row;
+    if (rotY === 180) {
+      colOffset = -colOffset;
+    } else if (rotY === 90) {
+      colOffset = 0;
+      rowLetter = pinId === '1' ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+    } else if (rotY === 270) {
+      colOffset = 0;
+      rowLetter = pinId === '1' ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+    }
+    const col = centerCol + colOffset;
+    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
   }
 
   if (comp.type === 'CAPACITOR' || comp.type === 'CAPACITOR_ELECTROLYTIC') {
@@ -208,21 +220,54 @@ export function getComponentPinHole(comp: Component3D, pinId: string): string | 
       pinId === '+' ||
       pinId.toLowerCase().includes('pos') ||
       pinId.toLowerCase().includes('anode');
-    const col = isPin1 ? centerCol - 1 : centerCol + 1;
-    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+    let colOffset = isPin1 ? -1 : 1;
+    let rowLetter = row;
+    if (rotY === 180) {
+      colOffset = -colOffset;
+    } else if (rotY === 90) {
+      colOffset = 0;
+      rowLetter = isPin1 ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+    } else if (rotY === 270) {
+      colOffset = 0;
+      rowLetter = isPin1 ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+    }
+    const col = centerCol + colOffset;
+    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
   }
 
   if (comp.type === 'LED') {
     const p = pinId.toLowerCase();
     const isAnode = p === 'anode' || p === 'a' || p === '1' || p === '+';
-    const col = isAnode ? centerCol - 1 : centerCol + 1;
-    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+    let colOffset = isAnode ? -1 : 1;
+    let rowLetter = row;
+    if (rotY === 180) {
+      colOffset = -colOffset;
+    } else if (rotY === 90) {
+      colOffset = 0;
+      rowLetter = isAnode ? (isTop ? 'B' : 'G') : (isTop ? 'D' : 'I');
+    } else if (rotY === 270) {
+      colOffset = 0;
+      rowLetter = isAnode ? (isTop ? 'D' : 'I') : (isTop ? 'B' : 'G');
+    }
+    const col = centerCol + colOffset;
+    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
   }
 
   if (comp.type === 'DIODE' || comp.type === 'DIODE_1N4007') {
     const isAnode = pinId === '1' || pinId === 'anode' || pinId === 'a';
-    const col = isAnode ? centerCol - 2 : centerCol + 2;
-    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${row}`;
+    let colOffset = isAnode ? -2 : 2;
+    let rowLetter = row;
+    if (rotY === 180) {
+      colOffset = -colOffset;
+    } else if (rotY === 90) {
+      colOffset = 0;
+      rowLetter = isAnode ? (isTop ? 'A' : 'F') : (isTop ? 'E' : 'J');
+    } else if (rotY === 270) {
+      colOffset = 0;
+      rowLetter = isAnode ? (isTop ? 'E' : 'J') : (isTop ? 'A' : 'F');
+    }
+    const col = centerCol + colOffset;
+    return `${boardPrefix}col_${Math.max(1, Math.min(63, col))}_${rowLetter}`;
   }
 
   if (
@@ -539,64 +584,22 @@ export function resolve3DWireToSchematicConnections(
 
   if (!bestPair) return [];
 
-  const { a: bestA, b: bestB, dist: directDist } = bestPair;
-  const posA = getPinPos(bestA.compId, bestA.pinId);
-  const posB = getPinPos(bestB.compId, bestB.pinId);
+  const { a: bestA, b: bestB } = bestPair;
 
-  // 6. Auto-Tap Nearest Existing Wire of That Net (Shortest Path Junction!) - Check BOTH directions!
-  interface TapCandidate {
-    from: CandidatePin;
-    to: CandidatePin;
-    wireId: string;
-    point: { x: number; y: number };
-    dist: number;
-  }
+  // 6. Auto-Tap Nearest Existing Wire of That Net (Shortest Path Junction!) via unified resolver
+  const resolved = resolveShortestNetWire(
+    bestA.compId,
+    bestA.pinId,
+    bestB.compId,
+    bestB.pinId,
+    schematicComponents,
+    schematicWires,
+    undefined,
+    10
+  );
 
-  let closestTap: TapCandidate | null = null;
-  const netRootA = uf.find(`${bestA.compId}:${bestA.pinId}`);
-  const netRootB = uf.find(`${bestB.compId}:${bestB.pinId}`);
-
-  for (const sw of schematicWires) {
-    const swNet = uf.find(`${sw.fromCompId}:${sw.fromPinId}`);
-    const verts = getCanonicalWirePoints(sw, schematicComponents, schematicWires);
-
-    // Direction 1: posA tapping onto existing wires of netRootB (from = bestA, to = bestB)
-    if (swNet === netRootB) {
-      for (let i = 0; i < verts.length - 1; i++) {
-        const proj = projectPointToSegment(posA, verts[i], verts[i + 1]);
-        if (proj) {
-          const threshold = closestTap ? closestTap.dist : directDist - 15;
-          if (proj.dist < threshold) {
-            closestTap = {
-              from: bestA,
-              to: bestB,
-              wireId: sw.id,
-              point: { x: proj.x, y: proj.y },
-              dist: proj.dist,
-            };
-          }
-        }
-      }
-    }
-
-    // Direction 2: posB tapping onto existing wires of netRootA (from = bestB, to = bestA)
-    if (swNet === netRootA) {
-      for (let i = 0; i < verts.length - 1; i++) {
-        const proj = projectPointToSegment(posB, verts[i], verts[i + 1]);
-        if (proj) {
-          const threshold = closestTap ? closestTap.dist : directDist - 15;
-          if (proj.dist < threshold) {
-            closestTap = {
-              from: bestB,
-              to: bestA,
-              wireId: sw.id,
-              point: { x: proj.x, y: proj.y },
-              dist: proj.dist,
-            };
-          }
-        }
-      }
-    }
+  if (resolved.skipDuplicate) {
+    return [];
   }
 
   // Preserve clean default schematic wire color (never force jarring red on normal signal wires)
@@ -605,27 +608,15 @@ export function resolve3DWireToSchematicConnections(
     resolvedColor = w3d.color;
   }
 
-  if (closestTap) {
-    return [
-      {
-        fromCompId: closestTap.from.compId,
-        fromPinId: closestTap.from.pinId,
-        toCompId: closestTap.to.compId,
-        toPinId: closestTap.to.pinId,
-        color: resolvedColor,
-        tappedWireId: closestTap.wireId,
-        junctionPoint: closestTap.point,
-      },
-    ];
-  }
-
   return [
     {
-      fromCompId: bestA.compId,
-      fromPinId: bestA.pinId,
-      toCompId: bestB.compId,
-      toPinId: bestB.pinId,
+      fromCompId: resolved.fromCompId,
+      fromPinId: resolved.fromPinId,
+      toCompId: resolved.toCompId,
+      toPinId: resolved.toPinId,
       color: resolvedColor,
+      tappedWireId: resolved.tappedWireId,
+      junctionPoint: resolved.junctionPoint,
     },
   ];
 }

@@ -171,7 +171,7 @@ export function getCanonicalWirePoints(
  * and 3+ branch meetings, plus user manual junctions.
  */
 export function computeCanonicalJunctions(
-  routedWires: { wireId: string; points: { x: number; y: number }[]; netName?: string; junctionPoint?: { x: number; y: number } }[],
+  routedWires: { wireId: string; points: { x: number; y: number }[]; netName?: string; junctionPoint?: { x: number; y: number }; tappedWireId?: string }[],
   manualJunctions: { x: number; y: number }[] = []
 ): { x: number; y: number }[] {
   const validWires = (routedWires || []).filter(
@@ -201,7 +201,196 @@ export function computeCanonicalJunctions(
       const key = `${Math.round(rw.junctionPoint.x)},${Math.round(rw.junctionPoint.y)}`;
       dotMap.set(key, { x: Math.round(rw.junctionPoint.x), y: Math.round(rw.junctionPoint.y) });
     }
+    if (rw.tappedWireId && rw.points && rw.points.length >= 2) {
+      const endPt = rw.points[rw.points.length - 1];
+      const key = `${Math.round(endPt.x)},${Math.round(endPt.y)}`;
+      dotMap.set(key, { x: Math.round(endPt.x), y: Math.round(endPt.y) });
+    }
   });
 
   return Array.from(dotMap.values());
+}
+
+/**
+ * Union-Find helper to manage electrical nets.
+ */
+class NetUnionFind {
+  private parent = new Map<string, string>();
+
+  find(i: string): string {
+    if (!this.parent.has(i)) this.parent.set(i, i);
+    if (this.parent.get(i) !== i) {
+      this.parent.set(i, this.find(this.parent.get(i)!));
+    }
+    return this.parent.get(i)!;
+  }
+
+  union(i: string, j: string) {
+    const rootI = this.find(i);
+    const rootJ = this.find(j);
+    if (rootI !== rootJ) {
+      this.parent.set(rootI, rootJ);
+    }
+  }
+
+  connected(i: string, j: string): boolean {
+    return this.find(i) === this.find(j);
+  }
+}
+
+/**
+ * Resolves a requested wire to the shortest net-connected trunk path or direct connection.
+ * Enforces:
+ * 1. Build Union-Find of ALL electrical nets in existingWires (including tappedWireId parent links).
+ * 2. If from and to are ALREADY in the same electrical net AND no explicit manualWaypoints -> return skipDuplicate: true.
+ * 3. If manualWaypoints are empty/undefined:
+ *    - Check all existing wires in net(to) and net(from).
+ *    - Project endpoint onto polyline of existing wire.
+ *    - If a valid projection is shorter than directDist - 5, return T-junction tap!
+ */
+export function resolveShortestNetWire(
+  fromCompId: string,
+  fromPinId: string,
+  toCompId: string,
+  toPinId: string,
+  components: CircuitComponent[],
+  existingWires: CircuitWire[],
+  manualWaypoints?: { x: number; y: number }[],
+  gridStep = 10
+): {
+  skipDuplicate?: boolean;
+  fromCompId: string;
+  fromPinId: string;
+  toCompId: string;
+  toPinId: string;
+  tappedWireId?: string;
+  junctionPoint?: { x: number; y: number };
+  points?: { x: number; y: number }[];
+} {
+  const uf = new NetUnionFind();
+  for (const wire of existingWires) {
+    const k1 = `${wire.fromCompId}:${wire.fromPinId}`;
+    const k2 = `${wire.toCompId}:${wire.toPinId}`;
+    uf.union(k1, k2);
+    if (wire.tappedWireId) {
+      const parentWire = existingWires.find((pw) => pw.id === wire.tappedWireId);
+      if (parentWire) {
+        uf.union(k1, `${parentWire.fromCompId}:${parentWire.fromPinId}`);
+      }
+    }
+  }
+
+  const keyFrom = `${fromCompId}:${fromPinId}`;
+  const keyTo = `${toCompId}:${toPinId}`;
+
+  if (keyFrom === keyTo) {
+    return { skipDuplicate: true, fromCompId, fromPinId, toCompId, toPinId };
+  }
+
+  const hasExplicitWaypoints = Array.isArray(manualWaypoints) && manualWaypoints.length > 0;
+  if (!hasExplicitWaypoints && uf.connected(keyFrom, keyTo)) {
+    return {
+      skipDuplicate: true,
+      fromCompId,
+      fromPinId,
+      toCompId,
+      toPinId,
+    };
+  }
+
+  const fromComp = components.find((c) => c.id === fromCompId);
+  const toComp = components.find((c) => c.id === toCompId);
+
+  if (fromComp && toComp && !hasExplicitWaypoints) {
+    const posFrom = getCanonicalPinWorldPos(fromComp, fromPinId);
+    const posTo = getCanonicalPinWorldPos(toComp, toPinId);
+    const directDist = Math.hypot(posFrom.x - posTo.x, posFrom.y - posTo.y);
+
+    const rootTo = uf.find(keyTo);
+    const rootFrom = uf.find(keyFrom);
+
+    let bestTap: {
+      fromC: string;
+      fromP: string;
+      toC: string;
+      toP: string;
+      wireId: string;
+      point: { x: number; y: number };
+      dist: number;
+    } | null = null;
+
+    // Check ALL existing wires belonging to net(to)
+    for (const sw of existingWires) {
+      const swNet = uf.find(`${sw.fromCompId}:${sw.fromPinId}`);
+      if (swNet === rootTo) {
+        const verts = getCanonicalWirePoints(sw, components, existingWires);
+        const proj = projectPointOntoPolyline(posFrom, verts, gridStep);
+        if (proj) {
+          const dToPoint = Math.hypot(proj.point.x - posTo.x, proj.point.y - posTo.y);
+          if (dToPoint > 4 || verts.length > 2) {
+            if (proj.distance < directDist - 5) {
+              if (!bestTap || proj.distance < bestTap.dist) {
+                bestTap = {
+                  fromC: fromCompId,
+                  fromP: fromPinId,
+                  toC: toCompId,
+                  toP: toPinId,
+                  wireId: sw.id,
+                  point: proj.point,
+                  dist: proj.distance,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ALSO check reverse direction: ALL existing wires belonging to net(from)
+    for (const sw of existingWires) {
+      const swNet = uf.find(`${sw.fromCompId}:${sw.fromPinId}`);
+      if (swNet === rootFrom) {
+        const verts = getCanonicalWirePoints(sw, components, existingWires);
+        const proj = projectPointOntoPolyline(posTo, verts, gridStep);
+        if (proj) {
+          const dFromPoint = Math.hypot(proj.point.x - posFrom.x, proj.point.y - posFrom.y);
+          if (dFromPoint > 4 || verts.length > 2) {
+            if (proj.distance < directDist - 5) {
+              if (!bestTap || proj.distance < bestTap.dist) {
+                // Swap so tapping endpoint is always `to` -> `junctionPoint`
+                bestTap = {
+                  fromC: toCompId,
+                  fromP: toPinId,
+                  toC: fromCompId,
+                  toP: fromPinId,
+                  wireId: sw.id,
+                  point: proj.point,
+                  dist: proj.distance,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (bestTap) {
+      return {
+        fromCompId: bestTap.fromC,
+        fromPinId: bestTap.fromP,
+        toCompId: bestTap.toC,
+        toPinId: bestTap.toP,
+        tappedWireId: bestTap.wireId,
+        junctionPoint: bestTap.point,
+      };
+    }
+  }
+
+  return {
+    fromCompId,
+    fromPinId,
+    toCompId,
+    toPinId,
+    points: hasExplicitWaypoints ? manualWaypoints : undefined,
+  };
 }

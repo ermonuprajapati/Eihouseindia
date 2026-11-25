@@ -42,7 +42,7 @@ export function SchematicTitleBlockView({
   const sheet = titleBlock?.sheet || '1 / 1';
 
   return (
-    <g className="sch-title-block select-none pointer-events-auto">
+    <g className="sch-title-block select-none pointer-events-none">
       {/* Outer Border Frame */}
       <rect
         x="10"
@@ -52,6 +52,7 @@ export function SchematicTitleBlockView({
         fill="none"
         stroke={isDark ? '#334155' : '#6E695C'}
         strokeWidth="2"
+        pointerEvents="none"
       />
 
       {/* Inner Margined Zone Border */}
@@ -63,6 +64,7 @@ export function SchematicTitleBlockView({
         fill="none"
         stroke={isDark ? '#1E293B' : '#A8A29E'}
         strokeWidth="1"
+        pointerEvents="none"
       />
 
       {/* Zone Coordinates Top & Bottom (1 - 6) */}
@@ -101,7 +103,7 @@ export function SchematicTitleBlockView({
       <g
         data-testid="sch-title-block"
         transform={`translate(${x}, ${y})`}
-        className="cursor-pointer"
+        className="cursor-pointer pointer-events-auto"
         onDoubleClick={onDoubleClick}
       >
         <rect

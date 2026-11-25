@@ -21,6 +21,8 @@ import { autoLayoutCircuit } from '@/modules/engineering-lab/schematic-engine/sc
 import {
   getCanonicalWirePoints,
   computeCanonicalJunctions,
+  projectPointOntoPolyline,
+  resolveShortestNetWire,
 } from './schematic-editor/canonical-geometry';
 import {
   extractWireSegments,
@@ -153,6 +155,7 @@ export function SchematicEditorPanel({
   const [pan, setPan] = useState<{ x: number; y: number }>(initialSession.pan);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragStartClient, setDragStartClient] = useState<{ x: number; y: number } | null>(null);
 
   // Component Dragging State (Single component)
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
@@ -478,18 +481,33 @@ export function SchematicEditorPanel({
             // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
             const interiorWaypoints = finalPoints.slice(1, -1);
 
-            const newWireId = `wire_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-            onAddWire({
-              id: newWireId,
-              fromCompId: activeWireStart.compId,
-              fromPinId: activeWireStart.pinId,
-              toCompId: compId,
-              toPinId: pinId,
-              points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
-            });
-            setInternalSelectedWireId(newWireId);
-            setWirePillPos({ x: wx, y: wy });
-            onSelectWire(newWireId);
+            const resolved = resolveShortestNetWire(
+              activeWireStart.compId,
+              activeWireStart.pinId,
+              compId,
+              pinId,
+              components,
+              wires,
+              interiorWaypoints,
+              sheetConfig.gridStep
+            );
+
+            if (!resolved.skipDuplicate) {
+              const newWireId = `wire_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              onAddWire({
+                id: newWireId,
+                fromCompId: resolved.fromCompId,
+                fromPinId: resolved.fromPinId,
+                toCompId: resolved.toCompId,
+                toPinId: resolved.toPinId,
+                tappedWireId: resolved.tappedWireId,
+                junctionPoint: resolved.junctionPoint,
+                points: resolved.points,
+              });
+              setInternalSelectedWireId(newWireId);
+              setWirePillPos({ x: wx, y: wy });
+              onSelectWire(newWireId);
+            }
           }
           setActiveWireStart(null);
           setWireWaypoints([]);
@@ -570,9 +588,7 @@ export function SchematicEditorPanel({
             junctionPoint: { x: hitX, y: hitY },
             points: interiorWaypoints.length > 0 ? interiorWaypoints : undefined,
           });
-          setInternalSelectedWireId(newWireId);
-          setWirePillPos({ x: hitX, y: hitY });
-          onSelectWire(newWireId);
+          clearWireSelection();
           setActiveWireStart(null);
           setWireWaypoints([]);
           return;
@@ -782,6 +798,7 @@ export function SchematicEditorPanel({
     if (e.button === 1 || tool === 'pan' || (e.button === 0 && e.altKey)) {
       setIsDraggingCanvas(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      setDragStartClient({ x: e.clientX, y: e.clientY });
       return;
     }
 
@@ -910,14 +927,12 @@ export function SchematicEditorPanel({
 
       // Clear wire selection on any empty canvas click when not currently drawing a wire
       clearWireSelection();
+      onSelectComponent(null);
+      updateSelectedCompIds([]);
+      setSelectedItemId(null);
 
       // Marquee box selection start on empty canvas in Select mode
       if (tool === 'select') {
-        if (!e.shiftKey) {
-          onSelectComponent(null);
-          updateSelectedCompIds([]);
-          setSelectedItemId(null);
-        }
         setMarqueeBox({ x1: wCoord.x, y1: wCoord.y, x2: wCoord.x, y2: wCoord.y });
       }
     }
@@ -1088,7 +1103,14 @@ export function SchematicEditorPanel({
   };
 
   // Canvas Mouse Up
-  const handleMouseUp = () => {
+  const handleMouseUp = (e?: React.MouseEvent) => {
+    if (isDraggingCanvas && dragStartClient && e) {
+      const dist = Math.hypot(e.clientX - dragStartClient.x, e.clientY - dragStartClient.y);
+      if (dist < 4) {
+        clearWireSelection();
+      }
+    }
+    setDragStartClient(null);
     setIsDraggingCanvas(false);
     setDraggingCompId(null);
     setDraggingWireCorner(null);
@@ -1498,27 +1520,21 @@ export function SchematicEditorPanel({
                         });
                       }}
                     >
-                      {/* Generous Invisible Hover/Click Stroke (14px) */}
+                      {/* Visible Copper Track Line rendered FIRST below interactive hit strokes */}
                       <polyline
-                        data-testid={`sch-wire-hit-${rw.wireId}`}
+                        data-testid={`sch-wire-${rw.wireId}`}
                         points={ptsStr}
                         fill="none"
-                        stroke="transparent"
-                        strokeWidth="14"
-                        pointerEvents="stroke"
+                        stroke={isSelected ? '#B45309' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54'}
+                        strokeWidth={isSelected ? '3' : '2'}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
-                          handleWireClick(e, rw.wireId, mid.x, mid.y);
-                        }}
-                        onClick={(e) => {
-                          // Bug 1 Fix: ONLY stopPropagation. Never double-invoke handleWireClick!
-                          e.stopPropagation();
-                        }}
+                        pointerEvents="none"
+                        style={{ pointerEvents: 'none' }}
+                        className="transition-colors hover:stroke-emerald-400"
                       />
-                      {/* Per-Segment 14px Hit Strokes for interactive segment sliding */}
+
+                      {/* Per-Segment 14px Hit Strokes for interactive segment sliding and selection */}
                       {segments.map((seg, sIdx) => {
                         const isH = seg.isHorizontal;
                         const isV = seg.isVertical;
@@ -1528,6 +1544,7 @@ export function SchematicEditorPanel({
                         return (
                           <line
                             key={`seg-hit-${rw.wireId}-${sIdx}`}
+                            data-testid={sIdx === 0 ? `sch-wire-hit-${rw.wireId}` : undefined}
                             x1={seg.p1.x}
                             y1={seg.p1.y}
                             x2={seg.p2.x}
@@ -1559,7 +1576,10 @@ export function SchematicEditorPanel({
                                   initialVertices: [...rw.points],
                                 });
                               } else {
-                                handleWireClick(e, rw.wireId, segMidX, segMidY);
+                                const clickedWorld = clientToWorld(e.clientX, e.clientY);
+                                const proj = projectPointOntoPolyline(clickedWorld, rw.points, sheetConfig.gridStep);
+                                const hitPt = proj ? proj.point : { x: segMidX, y: segMidY };
+                                handleWireClick(e, rw.wireId, hitPt.x, hitPt.y);
                               }
                             }}
                             onClick={(e) => {
@@ -1568,27 +1588,6 @@ export function SchematicEditorPanel({
                           />
                         );
                       })}
-
-                      {/* Visible Copper Track Line */}
-                      <polyline
-                        data-testid={`sch-wire-${rw.wireId}`}
-                        points={ptsStr}
-                        fill="none"
-                        stroke={isSelected ? '#B45309' : sheetConfig.theme === 'dark' ? '#38BDF8' : '#0F6B54'}
-                        strokeWidth={isSelected ? '3' : '2'}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="transition-colors hover:stroke-emerald-400"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          const mid = rw.points[Math.floor(rw.points.length / 2)] || { x: mousePos.x, y: mousePos.y };
-                          handleWireClick(e, rw.wireId, mid.x, mid.y);
-                        }}
-                        onClick={(e) => {
-                          // Bug 1 Fix: ONLY stopPropagation. Never double-invoke handleWireClick!
-                          e.stopPropagation();
-                        }}
-                      />
                       {/* Draggable Corner Handles when selected */}
                       {isSelected &&
                         rw.points.map((pt, pIdx) => {

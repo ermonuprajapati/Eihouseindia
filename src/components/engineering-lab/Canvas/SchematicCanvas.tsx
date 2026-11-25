@@ -41,7 +41,11 @@ import {
   runElectricalRulesCheck,
   ErcViolation,
 } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
-import { projectPointOntoPolyline } from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import {
+  projectPointOntoPolyline,
+  getCanonicalWirePoints,
+  resolveShortestNetWire,
+} from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
 import {
   Point,
   ElbowOrientation,
@@ -796,14 +800,30 @@ export function SchematicCanvas({
       if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
         const cleanedWaypoints =
           activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
-        onAddWire({
-          fromCompId: activeWireStart.compId,
-          fromPinId: activeWireStart.pinId,
-          toCompId: compId,
-          toPinId: pinId,
-          points: cleanedWaypoints && cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
-          style: activeRoutingStyle,
-        });
+        const resolved = resolveShortestNetWire(
+          activeWireStart.compId,
+          activeWireStart.pinId,
+          compId,
+          pinId,
+          components,
+          wires,
+          cleanedWaypoints,
+          10
+        );
+        if (resolved.skipDuplicate) {
+          toast.info('Pins are already electrically connected on the same net.');
+        } else {
+          onAddWire({
+            fromCompId: resolved.fromCompId,
+            fromPinId: resolved.fromPinId,
+            toCompId: resolved.toCompId,
+            toPinId: resolved.toPinId,
+            tappedWireId: resolved.tappedWireId,
+            junctionPoint: resolved.junctionPoint,
+            points: resolved.points,
+            style: activeRoutingStyle,
+          });
+        }
       }
       setActiveWireStart(null);
       setActiveWaypoints([]);
@@ -841,45 +861,8 @@ export function SchematicCanvas({
   const junctionDots = useMemo(() => {
     const wiresWithVertices = wires
       .map((w) => {
-        const fromComp = components.find((c) => c.id === w.fromCompId);
-        const toComp = components.find((c) => c.id === w.toCompId);
-        const fromPin = fromComp?.pins.find((p) => p.id === w.fromPinId);
-        const toPin = toComp?.pins.find((p) => p.id === w.toPinId);
-        const isTapped = Boolean((w.tappedWireId || w.junctionPoint) && w.junctionPoint);
-        if (!fromComp || !fromPin) {
-          return { id: w.id, vertices: [] as Point[], netName: w.netName };
-        }
-        if (!isTapped && (!toComp || !toPin)) {
-          return { id: w.id, vertices: [] as Point[], netName: w.netName };
-        }
-        const p1 = getPinWorldCoord(fromComp, fromPin);
-        let p2 = isTapped && w.junctionPoint ? w.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y });
-        if (w.tappedWireId) {
-          const parent = wires.find((pw) => pw.id === w.tappedWireId);
-          if (parent) {
-            const parentFromComp = components.find((c) => c.id === parent.fromCompId);
-            const parentToComp = components.find((c) => c.id === parent.toCompId);
-            const parentFromPin = parentFromComp?.pins.find((p) => p.id === parent.fromPinId);
-            const parentToPin = parentToComp?.pins.find((p) => p.id === parent.toPinId);
-            if (parentFromComp && parentToComp && parentFromPin && parentToPin) {
-              const pp1 = getPinWorldCoord(parentFromComp, parentFromPin);
-              const pp2 = getPinWorldCoord(parentToComp, parentToPin);
-              const pVerts = getFullWireVertices(pp1, pp2, parent.points, parent.style || activeRoutingStyle, elbowOrientation);
-              const proj = projectPointOntoPolyline(w.junctionPoint || p2, pVerts, 10);
-              if (proj) {
-                p2 = proj.point;
-              }
-            }
-          }
-        }
-        const vertices = getFullWireVertices(
-          p1,
-          p2,
-          w.points,
-          w.style || activeRoutingStyle,
-          elbowOrientation
-        );
-        return { id: w.id, vertices, netName: w.netName };
+        const canonicalVerts = getCanonicalWirePoints(w, components, wires);
+        return { id: w.id, vertices: canonicalVerts as Point[], netName: w.netName };
       })
       .filter((w) => w.vertices.length > 0);
 
@@ -895,9 +878,19 @@ export function SchematicCanvas({
           dotMap.set(key, { x: Math.round(w.junctionPoint.x), y: Math.round(w.junctionPoint.y), netName: w.netName });
         }
       }
+      if (w.tappedWireId) {
+        const cVerts = getCanonicalWirePoints(w, components, wires);
+        if (cVerts.length >= 2) {
+          const endPt = cVerts[cVerts.length - 1];
+          const key = `${Math.round(endPt.x)},${Math.round(endPt.y)}`;
+          if (!dotMap.has(key)) {
+            dotMap.set(key, { x: Math.round(endPt.x), y: Math.round(endPt.y), netName: w.netName });
+          }
+        }
+      }
     });
     return Array.from(dotMap.values());
-  }, [wires, components, activeRoutingStyle, elbowOrientation]);
+  }, [wires, components]);
 
   return (
     <div
@@ -1263,33 +1256,18 @@ export function SchematicCanvas({
             if (!isTapped && !toPin) return null;
 
             const p1 = getPinWorldCoord(fromComp, fromPin);
-            let p2 = isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y });
-            if (wire.tappedWireId) {
-              const parent = wires.find((pw) => pw.id === wire.tappedWireId);
-              if (parent) {
-                const parentFromComp = components.find((c) => c.id === parent.fromCompId);
-                const parentToComp = components.find((c) => c.id === parent.toCompId);
-                const parentFromPin = parentFromComp?.pins.find((p) => p.id === parent.fromPinId);
-                const parentToPin = parentToComp?.pins.find((p) => p.id === parent.toPinId);
-                if (parentFromComp && parentToComp && parentFromPin && parentToPin) {
-                  const pp1 = getPinWorldCoord(parentFromComp, parentFromPin);
-                  const pp2 = getPinWorldCoord(parentToComp, parentToPin);
-                  const pVerts = getFullWireVertices(pp1, pp2, parent.points, parent.style || activeRoutingStyle, elbowOrientation);
-                  const proj = projectPointOntoPolyline(wire.junctionPoint || p2, pVerts, 10);
-                  if (proj) {
-                    p2 = proj.point;
-                  }
-                }
-              }
-            }
+            const canonicalVerts = getCanonicalWirePoints(wire, components, wires);
+            const p2 = canonicalVerts.length >= 2
+              ? canonicalVerts[canonicalVerts.length - 1]
+              : (isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1.x, y: p1.y }));
 
             const isShorted = ercViolations.some(
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)
             );
             const routingStyle = wire.style || activeRoutingStyle;
-            const fullVertices = getFullWireVertices(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const fullVertices = canonicalVerts.length >= 2 ? (canonicalVerts as Point[]) : getFullWireVertices(p1, p2, wire.points, routingStyle, elbowOrientation);
             const segments = extractWireSegments(wire.id, fullVertices);
-            const pathData = computeWireSvgPath(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const pathData = verticesToSvgPath(fullVertices);
             const isWireSelected = selectedWireId === wire.id || selectedWireIds.has(wire.id);
             const isHighlighted = highlightedNetId === wire.id;
             const wireBaseColor = isShorted
@@ -1320,8 +1298,9 @@ export function SchematicCanvas({
                       const rect = containerRef.current?.getBoundingClientRect();
                       const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : e.clientX;
                       const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : e.clientY;
-                      const snapX = Math.round(curX / 10) * 10;
-                      const snapY = Math.round(curY / 10) * 10;
+                      const proj = projectPointOntoPolyline({ x: curX, y: curY }, fullVertices, 10);
+                      const snapX = proj ? proj.point.x : Math.round(curX / 10) * 10;
+                      const snapY = proj ? proj.point.y : Math.round(curY / 10) * 10;
                       const cleanedWaypoints =
                         activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
                       onAddWire({

@@ -12,7 +12,9 @@ import {
   getCanonicalPinWorldPos,
   getCanonicalWirePoints,
   computeCanonicalJunctions,
+  resolveShortestNetWire,
 } from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import { Virtual3dStudio } from '../components/engineering-lab/Panels/Virtual3dStudio';
 import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
 import {
   getHoleTieGroup,
@@ -26,6 +28,25 @@ import {
   routeOrthogonalWires,
   autoLayoutCircuit,
 } from '../modules/engineering-lab/schematic-engine/schematic-sync-layout';
+
+vi.mock('@/modules/engineering-lab/studio-3d/Studio3DCanvas', () => ({
+  Studio3DCanvas: (props: { wires?: Wire3D[]; children?: React.ReactNode }) => (
+    <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(props.wires || [])}>
+      {(props.wires || []).map((w: Wire3D) => (
+        <div
+          key={w.id}
+          data-testid={`wire3d-${w.id}`}
+          data-from-comp={w.fromPin?.compId}
+          data-from-pin={w.fromPin?.pinId}
+          data-to-comp={w.toPin?.compId}
+          data-to-pin={w.toPin?.pinId}
+          data-color={w.color}
+        />
+      ))}
+      {props.children}
+    </div>
+  ),
+}));
 
 describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering Suite', () => {
   const defaultProps = {
@@ -2024,6 +2045,339 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(lastPtMoved.y).toBe(160);
     expect(lastPtMoved.x).toBeGreaterThanOrEqual(180);
     expect(lastPtMoved.x).toBeLessThanOrEqual(280);
+  });
+
+  it('GATE 4 Test 1: Shared-Trunk Auto-Junction on Pin-to-Pin (B -> A, C -> A, D -> A)', () => {
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      designator: 'R_A',
+      label: 'Resistor A',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 400,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      designator: 'R_B',
+      label: 'Resistor B',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 100,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      designator: 'R_C',
+      label: 'Resistor C',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 250,
+      y: 350,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compD: CircuitComponent = {
+      id: 'comp_D',
+      type: 'RESISTOR',
+      designator: 'R_D',
+      label: 'Resistor D',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 300,
+      y: 50,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const comps = [compA, compB, compC, compD];
+
+    // Wire B -> A exists
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    // Connect C -> A directly
+    const resC_A = resolveShortestNetWire('comp_C', '1', 'comp_A', '1', comps, [wireBA], undefined, 10);
+    expect(resC_A.skipDuplicate).toBeFalsy();
+    expect(resC_A.tappedWireId).toBe('wire_B_A');
+    expect(resC_A.junctionPoint).toBeDefined();
+    expect(resC_A.junctionPoint?.x).toBe(250);
+    expect(resC_A.junctionPoint?.y).toBe(200);
+
+    const wireCA: CircuitWire = {
+      id: 'wire_C_A',
+      fromCompId: resC_A.fromCompId,
+      fromPinId: resC_A.fromPinId,
+      toCompId: resC_A.toCompId,
+      toPinId: resC_A.toPinId,
+      tappedWireId: resC_A.tappedWireId,
+      junctionPoint: resC_A.junctionPoint,
+    };
+
+    // Verify computeCanonicalJunctions emits a solder dot at junctionPoint
+    const junctions = computeCanonicalJunctions([wireBA, wireCA], comps);
+    const hasDotAtJunction = junctions.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDotAtJunction).toBe(true);
+
+    // Connect D -> A: should tap nearest trunk wire
+    const resD_A = resolveShortestNetWire('comp_D', '1', 'comp_A', '1', comps, [wireBA, wireCA], undefined, 10);
+    expect(resD_A.skipDuplicate).toBeFalsy();
+    expect(resD_A.tappedWireId).toBeDefined();
+    expect(resD_A.junctionPoint).toBeDefined();
+
+    const wireDA: CircuitWire = {
+      id: 'wire_D_A',
+      fromCompId: resD_A.fromCompId,
+      fromPinId: resD_A.fromPinId,
+      toCompId: resD_A.toCompId,
+      toPinId: resD_A.toPinId,
+      tappedWireId: resD_A.tappedWireId,
+      junctionPoint: resD_A.junctionPoint,
+    };
+
+    // Chained T-junction supported in both getCanonicalWirePoints and computeCanonicalJunctions
+    const ptsD = getCanonicalWirePoints(wireDA, comps, [wireBA, wireCA, wireDA]);
+    expect(ptsD.length).toBeGreaterThanOrEqual(2);
+    const junctionsAll = computeCanonicalJunctions([wireBA, wireCA, wireDA], comps);
+    expect(junctionsAll.length).toBeGreaterThanOrEqual(2);
+
+    // Attempt to connect C -> B (already in same electrical net)
+    const resC_B = resolveShortestNetWire('comp_C', '1', 'comp_B', '1', comps, [wireBA, wireCA, wireDA], undefined, 10);
+    expect(resC_B.skipDuplicate).toBe(true);
+  });
+
+  it('GATE 4 Test 2: 3D Studio Zero Fan-Out & Zero Red Color Leak', () => {
+    const arduinoComp: CircuitComponent = {
+      id: 'arduino1',
+      type: 'ARDUINO_UNO',
+      designator: 'U1',
+      label: 'Arduino Uno',
+      category: 'mcu',
+      value: 'UNO',
+      footprint: 'Arduino_Uno',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'passive' },
+        { id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' },
+      ],
+    };
+    const r3Comp: CircuitComponent = {
+      id: 'r3',
+      type: 'RESISTOR',
+      designator: 'R3',
+      label: 'Resistor 3',
+      category: 'passive',
+      value: '220',
+      footprint: 'R_Axial',
+      x: 100,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const ledComp: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      designator: 'LED1',
+      label: 'LED 1',
+      category: 'opto',
+      value: 'Red',
+      footprint: 'LED_5mm',
+      x: 150,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'a', name: 'anode', x: -10, y: 0, pinType: 'passive' },
+        { id: 'k', name: 'cathode', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const r4Comp: CircuitComponent = {
+      id: 'r4',
+      type: 'RESISTOR',
+      designator: 'R4',
+      label: 'Resistor 4',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 200,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const c1Comp: CircuitComponent = {
+      id: 'c1',
+      type: 'CAPACITOR',
+      designator: 'C1',
+      label: 'Capacitor 1',
+      category: 'passive',
+      value: '10uF',
+      footprint: 'C_Radial',
+      x: 250,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '+', name: '+', x: -10, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const c2Comp: CircuitComponent = {
+      id: 'c2',
+      type: 'CAPACITOR',
+      designator: 'C2',
+      label: 'Capacitor 2',
+      category: 'passive',
+      value: '100nF',
+      footprint: 'C_Disc',
+      x: 300,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '+', name: '+', x: -10, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const gndComp: CircuitComponent = {
+      id: 'gnd1',
+      type: 'GROUND',
+      designator: 'GND1',
+      label: 'Ground',
+      category: 'power',
+      value: '0V',
+      footprint: 'GND',
+      x: 250,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+
+    const comps = [arduinoComp, r3Comp, ledComp, r4Comp, c1Comp, c2Comp, gndComp];
+
+    // Multi-pin signal net: R3:2 -> LED1:a -> R4:1 -> Arduino:D9
+    const sigWires: CircuitWire[] = [
+      { id: 'w_sig_1', fromCompId: 'r3', fromPinId: '2', toCompId: 'led1', toPinId: 'a' },
+      { id: 'w_sig_2', fromCompId: 'led1', fromPinId: 'a', toCompId: 'r4', toPinId: '1' },
+      { id: 'w_sig_3', fromCompId: 'r4', fromPinId: '1', toCompId: 'arduino1', toPinId: 'D9' },
+    ];
+
+    // Multi-pin GND net: GND1 -> C1:- -> C2:- -> LED1:k -> Arduino:GND
+    const gndWires: CircuitWire[] = [
+      { id: 'w_gnd_1', fromCompId: 'gnd1', fromPinId: '1', toCompId: 'c1', toPinId: '-' },
+      { id: 'w_gnd_2', fromCompId: 'c1', fromPinId: '-', toCompId: 'c2', toPinId: '-' },
+      { id: 'w_gnd_3', fromCompId: 'c2', fromPinId: '-', toCompId: 'led1', toPinId: 'k' },
+      { id: 'w_gnd_4', fromCompId: 'led1', fromPinId: 'k', toCompId: 'arduino1', toPinId: 'GND' },
+    ];
+
+    const allTestWires = [...sigWires, gndWires[0], gndWires[1], gndWires[2], gndWires[3]];
+
+    const onAddWireMock = vi.fn();
+    const { container } = render(
+      <Virtual3dStudio
+        components={comps}
+        wires={allTestWires}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvasEl = container.querySelector('[data-testid="mock-3d-canvas"]');
+    expect(canvasEl).toBeInTheDocument();
+    const wiresDataRaw = canvasEl?.getAttribute('data-wires');
+    const wires3d: Wire3D[] = wiresDataRaw ? JSON.parse(wiresDataRaw) : [];
+
+    // Verify Arduino D9 has AT MOST 1 wire attached
+    const d9Wires = wires3d.filter(
+      (w) =>
+        (w.fromPin.compId === 'arduino1' && w.fromPin.pinId === 'D9') ||
+        (w.toPin.compId === 'arduino1' && w.toPin.pinId === 'D9')
+    );
+    expect(d9Wires.length).toBeLessThanOrEqual(1);
+
+    // Verify Arduino GND has AT MOST 1 wire attached
+    const gndWires3d = wires3d.filter(
+      (w) =>
+        (w.fromPin.compId === 'arduino1' && (w.fromPin.pinId === 'GND' || w.fromPin.pinId.toUpperCase().includes('GND'))) ||
+        (w.toPin.compId === 'arduino1' && (w.toPin.pinId === 'GND' || w.toPin.pinId.toUpperCase().includes('GND')))
+    );
+    expect(gndWires3d.length).toBeLessThanOrEqual(1);
+
+    // Zero red color leak: normal signal wires do not force #EF4444
+    d9Wires.forEach((w) => {
+      expect(w.color).not.toBe('#EF4444');
+    });
+
+    // Zero move wire-bomb: onAddWireMock is NOT called with duplicate wires
+    expect(onAddWireMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('GATE 4 Test 3: Schematic Editor Wire (W) Mode Dismiss & Segment Slide Paint Order', () => {
+    const { container } = render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Activate Wire (W) mode
+    const wireToolBtn = screen.getByTestId('tool-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Wire hit areas exist
+    const firstWire = defaultProps.wires[0];
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${firstWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+
+    // Click wire in Wire mode -> selects wire
+    if (wireHit) {
+      fireEvent.mouseDown(wireHit, { button: 0, clientX: 200, clientY: 200 });
+      fireEvent.click(wireHit, { button: 0, clientX: 200, clientY: 200 });
+    }
+
+    // Click empty sheet area -> dismisses selection
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 10, clientY: 10 });
+
+    const pill = container.querySelector('[data-testid="sch-wire-action-pill"]');
+    expect(pill).toBeNull();
+
+    // Assert visible copper polyline has pointer-events: none
+    const copperPolyline = container.querySelector(`[data-testid="sch-wire-${firstWire.id}"]`);
+    expect(copperPolyline).toBeInTheDocument();
+    expect(copperPolyline).toHaveStyle({ pointerEvents: 'none' });
   });
 });
 
