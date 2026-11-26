@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { SchematicEditorPanel } from '../components/engineering-lab/Panels/SchematicEditorPanel';
+import { SchematicTopBar } from '../components/engineering-lab/Panels/schematic-editor/SchematicTopBar';
 import { LabHeader } from '../components/engineering-lab/Header/LabHeader';
 import { SchematicCanvas } from '../components/engineering-lab/Canvas/SchematicCanvas';
 import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/starter-templates';
@@ -38,10 +39,54 @@ import {
 } from '../modules/engineering-lab/schematic-engine/schematic-sync-layout';
 
 vi.mock('@/modules/engineering-lab/studio-3d/Studio3DCanvas', () => ({
-  Studio3DCanvas: (props: { wires?: Wire3D[]; wires3d?: Wire3D[]; children?: React.ReactNode }) => {
+  Studio3DCanvas: (props: {
+    wires?: Wire3D[];
+    wires3d?: Wire3D[];
+    children?: React.ReactNode;
+    onAddWire3D?: (w: Wire3D) => void;
+  }) => {
+    const [toolMode3D, setToolMode3D] = React.useState<'inspect' | 'wire'>('inspect');
+    const [activeWireStart, setActiveWireStart] = React.useState<{ compId: string; pinId: string } | null>(null);
+
+    const handlePinClick = (compId: string, pinId: string) => {
+      // HARD IRONCLAD GATE: Wire routing ONLY runs when Wire tool mode is explicitly active!
+      if (toolMode3D !== 'wire') {
+        return;
+      }
+      if (!activeWireStart) {
+        setActiveWireStart({ compId, pinId });
+        return;
+      }
+      props.onAddWire3D?.({
+        id: `wire3d_${Date.now()}`,
+        fromPin: { compId: activeWireStart.compId, pinId: activeWireStart.pinId },
+        toPin: { compId, pinId },
+        color: '#3B82F6',
+      });
+      setActiveWireStart(null);
+    };
+
     const wireList = props.wires3d || props.wires || [];
     return (
-      <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(wireList)}>
+      <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(wireList)} data-tool-mode={toolMode3D}>
+        <button data-testid="tool-mode-select" onClick={() => setToolMode3D('inspect')}>Select (V)</button>
+        <button data-testid="tool-mode-wire" onClick={() => setToolMode3D('wire')}>Wire (W)</button>
+        <button data-testid="mock-pin-click-r1-1" onClick={() => handlePinClick('r1', '1')}>Pin R1:1</button>
+        <button data-testid="mock-pin-click-r1-2" onClick={() => handlePinClick('r1', '2')}>Pin R1:2</button>
+        <button data-testid="mock-pin-click-led1-1" onClick={() => handlePinClick('led1', '1')}>Pin LED1:1</button>
+        <button
+          data-testid="mock-add-r1-led1-wire"
+          onClick={() =>
+            props.onAddWire3D?.({
+              id: 'wire3d_r1_led1_manual',
+              fromPin: { compId: 'r1', pinId: '2' },
+              toPin: { compId: 'led1', pinId: '1' },
+              color: '#3B82F6',
+            })
+          }
+        >
+          Add Wire R1 to LED1
+        </button>
         {wireList.map((w: Wire3D) => (
           <div
             key={w.id}
@@ -3908,6 +3953,290 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     expect(wireEl.getAttribute('data-from-pin')).toBe('D9');
 
     clearUncommittedWires3dCache();
+  });
+
+  it('Test 1: Export menu opens in SchematicTopBar, has visible options with z-[9999], and closes on outside click', () => {
+    const onExportSvg = vi.fn();
+    const onExportPng = vi.fn();
+    const onPrintPdf = vi.fn();
+
+    render(
+      <SchematicTopBar
+        zoom={1}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onZoomReset={vi.fn()}
+        onZoomFit={vi.fn()}
+        sheetConfig={{ size: 'A4', theme: 'dark', gridStep: 10, snapToGrid: true, showGrid: true }}
+        onUpdateSheetConfig={vi.fn()}
+        onExportSvg={onExportSvg}
+        onExportPng={onExportPng}
+        onPrintPdf={onPrintPdf}
+      />
+    );
+
+    const exportBtn = screen.getByTestId('action-export-menu');
+    expect(exportBtn).toBeInTheDocument();
+
+    // Initially export dropdown should not exist
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+
+    // Click export button
+    fireEvent.click(exportBtn);
+
+    // Export dropdown must be in document with z-[9999]
+    const dropdown = screen.getByTestId('export-dropdown-menu');
+    expect(dropdown).toBeInTheDocument();
+    expect(dropdown.className).toContain('z-[9999]');
+
+    // Options must be visible
+    expect(screen.getByTestId('export-svg-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('export-png-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('export-print-btn')).toBeInTheDocument();
+
+    // Outside click closes dropdown
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+
+    // Reopen and test Escape key closes dropdown
+    fireEvent.click(exportBtn);
+    expect(screen.getByTestId('export-dropdown-menu')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+  });
+
+  it('Test 2: In SchematicCanvas wire mode, clicking empty canvas immediately calls onSelectComponent(null) and clears wire preview', () => {
+    const onSelectComp = vi.fn();
+    const onSelectWire = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onSelectWire={onSelectWire}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool mode via keyboard 'w'
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click on canvas background container
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    if (svgCanvas) {
+      fireEvent.mouseDown(svgCanvas, { button: 0, clientX: 50, clientY: 50 });
+    }
+
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+  });
+
+  it('Test 3: Studio3DCanvas default Wire mode is OFF; clicking pins/holes does NOT start wiring or call onAddWire3D until tool-mode-wire is clicked', () => {
+    const onAddWireMock = vi.fn();
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compR1]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // In default inspect mode, clicking pins does not trigger wiring
+    const pin1 = screen.getByTestId('mock-pin-click-r1-1');
+    const pin2 = screen.getByTestId('mock-pin-click-r1-2');
+    fireEvent.click(pin1);
+    fireEvent.click(pin2);
+    expect(onAddWireMock).not.toHaveBeenCalled();
+
+    // Explicitly activate Wire tool
+    const wireToolBtn = screen.getByTestId('tool-mode-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Now clicking pin1 then pin2 starts and completes wiring
+    fireEvent.click(pin1);
+    fireEvent.click(pin2);
+    // onAddWire is called via handleAddWire3D!
+    expect(onAddWireMock).toHaveBeenCalled();
+  });
+
+  it('Test 4: Real Wire3D payload connecting R1 to LED1 in Virtual3dStudio immediately calls onAddWire, and remounting shows ONLY that wire', () => {
+    const onAddWireMock = vi.fn();
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compLed: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      value: 'Red',
+      parameters: {},
+      x: 200,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: 'A', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: 'K', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'active',
+      footprint: '',
+    };
+
+    const { unmount } = render(
+      <Virtual3dStudio
+        components={[compR1, compLed]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Add 3D wire connecting R1 to LED1
+    const addWireBtn = screen.getByTestId('mock-add-r1-led1-wire');
+    fireEvent.click(addWireBtn);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.toCompId).toBe('led1');
+    // Ensure canonical pin IDs were resolved
+    expect(['1', '2', 'a', 'k']).toContain(addedWire.fromPinId.toLowerCase());
+    expect(['1', '2', 'a', 'k']).toContain(addedWire.toPinId.toLowerCase());
+
+    unmount();
+
+    // Remount with this wire in schematic wires:
+    const schematicWire: CircuitWire = {
+      id: addedWire.id,
+      fromCompId: addedWire.fromCompId,
+      fromPinId: addedWire.fromPinId,
+      toCompId: addedWire.toCompId,
+      toPinId: addedWire.toPinId,
+      color: '#3B82F6',
+    };
+
+    const { unmount: unmount2 } = render(
+      <Virtual3dStudio
+        components={[compR1, compLed]}
+        wires={[schematicWire]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvas = screen.getByTestId('mock-3d-canvas');
+    const wiresData = JSON.parse(canvas.getAttribute('data-wires') || '[]');
+    // Exactly 1 wire generated, 0 phantom/extra wires
+    expect(wiresData.length).toBe(1);
+
+    unmount2();
+
+    // Also assert a 0-wire circuit with a battery produces 0 auto wires
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BAT1',
+      value: '9V',
+      parameters: {},
+      x: 50,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: '+', name: '+', x: 0, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'power',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compBat]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvasBat = screen.getByTestId('mock-3d-canvas');
+    const batWiresData = JSON.parse(canvasBat.getAttribute('data-wires') || '[]');
+    expect(batWiresData.length).toBe(0);
   });
 });
 

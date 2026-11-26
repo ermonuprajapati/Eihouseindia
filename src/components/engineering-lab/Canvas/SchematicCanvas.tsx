@@ -592,28 +592,41 @@ export function SchematicCanvas({
     const curY = (e.clientY - rect.top - pan.y) / zoom;
 
     if (e.button === 0) {
-      // Dismiss wire floating toolbar when clicking on empty canvas
-      if (selectedWireId && !e.shiftKey) {
-        setWireSelected(null);
-        if (onSelectWire) onSelectWire(null);
-      }
+      // Unconditionally clear component, wire, and net selection on empty canvas click
+      onSelectComponent(null);
+      setSelectedCompIds(new Set());
+      if (onSelectWire) onSelectWire(null);
+      setWireSelected(null);
+      setSelectedWireIds(new Set());
+      setHighlightedNetId(null);
 
-      // If drawing a wire, clicking canvas locks a clean 90° corner waypoint
-      if (activeWireStart && toolMode === 'wire') {
-        const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
-        const snapX = Math.round(curX / 10) * 10;
-        const snapY = Math.round(curY / 10) * 10;
-        if (activeRoutingStyle === 'orthogonal') {
-          const corner = elbowOrientation === 'horizontal-first'
-            ? { x: snapX, y: lastPt.y }
-            : { x: lastPt.x, y: snapY };
-          if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
-            setActiveWaypoints((prev) => [...prev, corner]);
+      // In Wire mode:
+      if (toolMode === 'wire') {
+        if (activeWireStart) {
+          if (e.shiftKey) {
+            // Drop manual corner waypoint ONLY when holding Shift
+            const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+            const snapX = Math.round(curX / 10) * 10;
+            const snapY = Math.round(curY / 10) * 10;
+            if (activeRoutingStyle === 'orthogonal') {
+              const corner = elbowOrientation === 'horizontal-first'
+                ? { x: snapX, y: lastPt.y }
+                : { x: lastPt.x, y: snapY };
+              if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
+                setActiveWaypoints((prev) => [...prev, corner]);
+              } else {
+                setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+              }
+            } else {
+              setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+            }
+            return;
           } else {
-            setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+            // Normal click without Shift immediately cancels in-progress wire
+            setActiveWireStart(null);
+            setActiveWaypoints([]);
+            return;
           }
-        } else {
-          setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
         }
         return;
       }
@@ -630,12 +643,6 @@ export function SchematicCanvas({
         setIsMarqueeSelecting(true);
         setMarqueeStart({ x: curX, y: curY });
         setMarqueeEnd({ x: curX, y: curY });
-        if (!e.shiftKey) {
-          setSelectedCompIds(new Set());
-          setSelectedWireIds(new Set());
-          onSelectComponent(null);
-          setWireSelected(null);
-        }
         return;
       }
     } else if (e.button === 1) {

@@ -344,6 +344,84 @@ function projectPointToSegment(
 }
 
 /**
+ * Canonicalizes a raw 3D pin identifier to match the exact CircuitPin.id on the schematic component.
+ */
+export function canonicalizePinIdForSchematic(comp: CircuitComponent | undefined, rawPinId: string): string {
+  if (!comp || !comp.pins || comp.pins.length === 0) return rawPinId;
+  const raw = String(rawPinId).trim();
+  const rawLower = raw.toLowerCase();
+
+  // 1. Exact match first
+  const exact = comp.pins.find((p) => p.id === raw);
+  if (exact) return exact.id;
+
+  // 2. Case-insensitive ID or name match
+  const caseMatch = comp.pins.find(
+    (p) => p.id.toLowerCase() === rawLower || p.name?.toLowerCase() === rawLower
+  );
+  if (caseMatch) return caseMatch.id;
+
+  // 3. Anode / Pin 1 / Pos aliases
+  const posAliases = ['a', 'anode', '1', '+', 'pos', 'p', 'in'];
+  if (posAliases.includes(rawLower)) {
+    const found = comp.pins.find((p) => {
+      const pid = p.id.toLowerCase();
+      const pname = (p.name || '').toLowerCase();
+      return posAliases.includes(pid) || posAliases.includes(pname);
+    });
+    if (found) return found.id;
+  }
+
+  // 4. Cathode / Pin 2 / Neg aliases
+  const negAliases = ['k', 'cathode', '2', '-', 'neg', 'n', 'out'];
+  if (negAliases.includes(rawLower)) {
+    const found = comp.pins.find((p) => {
+      const pid = p.id.toLowerCase();
+      const pname = (p.name || '').toLowerCase();
+      return negAliases.includes(pid) || negAliases.includes(pname);
+    });
+    if (found) return found.id;
+  }
+
+  // 5. GND aliases
+  const gndAliases = ['gnd', 'gnd1', 'gnd2', 'gnd3', 'ground', '0v'];
+  if (gndAliases.includes(rawLower)) {
+    const found = comp.pins.find((p) => {
+      const pid = p.id.toLowerCase();
+      const pname = (p.name || '').toLowerCase();
+      return gndAliases.includes(pid) || gndAliases.includes(pname);
+    });
+    if (found) return found.id;
+  }
+
+  // 6. Power aliases
+  const pwrAliases = ['vcc', '5v', '3v3', '3.3v', 'vin', 'vdd', 'p', '+'];
+  if (pwrAliases.includes(rawLower)) {
+    const found = comp.pins.find((p) => {
+      const pid = p.id.toLowerCase();
+      const pname = (p.name || '').toLowerCase();
+      return pwrAliases.includes(pid) || pwrAliases.includes(pname);
+    });
+    if (found) return found.id;
+  }
+
+  // 7. Digital/Analog MCU pins: strip or add 'd'/'a' prefix
+  const strippedD = rawLower.replace(/^d/, '');
+  const foundD = comp.pins.find(
+    (p) => p.id.toLowerCase() === strippedD || p.id.toLowerCase() === `d${strippedD}`
+  );
+  if (foundD) return foundD.id;
+
+  const strippedA = rawLower.replace(/^a/, '');
+  const foundA = comp.pins.find(
+    (p) => p.id.toLowerCase() === strippedA || p.id.toLowerCase() === `a${strippedA}`
+  );
+  if (foundA) return foundA.id;
+
+  return rawPinId;
+}
+
+/**
  * Resolves a 3D jumper wire to its real component-to-component electrical connections.
  * Enforces strict 1-edge shortest-path / MST net resolution:
  * 1. Resolves candidate pins with priority to exact clicked breadboard column.
@@ -419,24 +497,7 @@ export function resolve3DWireToSchematicConnections(
       if (!tg) continue;
 
       // Canonicalize pinId if component is in schematicComponents
-      let canonicalPinId = p;
-      if (schComp?.pins && schComp.pins.length > 0) {
-        const matchingPin = schComp.pins.find(
-          (sp) => sp.id.toLowerCase() === p.toLowerCase() || sp.name?.toLowerCase() === p.toLowerCase()
-        );
-        if (matchingPin) {
-          canonicalPinId = matchingPin.id;
-        } else {
-          // If not in schComp.pins, try to map 'a'/'k' or '1'/'2'
-          if (p === 'anode' && schComp.pins.some((sp) => sp.id === 'a')) canonicalPinId = 'a';
-          else if (p === 'cathode' && schComp.pins.some((sp) => sp.id === 'k')) canonicalPinId = 'k';
-          else if (p === '1' && schComp.pins.some((sp) => sp.id === 'a')) canonicalPinId = 'a';
-          else if (p === '2' && schComp.pins.some((sp) => sp.id === 'k')) canonicalPinId = 'k';
-          else if (p === 'a' && schComp.pins.some((sp) => sp.id === '1')) canonicalPinId = '1';
-          else if (p === 'k' && schComp.pins.some((sp) => sp.id === '2')) canonicalPinId = '2';
-          else continue;
-        }
-      }
+      const canonicalPinId = canonicalizePinIdForSchematic(schComp, p);
 
       if (seenPins.has(canonicalPinId)) continue;
       seenPins.add(canonicalPinId);
@@ -501,16 +562,8 @@ export function resolve3DWireToSchematicConnections(
     if (compEnd && holeEnd) {
       const tg = getHoleTieGroup(holeEnd.pinId);
       if (tg) {
-        let canonicalPinId = compEnd.pinId;
         const schComp = schematicComponents?.find((c) => c.id === compEnd!.compId);
-        if (schComp?.pins && schComp.pins.length > 0) {
-          const matchingPin = schComp.pins.find(
-            (sp) => sp.id.toLowerCase() === compEnd!.pinId.toLowerCase() || sp.name?.toLowerCase() === compEnd!.pinId.toLowerCase()
-          );
-          if (matchingPin) {
-            canonicalPinId = matchingPin.id;
-          }
-        }
+        const canonicalPinId = canonicalizePinIdForSchematic(schComp, compEnd.pinId);
         const list = pinsByTieGroup.get(tg) || [];
         if (!list.some((item) => item.compId === compEnd!.compId && item.pinId === canonicalPinId)) {
           list.push({ compId: compEnd!.compId, pinId: canonicalPinId });
@@ -587,7 +640,9 @@ export function resolve3DWireToSchematicConnections(
   const resolveEndpoint = (endpoint: { compId: string; pinId: string }): CandidatePin[] => {
     const isBb = endpoint.compId === 'breadboard' || endpoint.compId.startsWith('breadboard');
     if (!isBb) {
-      return [{ compId: endpoint.compId, pinId: endpoint.pinId, isDirectHole: true }];
+      const schComp = schematicComponents?.find((c) => c.id === endpoint.compId);
+      const canonPin = canonicalizePinIdForSchematic(schComp, endpoint.pinId);
+      return [{ compId: endpoint.compId, pinId: canonPin, isDirectHole: true }];
     }
 
     const exactTg = getHoleTieGroup(endpoint.pinId);
@@ -693,12 +748,17 @@ export function resolve3DWireToSchematicConnections(
     resolvedColor = w3d.color;
   }
 
+  const fromComp = schematicComponents?.find((c) => c.id === resolved.fromCompId);
+  const toComp = schematicComponents?.find((c) => c.id === resolved.toCompId);
+  const finalFromPin = canonicalizePinIdForSchematic(fromComp, resolved.fromPinId);
+  const finalToPin = canonicalizePinIdForSchematic(toComp, resolved.toPinId);
+
   return [
     {
       fromCompId: resolved.fromCompId,
-      fromPinId: resolved.fromPinId,
+      fromPinId: finalFromPin,
       toCompId: resolved.toCompId,
-      toPinId: resolved.toPinId,
+      toPinId: finalToPin,
       color: resolvedColor,
       tappedWireId: resolved.tappedWireId,
       junctionPoint: resolved.junctionPoint,

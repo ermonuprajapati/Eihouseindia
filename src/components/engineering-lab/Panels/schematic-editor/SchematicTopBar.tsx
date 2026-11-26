@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Undo,
   Redo,
@@ -99,6 +99,65 @@ export function SchematicTopBar({
 }: SchematicTopBarProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showAlignMenu, setShowAlignMenu] = useState(false);
+  const exportBtnRef = useRef<HTMLButtonElement>(null);
+  const alignBtnRef = useRef<HTMLButtonElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const alignMenuRef = useRef<HTMLDivElement>(null);
+  const [exportMenuPos, setExportMenuPos] = useState<{ top: number; right: number }>({ top: 46, right: 12 });
+  const [alignMenuPos, setAlignMenuPos] = useState<{ top: number; left: number }>({ top: 46, left: 12 });
+
+  useEffect(() => {
+    if (!showExportMenu && !showAlignMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        exportBtnRef.current?.contains(target) ||
+        exportMenuRef.current?.contains(target) ||
+        alignBtnRef.current?.contains(target) ||
+        alignMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowExportMenu(false);
+      setShowAlignMenu(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowExportMenu(false);
+        setShowAlignMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleOutsideClick, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showExportMenu, showAlignMenu]);
+
+  const handleToggleExport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowAlignMenu(false);
+    const rect = exportBtnRef.current?.getBoundingClientRect();
+    setExportMenuPos({
+      top: rect ? rect.bottom + 6 : 46,
+      right: rect ? Math.max(8, (typeof window !== 'undefined' ? window.innerWidth : 1000) - rect.right) : 12,
+    });
+    setShowExportMenu((prev) => !prev);
+  };
+
+  const handleToggleAlign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowExportMenu(false);
+    const rect = alignBtnRef.current?.getBoundingClientRect();
+    setAlignMenuPos({
+      top: rect ? rect.bottom + 6 : 46,
+      left: rect ? Math.max(8, rect.left) : 12,
+    });
+    setShowAlignMenu((prev) => !prev);
+  };
   const hasCompSelection = Boolean(selectedCompId || selectedCompIds.length > 0);
   const hasDeleteSelection = Boolean(selectedCompId || selectedWireId || selectedItemId || selectedCompIds.length > 0);
 
@@ -211,15 +270,22 @@ export function SchematicTopBar({
         {/* Alignment Dropdown */}
         <div className="relative">
           <button
+            ref={alignBtnRef}
             data-testid="action-align"
-            onClick={() => setShowAlignMenu((p) => !p)}
+            onClick={handleToggleAlign}
             className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors flex items-center gap-1"
             title="Align Selected Components"
           >
             <AlignLeft className="w-3.5 h-3.5" />
           </button>
           {showAlignMenu && (
-            <div className="absolute left-0 top-8 bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-50 flex flex-col gap-1 w-32 text-[10px] font-mono">
+            <div
+              ref={alignMenuRef}
+              data-testid="align-dropdown-menu"
+              style={{ top: alignMenuPos.top, left: alignMenuPos.left }}
+              onClick={(e) => e.stopPropagation()}
+              className="fixed bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-[9999] flex flex-col gap-1 w-32 text-[10px] font-mono"
+            >
               <button
                 data-testid="action-align-left"
                 onClick={() => {
@@ -437,8 +503,9 @@ export function SchematicTopBar({
         {/* Export Dropdown */}
         <div className="relative">
           <button
+            ref={exportBtnRef}
             data-testid="action-export-menu"
-            onClick={() => setShowExportMenu((prev) => !prev)}
+            onClick={handleToggleExport}
             className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded flex items-center gap-1 text-[11px] font-mono border border-slate-700 transition-colors ml-1"
             title="Export Schematic"
           >
@@ -447,7 +514,13 @@ export function SchematicTopBar({
           </button>
 
           {showExportMenu && (
-            <div className="absolute right-0 top-8 bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-50 flex flex-col gap-1 w-36 text-[10px] font-mono">
+            <div
+              ref={exportMenuRef}
+              data-testid="export-dropdown-menu"
+              style={{ top: exportMenuPos.top, right: exportMenuPos.right }}
+              onClick={(e) => e.stopPropagation()}
+              className="fixed bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-[9999] flex flex-col gap-1 w-40 text-[10px] font-mono"
+            >
               <button
                 data-testid="export-svg-btn"
                 onClick={() => {
