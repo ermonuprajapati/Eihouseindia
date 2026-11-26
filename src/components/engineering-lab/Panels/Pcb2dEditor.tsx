@@ -14,6 +14,7 @@ import {
 import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/pcb-engine/autorouter';
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
+import { UniversalExportFormat } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { PcbGenerator, isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { resolvePhysicalSpec } from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
@@ -59,6 +60,8 @@ export interface Pcb2dEditorProps {
   onUpdatePcb?: (updated: PcbLayout) => void;
   onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
   onExportGerber?: () => void;
+  onExportProject?: (format: UniversalExportFormat) => void;
+  onTriggerImport?: () => void;
 }
 
 const TRACE_WIDTH_PRESETS = [
@@ -91,6 +94,9 @@ export function Pcb2dEditor({
   projectTitle = 'EI_House_PCB',
   onUpdatePcb,
   onUpdateDimensions,
+  onExportGerber,
+  onExportProject,
+  onTriggerImport,
 }: Pcb2dEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -598,8 +604,13 @@ export function Pcb2dEditor({
   // Multi-Format Manufacturing File Exporters
   const handleDownloadGerberZip = () => {
     setIsExportMenuOpen(false);
-    GerberExporter.exportGerberZip(pcb, components, projectTitle);
-    toast.success(`Downloaded Production Gerber ZIP package for ${projectTitle}`);
+    if (onExportProject) {
+      onExportProject('gerber-zip');
+    } else if (onExportGerber) {
+      onExportGerber();
+    } else {
+      GerberExporter.exportGerberZip(pcb, components, projectTitle);
+    }
   };
 
   const handleDownloadBomCsv = () => {
@@ -2130,6 +2141,40 @@ export function Pcb2dEditor({
                   <Printer className="w-3.5 h-3.5 text-purple-400" />
                   <span>2D Print Blueprint (.svg)</span>
                 </button>
+                <div className="h-px bg-slate-800 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onExportProject) onExportProject('pdf');
+                    setIsExportMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Production PDF (.pdf)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onExportProject) onExportProject('png');
+                    setIsExportMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  <span>2D Board Image (.png)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onExportProject) onExportProject('jpg');
+                    setIsExportMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>2D Board Image (.jpg)</span>
+                </button>
               </div>
             )}
           </div>
@@ -2412,6 +2457,7 @@ export function Pcb2dEditor({
 
           {/* 2D EDA Canvas */}
           <canvas
+            id="pcb-2d-canvas"
             ref={canvasRef}
             width={850}
             height={560}

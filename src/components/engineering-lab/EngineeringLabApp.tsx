@@ -25,12 +25,9 @@ import { toast } from 'sonner';
 import { RefreshCw, Crosshair } from 'lucide-react';
 import { QuickProbeOverlay } from './Panels/VirtualInstruments/QuickProbeOverlay';
 import {
-  downloadBlob,
-  createEihouseProjectPayload,
   parseEihouseProject,
-  exportCanvasToPng,
-  exportSvgElementToPng,
 } from '@/modules/engineering-lab/utils/export-helpers';
+import { runUniversalExport, UniversalExportFormat } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import { useOptionalAuth } from '@/modules/auth/auth-context';
 import {
   saveUserExplicitProject,
@@ -1032,6 +1029,11 @@ export function EngineeringLabApp() {
     }
   }, [currentUserId]);
 
+  const projectImportInputRef = useRef<HTMLInputElement>(null);
+  const triggerProjectImport = useCallback(() => {
+    projectImportInputRef.current?.click();
+  }, []);
+
   const handleLoadProjectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1061,133 +1063,14 @@ export function EngineeringLabApp() {
     e.target.value = '';
   };
 
-  const handleExportProject = async (format: ExportFormat) => {
+  const handleExportProject = async (format: ExportFormat | UniversalExportFormat) => {
     const curProject = projectRef.current;
-    const slug = curProject.title.toLowerCase().replace(/[^a-z0-9_-]/g, '_') || 'circuit';
-
-    if (format === 'eihouse') {
-      const payload = createEihouseProjectPayload(curProject);
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      downloadBlob(blob, `${slug}.eihouse.json`);
-      toast.success('Exported EI House project file (.eihouse.json)');
-    } else if (format === 'json') {
-      const blob = new Blob([JSON.stringify(curProject, null, 2)], { type: 'application/json' });
-      downloadBlob(blob, `${slug}.json`);
-      toast.success('Exported standard project JSON');
-    } else if (format === 'bom') {
-      const bom = PcbGenerator.generateBom(curProject.components);
-      let csv = 'Designator,Component Type,Value,Package/Footprint,Quantity\n';
-      bom.forEach((b) => {
-        csv += `"${b.designators.join(' ')}","${b.componentType}","${b.value}","${b.footprint}",${b.quantity}\n`;
-      });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      downloadBlob(blob, `${slug}_BOM.csv`);
-      toast.success('Bill of Materials exported (.csv)');
-    } else if (format === 'gerber') {
-      const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
-      GerberExporter.exportGerberZip(curProject.pcb, curProject.components, curProject.title);
-      toast.success('RS-274X Gerber & Excellon Drill ZIP package generated');
-    } else if (format === 'firmware') {
-      const blob = new Blob([curProject.firmware.code || ''], { type: 'text/plain;charset=utf-8' });
-      downloadBlob(blob, `${slug}.ino`);
-      toast.success('Arduino firmware exported (.ino)');
-    } else if (format === 'cpp') {
-      const blob = new Blob([curProject.firmware.code || ''], { type: 'text/plain;charset=utf-8' });
-      downloadBlob(blob, `${slug}.cpp`);
-      toast.success('C++ source file exported (.cpp)');
-    } else if (format === 'netlist') {
-      const { generateSpiceNetlist, downloadSpiceNetlist } = await import(
-        '@/modules/engineering-lab/circuit-engine/spice-netlist-generator'
-      );
-      const netlist = generateSpiceNetlist(curProject.title, curProject.components, curProject.wires);
-      downloadSpiceNetlist(curProject.title, netlist);
-      toast.success('SPICE Netlist exported (.cir)');
-    } else if (format === 'netlist-json') {
-      const jsonNetlist = {
-        title: curProject.title,
-        exportedAt: new Date().toISOString(),
-        components: curProject.components.map((c) => ({
-          id: c.id,
-          label: c.label,
-          designator: c.designator,
-          type: c.type,
-          value: c.value,
-          pins: c.pins.map((p) => p.id),
-        })),
-        wires: curProject.wires.map((w) => ({
-          id: w.id,
-          from: `${w.fromCompId}:${w.fromPinId}`,
-          to: `${w.toCompId}:${w.toPinId}`,
-          net: w.netName || 'NET',
-        })),
-      };
-      const blob = new Blob([JSON.stringify(jsonNetlist, null, 2)], { type: 'application/json' });
-      downloadBlob(blob, `${slug}_netlist.json`);
-      toast.success('JSON Netlist exported');
-    } else if (format === 'svg') {
-      if (activeMode === 'pcb2d') {
-        const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
-        const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
-        const blob = new Blob([pcbSvg], { type: 'image/svg+xml;charset=utf-8' });
-        downloadBlob(blob, `${slug}_pcb.svg`);
-        toast.success('PCB 2D vector blueprint exported (.svg)');
-      } else {
-        const svgEl = document.getElementById('main-schematic-svg') as SVGElement | null;
-        if (svgEl) {
-          const serializer = new XMLSerializer();
-          let svgStr = serializer.serializeToString(svgEl);
-          if (!svgStr.includes('xmlns="http://www.w3.org/2000/svg"')) {
-            svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-          }
-          const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-          downloadBlob(blob, `${slug}_schematic.svg`);
-          toast.success('Schematic vector drawing exported (.svg)');
-        } else {
-          toast.error('Schematic SVG could not be found.');
-        }
-      }
-    } else if (format === 'png') {
-      if (activeMode === 'virtual3d') {
-        const canvas = (document.getElementById('virtual-3d-webgl-canvas') ||
-          document.querySelector('.virtual-3d-canvas canvas') ||
-          document.querySelector('canvas')) as HTMLCanvasElement | null;
-        if (canvas) {
-          exportCanvasToPng(canvas, `${slug}_3d_studio.png`);
-          toast.success('3D Virtual Studio snapshot exported (.png)');
-        } else {
-          toast.error('3D canvas not ready for snapshot.');
-        }
-      } else if (activeMode === 'pcb3d') {
-        const canvas = (document.getElementById('pcb-3d-webgl-canvas') ||
-          document.querySelector('canvas')) as HTMLCanvasElement | null;
-        if (canvas) {
-          exportCanvasToPng(canvas, `${slug}_pcb3d.png`);
-          toast.success('PCB 3D inspection snapshot exported (.png)');
-        } else {
-          toast.error('PCB 3D canvas not ready for snapshot.');
-        }
-      } else if (activeMode === 'pcb2d') {
-        const { GerberExporter } = await import('@/modules/engineering-lab/pcb-engine/gerber-exporter');
-        const pcbSvg = GerberExporter.exportBlueprintSvg(curProject.pcb);
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = pcbSvg;
-        const svgEl = tempDiv.querySelector('svg');
-        if (svgEl) {
-          const ok = await exportSvgElementToPng(svgEl, `${slug}_pcb2d.png`, 3);
-          if (ok) toast.success('PCB 2D layout exported (.png)');
-          else toast.error('Failed to export PCB 2D PNG.');
-        }
-      } else {
-        const svgEl = document.getElementById('main-schematic-svg') as SVGElement | null;
-        if (svgEl) {
-          const ok = await exportSvgElementToPng(svgEl, `${slug}_schematic.png`, 2);
-          if (ok) toast.success('Schematic snapshot exported (.png)');
-          else toast.error('Failed to export schematic PNG.');
-        } else {
-          toast.error('Schematic drawing not found.');
-        }
-      }
-    }
+    const normalizedFormat: UniversalExportFormat =
+      format === 'gerber' ? 'gerber-zip' : (format as UniversalExportFormat);
+    await runUniversalExport(normalizedFormat, {
+      project: curProject,
+      activeMode,
+    });
   };
 
   const handleLoadExperiment = (exp: GuidedExperiment) => {
@@ -1326,6 +1209,15 @@ export function EngineeringLabApp() {
         isInspectorOpen={isInspectorOpen}
         onToggleInspector={() => setIsInspectorOpen((o) => !o)}
         onResetLayout={handleResetLayout}
+      />
+
+      {/* Hidden File Input for universal project import across all tabs */}
+      <input
+        ref={projectImportInputRef}
+        type="file"
+        accept=".eihouse.json,.json"
+        onChange={handleLoadProjectFile}
+        className="hidden"
       />
 
       {/* Main Workspace Body */}
@@ -1546,6 +1438,7 @@ export function EngineeringLabApp() {
               )}
 
               <Virtual3dStudio
+                project={project}
                 components={project.components}
                 wires={project.wires}
                 selectedCompId={selectedCompId}
@@ -1575,6 +1468,8 @@ export function EngineeringLabApp() {
                 isInspectorOpen={isInspectorOpen}
                 onToggleInspector={() => setIsInspectorOpen((o) => !o)}
                 onSaveWorkspace={handleSaveProject}
+                onExportProject={handleExportProject}
+                onTriggerImport={triggerProjectImport}
               />
             </div>
 
@@ -1676,6 +1571,9 @@ export function EngineeringLabApp() {
                 onRedo={handleRedo}
                 canUndo={undoStack.length > 0}
                 canRedo={redoStack.length > 0}
+                onExportProject={handleExportProject}
+                onTriggerImport={triggerProjectImport}
+                onSaveProject={handleSaveProject}
               />
             </main>
 
@@ -1728,7 +1626,9 @@ export function EngineeringLabApp() {
             components={project.components}
             wires={project.wires}
             projectTitle={project.title}
-            onExportGerber={() => handleExportProject('gerber')}
+            onExportGerber={() => handleExportProject('gerber-zip')}
+            onExportProject={handleExportProject}
+            onTriggerImport={triggerProjectImport}
             onUpdateDimensions={(widthMm, heightMm) => {
               recordHistory();
               setProject((p) => ({
@@ -1752,7 +1652,9 @@ export function EngineeringLabApp() {
             components={project.components}
             wires={project.wires}
             projectTitle={project.title}
-            onExportGerber={() => handleExportProject('gerber')}
+            onExportGerber={() => handleExportProject('gerber-zip')}
+            onExportProject={handleExportProject}
+            onTriggerImport={triggerProjectImport}
             onUpdateDimensions={(widthMm, heightMm) => {
               recordHistory();
               setProject((p) => ({
