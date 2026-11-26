@@ -498,6 +498,7 @@ export function resolve3DWireToSchematicConnections(
 
       // Canonicalize pinId if component is in schematicComponents
       const canonicalPinId = canonicalizePinIdForSchematic(schComp, p);
+      if (schComp?.pins && schComp.pins.length > 0 && !schComp.pins.some((sp) => sp.id === canonicalPinId)) continue;
 
       if (seenPins.has(canonicalPinId)) continue;
       seenPins.add(canonicalPinId);

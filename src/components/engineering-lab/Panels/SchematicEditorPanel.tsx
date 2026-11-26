@@ -22,6 +22,7 @@ import {
   projectPointOntoPolyline,
   resolveShortestNetWire,
   computeCanonicalSchematicGeometry,
+  getCanonicalPinWorldPos,
 } from './schematic-editor/canonical-geometry';
 import {
   extractWireSegments,
@@ -186,6 +187,7 @@ export function SchematicEditorPanel({
   const [wireWaypoints, setWireWaypoints] = useState<{ x: number; y: number }[]>([]);
   const [wireElbowFlip, setWireElbowFlip] = useState<boolean>(false);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+  const lastPinHandledRef = useRef<{ compId: string; pinId: string; time: number } | null>(null);
 
   // Mouse Coordinates (World space)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -421,6 +423,17 @@ export function SchematicEditorPanel({
   const handlePinClick = useCallback(
     (e: React.MouseEvent, compId: string, pinId: string, wx: number, wy: number) => {
       e.stopPropagation();
+
+      const now = Date.now();
+      if (
+        lastPinHandledRef.current &&
+        lastPinHandledRef.current.compId === compId &&
+        lastPinHandledRef.current.pinId === pinId &&
+        now - lastPinHandledRef.current.time < 120
+      ) {
+        return;
+      }
+      lastPinHandledRef.current = { compId, pinId, time: now };
 
       // Tool: Eraser
       if (tool === 'eraser') {
@@ -1772,10 +1785,32 @@ export function SchematicEditorPanel({
                           targetId: comp.id,
                         });
                       }}
+                      onClickCapture={(e) => {
+                        if (tool === 'wire' || tool === 'bus' || tool === 'noconnect') {
+                          const target = e.target as SVGElement | null;
+                          const pinG = target?.closest?.('[data-pin-id]') as SVGElement | null;
+                          if (pinG) {
+                            e.stopPropagation();
+                            const pinId = pinG.getAttribute('data-pin-id');
+                            const targetCompId = pinG.getAttribute('data-comp-id') || comp.id;
+                            if (pinId && targetCompId) {
+                              const pinObj = comp.pins?.find((p) => p.id === pinId);
+                              if (pinObj) {
+                                const pinPos = getCanonicalPinWorldPos(comp, pinObj);
+                                handlePinClick(e as unknown as React.MouseEvent, targetCompId, pinId, pinPos.x, pinPos.y);
+                              }
+                            }
+                          }
+                        }
+                      }}
                       onMouseDown={(e) => {
                         if (tool === 'eraser') {
                           e.stopPropagation();
                           onDeleteComponent(comp.id);
+                          return;
+                        }
+                        if ((tool === 'wire' || tool === 'bus') && activeWireStart) {
+                          e.stopPropagation();
                           return;
                         }
                         if (e.button === 0 && (tool === 'select' || tool === 'wire')) {

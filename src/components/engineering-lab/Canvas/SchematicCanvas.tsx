@@ -592,42 +592,40 @@ export function SchematicCanvas({
     const curY = (e.clientY - rect.top - pan.y) / zoom;
 
     if (e.button === 0) {
-      // Unconditionally clear component, wire, and net selection on empty canvas click
-      onSelectComponent(null);
-      setSelectedCompIds(new Set());
+      // In Wire mode with active wire start: Left click on canvas locks a 90° orthogonal fold waypoint
+      if (toolMode === 'wire' && activeWireStart) {
+        const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+        const snapX = Math.round(curX / 10) * 10;
+        const snapY = Math.round(curY / 10) * 10;
+        if (activeRoutingStyle === 'orthogonal') {
+          const corner = elbowOrientation === 'horizontal-first'
+            ? { x: snapX, y: lastPt.y }
+            : { x: lastPt.x, y: snapY };
+          if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
+            setActiveWaypoints((prev) => [...prev, corner]);
+          } else {
+            setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+          }
+        } else {
+          setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
+        }
+        return;
+      }
+
+      // Clear wire and net selection on empty canvas click when not routing
       if (onSelectWire) onSelectWire(null);
       setWireSelected(null);
       setSelectedWireIds(new Set());
       setHighlightedNetId(null);
 
-      // In Wire mode:
+      // Clear component selection whenever toolMode !== 'select' || !e.shiftKey
+      if (toolMode !== 'select' || !e.shiftKey) {
+        onSelectComponent(null);
+        setSelectedCompIds(new Set());
+      }
+
+      // In Wire mode without active wire start, selections cleared above; return immediately
       if (toolMode === 'wire') {
-        if (activeWireStart) {
-          if (e.shiftKey) {
-            // Drop manual corner waypoint ONLY when holding Shift
-            const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
-            const snapX = Math.round(curX / 10) * 10;
-            const snapY = Math.round(curY / 10) * 10;
-            if (activeRoutingStyle === 'orthogonal') {
-              const corner = elbowOrientation === 'horizontal-first'
-                ? { x: snapX, y: lastPt.y }
-                : { x: lastPt.x, y: snapY };
-              if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
-                setActiveWaypoints((prev) => [...prev, corner]);
-              } else {
-                setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
-              }
-            } else {
-              setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
-            }
-            return;
-          } else {
-            // Normal click without Shift immediately cancels in-progress wire
-            setActiveWireStart(null);
-            setActiveWaypoints([]);
-            return;
-          }
-        }
         return;
       }
 
@@ -1564,7 +1562,7 @@ export function SchematicCanvas({
 
           {/* Active Wire being drawn with live waypoints preview */}
           {activeWireStart && toolMode === 'wire' && (
-            <g>
+            <g data-testid="active-wire-preview">
               <path
                 d={computeWireSvgPath(
                   activeWireStart,
@@ -1670,8 +1668,13 @@ export function SchematicCanvas({
           return (
             <div
               key={comp.id}
+              data-testid={`canvas-comp-${comp.id}`}
               onClick={(e) => {
                 e.stopPropagation();
+                // Prevent component-body hijack while routing a wire
+                if (toolMode === 'wire' && activeWireStart) {
+                  return;
+                }
                 if (toolMode === 'delete') {
                   onDeleteComponent(comp.id);
                 } else {
@@ -1687,7 +1690,11 @@ export function SchematicCanvas({
                 }
               }}
               onMouseDown={(e) => {
-                if (e.button === 0 && toolMode !== 'wire') {
+                if (toolMode === 'wire') {
+                  e.stopPropagation();
+                  return;
+                }
+                if (e.button === 0) {
                   e.stopPropagation();
                   let currentSelection = selectedCompIds;
                   if (!selectedCompIds.has(comp.id) && !e.shiftKey) {
@@ -1746,6 +1753,7 @@ export function SchematicCanvas({
                 return (
                   <div
                     key={pin.id}
+                    data-testid={`canvas-pin-${comp.id}-${pin.id}`}
                     onClick={(e) => handlePinClick(e, comp.id, pin.id, world.x, world.y)}
                     className={`absolute w-3.5 h-3.5 rounded-full border-2 transition-all cursor-pointer z-30 flex items-center justify-center group/pin ${
                       isPinConnected

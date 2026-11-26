@@ -1103,10 +1103,27 @@ export function Virtual3dStudio({
     const gndRoot = uf.find('__GLOBAL_GND__');
     const vccRoot = uf.find('__GLOBAL_VCC__');
 
+    const batPosConnected = Boolean(
+      battery &&
+        srcWires.some(
+          (w) =>
+            (w.fromCompId === battery.id && ['p', '+', 'pos'].includes(w.fromPinId.toLowerCase())) ||
+            (w.toCompId === battery.id && ['p', '+', 'pos'].includes(w.toPinId.toLowerCase()))
+        )
+    );
+    const batNegConnected = Boolean(
+      battery &&
+        srcWires.some(
+          (w) =>
+            (w.fromCompId === battery.id && ['n', '-', 'neg'].includes(w.fromPinId.toLowerCase())) ||
+            (w.toCompId === battery.id && ['n', '-', 'neg'].includes(w.toPinId.toLowerCase()))
+        )
+    );
+
     let needsPosRailBridge = false;
     let needsNegRailBridge = false;
 
-    if (battery && batteryIsConnected) {
+    if (battery && (batPosConnected || batNegConnected)) {
       let hasTopPos = true;
       let hasBottomPos = false;
       let hasTopNeg = true;
@@ -1137,8 +1154,8 @@ export function Virtual3dStudio({
         }
       }
 
-      needsPosRailBridge = hasTopPos && hasBottomPos;
-      needsNegRailBridge = hasTopNeg && hasBottomNeg;
+      needsPosRailBridge = batPosConnected && hasTopPos && hasBottomPos;
+      needsNegRailBridge = batNegConnected && hasTopNeg && hasBottomNeg;
     }
 
     // PHASE 2: Route Power Rails & Zero-Collision Jumper Wires
@@ -1146,12 +1163,10 @@ export function Virtual3dStudio({
     let sigColorIdx = 0;
     const nextSourceMap = new Map<string, string[]>();
 
-    // 1. Battery Connections to Top Rails at Col 1 ONLY if battery has wires in circuit
-    if (battery && batteryIsConnected) {
+    // 1. Battery Connections to Top Rails at Col 1 ONLY if specific battery terminal has wires in circuit
+    if (battery && batPosConnected) {
       const batPosHole = 'bb_rail_top_pos_1';
-      const batNegHole = 'bb_rail_top_neg_1';
       occupancy.occupy(batPosHole, { type: 'wire_end', ownerId: battery.id });
-      occupancy.occupy(batNegHole, { type: 'wire_end', ownerId: battery.id });
 
       outWires.push({
         id: `wire_bat_pos_${battery.id}`,
@@ -1159,39 +1174,45 @@ export function Virtual3dStudio({
         toPin: { compId: 'breadboard', pinId: batPosHole },
         color: '#EF4444',
       });
+    }
+
+    if (battery && batNegConnected) {
+      const batNegHole = 'bb_rail_top_neg_1';
+      occupancy.occupy(batNegHole, { type: 'wire_end', ownerId: battery.id });
+
       outWires.push({
         id: `wire_bat_neg_${battery.id}`,
         fromPin: { compId: battery.id, pinId: '-' },
         toPin: { compId: 'breadboard', pinId: batNegHole },
         color: '#1E293B',
       });
+    }
 
-      // 2. Power Rail Bridges connecting Top <-> Bottom Rails ONLY if components on BOTH top and bottom rails connect
-      if (needsPosRailBridge) {
-        const bridgePosLeft = 'bb_rail_top_pos_2';
-        const bridgePosLeftBot = 'bb_rail_bottom_pos_2';
-        occupancy.occupy(bridgePosLeft, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
-        occupancy.occupy(bridgePosLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
-        outWires.push({
-          id: 'wire_rail_bridge_pos_left',
-          fromPin: { compId: 'breadboard', pinId: bridgePosLeft },
-          toPin: { compId: 'breadboard', pinId: bridgePosLeftBot },
-          color: '#EF4444',
-        });
-      }
+    // 2. Power Rail Bridges connecting Top <-> Bottom Rails ONLY if components on BOTH top and bottom rails connect
+    if (needsPosRailBridge) {
+      const bridgePosLeft = 'bb_rail_top_pos_2';
+      const bridgePosLeftBot = 'bb_rail_bottom_pos_2';
+      occupancy.occupy(bridgePosLeft, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
+      occupancy.occupy(bridgePosLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_pos_l' });
+      outWires.push({
+        id: 'wire_rail_bridge_pos_left',
+        fromPin: { compId: 'breadboard', pinId: bridgePosLeft },
+        toPin: { compId: 'breadboard', pinId: bridgePosLeftBot },
+        color: '#EF4444',
+      });
+    }
 
-      if (needsNegRailBridge) {
-        const bridgeNegLeft = 'bb_rail_top_neg_2';
-        const bridgeNegLeftBot = 'bb_rail_bottom_neg_2';
-        occupancy.occupy(bridgeNegLeft, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
-        occupancy.occupy(bridgeNegLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
-        outWires.push({
-          id: 'wire_rail_bridge_neg_left',
-          fromPin: { compId: 'breadboard', pinId: bridgeNegLeft },
-          toPin: { compId: 'breadboard', pinId: bridgeNegLeftBot },
-          color: '#1E293B',
-        });
-      }
+    if (needsNegRailBridge) {
+      const bridgeNegLeft = 'bb_rail_top_neg_2';
+      const bridgeNegLeftBot = 'bb_rail_bottom_neg_2';
+      occupancy.occupy(bridgeNegLeft, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
+      occupancy.occupy(bridgeNegLeftBot, { type: 'wire_end', ownerId: 'rail_bridge_neg_l' });
+      outWires.push({
+        id: 'wire_rail_bridge_neg_left',
+        fromPin: { compId: 'breadboard', pinId: bridgeNegLeft },
+        toPin: { compId: 'breadboard', pinId: bridgeNegLeftBot },
+        color: '#1E293B',
+      });
     }
 
     // Inter-Breadboard Power Rail Bridges when breadboardCount >= 2 AND battery is connected
@@ -1215,7 +1236,7 @@ export function Virtual3dStudio({
         }
       }
 
-      if (b2HasPos) {
+      if (b2HasPos && batPosConnected) {
         const b1PosLeft = 'bb_rail_top_pos_4';
         const b2PosLeft = 'bb2_rail_bottom_pos_4';
         occupancy.occupy(b1PosLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_pos_l' });
@@ -1239,7 +1260,7 @@ export function Virtual3dStudio({
         });
       }
 
-      if (b2HasNeg) {
+      if (b2HasNeg && batNegConnected) {
         const b1NegLeft = 'bb_rail_top_neg_4';
         const b2NegLeft = 'bb2_rail_bottom_neg_4';
         occupancy.occupy(b1NegLeft, { type: 'wire_end', ownerId: 'bb1_bb2_rail_bridge_neg_l' });
@@ -1264,30 +1285,33 @@ export function Virtual3dStudio({
       }
     }
 
-    if (breadboardCount >= 3 && batteryIsConnected) {
-      // Connect Board 2 Top Rails <-> Board 3 Bottom Rails
-      const b2PosLeft = 'bb2_rail_top_pos_4';
-      const b3PosLeft = 'bb3_rail_bottom_pos_4';
-      const b2NegLeft = 'bb2_rail_top_neg_4';
-      const b3NegLeft = 'bb3_rail_bottom_neg_4';
+    if (breadboardCount >= 3) {
+      if (batPosConnected) {
+        // Connect Board 2 Top Rails <-> Board 3 Bottom Rails
+        const b2PosLeft = 'bb2_rail_top_pos_4';
+        const b3PosLeft = 'bb3_rail_bottom_pos_4';
+        occupancy.occupy(b2PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
+        occupancy.occupy(b3PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
+        outWires.push({
+          id: 'wire_bb2_bb3_rail_pos_left',
+          fromPin: { compId: 'breadboard', pinId: b2PosLeft },
+          toPin: { compId: 'breadboard', pinId: b3PosLeft },
+          color: '#EF4444',
+        });
+      }
 
-      occupancy.occupy(b2PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
-      occupancy.occupy(b3PosLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_pos_l' });
-      occupancy.occupy(b2NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
-      occupancy.occupy(b3NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
-
-      outWires.push({
-        id: 'wire_bb2_bb3_rail_pos_left',
-        fromPin: { compId: 'breadboard', pinId: b2PosLeft },
-        toPin: { compId: 'breadboard', pinId: b3PosLeft },
-        color: '#EF4444',
-      });
-      outWires.push({
-        id: 'wire_bb2_bb3_rail_neg_left',
-        fromPin: { compId: 'breadboard', pinId: b2NegLeft },
-        toPin: { compId: 'breadboard', pinId: b3NegLeft },
-        color: '#1E293B',
-      });
+      if (batNegConnected) {
+        const b2NegLeft = 'bb2_rail_top_neg_4';
+        const b3NegLeft = 'bb3_rail_bottom_neg_4';
+        occupancy.occupy(b2NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
+        occupancy.occupy(b3NegLeft, { type: 'wire_end', ownerId: 'bb2_bb3_rail_bridge_neg_l' });
+        outWires.push({
+          id: 'wire_bb2_bb3_rail_neg_left',
+          fromPin: { compId: 'breadboard', pinId: b2NegLeft },
+          toPin: { compId: 'breadboard', pinId: b3NegLeft },
+          color: '#1E293B',
+        });
+      }
     }
 
     // 3. Circuit Jumper Wires & Power Drops via True Net-Based Minimum Spanning Tree (MST)
@@ -1346,8 +1370,8 @@ export function Virtual3dStudio({
     };
 
     netsByRoot.forEach((netPins, root) => {
-      const isGndNet = Boolean(battery && batteryIsConnected && root === gndRoot);
-      const isPosNet = Boolean(battery && batteryIsConnected && root === vccRoot);
+      const isGndNet = Boolean(battery && batNegConnected && root === gndRoot);
+      const isPosNet = Boolean(battery && batPosConnected && root === vccRoot);
 
       // Collect unique breadboard tieGroups and MCU leaves for this net
       const tieGroupSet = new Set<string>();

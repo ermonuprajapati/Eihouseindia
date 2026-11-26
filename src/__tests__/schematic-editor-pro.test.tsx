@@ -4238,5 +4238,369 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const batWiresData = JSON.parse(canvasBat.getAttribute('data-wires') || '[]');
     expect(batWiresData.length).toBe(0);
   });
+
+  // =========================================================================
+  // GATE 3: 4 FOCUSED REGRESSION TESTS: WIRE FOLDING & CONNECTION (SIMULATION + EDITOR)
+  // =========================================================================
+
+  it('GATE 3 Test 1: <SchematicCanvas> Wire Mode - BOTH Folding AND Deselect Work Together With Zero Conflict', () => {
+    const onSelectComp = vi.fn();
+    const onSelectWire = vi.fn();
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onSelectWire={onSelectWire}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // 1. Switch to Wire mode via keyboard 'w'
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click empty canvas when no wire is active -> MUST call onSelectComponent(null)
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 50, clientY: 50 });
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+
+    // 2. Click Pin 1 of R1 to start wire routing
+    const pinR1_1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+    fireEvent.click(pinR1_1!);
+
+    // Wire preview must now be active
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+
+    // Normal left-click on empty canvas (NO Shift!) MUST add 90° fold and KEEP active wire alive
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 200, clientY: 100 });
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+
+    // Click Pin 1 of R2 to finish wiring
+    const pinR2_1 = container.querySelector('[data-testid="canvas-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.click(pinR2_1!);
+
+    // Wire must be added with folded waypoints and active wire preview cleared
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+    expect(addedWire.points).toBeDefined();
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).not.toBeInTheDocument();
+
+    // 3. Test Right-Click cancel
+    fireEvent.click(pinR1_1!);
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+    fireEvent.mouseDown(svgCanvas!, { button: 2, clientX: 150, clientY: 150 });
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).not.toBeInTheDocument();
+  });
+
+  it('GATE 3 Test 2: <SchematicEditorPanel> Wire Mode - Pin-to-Pin Direct + Left-Click Console Folding + Empty-Console Deselect', () => {
+    const onSelectComp = vi.fn();
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Switch to Wire mode
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    // Empty canvas click with no active wire -> MUST deselect component
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+
+    // 2. Click Pin 1 of R1
+    const pinR1_1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1_1!);
+
+    // Normal left-click empty console (adds 90° fold, does NOT cancel!)
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 200, clientY: 100 });
+
+    // Click Pin 1 of R2 to finish wiring
+    const pinR2_1 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2_1!);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+    expect(addedWire.points).toBeDefined();
+
+    // 3. Direct Pin 1 -> Pin 2 wiring
+    fireEvent.mouseDown(pinR1_1!);
+    fireEvent.mouseDown(pinR2_1!);
+    expect(onAddWireMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('GATE 3 Test 3: breadboard-wire-resolver.ts - No Fake Pin IDs on 2-Pin Parts', () => {
+    const compR1: Component3D & { pinHoles?: Record<string, string> } = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      parameters: {},
+      rotY: 0,
+      x3d: 0,
+      y3d: 0,
+      z3d: 0,
+      pinHoles: {
+        '1': 'bb_col_10_a',
+        '2': 'bb_col_15_a',
+      },
+    };
+
+    const compLed1: Component3D & { pinHoles?: Record<string, string> } = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      parameters: {},
+      rotY: 0,
+      x3d: 0,
+      y3d: 0,
+      z3d: 0,
+      pinHoles: {
+        a: 'bb_col_15_b',
+        k: 'bb_col_20_b',
+      },
+    };
+
+    const schR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '220',
+      category: 'passive',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      footprint: '',
+    };
+
+    const schLed1: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      value: 'Red',
+      category: 'active',
+      x: 100,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+        { id: 'k', name: 'K', x: 20, y: 0, pinType: 'passive' },
+      ],
+      footprint: '',
+    };
+
+    // 3D jumper wire connecting col 15 to col 20
+    const wire3d: Wire3D = {
+      id: 'w3d_test_r1_led1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_15_c' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_c' },
+      color: '#3B82F6',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      wire3d,
+      [wire3d],
+      [compR1, compLed1],
+      [schR1, schLed1],
+      []
+    );
+
+    expect(resolved.length).toBeGreaterThan(0);
+    for (const conn of resolved) {
+      if (conn.fromCompId === 'r1') {
+        expect(['1', '2']).toContain(conn.fromPinId);
+      }
+      if (conn.toCompId === 'r1') {
+        expect(['1', '2']).toContain(conn.toPinId);
+      }
+      if (conn.fromCompId === 'led1') {
+        expect(['a', 'k']).toContain(conn.fromPinId);
+      }
+      if (conn.toCompId === 'led1') {
+        expect(['a', 'k']).toContain(conn.toPinId);
+      }
+      // Ensure no non-existent pins like '3', '4', 'b', 'c', 'cc' were attached
+      expect(['3', '4', 'b', 'c', 'cc']).not.toContain(conn.fromPinId);
+      expect(['3', '4', 'b', 'c', 'cc']).not.toContain(conn.toPinId);
+    }
+  });
+
+  it('GATE 3 Test 4: <Virtual3dStudio> - Single-Terminal Battery Emits 0 Extra Wire & 0 Unpowered Rail Drops', () => {
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BAT1',
+      value: '9V',
+      parameters: {},
+      x: 50,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: 'p', name: '+', x: 0, y: 0, pinType: 'passive' },
+        { id: 'n', name: '-', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'power',
+      footprint: '',
+    };
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 150,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    // Circuit with ONLY bat1:p -> r1:1 (bat1:n is strictly UNCONNECTED)
+    const wireOnlyPos: CircuitWire = {
+      id: 'w_pos_only',
+      fromCompId: 'bat1',
+      fromPinId: 'p',
+      toCompId: 'r1',
+      toPinId: '1',
+      color: '#EF4444',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compBat, compR1]}
+        wires={[wireOnlyPos]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvas = screen.getByTestId('mock-3d-canvas');
+    const wiresData: Wire3D[] = JSON.parse(canvas.getAttribute('data-wires') || '[]');
+
+    // wire_bat_pos_bat1 MUST exist
+    const hasBatPos = wiresData.some((w) => w.id === 'wire_bat_pos_bat1');
+    expect(hasBatPos).toBe(true);
+
+    // wire_bat_neg_bat1 MUST NOT exist
+    const hasBatNeg = wiresData.some((w) => w.id === 'wire_bat_neg_bat1');
+    expect(hasBatNeg).toBe(false);
+
+    // 0 unpowered GND drop wires
+    const hasGndDrop = wiresData.some((w) => w.id.includes('wire_drop_gnd'));
+    expect(hasGndDrop).toBe(false);
+  });
 });
 
