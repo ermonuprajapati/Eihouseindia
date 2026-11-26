@@ -22,6 +22,11 @@ export function escapeXml(str: unknown): string {
     .replace(/'/g, '&apos;');
 }
 
+export function csvEscape(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  return String(val).replace(/"/g, '""');
+}
+
 // ---------------------------------------------------------------------------
 // 5x7 Stroke Font Engine for RS-274X Vector Silkscreen
 // ---------------------------------------------------------------------------
@@ -601,9 +606,9 @@ export class GerberExporter {
     let csv = `Designator,Val,Package,Mid X,Mid Y,Rotation,Layer\n`;
     if (pcb.components) {
       pcb.components.forEach((c) => {
-        const des = c.designator || c.label || c.componentId;
-        const val = c.value || '-';
-        const pkg = c.footprint || c.type || 'Generic';
+        const des = csvEscape(c.designator || c.label || c.componentId);
+        const val = csvEscape(c.value || '-');
+        const pkg = csvEscape(c.footprint || c.type || 'Generic');
         const rot = c.rotation || 0;
         csv += `"${des}","${val}","${pkg}",${c.x.toFixed(3)},${c.y.toFixed(3)},${rot},"Top"\n`;
       });
@@ -633,7 +638,12 @@ export class GerberExporter {
 
     let itemIdx = 1;
     map.forEach((item) => {
-      csv += `${itemIdx++},"${item.des.join(', ')}",${item.des.length},"${item.type}","${item.value}","${item.footprint}","${item.mpn}"\n`;
+      const desEscaped = csvEscape(item.des.join(', '));
+      const typeEscaped = csvEscape(item.type);
+      const valEscaped = csvEscape(item.value);
+      const pkgEscaped = csvEscape(item.footprint);
+      const mpnEscaped = csvEscape(item.mpn);
+      csv += `${itemIdx++},"${desEscaped}",${item.des.length},"${typeEscaped}","${valEscaped}","${pkgEscaped}","${mpnEscaped}"\n`;
     });
 
     return csv;
@@ -669,7 +679,11 @@ export class GerberExporter {
     });
 
     map.forEach((item) => {
-      csv += `"${item.comment}","${item.des.join(',')}","${item.footprint}",${item.des.length},"${item.lcsc}"\n`;
+      const commentEscaped = csvEscape(item.comment);
+      const desEscaped = csvEscape(item.des.join(','));
+      const pkgEscaped = csvEscape(item.footprint);
+      const lcscEscaped = csvEscape(item.lcsc);
+      csv += `"${commentEscaped}","${desEscaped}","${pkgEscaped}",${item.des.length},"${lcscEscaped}"\n`;
     });
 
     return csv;
@@ -717,6 +731,30 @@ export class GerberExporter {
     });
     svg += `  </g>\n`;
 
+    // Vias
+    const extraVias = ((pcb as { vias?: { x: number; y: number; diameterMm?: number; drillMm?: number }[] }).vias || []).filter(
+      (v) => !pcb.pads?.some((p) => Math.hypot(p.x - v.x, p.y - v.y) < 0.01)
+    );
+    const viaPads = (pcb.pads || []).filter((p) => p.componentId === 'VIA');
+    const allVias = [
+      ...viaPads.map((p) => ({ x: p.x, y: p.y, diameterMm: p.diameterMm || 0.6, drillMm: p.holeMm || 0.3 })),
+      ...extraVias,
+    ];
+    if (allVias.length > 0) {
+      svg += `  <g id="Vias" fill="#10B981" stroke="#059669" stroke-width="0.05">\n`;
+      allVias.forEach((v) => {
+        const r = (v.diameterMm || 0.6) / 2;
+        svg += `    <circle cx="${v.x}" cy="${v.y}" r="${r}"/>\n`;
+      });
+      svg += `  </g>\n`;
+      svg += `  <g id="Via_Holes" fill="#020617">\n`;
+      allVias.forEach((v) => {
+        const hr = (v.drillMm || 0.3) / 2;
+        svg += `    <circle cx="${v.x}" cy="${v.y}" r="${hr}"/>\n`;
+      });
+      svg += `  </g>\n`;
+    }
+
     // Drill holes
     svg += `  <g id="Drill_Holes" fill="#020617">\n`;
     (pcb.pads || []).forEach((p) => {
@@ -737,12 +775,34 @@ export class GerberExporter {
 
     // Silkscreen
     svg += `  <g id="Silkscreen" stroke="#FFFFFF" fill="none" stroke-width="0.15">\n`;
+    const compPadsMap = new Map<string, PcbPad[]>();
+    (pcb.pads || []).forEach((p) => {
+      if (!p.componentId) return;
+      if (!compPadsMap.has(p.componentId)) compPadsMap.set(p.componentId, []);
+      compPadsMap.get(p.componentId)!.push(p);
+    });
+
     if (pcb.components) {
       pcb.components.forEach((c) => {
-        svg += `    <rect x="${c.x - 5}" y="${c.y - 4}" width="10" height="8" rx="0.5"/>\n`;
+        const cPads = compPadsMap.get(c.componentId) || [];
+        let minX = c.x - 3;
+        let maxX = c.x + 3;
+        let minY = c.y - 2.5;
+        let maxY = c.y + 2.5;
+
+        if (cPads.length > 0) {
+          minX = Math.min(...cPads.map((p) => p.x - (p.diameterMm || 1.8) / 2)) - 0.5;
+          maxX = Math.max(...cPads.map((p) => p.x + (p.diameterMm || 1.8) / 2)) + 0.5;
+          minY = Math.min(...cPads.map((p) => p.y - (p.diameterMm || 1.8) / 2)) - 0.5;
+          maxY = Math.max(...cPads.map((p) => p.y + (p.diameterMm || 1.8) / 2)) + 0.5;
+        }
+
+        const bw = Math.max(1, maxX - minX);
+        const bh = Math.max(1, maxY - minY);
+        svg += `    <rect x="${minX.toFixed(3)}" y="${minY.toFixed(3)}" width="${bw.toFixed(3)}" height="${bh.toFixed(3)}" rx="0.5"/>\n`;
         const desEscaped = escapeXml(c.designator || c.label || c.componentId);
         const valEscaped = escapeXml(c.value || '');
-        svg += `    <text x="${c.x - 4.5}" y="${c.y - 4.5}" font-family="monospace" font-size="1.2" fill="#FFFFFF" stroke="none">${desEscaped} ${valEscaped}</text>\n`;
+        svg += `    <text x="${(minX + 0.5).toFixed(3)}" y="${Math.max(1, minY - 0.5).toFixed(3)}" font-family="monospace" font-size="1.2" fill="#FFFFFF" stroke="none">${desEscaped} ${valEscaped}</text>\n`;
       });
     }
 

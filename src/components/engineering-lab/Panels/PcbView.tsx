@@ -224,7 +224,7 @@ export function PcbView({
                 const exportProject: EngineeringProject = {
                   title: projectTitle || 'EIHouse PCB Project',
                   components,
-                  wires: [],
+                  wires,
                   pcb,
                 } as unknown as EngineeringProject;
                 runUniversalExport(fmt, { activeMode: 'pcb3d', project: exportProject });

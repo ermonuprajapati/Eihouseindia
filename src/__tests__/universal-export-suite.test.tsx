@@ -10,7 +10,7 @@ import {
 } from '../modules/engineering-lab/export-engine/universal-exporter';
 import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/starter-templates';
 import { PcbGenerator } from '../modules/engineering-lab/pcb-engine/pcb-generator';
-import { EngineeringProject, PcbLayout } from '../modules/engineering-lab/types';
+import { EngineeringProject, PcbLayout, CircuitComponent } from '../modules/engineering-lab/types';
 
 /**
  * Helper to parse file names and text contents from an uncompressed PKZIP (method 0) Uint8Array
@@ -570,5 +570,135 @@ describe('Universal Export & CAM Manufacturing Suite', () => {
       activeMode: 'schematic',
     });
     expect(clickSpy).toHaveBeenCalled();
+  });
+
+  // ============================================================================
+  // Test 8: Context-Aware SVG Exports in 3D Views (pcb3d & virtual3d)
+  // ============================================================================
+  it('Test 8: runUniversalExport dispatches SVG cleanly in pcb3d and virtual3d modes', async () => {
+    let downloadedFilename = '';
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilename = this.download;
+    });
+
+    // pcb3d mode -> exports PCB blueprint SVG
+    await runUniversalExport('svg', {
+      project: TEMPLATE_555_ASTABLE,
+      activeMode: 'pcb3d',
+    });
+    expect(downloadedFilename).toContain('_pcb_blueprint.svg');
+
+    // virtual3d mode -> exports schematic vector SVG
+    await runUniversalExport('svg', {
+      project: TEMPLATE_555_ASTABLE,
+      activeMode: 'virtual3d',
+    });
+    expect(downloadedFilename).toContain('_schematic.svg');
+    clickSpy.mockRestore();
+  });
+
+  // ============================================================================
+  // Test 9: PDF Stream WinAnsi Safety (Zero 0xC2 0xB7 Multi-Byte Glitches)
+  // ============================================================================
+  it('Test 9: PDF output contains zero non-ASCII 0xC2 0xB7 bytes in Helvetica text stream', async () => {
+    const jpegBytes = createMinimalJpegBytes();
+    const pdfBlob = buildCircuitPdfBlob(jpegBytes, 800, 600, {
+      title: '555 Timer · 10kΩ & 100µF',
+      viewLabel: 'Schematic Sheet',
+      subtitle: 'Size: 80 x 60 mm · 2-Layer FR-4',
+    });
+
+    const pdfBytes = await blobToUint8Array(pdfBlob);
+
+    // Verify PDF header and trailer
+    const pdfText = new TextDecoder('latin1').decode(pdfBytes);
+    expect(pdfText).toContain('%PDF-1.4');
+    expect(pdfText).toContain('%%EOF');
+
+    // Search for UTF-8 multi-byte sequence for middle dot: 0xC2, 0xB7
+    let hasMiddleDotUtf8 = false;
+    for (let i = 0; i < pdfBytes.length - 1; i++) {
+      if (pdfBytes[i] === 0xc2 && pdfBytes[i + 1] === 0xb7) {
+        hasMiddleDotUtf8 = true;
+        break;
+      }
+    }
+    expect(hasMiddleDotUtf8).toBe(false);
+  });
+
+  // ============================================================================
+  // Test 10: Schematic Editor SVG Light Theme & Style Inlining Stability
+  // ============================================================================
+  it('Test 10: Schematic editor SVG preserves light background #ECE8DC without style index shifting', () => {
+    const liveSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    liveSvg.setAttribute('viewBox', '0 0 1000 700');
+
+    // Ignored element before styled element
+    const ignoreEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    ignoreEl.setAttribute('data-export-ignore', 'true');
+    liveSvg.appendChild(ignoreEl);
+
+    // Styled element
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', '10');
+    rect.setAttribute('y', '10');
+    rect.setAttribute('width', '50');
+    rect.setAttribute('height', '50');
+    rect.style.stroke = 'rgb(0, 0, 0)';
+    liveSvg.appendChild(rect);
+
+    const sanitized = cloneAndSanitizeLiveSvg(liveSvg, '#ECE8DC');
+
+    expect(sanitized).toContain('fill="#ECE8DC"');
+    expect(sanitized).not.toContain('data-export-ignore');
+    expect(sanitized).toContain('viewBox="0 0 1000 700"');
+  });
+
+  // ============================================================================
+  // Test 11: CSV Double-Quote Escaping Standards
+  // ============================================================================
+  it('Test 11: CSV generation escapes double quotes properly (0.1" Header -> ""0.1"""" Header"")', () => {
+    const comp = {
+      id: 'c1',
+      type: 'HEADER',
+      label: '0.1" Header',
+      designator: 'J1 "Main"',
+      value: '0.1" Header',
+      footprint: 'HDR_1X2 "SMD"',
+      manufacturerPartNumber: 'PART "ABC"',
+      pins: [],
+      x: 20,
+      y: 20,
+      rotation: 0,
+    } as unknown as CircuitComponent;
+
+    const bomCsv = GerberExporter.exportBomCsv([comp]);
+    expect(bomCsv).toContain('0.1"" Header');
+    expect(bomCsv).toContain('J1 ""Main""');
+    expect(bomCsv).toContain('PART ""ABC""');
+
+    const pcb = {
+      widthMm: 50,
+      heightMm: 50,
+      components: [
+        {
+          componentId: 'c1',
+          label: '0.1" Header',
+          designator: 'J1 "Main"',
+          type: 'HEADER',
+          value: '0.1" Header',
+          footprint: 'HDR_1X2 "SMD"',
+          x: 20,
+          y: 20,
+          rotation: 0,
+        },
+      ],
+      pads: [],
+      tracks: [],
+    } as unknown as PcbLayout;
+
+    const cplCsv = GerberExporter.exportPickAndPlaceCsv(pcb);
+    expect(cplCsv).toContain('J1 ""Main""');
+    expect(cplCsv).toContain('0.1"" Header');
   });
 });

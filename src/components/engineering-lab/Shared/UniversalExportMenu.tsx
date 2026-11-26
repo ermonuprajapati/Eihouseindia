@@ -292,21 +292,17 @@ export function UniversalExportMenu({
             type="button"
             data-testid={`${pfx}export-eihouse-btn`}
             onClick={() => {
-              if (onSaveProject) {
-                setIsOpen(false);
-                onSaveProject();
-              } else {
-                handleSelect('eihouse');
-              }
+              handleSelect('eihouse');
+              onSaveProject?.();
             }}
             className="w-full px-2.5 py-1.5 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-2 group transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-2 min-w-0">
               <Save className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-medium text-xs truncate">Save Local Project</span>
+              <span className="font-medium text-xs truncate">Save Local File (.eihouse.json)</span>
             </span>
             <span className="shrink-0 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/50 font-bold">
-              Ctrl+S
+              Download
             </span>
           </button>
 

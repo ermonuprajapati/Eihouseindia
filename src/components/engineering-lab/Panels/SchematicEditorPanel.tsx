@@ -1422,7 +1422,12 @@ export function SchematicEditorPanel({
         onPrintPdf={() => printSchematicSheet(svgRef.current, project.title, sheetConfig.theme)}
         onExportGerber={onExportProject ? () => onExportProject('gerber-zip') : undefined}
         onExportBom={onExportProject ? () => onExportProject('bom') : undefined}
-        onSaveProject={onSaveProject}
+        onSaveProject={() => {
+          if (onExportProject) {
+            onExportProject('eihouse');
+          }
+          onSaveProject?.();
+        }}
         onTriggerImport={onTriggerImport}
         selectedCompId={selectedCompId}
         selectedCompIds={selectedCompIds}

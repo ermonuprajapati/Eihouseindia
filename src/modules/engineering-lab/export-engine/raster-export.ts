@@ -53,6 +53,47 @@ export function resolveLiveCanvasElement(idOrSelector: string): HTMLCanvasElemen
 }
 
 /**
+ * Safely converts an HTMLCanvasElement to a Blob across all environments (including JSDOM).
+ * Uses canvas.toBlob when available; falls back to canvas.toDataURL + dataUrlToUint8Array.
+ */
+export function canvasToBlobSafe(
+  canvas: HTMLCanvasElement,
+  mimeType = 'image/png',
+  quality = 0.95
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (typeof canvas.toBlob === 'function') {
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              // Fallback to toDataURL
+              try {
+                const dataUrl = canvas.toDataURL(mimeType, quality);
+                const bytes = dataUrlToUint8Array(dataUrl);
+                resolve(new Blob([bytes as unknown as BlobPart], { type: mimeType }));
+              } catch (err) {
+                reject(err);
+              }
+            }
+          },
+          mimeType,
+          quality
+        );
+      } else {
+        const dataUrl = canvas.toDataURL(mimeType, quality);
+        const bytes = dataUrlToUint8Array(dataUrl);
+        resolve(new Blob([bytes as unknown as BlobPart], { type: mimeType }));
+      }
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
  * Composite a canvas onto a solid background color to eliminate alpha-transparency
  * turning black in JPEG or PDF rendering.
  */
@@ -166,11 +207,8 @@ export async function exportSvgStringAsPng(
   bgColor = '#070E1A'
 ): Promise<void> {
   const canvas = await renderSvgStringToCanvas(svgString, scale, bgColor);
-  canvas.toBlob((blob) => {
-    if (blob) {
-      triggerDownloadBlob(blob, filename.endsWith('.png') ? filename : `${filename}.png`);
-    }
-  }, 'image/png');
+  const blob = await canvasToBlobSafe(canvas, 'image/png');
+  triggerDownloadBlob(blob, filename.endsWith('.png') ? filename : `${filename}.png`);
 }
 
 export async function exportSvgStringAsJpg(
@@ -181,11 +219,8 @@ export async function exportSvgStringAsJpg(
   quality = 0.95
 ): Promise<void> {
   const canvas = await renderSvgStringToCanvas(svgString, scale, bgColor);
-  canvas.toBlob((blob) => {
-    if (blob) {
-      triggerDownloadBlob(blob, filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`);
-    }
-  }, 'image/jpeg', quality);
+  const blob = await canvasToBlobSafe(canvas, 'image/jpeg', quality);
+  triggerDownloadBlob(blob, filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`);
 }
 
 export async function exportSvgStringAsPdf(
@@ -202,26 +237,20 @@ export async function exportSvgStringAsPdf(
   triggerDownloadBlob(pdfBlob, filename.endsWith('.pdf') ? filename : `${filename}.pdf`);
 }
 
-export function exportCanvasAsPng(canvas: HTMLCanvasElement, filename: string): void {
-  canvas.toBlob((blob) => {
-    if (blob) {
-      triggerDownloadBlob(blob, filename.endsWith('.png') ? filename : `${filename}.png`);
-    }
-  }, 'image/png');
+export async function exportCanvasAsPng(canvas: HTMLCanvasElement, filename: string): Promise<void> {
+  const blob = await canvasToBlobSafe(canvas, 'image/png');
+  triggerDownloadBlob(blob, filename.endsWith('.png') ? filename : `${filename}.png`);
 }
 
-export function exportCanvasAsJpg(
+export async function exportCanvasAsJpg(
   canvas: HTMLCanvasElement,
   filename: string,
   bgColor = '#070D18',
   quality = 0.95
-): void {
+): Promise<void> {
   const comp = canvasToCompositeCanvas(canvas, bgColor);
-  comp.toBlob((blob) => {
-    if (blob) {
-      triggerDownloadBlob(blob, filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`);
-    }
-  }, 'image/jpeg', quality);
+  const blob = await canvasToBlobSafe(comp, 'image/jpeg', quality);
+  triggerDownloadBlob(blob, filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`);
 }
 
 export function exportCanvasAsPdf(

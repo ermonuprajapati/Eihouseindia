@@ -287,9 +287,57 @@ export function buildStandaloneSchematicSvg(
  * injects namespaces and background rect, and returns valid XML source.
  */
 export function cloneAndSanitizeLiveSvg(svgEl: SVGSVGElement, bgColor = '#09101E'): string {
+  // 1. Clone
   const clone = svgEl.cloneNode(true) as SVGSVGElement;
 
-  // Remove elements flagged to ignore in export
+  // 2. BEFORE removing ANY node and BEFORE inserting bgRect:
+  // Order-safe computed style inlining on paired elements
+  if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+    try {
+      const selector = 'path, line, rect, circle, polyline, polygon, text';
+      const origElements = svgEl.querySelectorAll(selector);
+      const cloneElements = clone.querySelectorAll(selector);
+
+      if (origElements.length === cloneElements.length) {
+        for (let i = 0; i < origElements.length; i++) {
+          const orig = origElements[i] as SVGElement;
+          const cloned = cloneElements[i] as SVGElement;
+
+          const strokeVal = cloned.getAttribute('stroke');
+          const fillVal = cloned.getAttribute('fill');
+          const hasClass = orig.hasAttribute('class');
+
+          if (hasClass || strokeVal === 'currentColor' || fillVal === 'currentColor') {
+            const cs = window.getComputedStyle(orig);
+
+            if (strokeVal === 'currentColor' || (!cloned.hasAttribute('stroke') && cs.stroke && cs.stroke !== 'none')) {
+              cloned.setAttribute('stroke', cs.stroke);
+            }
+            if (cloned.hasAttribute('stroke-width') === false && cs.strokeWidth && cs.strokeWidth !== '0px') {
+              cloned.setAttribute('stroke-width', cs.strokeWidth);
+            }
+            if (fillVal === 'currentColor' || (!cloned.hasAttribute('fill') && cs.fill && cs.fill !== 'none')) {
+              cloned.setAttribute('fill', cs.fill);
+            }
+            if (!cloned.hasAttribute('font-family') && cs.fontFamily) {
+              cloned.setAttribute('font-family', cs.fontFamily);
+            }
+            if (!cloned.hasAttribute('font-size') && cs.fontSize) {
+              cloned.setAttribute('font-size', cs.fontSize);
+            }
+            if (!cloned.hasAttribute('font-weight') && cs.fontWeight && cs.fontWeight !== 'normal') {
+              cloned.setAttribute('font-weight', cs.fontWeight);
+            }
+            if (!cloned.hasAttribute('opacity') && cs.opacity && cs.opacity !== '1') {
+              cloned.setAttribute('opacity', cs.opacity);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. AFTER style inlining: remove elements flagged to ignore in export
   const ignoreElements = clone.querySelectorAll('[data-export-ignore="true"], .marquee-selection, .rubberband');
   ignoreElements.forEach((el) => el.remove());
 
@@ -297,13 +345,29 @@ export function cloneAndSanitizeLiveSvg(svgEl: SVGSVGElement, bgColor = '#09101E
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
 
-  // Prepend solid background rectangle if not present
+  // 4. Parse viewBox if present and set bgRect coordinates and dimensions
   const firstChild = clone.firstChild;
   const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  const w = clone.getAttribute('width') || '100%';
-  const h = clone.getAttribute('height') || '100%';
-  bgRect.setAttribute('width', w);
-  bgRect.setAttribute('height', h);
+  const vb = clone.getAttribute('viewBox');
+  if (vb) {
+    const parts = vb.trim().split(/\s+/).map(Number);
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      bgRect.setAttribute('x', String(parts[0]));
+      bgRect.setAttribute('y', String(parts[1]));
+      bgRect.setAttribute('width', String(parts[2]));
+      bgRect.setAttribute('height', String(parts[3]));
+    } else {
+      bgRect.setAttribute('x', '0');
+      bgRect.setAttribute('y', '0');
+      bgRect.setAttribute('width', clone.getAttribute('width') || '100%');
+      bgRect.setAttribute('height', clone.getAttribute('height') || '100%');
+    }
+  } else {
+    bgRect.setAttribute('x', '0');
+    bgRect.setAttribute('y', '0');
+    bgRect.setAttribute('width', clone.getAttribute('width') || '100%');
+    bgRect.setAttribute('height', clone.getAttribute('height') || '100%');
+  }
   bgRect.setAttribute('fill', bgColor);
   clone.insertBefore(bgRect, firstChild);
 
