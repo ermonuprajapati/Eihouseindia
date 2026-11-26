@@ -28,6 +28,7 @@ import {
   extractWireSegments,
   slideWireSegment,
   dragWireCornerVertex,
+  simplifyCollinearPoints,
   Point,
 } from '@/modules/engineering-lab/circuit-engine/wire-router';
 
@@ -187,7 +188,7 @@ export function SchematicEditorPanel({
   const [wireWaypoints, setWireWaypoints] = useState<{ x: number; y: number }[]>([]);
   const [wireElbowFlip, setWireElbowFlip] = useState<boolean>(false);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
-  const mouseDownHandledPinRef = useRef<{ compId: string; pinId: string } | null>(null);
+  const pinHandledOnMouseDownRef = useRef<{ compId: string; pinId: string } | null>(null);
 
   // Mouse Coordinates (World space)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -425,7 +426,17 @@ export function SchematicEditorPanel({
       e.stopPropagation();
 
       if (e.type === 'mousedown') {
-        mouseDownHandledPinRef.current = { compId, pinId };
+        pinHandledOnMouseDownRef.current = { compId, pinId };
+      } else if (e.type === 'click') {
+        if (
+          pinHandledOnMouseDownRef.current &&
+          pinHandledOnMouseDownRef.current.compId === compId &&
+          pinHandledOnMouseDownRef.current.pinId === pinId
+        ) {
+          pinHandledOnMouseDownRef.current = null;
+          return;
+        }
+        pinHandledOnMouseDownRef.current = null;
       }
 
       // Tool: Eraser
@@ -460,22 +471,26 @@ export function SchematicEditorPanel({
           if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
             const startPt = { x: activeWireStart.x, y: activeWireStart.y };
             const lastPt = wireWaypoints.length > 0 ? wireWaypoints[wireWaypoints.length - 1] : startPt;
+            const targetPt = { x: wx, y: wy };
             const corner = wireElbowFlip
               ? { x: lastPt.x, y: wy }
               : { x: wx, y: lastPt.y };
 
             const finalPoints: { x: number; y: number }[] = [startPt, ...wireWaypoints];
             if (
-              (corner.x !== lastPt.x || corner.y !== lastPt.y) &&
-              (corner.x !== wx || corner.y !== wy)
+              Math.hypot(corner.x - lastPt.x, corner.y - lastPt.y) > 1 &&
+              Math.hypot(targetPt.x - corner.x, targetPt.y - corner.y) > 1
             ) {
               finalPoints.push(corner);
             }
-            finalPoints.push({ x: wx, y: wy });
+            finalPoints.push(targetPt);
 
-            // Bug 2 Contract: wire.points stores ONLY interior waypoints (slice(1, -1))
-            const interiorWaypoints = finalPoints.slice(1, -1);
-            const explicitManualWaypoints = wireWaypoints.length > 0 ? interiorWaypoints : undefined;
+            const simplifiedFull = simplifyCollinearPoints(finalPoints);
+            const interiorWaypoints = simplifiedFull.length > 2 ? simplifiedFull.slice(1, -1) : [];
+            const explicitManualWaypoints =
+              wireWaypoints.length > 0 || wireElbowFlip
+                ? (interiorWaypoints.length > 0 ? interiorWaypoints : undefined)
+                : undefined;
 
             const resolved = resolveShortestNetWire(
               activeWireStart.compId,
@@ -826,6 +841,8 @@ export function SchematicEditorPanel({
     }
 
     if (e.button === 0) {
+      pinHandledOnMouseDownRef.current = null;
+
       // Ruler tool: start measurement line
       if (tool === 'ruler') {
         setRulerStart(wCoord);
@@ -1789,11 +1806,11 @@ export function SchematicEditorPanel({
                             if (pinId && targetCompId) {
                               // SLOW-CLICK GUARD: If mousedown already handled this pin, do not re-run on click!
                               if (
-                                mouseDownHandledPinRef.current &&
-                                mouseDownHandledPinRef.current.compId === targetCompId &&
-                                mouseDownHandledPinRef.current.pinId === pinId
+                                pinHandledOnMouseDownRef.current &&
+                                pinHandledOnMouseDownRef.current.compId === targetCompId &&
+                                pinHandledOnMouseDownRef.current.pinId === pinId
                               ) {
-                                mouseDownHandledPinRef.current = null;
+                                pinHandledOnMouseDownRef.current = null;
                                 return;
                               }
                               const pinObj = comp.pins?.find((p) => p.id === pinId);

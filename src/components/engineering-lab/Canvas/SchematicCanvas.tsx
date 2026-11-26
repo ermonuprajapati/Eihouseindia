@@ -875,50 +875,61 @@ export function SchematicCanvas({
   // Shared Wire Completion Helper (Handles both direct pin click & snapped-pin click)
   const commitWireToPin = (compId: string, pinId: string, pinX: number, pinY: number) => {
     if (!activeWireStart) return;
-    if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
-      const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
-      const targetPt = { x: pinX, y: pinY };
-      const finalWaypoints = [...activeWaypoints];
-
-      if (activeRoutingStyle === 'orthogonal') {
-        const corner = elbowOrientation === 'horizontal-first'
-          ? { x: targetPt.x, y: lastPt.y }
-          : { x: lastPt.x, y: targetPt.y };
-        if (
-          Math.hypot(corner.x - lastPt.x, corner.y - lastPt.y) > 1 &&
-          Math.hypot(targetPt.x - corner.x, targetPt.y - corner.y) > 1
-        ) {
-          finalWaypoints.push(corner);
-        }
-      }
-
-      const cleanedWaypoints =
-        finalWaypoints.length > 0 ? simplifyCollinearPoints(finalWaypoints) : undefined;
-      const resolved = resolveShortestNetWire(
-        activeWireStart.compId,
-        activeWireStart.pinId,
-        compId,
-        pinId,
-        components,
-        wires,
-        cleanedWaypoints,
-        10
-      );
-      if (resolved.skipDuplicate) {
-        toast.info('Pins are already electrically connected on the same net.');
-      } else {
-        onAddWire({
-          fromCompId: resolved.fromCompId,
-          fromPinId: resolved.fromPinId,
-          toCompId: resolved.toCompId,
-          toPinId: resolved.toPinId,
-          tappedWireId: resolved.tappedWireId,
-          junctionPoint: resolved.junctionPoint,
-          points: resolved.points,
-          style: activeRoutingStyle,
-        });
-      }
+    if (activeWireStart.compId === compId && activeWireStart.pinId === pinId) {
+      setActiveWireStart(null);
+      setActiveWaypoints([]);
+      setSnappedPin(null);
+      return;
     }
+
+    const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+    const targetPt = { x: pinX, y: pinY };
+    let liveLeg: Point[] = [];
+    if (activeRoutingStyle === 'straight') {
+      liveLeg = [lastPt, targetPt];
+    } else if (activeRoutingStyle === 'diagonal45') {
+      liveLeg = compute45Vertices(lastPt, targetPt, elbowOrientation);
+    } else {
+      liveLeg = computeOrthogonalVertices(lastPt, targetPt, elbowOrientation);
+    }
+
+    const fullPreviewVerts = [activeWireStart, ...activeWaypoints, ...liveLeg.slice(1)];
+    const simplifiedFull = simplifyCollinearPoints(fullPreviewVerts);
+    const interiorWaypoints = simplifiedFull.length > 2 ? simplifiedFull.slice(1, -1) : undefined;
+
+    const waypointsForResolve =
+      activeWaypoints.length > 0 || elbowOrientation === 'vertical-first'
+        ? interiorWaypoints
+        : undefined;
+
+    const resolved = resolveShortestNetWire(
+      activeWireStart.compId,
+      activeWireStart.pinId,
+      compId,
+      pinId,
+      components,
+      wires,
+      waypointsForResolve,
+      10
+    );
+
+    if (resolved.skipDuplicate) {
+      toast.info('Pins are already electrically connected on the same net.');
+    } else {
+      onAddWire({
+        fromCompId: resolved.fromCompId,
+        fromPinId: resolved.fromPinId,
+        toCompId: resolved.toCompId,
+        toPinId: resolved.toPinId,
+        tappedWireId: resolved.tappedWireId,
+        junctionPoint: resolved.junctionPoint,
+        points: resolved.tappedWireId || resolved.fromCompId !== activeWireStart.compId
+          ? resolved.points
+          : (resolved.points || waypointsForResolve),
+        style: activeRoutingStyle,
+      });
+    }
+
     setActiveWireStart(null);
     setActiveWaypoints([]);
     setSnappedPin(null);
