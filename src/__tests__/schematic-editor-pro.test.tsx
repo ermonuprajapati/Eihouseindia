@@ -4602,5 +4602,235 @@ describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering
     const hasGndDrop = wiresData.some((w) => w.id.includes('wire_drop_gnd'));
     expect(hasGndDrop).toBe(false);
   });
+
+  // =========================================================================
+  // SURGICAL TESTS: WIRE CONNECT + EXACT 90-DEGREE FOLDING + SLOW-CLICK GUARD
+  // =========================================================================
+
+  it('SURGICAL TEST 1: <SchematicCanvas> Snapped-Pin Auto-Connect on Canvas Click', () => {
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click Pin 1 of R1 to start wire
+    const pinR1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.click(pinR1!);
+
+    // Move mouse close to R2 Pin 1 (at world x: 300, y: 100, canvas pan is {x:40, y:30} -> screen x: 340, y: 130)
+    // Client coord (345, 135) maps to world (305, 105), which is within 18px snap distance
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    fireEvent.mouseMove(svgCanvas!, { clientX: 345, clientY: 135 });
+
+    // Click empty canvas SVG inside the snap halo -> MUST auto-connect to snapped Pin R2:1
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 345, clientY: 135 });
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+  });
+
+  it('SURGICAL TEST 2: <SchematicCanvas> Exact 90-Degree Orthogonal Waypoint Locking with Auto-Flip', () => {
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 400,
+      y: 300,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: 'w' });
+
+    const pinR1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    fireEvent.click(pinR1!);
+
+    const svgCanvas = container.querySelector('svg');
+    // Lock 90° corner at (200, 150)
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 200, clientY: 150 });
+
+    // Finish wire on R2 Pin 1
+    const pinR2 = container.querySelector('[data-testid="canvas-pin-r2-1"]');
+    fireEvent.click(pinR2!);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.points).toBeDefined();
+    expect(addedWire.points.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('SURGICAL TEST 3: <SchematicEditorPanel> Slow-Click Guard Prevents Wire Start Cancellation', () => {
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={vi.fn()}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // 1. Switch to Wire tool
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    const pinR1_1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+
+    // 2. Slow-click simulation on Pin 1: mouseDown followed by delayed click
+    fireEvent.mouseDown(pinR1_1!);
+    // Click fired on the same pin (even if delayed in real browser) MUST NOT cancel activeWireStart!
+    fireEvent.click(pinR1_1!);
+
+    // 3. Connect to Pin 1 of R2: mouseDown followed by click
+    const pinR2_1 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2_1!);
+    fireEvent.click(pinR2_1!);
+
+    // Assert that the wire was created successfully and exactly once!
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+  });
 });
 

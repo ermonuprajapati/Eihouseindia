@@ -187,7 +187,7 @@ export function SchematicEditorPanel({
   const [wireWaypoints, setWireWaypoints] = useState<{ x: number; y: number }[]>([]);
   const [wireElbowFlip, setWireElbowFlip] = useState<boolean>(false);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
-  const lastPinHandledRef = useRef<{ compId: string; pinId: string; time: number } | null>(null);
+  const mouseDownHandledPinRef = useRef<{ compId: string; pinId: string } | null>(null);
 
   // Mouse Coordinates (World space)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -424,16 +424,9 @@ export function SchematicEditorPanel({
     (e: React.MouseEvent, compId: string, pinId: string, wx: number, wy: number) => {
       e.stopPropagation();
 
-      const now = Date.now();
-      if (
-        lastPinHandledRef.current &&
-        lastPinHandledRef.current.compId === compId &&
-        lastPinHandledRef.current.pinId === pinId &&
-        now - lastPinHandledRef.current.time < 120
-      ) {
-        return;
+      if (e.type === 'mousedown') {
+        mouseDownHandledPinRef.current = { compId, pinId };
       }
-      lastPinHandledRef.current = { compId, pinId, time: now };
 
       // Tool: Eraser
       if (tool === 'eraser') {
@@ -1794,6 +1787,15 @@ export function SchematicEditorPanel({
                             const pinId = pinG.getAttribute('data-pin-id');
                             const targetCompId = pinG.getAttribute('data-comp-id') || comp.id;
                             if (pinId && targetCompId) {
+                              // SLOW-CLICK GUARD: If mousedown already handled this pin, do not re-run on click!
+                              if (
+                                mouseDownHandledPinRef.current &&
+                                mouseDownHandledPinRef.current.compId === targetCompId &&
+                                mouseDownHandledPinRef.current.pinId === pinId
+                              ) {
+                                mouseDownHandledPinRef.current = null;
+                                return;
+                              }
                               const pinObj = comp.pins?.find((p) => p.id === pinId);
                               if (pinObj) {
                                 const pinPos = getCanonicalPinWorldPos(comp, pinObj);
