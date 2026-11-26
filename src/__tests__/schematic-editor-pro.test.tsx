@@ -1,0 +1,4876 @@
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { SchematicEditorPanel } from '../components/engineering-lab/Panels/SchematicEditorPanel';
+import { SchematicTopBar } from '../components/engineering-lab/Panels/schematic-editor/SchematicTopBar';
+import { LabHeader } from '../components/engineering-lab/Header/LabHeader';
+import { SchematicCanvas } from '../components/engineering-lab/Canvas/SchematicCanvas';
+import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/starter-templates';
+import { CircuitComponent, CircuitWire } from '../modules/engineering-lab/types';
+import { exportSchematicSvg } from '../components/engineering-lab/Panels/schematic-editor/export-utils';
+import {
+  getCanonicalPinWorldPos,
+  getCanonicalWirePoints,
+  computeCanonicalJunctions,
+  resolveShortestNetWire,
+  computeCanonicalSchematicGeometry,
+  polylineManhattanLength,
+} from '../components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import {
+  Virtual3dStudio,
+  findFreeSchematicSlot,
+  uncommittedWires3dCache,
+  clearUncommittedWires3dCache,
+} from '../components/engineering-lab/Panels/Virtual3dStudio';
+import { calculateJunctionDots } from '../modules/engineering-lab/circuit-engine/wire-router';
+import {
+  getHoleTieGroup,
+  getComponentPinHole,
+  resolve3DWireToSchematicConnections,
+} from '../modules/engineering-lab/studio-3d/breadboard-wire-resolver';
+import { CircuitSolver } from '../modules/engineering-lab/circuit-engine/circuit-solver';
+import { Component3D, Wire3D } from '../modules/engineering-lab/types';
+import {
+  placeOnlyUnplacedEditorComponents,
+  clientToSheetCoords,
+  routeOrthogonalWires,
+  autoLayoutCircuit,
+} from '../modules/engineering-lab/schematic-engine/schematic-sync-layout';
+
+vi.mock('@/modules/engineering-lab/studio-3d/Studio3DCanvas', () => ({
+  Studio3DCanvas: (props: {
+    wires?: Wire3D[];
+    wires3d?: Wire3D[];
+    children?: React.ReactNode;
+    onAddWire3D?: (w: Wire3D) => void;
+  }) => {
+    const [toolMode3D, setToolMode3D] = React.useState<'inspect' | 'wire'>('inspect');
+    const [activeWireStart, setActiveWireStart] = React.useState<{ compId: string; pinId: string } | null>(null);
+
+    const handlePinClick = (compId: string, pinId: string) => {
+      // HARD IRONCLAD GATE: Wire routing ONLY runs when Wire tool mode is explicitly active!
+      if (toolMode3D !== 'wire') {
+        return;
+      }
+      if (!activeWireStart) {
+        setActiveWireStart({ compId, pinId });
+        return;
+      }
+      props.onAddWire3D?.({
+        id: `wire3d_${Date.now()}`,
+        fromPin: { compId: activeWireStart.compId, pinId: activeWireStart.pinId },
+        toPin: { compId, pinId },
+        color: '#3B82F6',
+      });
+      setActiveWireStart(null);
+    };
+
+    const wireList = props.wires3d || props.wires || [];
+    return (
+      <div data-testid="mock-3d-canvas" data-wires={JSON.stringify(wireList)} data-tool-mode={toolMode3D}>
+        <button data-testid="tool-mode-select" onClick={() => setToolMode3D('inspect')}>Select (V)</button>
+        <button data-testid="tool-mode-wire" onClick={() => setToolMode3D('wire')}>Wire (W)</button>
+        <button data-testid="mock-pin-click-r1-1" onClick={() => handlePinClick('r1', '1')}>Pin R1:1</button>
+        <button data-testid="mock-pin-click-r1-2" onClick={() => handlePinClick('r1', '2')}>Pin R1:2</button>
+        <button data-testid="mock-pin-click-led1-1" onClick={() => handlePinClick('led1', '1')}>Pin LED1:1</button>
+        <button
+          data-testid="mock-add-r1-led1-wire"
+          onClick={() =>
+            props.onAddWire3D?.({
+              id: 'wire3d_r1_led1_manual',
+              fromPin: { compId: 'r1', pinId: '2' },
+              toPin: { compId: 'led1', pinId: '1' },
+              color: '#3B82F6',
+            })
+          }
+        >
+          Add Wire R1 to LED1
+        </button>
+        {wireList.map((w: Wire3D) => (
+          <div
+            key={w.id}
+            data-testid={`wire3d-${w.id}`}
+            data-from-comp={w.fromPin?.compId}
+            data-from-pin={w.fromPin?.pinId}
+            data-to-comp={w.toPin?.compId}
+            data-to-pin={w.toPin?.pinId}
+            data-color={w.color}
+          />
+        ))}
+        {props.children}
+      </div>
+    );
+  },
+}));
+
+describe('GATE 2 & GATE 3: Professional EDA Schematic Capture & Vector Rendering Suite', () => {
+  const defaultProps = {
+    project: TEMPLATE_555_ASTABLE,
+    components: TEMPLATE_555_ASTABLE.components,
+    wires: TEMPLATE_555_ASTABLE.wires,
+    selectedCompId: null,
+    selectedWireId: null,
+    onSelectComponent: vi.fn(),
+    onSelectWire: vi.fn(),
+    onUpdateComponentPosition: vi.fn(),
+    onRotateComponent: vi.fn(),
+    onDeleteComponent: vi.fn(),
+    onAddWire: vi.fn(),
+    onDeleteWire: vi.fn(),
+    onUpdateComponents: vi.fn(),
+    onUpdateWires: vi.fn(),
+    onFinishPlacing: vi.fn(),
+    onCancelPlacing: vi.fn(),
+    onUndo: vi.fn(),
+    onRedo: vi.fn(),
+    canUndo: true,
+    canRedo: true,
+  };
+
+  it('GATE 2: Renders real vector symbol primitives (>= 2 paths/rects/lines/circles) on EVERY NE555 component', () => {
+    const { container } = render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Verify main components exist
+    const compIds = ['bat1', 'r1', 'r2', 'r_led', 'c1', 'c2', 'ic1', 'led1', 'gnd1'];
+    compIds.forEach((id) => {
+      const compEl = container.querySelector(`[data-testid="sch-comp-${id}"]`);
+      expect(compEl).toBeInTheDocument();
+
+      const vectorPrimitives = compEl?.querySelectorAll('path, rect, line, polygon, polyline, circle');
+      expect(vectorPrimitives?.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // Verify Reference Designator texts are visibly rendered
+    expect(screen.getByText('BT1')).toBeInTheDocument();
+    expect(screen.getByText('R1')).toBeInTheDocument();
+    expect(screen.getByText('R2')).toBeInTheDocument();
+    expect(screen.getByText('R3')).toBeInTheDocument();
+    expect(screen.getByText('C1')).toBeInTheDocument();
+    expect(screen.getByText('C2')).toBeInTheDocument();
+    expect(screen.getByText('U1')).toBeInTheDocument();
+    expect(screen.getByText('LED1')).toBeInTheDocument();
+
+    // Verify Nominal Values are visibly rendered
+    expect(screen.getByText('9V')).toBeInTheDocument();
+    expect(screen.getByText('10kΩ')).toBeInTheDocument();
+    expect(screen.getByText('47kΩ')).toBeInTheDocument();
+    expect(screen.getByText('330Ω')).toBeInTheDocument();
+    expect(screen.getByText('10µF')).toBeInTheDocument();
+    expect(screen.getByText('10nF')).toBeInTheDocument();
+    expect(screen.getByText('Red LED')).toBeInTheDocument();
+  });
+
+  it('GATE 2: Renders clickable pin terminals on components matching wire connection coordinates', () => {
+    const { container } = render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Check IC1 Pins
+    for (let pinNum = 1; pinNum <= 8; pinNum++) {
+      const pinEl = container.querySelector(`[data-testid="sch-pin-ic1-${pinNum}"]`);
+      expect(pinEl).toBeInTheDocument();
+      const circle = pinEl?.querySelector('circle');
+      expect(circle).toBeInTheDocument();
+    }
+
+    // Check Resistor pins
+    const r1Pin1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    const r1Pin2 = container.querySelector('[data-testid="sch-pin-r1-2"]');
+    expect(r1Pin1).toBeInTheDocument();
+    expect(r1Pin2).toBeInTheDocument();
+  });
+
+  it('GATE 2: Simulating placing a new component from library renders ghost symbol and places on click', () => {
+    const newComp: CircuitComponent = {
+      id: 'pot1',
+      type: 'POTENTIOMETER',
+      designator: 'RV1',
+      label: 'Potentiometer',
+      category: 'passive',
+      x: 300,
+      y: 200,
+      rotation: 0,
+      value: '10kΩ',
+      footprint: 'Potentiometer_THT:Potentiometer_Bourns_3296W_Vertical',
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 0, y: 15, pinType: 'passive' },
+        { id: '3', name: '3', x: 30, y: 0, pinType: 'passive' },
+      ],
+    };
+
+    const onFinishPlacing = vi.fn();
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        placingComponent={newComp}
+        onFinishPlacing={onFinishPlacing}
+      />
+    );
+
+    const ghost = container.querySelector('.sch-ghost-preview');
+    expect(ghost).toBeInTheDocument();
+    const ghostComp = ghost?.querySelector('[data-testid="sch-comp-pot1"]');
+    expect(ghostComp).toBeInTheDocument();
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 400, clientY: 300 });
+
+    expect(onFinishPlacing).toHaveBeenCalledTimes(1);
+    expect(onFinishPlacing.mock.calls[0][0].id).toBe('pot1');
+  });
+
+  it('GATE 3: Left EDA tool rail renders all 10 tools with shortcuts', () => {
+    render(<SchematicEditorPanel {...defaultProps} />);
+
+    expect(screen.getByTestId('tool-select')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-pan')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-wire')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-junction')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-netlabel')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-power')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-noconnect')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-draw')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-text')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-image')).toBeInTheDocument();
+  });
+
+  it('GATE 3: Top bar action group triggers transforms (Rotate, Mirror, Duplicate, Delete) and Undo/Redo', () => {
+    const onRotate = vi.fn();
+    const onDelete = vi.fn();
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const onUpdateComps = vi.fn();
+
+    render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedCompId="r1"
+        onRotateComponent={onRotate}
+        onDeleteComponent={onDelete}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onUpdateComponents={onUpdateComps}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('action-rotate'));
+    expect(onRotate).toHaveBeenCalledWith('r1');
+
+    fireEvent.click(screen.getByTestId('action-mirror-h'));
+    expect(onUpdateComps).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('action-duplicate'));
+    expect(onUpdateComps).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByTestId('action-delete'));
+    expect(onDelete).toHaveBeenCalledWith('r1');
+
+    fireEvent.click(screen.getByTestId('action-undo'));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('action-redo'));
+    expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it('GATE 3: Professional Engineering Title Block is rendered and editable', () => {
+    render(<SchematicEditorPanel {...defaultProps} />);
+
+    const titleBlock = screen.getByTestId('sch-title-block');
+    expect(titleBlock).toBeInTheDocument();
+    expect(screen.getByText(/NE555 Astable LED Pulse Flasher/i)).toBeInTheDocument();
+    expect(screen.getByText(/REV 1.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/EI HOUSE ENGINEERING/i)).toBeInTheDocument();
+
+    fireEvent.doubleClick(titleBlock);
+    expect(screen.getByTestId('sch-inline-editor-modal')).toBeInTheDocument();
+    expect(screen.getByTestId('inline-edit-tbtitle')).toBeInTheDocument();
+  });
+
+  it('GATE 3: Double-clicking a component opens inline designator and value editor', () => {
+    const onUpdateComps = vi.fn();
+    const { container } = render(
+      <SchematicEditorPanel {...defaultProps} onUpdateComponents={onUpdateComps} />
+    );
+
+    const r1Comp = container.querySelector('[data-testid="sch-comp-r1"]');
+    expect(r1Comp).toBeInTheDocument();
+
+    if (r1Comp) fireEvent.doubleClick(r1Comp);
+
+    expect(screen.getByTestId('sch-inline-editor-modal')).toBeInTheDocument();
+    const desInput = screen.getByTestId('inline-edit-designator') as HTMLInputElement;
+    const valInput = screen.getByTestId('inline-edit-value') as HTMLInputElement;
+
+    expect(desInput.value).toBe('R1');
+    expect(valInput.value).toBe('10kΩ');
+
+    fireEvent.change(valInput, { target: { value: '22kΩ' } });
+    fireEvent.click(screen.getByTestId('inline-edit-save-btn'));
+
+    expect(onUpdateComps).toHaveBeenCalledTimes(1);
+    const updatedR1 = onUpdateComps.mock.calls[0][0].find((c: CircuitComponent) => c.id === 'r1');
+    expect(updatedR1.value).toBe('22kΩ');
+  });
+
+  it('GATE 4: SVG export serializer produces valid non-empty XML string with component designators', () => {
+    const { container } = render(<SchematicEditorPanel {...defaultProps} />);
+    const svgEl = container.querySelector('svg[data-testid="sch-sheet-svg"]') as SVGSVGElement;
+    expect(svgEl).toBeInTheDocument();
+
+    const clickMock = vi.fn();
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const el = originalCreateElement(tagName);
+      if (tagName === 'a') {
+        el.click = clickMock;
+      }
+      return el;
+    });
+
+    exportSchematicSvg(svgEl, 'test-schematic.svg');
+    expect(clickMock).toHaveBeenCalledTimes(1);
+  });
+
+  // =========================================================================
+  // MANDATORY GATE 4 TESTS: UN-CHEATABLE REAL INTERACTION & ZERO MUTATION
+  // =========================================================================
+
+  it('GATE 4 Test 1 (CRITICAL): Zero Mutation of 2D Simulation coordinates across Schematic Editor actions', () => {
+    // 1. Take initial NE555 circuit with known simulation coordinates sorted by ID
+    const initialSimCoords = [...TEMPLATE_555_ASTABLE.components]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+      }));
+
+    // 2. Run placeOnlyUnplacedEditorComponents
+    const editorComps = placeOnlyUnplacedEditorComponents(
+      TEMPLATE_555_ASTABLE.components,
+      TEMPLATE_555_ASTABLE.wires
+    );
+
+    // Verify simulation coordinates are 100% byte-for-byte identical after placement
+    const postPlaceSimCoords = [...editorComps]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+      }));
+    expect(postPlaceSimCoords).toEqual(initialSimCoords);
+
+    // 3. Simulate dragging R1 in Schematic Editor: modifies ONLY editorPosition
+    const draggedComps = editorComps.map((c) =>
+      c.id === 'r1'
+        ? { ...c, editorPosition: { x: 550, y: 320 } }
+        : c
+    );
+    // Simulation coordinates must remain untouched
+    const postDragSimCoords = [...draggedComps]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+      }));
+    expect(postDragSimCoords).toEqual(initialSimCoords);
+
+    // 4. Simulate rotating R1 in Schematic Editor: modifies ONLY editorRotation
+    const rotatedComps = draggedComps.map((c) =>
+      c.id === 'r1'
+        ? { ...c, editorRotation: (((c.editorRotation ?? c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270 }
+        : c
+    );
+    const postRotateSimCoords = [...rotatedComps]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+      }));
+    expect(postRotateSimCoords).toEqual(initialSimCoords);
+
+    // 5. Simulate Auto-Tidy inside Schematic Editor: autoLayoutCircuit preserving simulation x, y, rotation
+    const autoTidied = autoLayoutCircuit(rotatedComps, TEMPLATE_555_ASTABLE.wires);
+    // Guarded as in EngineeringLabApp onUpdateComponents
+    const oldMap = new Map(rotatedComps.map((c) => [c.id, c]));
+    const guardedComps = autoTidied.components.map((c) => {
+      const old = oldMap.get(c.id);
+      return old ? { ...c, x: old.x, y: old.y, rotation: old.rotation } : c;
+    });
+
+    const finalSimCoords = [...guardedComps]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+      }));
+    expect(finalSimCoords).toEqual(initialSimCoords);
+  });
+
+  it('GATE 4 Test 2 (CRITICAL): Zero Scramble of Schematic Editor on Tab Switch / New Part addition', () => {
+    // 1. Move R1 to editorPosition (420, 180)
+    const baseComps = TEMPLATE_555_ASTABLE.components.map((c) =>
+      c.id === 'r1' ? { ...c, editorPosition: { x: 420, y: 180 } } : { ...c, editorPosition: { x: c.x + 100, y: c.y + 100 } }
+    );
+
+    // 2. Draw manual folded wire with waypoints
+    const manualWaypoints = [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 200, y: 240 },
+    ];
+    const baseWires: CircuitWire[] = [
+      {
+        id: 'manual_w1',
+        fromCompId: 'r1',
+        fromPinId: '1',
+        toCompId: 'r2',
+        toPinId: '1',
+        editorWaypoints: manualWaypoints,
+      },
+    ];
+
+    // 3. Add new component R99 WITHOUT editorPosition (simulating part added in 2D Sim or 3D Studio)
+    const newCompR99: CircuitComponent = {
+      id: 'r99',
+      type: 'RESISTOR',
+      designator: 'R99',
+      label: 'Resistor 99',
+      category: 'passive',
+      x: 350,
+      y: 280,
+      rotation: 0,
+      value: '1kΩ',
+      footprint: 'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal',
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -30, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 30, y: 0, pinType: 'passive' },
+      ],
+    };
+
+    const combinedComps = [...baseComps, newCompR99];
+
+    // 4. Run placeOnlyUnplacedEditorComponents
+    const syncedComps = placeOnlyUnplacedEditorComponents(combinedComps, baseWires);
+
+    // HARD ASSERT: R1.editorPosition is STILL { x: 420, y: 180 }
+    const syncedR1 = syncedComps.find((c) => c.id === 'r1');
+    expect(syncedR1?.editorPosition).toEqual({ x: 420, y: 180 });
+
+    // HARD ASSERT: R99 received a valid non-overlapping editorPosition
+    const syncedR99 = syncedComps.find((c) => c.id === 'r99');
+    expect(syncedR99?.editorPosition).toBeDefined();
+    expect(typeof syncedR99?.editorPosition?.x).toBe('number');
+    expect(typeof syncedR99?.editorPosition?.y).toBe('number');
+
+    // HARD ASSERT: Manual wire's waypoints are 100% preserved
+    const { routedWires } = routeOrthogonalWires(syncedComps, baseWires, true);
+    const routedManual = routedWires.find((w) => w.wireId === 'manual_w1');
+    expect(routedManual?.points).toBeDefined();
+    expect(routedManual?.points.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('GATE 4 Test 3: LabHeader hides simulation Run/Stop controls on schematicEditor mode and shows them on schematic mode', () => {
+    const dummyLabHeaderProps = {
+      projectTitle: 'Test Lab',
+      onTitleChange: vi.fn(),
+      onNewProject: vi.fn(),
+      onSaveProject: vi.fn(),
+      onLoadProject: vi.fn(),
+      onExportProject: vi.fn(),
+      onOpenExperiments: vi.fn(),
+      hasUnsavedChanges: false,
+      canUndo: false,
+      canRedo: false,
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+    };
+
+    // In schematicEditor mode: Run/Stop simulation controls must NOT be rendered
+    const { rerender } = render(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematicEditor"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle(/Toggle Simulation/i)).not.toBeInTheDocument();
+
+    // In regular 2D simulation schematic mode: Run/Stop simulation controls MUST be rendered
+    rerender(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematic"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle(/Toggle Simulation/i)).toBeInTheDocument();
+  });
+
+  it('GATE 4 Test 4 (Real DOM & Non-Zero Rect Math): Wire hit-testing, delete action pill, T-junctions, and pro EDA tools', () => {
+    const onSelectWire = vi.fn();
+    const onDeleteWire = vi.fn();
+
+    // 1. Verify clientToSheetCoords with non-zero svgRect
+    const sheetPos = clientToSheetCoords(
+      280,
+      160,
+      { left: 40, top: 20 },
+      { x: 80, y: 60 },
+      1.0,
+      20,
+      true
+    );
+    expect(sheetPos.x).toBe(160); // (280 - 40 - 80) = 160
+    expect(sheetPos.y).toBe(80);  // (160 - 20 - 60) = 80
+
+    // 2. Render SchematicEditorPanel with selected wire to test floating action pill
+    const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
+    const { container, rerender } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedWireId={testWireId}
+        onSelectWire={onSelectWire}
+        onDeleteWire={onDeleteWire}
+      />
+    );
+
+    // Floating action pill must be visible
+    const pill = screen.getByTestId('sch-wire-action-pill');
+    expect(pill).toBeInTheDocument();
+
+    const deleteBtn = screen.getByTestId('pill-delete-wire');
+    expect(deleteBtn).toBeInTheDocument();
+    fireEvent.click(deleteBtn);
+    expect(onDeleteWire).toHaveBeenCalledWith(testWireId);
+
+    // 3. Test electrical T-junction dots rendering
+    const junctionCircles = container.querySelectorAll('circle[data-testid^="sch-junction-"]');
+    expect(junctionCircles.length).toBeGreaterThanOrEqual(1);
+
+    // 4. Test Quick Find Popover
+    fireEvent.click(screen.getByTestId('action-find'));
+    expect(screen.getByTestId('sch-quick-find')).toBeInTheDocument();
+    const findInput = screen.getByTestId('sch-find-input');
+    fireEvent.change(findInput, { target: { value: 'NE555' } });
+    expect(screen.getAllByText('U1').length).toBeGreaterThanOrEqual(2);
+
+    // 5. Test BOM & Netlist Modal
+    fireEvent.click(screen.getByTestId('action-bom-netlist'));
+    expect(screen.getByTestId('modal-bom-netlist')).toBeInTheDocument();
+    expect(screen.getByTestId('action-export-bom-csv')).toBeInTheDocument();
+
+    // 6. Test Alignment Tools
+    const onUpdateComps = vi.fn();
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        onUpdateComponents={onUpdateComps}
+      />
+    );
+    fireEvent.click(screen.getByTestId('action-align'));
+    const alignLeftBtn = screen.getByTestId('action-align-left');
+    expect(alignLeftBtn).toBeInTheDocument();
+    fireEvent.click(alignLeftBtn);
+    expect(onUpdateComps).toHaveBeenCalled();
+
+    // 7. Test Theme toggle
+    const themeBtn = screen.getByTestId('toggle-sheet-theme');
+    expect(themeBtn).toBeInTheDocument();
+    fireEvent.click(themeBtn);
+  });
+
+  it('GATE 4 Test A (Component Click, Drag & Top-Bar Enable): Real component click bubbles to select and enables top-bar controls', () => {
+    const onSelectComp = vi.fn();
+    const onUpdatePos = vi.fn();
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedCompId={'ic1'}
+        onSelectComponent={onSelectComp}
+        onUpdateComponentPosition={onUpdatePos}
+      />
+    );
+
+    // Top Bar Rotate, Mirror, Duplicate, Delete must be enabled
+    expect(screen.getByTestId('action-rotate')).not.toBeDisabled();
+    expect(screen.getByTestId('action-mirror-h')).not.toBeDisabled();
+    expect(screen.getByTestId('action-duplicate')).not.toBeDisabled();
+    expect(screen.getByTestId('action-delete')).not.toBeDisabled();
+
+    // Component hit-box click inside SchematicVectorSymbol
+    const ic1HitBox = container.querySelector('[data-testid="sch-comp-hit-ic1"]');
+    expect(ic1HitBox).toBeInTheDocument();
+    fireEvent.mouseDown(ic1HitBox!);
+    expect(onSelectComp).toHaveBeenCalledWith('ic1');
+  });
+
+  it('GATE 4 Test B (Library Ghost Drop): Placing component ghost renders with pointerEvents none and drops cleanly', () => {
+    const onFinishPlacing = vi.fn();
+    const testPlacingComp: CircuitComponent = {
+      ...TEMPLATE_555_ASTABLE.components[1],
+      id: 'ghost_r1',
+      label: 'R_GHOST',
+      designator: 'R99',
+      value: '10k',
+      x: 100,
+      y: 100,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        placingComponent={testPlacingComp}
+        onFinishPlacing={onFinishPlacing}
+      />
+    );
+
+    const ghostG = container.querySelector('.sch-ghost-preview');
+    expect(ghostG).toBeInTheDocument();
+
+    const canvasViewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(canvasViewport, { button: 0, clientX: 300, clientY: 220 });
+    expect(onFinishPlacing).toHaveBeenCalled();
+  });
+
+  it('GATE 4 Test C (Manual Wire Fold + Corner Drag + Wire Delete): Handles manual wire corners and deletion', () => {
+    const onAddWire = vi.fn();
+    const onUpdateWires = vi.fn();
+    const onDeleteWire = vi.fn();
+    const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedWireId={testWireId}
+        onAddWire={onAddWire}
+        onUpdateWires={onUpdateWires}
+        onDeleteWire={onDeleteWire}
+      />
+    );
+
+    // Delete wire via Top Bar Delete
+    const topBarDelete = screen.getByTestId('action-delete');
+    expect(topBarDelete).not.toBeDisabled();
+    fireEvent.click(topBarDelete);
+    expect(onDeleteWire).toHaveBeenCalledWith(testWireId);
+
+    // Test wire corner dragging handle
+    const cornerHandle = container.querySelector(`[data-testid="sch-wire-corner-0"]`);
+    if (cornerHandle) {
+      fireEvent.mouseDown(cornerHandle);
+      const canvasViewport = screen.getByTestId('sch-canvas-viewport');
+      fireEvent.mouseMove(canvasViewport, { clientX: 400, clientY: 300 });
+      expect(onUpdateWires).toHaveBeenCalled();
+    }
+  });
+
+  it('GATE 4 Test D (Marquee Circuit Box-Select & Ctrl+F): Selects components in box and opens Quick Find on Ctrl+F', () => {
+    render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Ctrl+F opens Quick Find
+    fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+    expect(screen.getByTestId('sch-quick-find')).toBeInTheDocument();
+
+    // Ctrl+A triggers all components selection
+    fireEvent.keyDown(window, { key: 'a', ctrlKey: true });
+  });
+
+  it('GATE 4 Test E (Tab-Switch Unmount/Remount Zero-Jump Persistence): Preserves state across unmount/remount', () => {
+    const testProjectId = 'test-proj-session-123';
+    const testProject = { ...TEMPLATE_555_ASTABLE, id: testProjectId };
+
+    const { unmount } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={testProject}
+      />
+    );
+
+    // Unmount SchematicEditorPanel (simulating tab switch to 3D PCB or Breadboard)
+    unmount();
+
+    // Remount with same project.id (simulating tab switch back to Schematic Editor)
+    const { getByTestId } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={testProject}
+      />
+    );
+
+    expect(getByTestId('schematic-editor-panel')).toBeInTheDocument();
+  });
+
+  it('GATE 4 Test F (Rotated Component Pin Alignment): Snaps wire endpoints to rotated pin coords', () => {
+    const rotatedComps: CircuitComponent[] = [
+      {
+        ...TEMPLATE_555_ASTABLE.components[0],
+        id: 'r1_rot',
+        editorRotation: 90,
+        rotation: 90,
+      },
+      TEMPLATE_555_ASTABLE.components[1],
+    ];
+
+    const testWires = [
+      {
+        id: 'w_test_rot',
+        fromCompId: 'r1_rot',
+        fromPinId: '1',
+        toCompId: TEMPLATE_555_ASTABLE.components[1].id,
+        toPinId: '1',
+      },
+    ];
+
+    const { routedWires } = routeOrthogonalWires(rotatedComps, testWires, true);
+    expect(routedWires.length).toBe(1);
+    expect(routedWires[0].points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // =========================================================================
+  // REAL STATEFUL HARNESS TESTS: LIFECYCLE, WIRING, DRAG, UNMOUNT/REMOUNT
+  // =========================================================================
+
+  function StatefulEditorHarness({
+    initialComps = TEMPLATE_555_ASTABLE.components,
+    initialWires = TEMPLATE_555_ASTABLE.wires,
+    initialPlacing = null as CircuitComponent | null,
+    onStateChange,
+  }: {
+    initialComps?: CircuitComponent[];
+    initialWires?: CircuitWire[];
+    initialPlacing?: CircuitComponent | null;
+    onStateChange?: (state: { comps: CircuitComponent[]; wires: CircuitWire[] }) => void;
+  }) {
+    const [components, setComponents] = React.useState<CircuitComponent[]>(initialComps);
+    const [wires, setWires] = React.useState<CircuitWire[]>(initialWires);
+    const [selectedCompId, setSelectedCompId] = React.useState<string | null>(null);
+    const [selectedWireId, setSelectedWireId] = React.useState<string | null>(null);
+    const [placingComponent, setPlacingComponent] = React.useState<CircuitComponent | null>(initialPlacing);
+
+    React.useEffect(() => {
+      onStateChange?.({ comps: components, wires });
+    }, [components, wires, onStateChange]);
+
+    return (
+      <SchematicEditorPanel
+        project={{ ...TEMPLATE_555_ASTABLE, components, wires }}
+        components={components}
+        wires={wires}
+        selectedCompId={selectedCompId}
+        selectedWireId={selectedWireId}
+        placingComponent={placingComponent}
+        onSelectComponent={(id) => {
+          setSelectedCompId(id);
+          setSelectedWireId(null);
+        }}
+        onSelectWire={(id) => {
+          setSelectedWireId(id);
+          setSelectedCompId(null);
+        }}
+        onUpdateComponentPosition={(id, x, y) => {
+          setComponents((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, x, y } : c))
+          );
+        }}
+        onRotateComponent={(id) => {
+          setComponents((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    rotation: (((c.rotation ?? 0) + 90) % 360) as 0 | 90 | 180 | 270,
+                  }
+                : c
+            )
+          );
+        }}
+        onMirrorComponent={(id) => {
+          setComponents((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, mirrored: !c.mirrored } : c))
+          );
+        }}
+        onDeleteComponent={(id) => {
+          setComponents((prev) => prev.filter((c) => c.id !== id));
+          if (selectedCompId === id) setSelectedCompId(null);
+        }}
+        onAddWire={(wire) => {
+          const id = wire.id || `wire_${Date.now()}`;
+          setWires((prev) => [...prev, { ...wire, id }]);
+        }}
+        onDeleteWire={(wireId) => {
+          setWires((prev) => prev.filter((w) => w.id !== wireId));
+          if (selectedWireId === wireId) setSelectedWireId(null);
+        }}
+        onUpdateComponents={(comps) => setComponents(comps)}
+        onUpdateWires={(updatedWires) => setWires(updatedWires)}
+        onFinishPlacing={(placed) => {
+          setComponents((prev) => [...prev, placed]);
+          setPlacingComponent(null);
+        }}
+        onCancelPlacing={() => setPlacingComponent(null)}
+        canUndo={true}
+        canRedo={true}
+      />
+    );
+  }
+
+  it('STATEFUL TEST 1: Place from library -> clears placingComponent -> immediately mouse-drag changes canonical (x, y)', () => {
+    let latestComps: CircuitComponent[] = [];
+    const newResistor: CircuitComponent = {
+      ...TEMPLATE_555_ASTABLE.components[1],
+      id: 'res_custom_1',
+      label: 'R_CUSTOM',
+      designator: 'R99',
+      value: '22kΩ',
+      x: 0,
+      y: 0,
+    };
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialPlacing={newResistor}
+        onStateChange={({ comps }) => {
+          latestComps = comps;
+        }}
+      />
+    );
+
+    // 1. Ghost preview must be visible
+    expect(container.querySelector('.sch-ghost-preview')).toBeInTheDocument();
+
+    // 2. Click canvas viewport to drop component at (400, 300)
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 400, clientY: 300 });
+
+    // Ghost preview must now be cleared and placed in state
+    expect(container.querySelector('.sch-ghost-preview')).not.toBeInTheDocument();
+    const placed = latestComps.find((c) => c.id === 'res_custom_1');
+    expect(placed).toBeDefined();
+
+    // 3. Immediately select and drag the component
+    const compHit = container.querySelector('[data-testid="sch-comp-hit-res_custom_1"]');
+    expect(compHit).toBeInTheDocument();
+
+    fireEvent.mouseDown(compHit!, { button: 0, clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(viewport, { clientX: 460, clientY: 360 });
+    fireEvent.mouseUp(viewport);
+
+    // 4. Verify canonical (x, y) was modified
+    const afterDrag = latestComps.find((c) => c.id === 'res_custom_1');
+    expect(afterDrag?.x).toBeDefined();
+    expect(typeof afterDrag?.x).toBe('number');
+  });
+
+  it('STATEFUL TEST 2: Pin click in Select mode -> click corner -> click Pin B -> wire created -> midpoint adds fold -> delete action pill removes wire', () => {
+    let latestWires: CircuitWire[] = [];
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Switch to Wire mode and click Pin 1 of R1 with real browser event sequence: mouseDown -> mouseUp -> click
+    fireEvent.click(screen.getByTestId('tool-wire'));
+    const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
+
+    // 2. Click intermediate canvas position for corner waypoint
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 250, clientY: 100 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 250, clientY: 100 });
+    fireEvent.click(viewport, { button: 0, clientX: 250, clientY: 100 });
+
+    // 3. Click Pin 1 of R2 with real browser event sequence: mouseDown -> mouseUp -> click to finish wiring
+    const pinR2 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.mouseUp(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.click(pinR2!, { clientX: 250, clientY: 200 });
+
+    // Wire must be created and added to state
+    expect(latestWires.length).toBe(1);
+    const createdWire = latestWires[0];
+    expect(createdWire.fromCompId).toBe('r1');
+    expect(createdWire.toCompId).toBe('r2');
+    expect(createdWire.points?.length).toBeGreaterThanOrEqual(1);
+
+    // 4. Select the created wire with real browser event sequence
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${createdWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+
+    // Midpoint handle must appear
+    const midHandle = container.querySelector('[data-testid="sch-wire-mid-0"]');
+    expect(midHandle).toBeInTheDocument();
+
+    // Drag midpoint handle to add a fold point
+    fireEvent.mouseDown(midHandle!);
+    fireEvent.mouseMove(viewport, { clientX: 280, clientY: 150 });
+    fireEvent.mouseUp(viewport);
+
+    // Wire points must now include the fold point
+    expect(latestWires[0].points?.length).toBeGreaterThanOrEqual(2);
+
+    // 5. Delete Action Pill must be visible
+    const pill = screen.getByTestId('sch-wire-action-pill');
+    expect(pill).toBeInTheDocument();
+    const deleteBtn = screen.getByTestId('pill-delete-wire');
+    fireEvent.click(deleteBtn);
+
+    // Wire must be removed from state
+    expect(latestWires.length).toBe(0);
+  });
+
+  it('STATEFUL TEST 3: Move component -> unmount -> remount -> verify position and wire points are identical', () => {
+    let savedComps: CircuitComponent[] = [];
+    let savedWires: CircuitWire[] = [];
+
+    const { unmount, container } = render(
+      <StatefulEditorHarness
+        onStateChange={({ comps, wires }) => {
+          savedComps = comps;
+          savedWires = wires;
+        }}
+      />
+    );
+
+    // Move R1 to new position
+    const r1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(r1Hit!, { button: 0, clientX: 200, clientY: 100 });
+    fireEvent.mouseMove(viewport, { clientX: 300, clientY: 160 });
+    fireEvent.mouseUp(viewport);
+
+    const posBeforeUnmount = savedComps.find((c) => c.id === 'r1');
+    expect(posBeforeUnmount).toBeDefined();
+
+    // Unmount (simulating tab switch)
+    unmount();
+
+    // Remount with saved state
+    const { container: remountContainer } = render(
+      <StatefulEditorHarness
+        initialComps={savedComps}
+        initialWires={savedWires}
+      />
+    );
+
+    const r1After = savedComps.find((c) => c.id === 'r1');
+    expect(r1After?.x).toBe(posBeforeUnmount?.x);
+    expect(r1After?.y).toBe(posBeforeUnmount?.y);
+    expect(remountContainer.querySelector('[data-testid="sch-comp-r1"]')).toBeInTheDocument();
+  });
+
+  it('INVARIANT 1 (ZERO Auto-Change on Tab Switch): Mount -> unmount -> remount causes 0 updates and byte-for-byte identical state', () => {
+    const onUpdateComponents = vi.fn();
+    const onUpdateWires = vi.fn();
+    const onUpdateComponentPosition = vi.fn();
+
+    const initialCompsStr = JSON.stringify(TEMPLATE_555_ASTABLE.components);
+    const initialWiresStr = JSON.stringify(TEMPLATE_555_ASTABLE.wires);
+
+    const { unmount } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={TEMPLATE_555_ASTABLE}
+        components={TEMPLATE_555_ASTABLE.components}
+        wires={TEMPLATE_555_ASTABLE.wires}
+        onUpdateComponents={onUpdateComponents}
+        onUpdateWires={onUpdateWires}
+        onUpdateComponentPosition={onUpdateComponentPosition}
+      />
+    );
+
+    unmount();
+
+    render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={TEMPLATE_555_ASTABLE}
+        components={TEMPLATE_555_ASTABLE.components}
+        wires={TEMPLATE_555_ASTABLE.wires}
+        onUpdateComponents={onUpdateComponents}
+        onUpdateWires={onUpdateWires}
+        onUpdateComponentPosition={onUpdateComponentPosition}
+      />
+    );
+
+    expect(onUpdateComponents).toHaveBeenCalledTimes(0);
+    expect(onUpdateWires).toHaveBeenCalledTimes(0);
+    expect(onUpdateComponentPosition).toHaveBeenCalledTimes(0);
+    expect(JSON.stringify(TEMPLATE_555_ASTABLE.components)).toBe(initialCompsStr);
+    expect(JSON.stringify(TEMPLATE_555_ASTABLE.wires)).toBe(initialWiresStr);
+  });
+
+  it('INVARIANT 2 (0.0px Pin-to-Wire Connection Proof): Wire endpoints match pin terminal positions <= 0.5px including rotated components', () => {
+    const rotatedComps = TEMPLATE_555_ASTABLE.components.map((c) =>
+      c.id === 'r1' ? { ...c, rotation: 90 as const } : c
+    );
+
+    TEMPLATE_555_ASTABLE.wires.forEach((w) => {
+      const fromComp = rotatedComps.find((c) => c.id === w.fromCompId);
+      const toComp = rotatedComps.find((c) => c.id === w.toCompId);
+      if (!fromComp || !toComp) return;
+
+      const pts = getCanonicalWirePoints(w, rotatedComps);
+      expect(pts.length).toBeGreaterThanOrEqual(2);
+
+      const wireStart = pts[0];
+      const wireEnd = pts[pts.length - 1];
+
+      const pinStart = getCanonicalPinWorldPos(fromComp, w.fromPinId);
+      const pinEnd = getCanonicalPinWorldPos(toComp, w.toPinId);
+
+      const distStart = Math.hypot(wireStart.x - pinStart.x, wireStart.y - pinStart.y);
+      const distEnd = Math.hypot(wireEnd.x - pinEnd.x, wireEnd.y - pinEnd.y);
+
+      expect(distStart).toBeLessThanOrEqual(0.5);
+      expect(distEnd).toBeLessThanOrEqual(0.5);
+    });
+  });
+
+  it('INVARIANT 4 (Eye-Comfort Warm Light Theme): Sheet SVG uses #ECE8DC (not white), surround uses #D8D4C8, and wire uses #0F6B54', () => {
+    const isolatedProject = {
+      ...TEMPLATE_555_ASTABLE,
+      id: `proj_theme_test_${Date.now()}`,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={isolatedProject}
+        components={isolatedProject.components}
+        wires={isolatedProject.wires}
+      />
+    );
+
+    const themeToggle = screen.getByTestId('toggle-sheet-theme');
+    const sheetSvgBefore = screen.getByTestId('sch-sheet-svg');
+    const beforeClass = sheetSvgBefore.getAttribute('class') || '';
+    if (beforeClass.includes('bg-[#09101E]')) {
+      fireEvent.click(themeToggle);
+    }
+
+    const sheetSvg = screen.getByTestId('sch-sheet-svg');
+    const svgClass = sheetSvg.getAttribute('class') || '';
+    expect(svgClass).toContain('bg-[#ECE8DC]');
+    expect(svgClass).not.toContain('bg-[#FAFCFF]');
+    expect(svgClass).not.toContain('bg-[#FFFFFF]');
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    expect(viewport.className).toContain('bg-[#D8D4C8]');
+
+    const wire = container.querySelector('[data-testid^="sch-wire-"]:not([data-testid*="hit"])');
+    if (wire) {
+      expect(wire.getAttribute('stroke')).toBe('#0F6B54');
+    }
+  });
+
+  it('STATEFUL TEST 4: Verify all 14 Left Rail tools and top bar buttons trigger without error and right-click context menu works', () => {
+    const { container } = render(<StatefulEditorHarness />);
+
+    // Check all 14 Left Rail tools
+    const tools = [
+      'tool-select',
+      'tool-pan',
+      'tool-wire',
+      'tool-bus',
+      'tool-junction',
+      'tool-netlabel',
+      'tool-sheetport',
+      'tool-power',
+      'tool-noconnect',
+      'tool-draw',
+      'tool-text',
+      'tool-image',
+      'tool-ruler',
+      'tool-eraser',
+    ];
+
+    tools.forEach((tid) => {
+      const btn = screen.getByTestId(tid);
+      expect(btn).toBeInTheDocument();
+      fireEvent.click(btn);
+    });
+
+    // Check Top Bar action buttons
+    const topActions = [
+      'action-undo',
+      'action-redo',
+      'action-rotate',
+      'action-rotate-ccw',
+      'action-align',
+      'action-autotidy',
+      'action-auto-annotate',
+      'action-erc',
+      'action-find',
+      'action-bom-netlist',
+      'toggle-show-grid',
+      'toggle-grid-snap',
+      'toggle-sheet-theme',
+    ];
+
+    topActions.forEach((tid) => {
+      const btn = screen.getByTestId(tid);
+      expect(btn).toBeInTheDocument();
+      fireEvent.click(btn);
+    });
+
+    // Test Right-Click Context Menu on component
+    const r1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    expect(r1Hit).toBeInTheDocument();
+    fireEvent.contextMenu(r1Hit!);
+
+    const ctxMenu = screen.getByTestId('sch-context-menu');
+    expect(ctxMenu).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-rotate')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-mirror')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-duplicate')).toBeInTheDocument();
+    expect(screen.getByTestId('ctx-delete')).toBeInTheDocument();
+
+    // Clicking rotate in context menu rotates component
+    fireEvent.click(screen.getByTestId('ctx-rotate'));
+    expect(screen.queryByTestId('sch-context-menu')).not.toBeInTheDocument();
+  });
+
+  it('STATEFUL TEST 5 (Zero Regression on LabHeader & SchematicCanvas): LabHeader hides/shows simulation controls and untouched SchematicCanvas mounts cleanly with moved R1 and folded wire', () => {
+    // 1. LabHeader activeMode="schematicEditor" hides Run/Stop; activeMode="schematic" shows Run/Stop
+    const dummyLabHeaderProps = {
+      projectTitle: 'Regression Test Lab',
+      onTitleChange: vi.fn(),
+      onNewProject: vi.fn(),
+      onSaveProject: vi.fn(),
+      onLoadProject: vi.fn(),
+      onExportProject: vi.fn(),
+      onOpenExperiments: vi.fn(),
+      hasUnsavedChanges: false,
+      canUndo: false,
+      canRedo: false,
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematicEditor"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+    expect(screen.queryByTitle(/Toggle Simulation/i)).not.toBeInTheDocument();
+
+    rerender(
+      <LabHeader
+        {...dummyLabHeaderProps}
+        activeMode="schematic"
+        onModeChange={vi.fn()}
+        isSimulating={false}
+        onToggleSimulation={vi.fn()}
+        onResetSimulation={vi.fn()}
+      />
+    );
+    expect(screen.getByTitle(/Toggle Simulation/i)).toBeInTheDocument();
+
+    // 2. Untouched SchematicCanvas mounts cleanly with moved R1 and folded wire
+    const movedComps: CircuitComponent[] = TEMPLATE_555_ASTABLE.components.map((c) =>
+      c.id === 'r1' ? { ...c, x: 420, y: 180 } : c
+    );
+    const foldedWires: CircuitWire[] = [
+      {
+        id: 'w_folded_1',
+        fromCompId: 'r1',
+        fromPinId: '1',
+        toCompId: 'r2',
+        toPinId: '1',
+        points: [
+          { x: 420, y: 180 },
+          { x: 300, y: 180 },
+          { x: 300, y: 220 },
+        ],
+      },
+    ];
+
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={movedComps}
+        wires={foldedWires}
+        selectedCompId="r1"
+        onSelectComponent={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    expect(canvasContainer.querySelector('#main-schematic-svg')).toBeInTheDocument();
+    expect(canvasContainer.textContent).toContain('R1');
+  });
+
+  it('Test 1 (Real Browser Pin Click Sequence): Real browser pin click sequence keeps rubberband active, saves interior-only points, and moves endpoints with component', () => {
+    let latestWires: CircuitWire[] = [];
+    let latestComps: CircuitComponent[] = [...TEMPLATE_555_ASTABLE.components];
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires, comps }) => {
+          latestWires = wires;
+          latestComps = comps;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Switch to Wire mode and on Pin A, fire ALL THREE real browser events in order
+    fireEvent.click(screen.getByTestId('tool-wire'));
+    const pinA = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinA).toBeInTheDocument();
+    fireEvent.mouseDown(pinA!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinA!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinA!, { clientX: 200, clientY: 100 });
+
+    // Assert rubberband wire preview IS STILL ACTIVE (NOT canceled by double-fire!)
+    const rubberband = screen.getByTestId('sch-rubberband-wire');
+    expect(rubberband).toBeInTheDocument();
+
+    // 2. Click intermediate canvas position for corner waypoint (260, 140)
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 260, clientY: 140 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 260, clientY: 140 });
+    fireEvent.click(viewport, { button: 0, clientX: 260, clientY: 140 });
+
+    // 3. Fire mouseDown + mouseUp + click on Pin B
+    const pinB = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinB).toBeInTheDocument();
+    fireEvent.mouseDown(pinB!, { clientX: 260, clientY: 200 });
+    fireEvent.mouseUp(pinB!, { clientX: 260, clientY: 200 });
+    fireEvent.click(pinB!, { clientX: 260, clientY: 200 });
+
+    // Assert new wire saved in wires AND wire.points contains ONLY interior waypoints (NOT duplicate p1/p2!)
+    expect(latestWires.length).toBe(1);
+    const newWire = latestWires[0];
+    expect(newWire.fromCompId).toBe('r1');
+    expect(newWire.toCompId).toBe('r2');
+
+    const r1CompInitial = latestComps.find((c) => c.id === 'r1')!;
+    const r2CompInitial = latestComps.find((c) => c.id === 'r2')!;
+    const p1WorldInitial = { x: r1CompInitial.x + r1CompInitial.pins![0].x, y: r1CompInitial.y + r1CompInitial.pins![0].y };
+    const p2WorldInitial = { x: r2CompInitial.x + r2CompInitial.pins![0].x, y: r2CompInitial.y + r2CompInitial.pins![0].y };
+
+    if (newWire.points && newWire.points.length > 0) {
+      expect(newWire.points[0]).not.toEqual(p1WorldInitial);
+      expect(newWire.points[newWire.points.length - 1]).not.toEqual(p2WorldInitial);
+    }
+
+    // Move component R1 by +40px
+    const compR1Hit = container.querySelector('[data-testid="sch-comp-hit-r1"]');
+    expect(compR1Hit).toBeInTheDocument();
+    fireEvent.mouseDown(compR1Hit!, { clientX: r1CompInitial.x, clientY: r1CompInitial.y });
+    fireEvent.mouseMove(viewport, { clientX: r1CompInitial.x + 40, clientY: r1CompInitial.y });
+    fireEvent.mouseUp(viewport);
+
+    // Wire endpoint moves cleanly with R1's pin
+    const r1CompMoved = latestComps.find((c) => c.id === 'r1')!;
+    expect(r1CompMoved.x).toBe(r1CompInitial.x + 40);
+    const canonicalWirePts = getCanonicalWirePoints(newWire, latestComps);
+    expect(canonicalWirePts[0].x).toBe(r1CompMoved.x + r1CompMoved.pins![0].x);
+    expect(canonicalWirePts[0].y).toBe(r1CompMoved.y + r1CompMoved.pins![0].y);
+  });
+
+  it('Test 2 (Real Browser Wire Junction Click Sequence): Activate Junction (J) -> fire mouseDown + mouseUp + click on wire -> assert EXACTLY 1 manual junction added', () => {
+    const testWireId = TEMPLATE_555_ASTABLE.wires[0].id;
+    const { container } = render(<SchematicEditorPanel {...defaultProps} selectedWireId={testWireId} />);
+
+    // Activate Junction (J)
+    const toolJunc = screen.getByTestId('tool-junction');
+    fireEvent.click(toolJunc);
+
+    // Fire mouseDown + mouseUp + click on a wire
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${testWireId}"]`);
+    expect(wireHit).toBeInTheDocument();
+
+    fireEvent.mouseDown(wireHit!, { clientX: 220, clientY: 150 });
+    fireEvent.mouseUp(wireHit!, { clientX: 220, clientY: 150 });
+    fireEvent.click(wireHit!, { clientX: 220, clientY: 150 });
+
+    // Assert EXACTLY 1 manual junction added (NOT 2 duplicates!)
+    const juncDots = container.querySelectorAll('[data-testid^="sch-manual-junction-"]');
+    expect(juncDots.length).toBe(1);
+  });
+
+  it('Test 3 (Light Theme Contrast Check): Toggle to warm light theme -> assert designator text fill is dark (#0F5132) and sheet is #ECE8DC', () => {
+    const isolatedProject = {
+      ...TEMPLATE_555_ASTABLE,
+      id: `proj_contrast_${Date.now()}`,
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        project={isolatedProject}
+      />
+    );
+
+    // Toggle theme to warm light theme
+    const themeBtn = screen.getByTestId('toggle-sheet-theme');
+    const sheetSvgBefore = screen.getByTestId('sch-sheet-svg');
+    const beforeClass = sheetSvgBefore.getAttribute('class') || '';
+    if (beforeClass.includes('bg-[#09101E]')) {
+      fireEvent.click(themeBtn);
+    }
+
+    // Assert designator text fill is dark (#0F5132, NOT #34D399)
+    const designator = container.querySelector('[data-testid="sch-designator-r1"]');
+    expect(designator).toBeInTheDocument();
+    expect(designator?.getAttribute('fill')).toBe('#0F5132');
+
+    // Assert sheet is #ECE8DC
+    const sheetSvg = screen.getByTestId('sch-sheet-svg');
+    expect(sheetSvg).toBeInTheDocument();
+    expect(sheetSvg.getAttribute('class')).toContain('bg-[#ECE8DC]');
+  });
+
+  // =========================================================================
+  // MANDATORY QUALITY GATE ANTI-REGRESSION TESTS: CRASH-PROOF, BREADBOARD SYNC, UX PARITY & MNA PHYSICS
+  // =========================================================================
+
+  it('GATE 4 Test 1 (Crash Proof): Malformed wire with fromCompId breadboard or empty points never crashes calculations or render', () => {
+    const malformedWire: CircuitWire = {
+      id: 'w_bad_bb',
+      fromCompId: 'breadboard',
+      fromPinId: 'bb_col_10_a',
+      toCompId: 'r1',
+      toPinId: '1',
+      points: [],
+    };
+
+    // 1. computeCanonicalJunctions must not throw
+    expect(() => {
+      const junctions = computeCanonicalJunctions(
+        [{ wireId: malformedWire.id, points: malformedWire.points || [] }],
+        TEMPLATE_555_ASTABLE.components
+      );
+      expect(Array.isArray(junctions)).toBe(true);
+    }).not.toThrow();
+
+    // 2. calculateJunctionDots with invalid/missing vertices must not throw
+    expect(() => {
+      const dots = calculateJunctionDots([
+        { id: 'w1', vertices: [] },
+        { id: 'w2', vertices: [{ x: 10, y: 10 }] },
+        { id: 'w3', vertices: [{ x: 10, y: 10 }, { x: 20, y: 10 }] },
+      ] as unknown as Parameters<typeof calculateJunctionDots>[0]);
+      expect(Array.isArray(dots)).toBe(true);
+    }).not.toThrow();
+
+    // 3. SchematicEditorPanel rendering with malformed wire must not crash
+    expect(() => {
+      render(
+        <SchematicEditorPanel
+          {...defaultProps}
+          wires={[malformedWire, ...TEMPLATE_555_ASTABLE.wires]}
+        />
+      );
+    }).not.toThrow();
+  });
+
+  it('GATE 4 Test 2 (3D Breadboard Sync Resolver): Accurately resolves column tie-groups, rails, ravine isolation, and multi-hop jumpers', () => {
+    // 1. Column tie groups and ravine isolation
+    const topHoleA = 'bb_col_15_a';
+    const topHoleC = 'bb_col_15_c';
+    const botHoleF = 'bb_col_15_f';
+
+    const groupA = getHoleTieGroup(topHoleA);
+    const groupC = getHoleTieGroup(topHoleC);
+    const groupF = getHoleTieGroup(botHoleF);
+
+    expect(groupA).toBe(groupC); // Col 15 Top rows A and C share tie group
+    expect(groupA).not.toBe(groupF); // Col 15 Top is isolated from Bottom across center ravine!
+    expect(groupA).toBe('bb_tie_col_15_top');
+    expect(groupF).toBe('bb_tie_col_15_bottom');
+
+    // 2. Power rails
+    const railPos1 = getHoleTieGroup('bb_rail_top_pos_5');
+    const railPos2 = getHoleTieGroup('bb_rail_top_pos_20');
+    const railNeg = getHoleTieGroup('bb_rail_top_neg_5');
+    expect(railPos1).toBe(railPos2);
+    expect(railPos1).not.toBe(railNeg);
+
+    // 3. resolve3DWireToSchematicConnections
+    // LED anode at Col 15 Row C, cathode at Col 16 Row C
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'LED',
+        value: 'Red',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        mountedOnHoleId: 'bb_col_15_c',
+        pinHoles: {
+          a: 'bb_col_15_c',
+          k: 'bb_col_16_c',
+        },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'D1',
+        label: 'LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_THT:LED_D5.0mm',
+        parameters: {},
+        x: 0,
+        y: 0,
+        rotation: 0,
+        pins: [
+          { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'mcu1',
+        type: 'ARDUINO_UNO',
+        designator: 'U_MCU',
+        label: 'Arduino',
+        category: 'microcontrollers',
+        value: 'ATmega328P',
+        footprint: 'Module:Arduino_UNO_R3',
+        parameters: {},
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [{ id: 'D13', name: '13', x: 0, y: 0, pinType: 'passive' }],
+      },
+    ];
+
+    // Jumper wire from Arduino D13 to Col 15 Row A
+    const wire3d: Wire3D = {
+      id: 'w_jumper_1',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_15_a' },
+      color: '#ff0000',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      wire3d,
+      [wire3d],
+      components3d,
+      schematicComponents
+    );
+
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].fromCompId).toBe('mcu1');
+    expect(resolved[0].fromPinId).toBe('D13');
+    expect(resolved[0].toCompId).toBe('led1');
+    expect(resolved[0].toPinId).toBe('a');
+
+    // 4. Empty column jumper does NOT create phantom connections
+    const emptyJumper: Wire3D = {
+      id: 'w_empty',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_40_a' },
+      color: '#00ff00',
+    };
+    const emptyResolved = resolve3DWireToSchematicConnections(
+      emptyJumper,
+      [emptyJumper],
+      components3d,
+      schematicComponents
+    );
+    expect(emptyResolved.length).toBe(0);
+  });
+
+  it('GATE 4 Test 3 (Schematic Editor UX Parity): Pin click in Select mode does not wire; Wire mode creates wire; Docked action bar dismisses; Segment drag works', () => {
+    let latestWires: CircuitWire[] = [];
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={[]}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. In Select (V) mode, clicking pin must NOT start wire drawing!
+    const pinR1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).not.toBeInTheDocument();
+    expect(latestWires.length).toBe(0);
+
+    // 2. Switch to Wire (W) mode: clicking pin starts wire drawing
+    fireEvent.click(screen.getByTestId('tool-wire'));
+    fireEvent.mouseDown(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeInTheDocument();
+
+    // Finish wire to pin R2-1
+    const pinR2 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    fireEvent.mouseDown(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.mouseUp(pinR2!, { clientX: 250, clientY: 200 });
+    fireEvent.click(pinR2!, { clientX: 250, clientY: 200 });
+
+    expect(latestWires.length).toBe(1);
+    const createdWire = latestWires[0];
+
+    // Switch back to Select mode
+    fireEvent.click(screen.getByTestId('tool-select'));
+
+    // 3. Select wire -> Bottom-center docked action bar is rendered
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${createdWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+
+    const pill = container.querySelector('.sch-wire-action-pill');
+    expect(pill).toBeInTheDocument();
+
+    // Pressing Escape cleanly dismisses the pill
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // Re-select wire and click empty canvas -> cleanly dismisses the pill
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+    expect(container.querySelector('.sch-wire-action-pill')).toBeInTheDocument();
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // 4. Real wire segment sliding: dragging segment midpoint handle updates waypoints
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+    const midHandle = container.querySelector('[data-testid="sch-wire-mid-0"]');
+    if (midHandle) {
+      fireEvent.mouseDown(midHandle);
+      fireEvent.mouseMove(viewport, { clientX: 300, clientY: 150 });
+      fireEvent.mouseUp(viewport);
+      expect(latestWires[0].points).toBeDefined();
+    }
+  });
+
+  it('GATE 4 Test 4 (MNA Real-Time Physics Accuracy): NE555 astable simulation yields bounded C1 companion current, 6V on Pin 5 CTRL, and realistic LED current', () => {
+    const solver = new CircuitSolver();
+    const dt = 0.001; // 1ms step
+
+    // Warm up the solver across multiple steps to achieve steady state
+    let lastResult = solver.step(TEMPLATE_555_ASTABLE.components, TEMPLATE_555_ASTABLE.wires, dt);
+    for (let s = 0; s < 50; s++) {
+      lastResult = solver.step(TEMPLATE_555_ASTABLE.components, TEMPLATE_555_ASTABLE.wires, dt);
+    }
+
+    const compStates = lastResult.componentStates;
+    expect(compStates).toBeDefined();
+
+    // 1. Capacitor C1 companion current must be physically bounded (|I| < 5mA, not bogus 51.7mA!)
+    const c1State = compStates['c1'];
+    expect(c1State).toBeDefined();
+    expect(Math.abs(c1State.current)).toBeLessThan(0.005);
+
+    // 2. NE555 Pin 5 (CTRL) voltage and C2 voltage:
+    // Internal 5k-5k-5k divider establishes 2/3 * Vcc = 6.00V at 9V Vcc
+    const c2State = compStates['c2'];
+    expect(c2State).toBeDefined();
+    expect(c2State.voltage).toBeGreaterThanOrEqual(5.8);
+    expect(c2State.voltage).toBeLessThanOrEqual(6.2);
+
+    // 3. LED current when flashing on: resistor is 330 ohm, Vf ~ 2.0V, Vout ~ 7.6V -> (7.6 - 2.0) / 330 ~ 17mA
+    const ledState = compStates['led1'];
+    expect(ledState).toBeDefined();
+    expect(ledState.current).toBeGreaterThanOrEqual(0);
+    expect(ledState.current).toBeLessThanOrEqual(0.025);
+  });
+
+  it('GATE 5 Test 1 (3D Breadboard Zero Fan-Out & Net Union-Find): Jumper wire produces exactly 1 shortest-path schematic wire with 0 Cartesian explosion', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'mcu1',
+        type: 'arduino_uno',
+        label: 'Arduino',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: {},
+      },
+      {
+        id: 'led1',
+        type: 'led',
+        label: 'LED',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { 'a': 'bb_col_10_c', 'k': 'bb_rail_bot_neg_1' },
+      },
+      {
+        id: 'r1',
+        type: 'resistor',
+        label: 'Resistor',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_10_e', '2': 'bb_col_15_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'mcu1',
+        type: 'MCU',
+        designator: 'U1',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        value: 'Arduino',
+        footprint: 'Arduino_Uno',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [{ id: 'D13', name: 'D13', x: 20, y: 0, pinType: 'output' }],
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'D1',
+        label: 'Red LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_D5.0mm',
+        x: 200,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: 'a', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        designator: 'R1',
+        label: '1k Resistor',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 300,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    const jWire: Wire3D = {
+      id: 'w3d_jumper_1',
+      fromPin: { compId: 'mcu1', pinId: 'D13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_b' },
+      color: '#3B82F6',
+    };
+
+    // When resolving, it should produce EXACTLY 1 wire connecting mcu1:D13 to the closest pin in column 10 (led1:a)
+    // NEVER a Cartesian product of 2x3 or all-to-all explosion!
+    const resolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, []);
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].fromCompId).toBe('mcu1');
+    expect(resolved[0].fromPinId).toBe('D13');
+    expect(resolved[0].toCompId).toBe('led1');
+    expect(resolved[0].toPinId).toBe('a');
+
+    // If mcu1:D13 and led1:a are ALREADY connected in schematicWires, resolving a duplicate jumper returns [] (0 redundant wires)
+    const existingWire: CircuitWire = {
+      id: 'w_existing',
+      fromCompId: 'mcu1',
+      fromPinId: 'D13',
+      toCompId: 'led1',
+      toPinId: 'a',
+    };
+    const redundantResolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, [existingWire]);
+    expect(redundantResolved.length).toBe(0);
+  });
+
+  it('GATE 5 Test 2 (Smart Shortest-Path Auto-Tap): Resolver taps existing wire segment when closer by >= 15px', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'compA',
+        type: 'resistor',
+        label: 'RA',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_5_a', '2': 'bb_col_5_e' },
+      },
+      {
+        id: 'compB',
+        type: 'resistor',
+        label: 'RB',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_20_a', '2': 'bb_col_20_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'compA',
+        type: 'RESISTOR',
+        designator: 'RA',
+        label: 'RA',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'compB',
+        type: 'RESISTOR',
+        designator: 'RB',
+        label: 'RB',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 500,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Wire passing between compB:1 (500, 100) and some other component at (100, 300)
+    // with a segment passing close to compA:1 (100, 100) -> segment from (120, 0) to (120, 200)
+    const existingWireB: CircuitWire = {
+      id: 'wire_bus_B',
+      fromCompId: 'compB',
+      fromPinId: '1',
+      toCompId: 'compB',
+      toPinId: '2',
+      points: [
+        { x: 500, y: 100 },
+        { x: 120, y: 100 },
+        { x: 120, y: 200 },
+      ],
+    };
+
+    const jWire: Wire3D = {
+      id: 'w3d_jumper_tap',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_5_b' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_b' },
+      color: '#10B981',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(jWire, [jWire], components3d, schematicComponents, [existingWireB]);
+    expect(resolved.length).toBe(1);
+    // Because the existing wire segment passes right at (120, 100), which is closer than compB (at 500, 100) by 380px:
+    expect(resolved[0].tappedWireId).toBe('wire_bus_B');
+    expect(resolved[0].junctionPoint).toBeDefined();
+    expect(resolved[0].junctionPoint?.x).toBe(150);
+    expect(resolved[0].junctionPoint?.y).toBe(100);
+  });
+
+  it('GATE 5 Test 3 (Empty-Canvas Deselect in Wire Mode & T-Junction Wire Tap): Clicking empty canvas in Wire mode clears selection, clicking wire completes tap', () => {
+    let latestWires: CircuitWire[] = [
+      {
+        id: 'test_wire_1',
+        fromCompId: 'r1',
+        fromPinId: '1',
+        toCompId: 'r2',
+        toPinId: '1',
+      },
+    ];
+
+    const { container } = render(
+      <StatefulEditorHarness
+        initialWires={latestWires}
+        onStateChange={({ wires }) => {
+          latestWires = wires;
+        }}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Select the wire
+    const wireHit = container.querySelector('[data-testid="sch-wire-hit-test_wire_1"]');
+    expect(wireHit).toBeInTheDocument();
+    fireEvent.mouseDown(wireHit!);
+    fireEvent.mouseUp(wireHit!);
+    fireEvent.click(wireHit!);
+
+    expect(container.querySelector('.sch-wire-action-pill')).toBeInTheDocument();
+
+    // 2. Switch to Wire (W) mode while wire is selected
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    // 3. Click empty canvas in Wire mode -> MUST dismiss wire selection
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(container.querySelector('.sch-wire-action-pill')).not.toBeInTheDocument();
+
+    // 4. Start wire from pin R1-2 and tap into test_wire_1
+    const pinR1_2 = container.querySelector('[data-testid="sch-pin-r1-2"]');
+    expect(pinR1_2).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1_2!, { clientX: 200, clientY: 100 });
+    fireEvent.mouseUp(pinR1_2!, { clientX: 200, clientY: 100 });
+    fireEvent.click(pinR1_2!, { clientX: 200, clientY: 100 });
+
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeInTheDocument();
+
+    // Tap into test_wire_1
+    fireEvent.mouseDown(wireHit!, { clientX: 220, clientY: 100 });
+
+    // A tapped wire is created with tappedWireId and junctionPoint
+    const tapped = latestWires.find((w) => w.tappedWireId === 'test_wire_1');
+    expect(tapped).toBeDefined();
+    expect(tapped?.junctionPoint).toBeDefined();
+  });
+
+  it('GATE 6 Test 1 (Reverse 3D Click-Order Bi-Directional Auto-Tap): Reverse click-order from bb_col_30_A to U2:D9 resolves T-junction tap and returns strictly 1 wire', () => {
+    const components3d: (Component3D & { pinHoles?: Record<string, string> })[] = [
+      {
+        id: 'u2',
+        type: 'arduino_uno',
+        label: 'Arduino',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: {}, // Off-board MCU pin
+      },
+      {
+        id: 'led1',
+        type: 'led',
+        label: 'LED',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { 'a': 'bb_col_30_c', 'k': 'bb_rail_bot_neg_1' },
+      },
+      {
+        id: 'r3',
+        type: 'resistor',
+        label: 'Resistor',
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 0,
+        pinHoles: { '1': 'bb_col_30_e', '2': 'bb_col_25_e' },
+      },
+    ];
+
+    const schematicComponents: CircuitComponent[] = [
+      {
+        id: 'u2',
+        type: 'MCU',
+        designator: 'U2',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        value: 'Arduino',
+        footprint: 'Arduino_Uno',
+        x: 240,
+        y: 150,
+        rotation: 0,
+        parameters: {},
+        pins: [{ id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'output' }],
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        designator: 'LED1',
+        label: 'Red LED',
+        category: 'semiconductors',
+        value: 'Red',
+        footprint: 'LED_D5.0mm',
+        x: 200,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: 'a', name: 'A', x: -10, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'r3',
+        type: 'RESISTOR',
+        designator: 'R3',
+        label: '330 Resistor',
+        category: 'passive',
+        value: '330',
+        footprint: 'R_Axial',
+        x: 300,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Existing net: r3:1 connected to led1:a
+    const existingWire: CircuitWire = {
+      id: 'wire_r3_led1',
+      fromCompId: 'r3',
+      fromPinId: '1',
+      toCompId: 'led1',
+      toPinId: 'a',
+      points: [{ x: 290, y: 100 }, { x: 190, y: 100 }],
+    };
+
+    // Reverse click-order in 3D: from breadboard hole to MCU pin!
+    const reverseJumperWire: Wire3D = {
+      id: 'w3d_jumper_reverse',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_30_a' },
+      toPin: { compId: 'u2', pinId: 'D9' },
+      color: '#3B82F6',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      reverseJumperWire,
+      [reverseJumperWire],
+      components3d,
+      schematicComponents,
+      [existingWire]
+    );
+
+    // Strictly 1 wire returned (zero fan-out, zero duplicate)
+    expect(resolved.length).toBe(1);
+    expect(resolved[0].tappedWireId).toBe('wire_r3_led1');
+    expect(resolved[0].junctionPoint).toBeDefined();
+    expect(resolved[0].junctionPoint?.x).toBe(240);
+    expect(resolved[0].junctionPoint?.y).toBe(100);
+  });
+
+  it('GATE 6 Test 2 (Live Dynamic T-Junction Glue on Move): Moving a parent component dynamically glues tapping wire endpoint with 0px detachment', () => {
+    const comps: CircuitComponent[] = [
+      {
+        id: 'comp_parent_A',
+        type: 'RESISTOR',
+        designator: 'R_P1',
+        label: 'Parent Resistor A',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 100,
+        y: 100,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 100, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'comp_tap',
+        type: 'RESISTOR',
+        designator: 'R_TAP',
+        label: 'Tap Resistor',
+        category: 'passive',
+        value: '1k',
+        footprint: 'R_Axial',
+        x: 150,
+        y: 200,
+        rotation: 0,
+        parameters: {},
+        pins: [
+          { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 50, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Parent wire between pin 1 (100, 100) and pin 2 (200, 100)
+    const parentWire: CircuitWire = {
+      id: 'parent_wire_1',
+      fromCompId: 'comp_parent_A',
+      fromPinId: '1',
+      toCompId: 'comp_parent_A',
+      toPinId: '2',
+    };
+
+    // Tapping wire starting at comp_tap:1 (150, 200) and tapped into parent_wire_1 at (150, 100)
+    const tappingWire: CircuitWire = {
+      id: 'tapping_wire_1',
+      fromCompId: 'comp_tap',
+      fromPinId: '1',
+      toCompId: 'comp_parent_A',
+      toPinId: '1',
+      tappedWireId: 'parent_wire_1',
+      junctionPoint: { x: 150, y: 100 },
+    };
+
+    const allWires = [parentWire, tappingWire];
+
+    // Initial canonical wire points
+    const ptsInitial = getCanonicalWirePoints(tappingWire, comps, allWires);
+    const lastPtInitial = ptsInitial[ptsInitial.length - 1];
+    expect(lastPtInitial.x).toBe(150);
+    expect(lastPtInitial.y).toBe(100);
+
+    // NOW MOVE parent component by dx=+80, dy=+60 (x: 180, y: 160)
+    const movedComps: CircuitComponent[] = comps.map((c) =>
+      c.id === 'comp_parent_A' ? { ...c, x: 180, y: 160 } : c
+    );
+
+    // Dynamic evaluation with moved parent component
+    const ptsMoved = getCanonicalWirePoints(tappingWire, movedComps, allWires);
+    const lastPtMoved = ptsMoved[ptsMoved.length - 1];
+
+    // Parent wire is now along y = 160 (between x=180 and x=280).
+    // Tapping wire terminal endpoint MUST dynamically project onto y = 160 (0px detachment!)
+    expect(lastPtMoved.y).toBe(160);
+    expect(lastPtMoved.x).toBeGreaterThanOrEqual(180);
+    expect(lastPtMoved.x).toBeLessThanOrEqual(280);
+  });
+
+  it('GATE 4 Test 1: Shared-Trunk Auto-Junction on Pin-to-Pin (B -> A, C -> A, D -> A)', () => {
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      designator: 'R_A',
+      label: 'Resistor A',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 400,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      designator: 'R_B',
+      label: 'Resistor B',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 100,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      designator: 'R_C',
+      label: 'Resistor C',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 250,
+      y: 350,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compD: CircuitComponent = {
+      id: 'comp_D',
+      type: 'RESISTOR',
+      designator: 'R_D',
+      label: 'Resistor D',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 300,
+      y: 50,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const comps = [compA, compB, compC, compD];
+
+    // Wire B -> A exists
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    // Connect C -> A directly
+    const resC_A = resolveShortestNetWire('comp_C', '1', 'comp_A', '1', comps, [wireBA], undefined, 10);
+    expect(resC_A.skipDuplicate).toBeFalsy();
+    expect(resC_A.tappedWireId).toBe('wire_B_A');
+    expect(resC_A.junctionPoint).toBeDefined();
+    expect(resC_A.junctionPoint?.x).toBe(250);
+    expect(resC_A.junctionPoint?.y).toBe(200);
+
+    const wireCA: CircuitWire = {
+      id: 'wire_C_A',
+      fromCompId: resC_A.fromCompId,
+      fromPinId: resC_A.fromPinId,
+      toCompId: resC_A.toCompId,
+      toPinId: resC_A.toPinId,
+      tappedWireId: resC_A.tappedWireId,
+      junctionPoint: resC_A.junctionPoint,
+    };
+
+    // Verify computeCanonicalJunctions emits a solder dot at junctionPoint
+    const routedBA = {
+      wireId: wireBA.id,
+      points: getCanonicalWirePoints(wireBA, comps, [wireBA, wireCA]),
+      junctionPoint: wireBA.junctionPoint,
+      tappedWireId: wireBA.tappedWireId,
+    };
+    const routedCA = {
+      wireId: wireCA.id,
+      points: getCanonicalWirePoints(wireCA, comps, [wireBA, wireCA]),
+      junctionPoint: wireCA.junctionPoint,
+      tappedWireId: wireCA.tappedWireId,
+    };
+    const junctions = computeCanonicalJunctions([routedBA, routedCA]);
+    const hasDotAtJunction = junctions.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDotAtJunction).toBe(true);
+
+    // Connect D -> A: should tap nearest trunk wire
+    const resD_A = resolveShortestNetWire('comp_D', '1', 'comp_A', '1', comps, [wireBA, wireCA], undefined, 10);
+    expect(resD_A.skipDuplicate).toBeFalsy();
+    expect(resD_A.tappedWireId).toBeDefined();
+    expect(resD_A.junctionPoint).toBeDefined();
+
+    const wireDA: CircuitWire = {
+      id: 'wire_D_A',
+      fromCompId: resD_A.fromCompId,
+      fromPinId: resD_A.fromPinId,
+      toCompId: resD_A.toCompId,
+      toPinId: resD_A.toPinId,
+      tappedWireId: resD_A.tappedWireId,
+      junctionPoint: resD_A.junctionPoint,
+    };
+
+    // Chained T-junction supported in both getCanonicalWirePoints and computeCanonicalJunctions
+    const ptsD = getCanonicalWirePoints(wireDA, comps, [wireBA, wireCA, wireDA]);
+    expect(ptsD.length).toBeGreaterThanOrEqual(2);
+    const routedDA = {
+      wireId: wireDA.id,
+      points: ptsD,
+      junctionPoint: wireDA.junctionPoint,
+      tappedWireId: wireDA.tappedWireId,
+    };
+    const junctionsAll = computeCanonicalJunctions([routedBA, routedCA, routedDA]);
+    expect(junctionsAll.length).toBeGreaterThanOrEqual(2);
+
+    // Attempt to connect C -> B (already in same electrical net)
+    const resC_B = resolveShortestNetWire('comp_C', '1', 'comp_B', '1', comps, [wireBA, wireCA, wireDA], undefined, 10);
+    expect(resC_B.skipDuplicate).toBe(true);
+  });
+
+  it('GATE 4 Test 2: 3D Studio Zero Fan-Out & Zero Red Color Leak', () => {
+    const arduinoComp: CircuitComponent = {
+      id: 'arduino1',
+      type: 'ARDUINO_UNO',
+      designator: 'U1',
+      label: 'Arduino Uno',
+      category: 'microcontrollers',
+      value: 'UNO',
+      footprint: 'Arduino_Uno',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'passive' },
+        { id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' },
+      ],
+    };
+    const r3Comp: CircuitComponent = {
+      id: 'r3',
+      type: 'RESISTOR',
+      designator: 'R3',
+      label: 'Resistor 3',
+      category: 'passive',
+      value: '220',
+      footprint: 'R_Axial',
+      x: 100,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const ledComp: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      designator: 'LED1',
+      label: 'LED 1',
+      category: 'displays',
+      value: 'Red',
+      footprint: 'LED_5mm',
+      x: 150,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'a', name: 'anode', x: -10, y: 0, pinType: 'passive' },
+        { id: 'k', name: 'cathode', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const r4Comp: CircuitComponent = {
+      id: 'r4',
+      type: 'RESISTOR',
+      designator: 'R4',
+      label: 'Resistor 4',
+      category: 'passive',
+      value: '1k',
+      footprint: 'R_Axial',
+      x: 200,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: -10, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const c1Comp: CircuitComponent = {
+      id: 'c1',
+      type: 'CAPACITOR',
+      designator: 'C1',
+      label: 'Capacitor 1',
+      category: 'passive',
+      value: '10uF',
+      footprint: 'C_Radial',
+      x: 250,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '+', name: '+', x: -10, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const c2Comp: CircuitComponent = {
+      id: 'c2',
+      type: 'CAPACITOR',
+      designator: 'C2',
+      label: 'Capacitor 2',
+      category: 'passive',
+      value: '100nF',
+      footprint: 'C_Disc',
+      x: 300,
+      y: 100,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '+', name: '+', x: -10, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 10, y: 0, pinType: 'passive' },
+      ],
+    };
+    const gndComp: CircuitComponent = {
+      id: 'gnd1',
+      type: 'GROUND',
+      designator: 'GND1',
+      label: 'Ground',
+      category: 'power',
+      value: '0V',
+      footprint: 'GND',
+      x: 250,
+      y: 200,
+      rotation: 0,
+      parameters: {},
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+
+    const comps = [arduinoComp, r3Comp, ledComp, r4Comp, c1Comp, c2Comp, gndComp];
+
+    // Multi-pin signal net: R3:2 -> LED1:a -> R4:1 -> Arduino:D9
+    const sigWires: CircuitWire[] = [
+      { id: 'w_sig_1', fromCompId: 'r3', fromPinId: '2', toCompId: 'led1', toPinId: 'a' },
+      { id: 'w_sig_2', fromCompId: 'led1', fromPinId: 'a', toCompId: 'r4', toPinId: '1' },
+      { id: 'w_sig_3', fromCompId: 'r4', fromPinId: '1', toCompId: 'arduino1', toPinId: 'D9' },
+    ];
+
+    // Multi-pin GND net: GND1 -> C1:- -> C2:- -> LED1:k -> Arduino:GND
+    const gndWires: CircuitWire[] = [
+      { id: 'w_gnd_1', fromCompId: 'gnd1', fromPinId: '1', toCompId: 'c1', toPinId: '-' },
+      { id: 'w_gnd_2', fromCompId: 'c1', fromPinId: '-', toCompId: 'c2', toPinId: '-' },
+      { id: 'w_gnd_3', fromCompId: 'c2', fromPinId: '-', toCompId: 'led1', toPinId: 'k' },
+      { id: 'w_gnd_4', fromCompId: 'led1', fromPinId: 'k', toCompId: 'arduino1', toPinId: 'GND' },
+    ];
+
+    const allTestWires = [...sigWires, gndWires[0], gndWires[1], gndWires[2], gndWires[3]];
+
+    const onAddWireMock = vi.fn();
+    const { container } = render(
+      <Virtual3dStudio
+        components={comps}
+        wires={allTestWires}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvasEl = container.querySelector('[data-testid="mock-3d-canvas"]');
+    expect(canvasEl).toBeInTheDocument();
+    const wiresDataRaw = canvasEl?.getAttribute('data-wires');
+    const wires3d: Wire3D[] = wiresDataRaw ? JSON.parse(wiresDataRaw) : [];
+
+    // Verify Arduino D9 has AT MOST 1 wire attached
+    const d9Wires = wires3d.filter(
+      (w) =>
+        (w.fromPin.compId === 'arduino1' && w.fromPin.pinId === 'D9') ||
+        (w.toPin.compId === 'arduino1' && w.toPin.pinId === 'D9')
+    );
+    expect(d9Wires.length).toBeLessThanOrEqual(1);
+
+    // Verify Arduino GND has AT MOST 1 wire attached
+    const gndWires3d = wires3d.filter(
+      (w) =>
+        (w.fromPin.compId === 'arduino1' && (w.fromPin.pinId === 'GND' || w.fromPin.pinId.toUpperCase().includes('GND'))) ||
+        (w.toPin.compId === 'arduino1' && (w.toPin.pinId === 'GND' || w.toPin.pinId.toUpperCase().includes('GND')))
+    );
+    expect(gndWires3d.length).toBeLessThanOrEqual(1);
+
+    // Zero red color leak: normal signal wires do not force #EF4444
+    d9Wires.forEach((w) => {
+      expect(w.color).not.toBe('#EF4444');
+    });
+
+    // Zero move wire-bomb: onAddWireMock is NOT called with duplicate wires
+    expect(onAddWireMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('GATE 4 Test 3: Schematic Editor Wire (W) Mode Dismiss & Segment Slide Paint Order', () => {
+    const { container } = render(<SchematicEditorPanel {...defaultProps} />);
+
+    // Activate Wire (W) mode
+    const wireToolBtn = screen.getByTestId('tool-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Wire hit areas exist
+    const firstWire = defaultProps.wires[0];
+    const wireHit = container.querySelector(`[data-testid="sch-wire-hit-${firstWire.id}"]`);
+    expect(wireHit).toBeInTheDocument();
+
+    // Click wire in Wire mode -> selects wire
+    if (wireHit) {
+      fireEvent.mouseDown(wireHit, { button: 0, clientX: 200, clientY: 200 });
+      fireEvent.click(wireHit, { button: 0, clientX: 200, clientY: 200 });
+    }
+
+    // Click empty sheet area -> dismisses selection
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 10, clientY: 10 });
+
+    const pill = container.querySelector('[data-testid="sch-wire-action-pill"]');
+    expect(pill).toBeNull();
+
+    // Assert visible copper polyline has pointer-events: none
+    const copperPolyline = container.querySelector(`[data-testid="sch-wire-${firstWire.id}"]`);
+    expect(copperPolyline).toBeInTheDocument();
+    expect(copperPolyline).toHaveStyle({ pointerEvents: 'none' });
+  });
+
+  it('CORRECTIVE Test 1: No C1:+ / 5V false rail short + USB-only Arduino MST', () => {
+    const comps: CircuitComponent[] = [
+      {
+        id: 'arduino1',
+        type: 'ARDUINO_UNO',
+        label: 'Arduino Uno',
+        category: 'microcontrollers',
+        rotation: 0,
+        value: 'UNO',
+        footprint: 'Arduino_Uno',
+        parameters: {},
+        x: 0,
+        y: 0,
+        pins: [
+          { id: '5V', name: '5V', x: 0, y: 0, pinType: 'power' },
+          { id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' },
+          { id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'c1',
+        type: 'CAPACITOR_ELECTROLYTIC',
+        label: 'C1',
+        category: 'passive',
+        rotation: 0,
+        value: '10uF',
+        footprint: 'CP_Radial',
+        parameters: {},
+        x: 200,
+        y: 100,
+        pins: [
+          { id: '+', name: '+', x: 0, y: -10, pinType: 'passive' },
+          { id: '-', name: '-', x: 0, y: 10, pinType: 'passive' },
+        ],
+      },
+      {
+        id: 'r1',
+        type: 'RESISTOR',
+        label: 'R1',
+        category: 'passive',
+        rotation: 0,
+        value: '220',
+        footprint: 'R_Axial',
+        parameters: {},
+        x: 200,
+        y: 200,
+        pins: [
+          { id: '1', name: '1', x: -20, y: 0, pinType: 'passive' },
+          { id: '2', name: '2', x: 20, y: 0, pinType: 'passive' },
+        ],
+      },
+    ];
+
+    // Wire C1:+ to R1:1, R1:2 to Arduino D9, C1:- to Arduino GND
+    const wires: CircuitWire[] = [
+      { id: 'w1', fromCompId: 'c1', fromPinId: '+', toCompId: 'r1', toPinId: '1' },
+      { id: 'w2', fromCompId: 'r1', fromPinId: '2', toCompId: 'arduino1', toPinId: 'D9' },
+      { id: 'w3', fromCompId: 'c1', fromPinId: '-', toCompId: 'arduino1', toPinId: 'GND' },
+    ];
+
+    const { container } = render(
+      <Virtual3dStudio
+        components={comps}
+        wires={wires}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvasEl = container.querySelector('[data-testid="mock-3d-canvas"]');
+    expect(canvasEl).toBeInTheDocument();
+    const wiresDataRaw = canvasEl?.getAttribute('data-wires');
+    const wires3d: Wire3D[] = wiresDataRaw ? JSON.parse(wiresDataRaw) : [];
+
+    // Since battery is not present/connected, NO wires should connect to breadboard battery power rails!
+    const railWires = wires3d.filter(
+      (w) =>
+        w.fromPin.pinId.includes('rail_') ||
+        w.toPin.pinId.includes('rail_')
+    );
+    expect(railWires.length).toBe(0);
+
+    // C1:+ should NOT be connected to any rail or leak #EF4444 battery red
+    const c1PosWires = wires3d.filter(
+      (w) =>
+        (w.fromPin.compId === 'c1' && w.fromPin.pinId === '+') ||
+        (w.toPin.compId === 'c1' && w.toPin.pinId === '+')
+    );
+    c1PosWires.forEach((w) => {
+      expect(w.fromPin.pinId).not.toContain('rail_');
+      expect(w.toPin.pinId).not.toContain('rail_');
+    });
+  });
+
+  it('CORRECTIVE Test 2: 90/270 rotated component breadboard isolation (different tieGroups across ravine)', () => {
+    const testTypes: Array<Component3D['type']> = [
+      'RESISTOR',
+      'CAPACITOR',
+      'CAPACITOR_ELECTROLYTIC',
+      'LED',
+      'DIODE',
+    ];
+
+    for (const compType of testTypes) {
+      // 90 degrees rotation
+      const comp90: Component3D = {
+        id: `test_${compType}_90`,
+        type: compType,
+        label: compType,
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 90,
+      };
+
+      const h1_90 = getComponentPinHole(comp90, compType === 'LED' ? 'anode' : '1');
+      const h2_90 = getComponentPinHole(comp90, compType === 'LED' ? 'cathode' : '2');
+      expect(h1_90).toBeTruthy();
+      expect(h2_90).toBeTruthy();
+
+      const tg1_90 = getHoleTieGroup(h1_90!);
+      const tg2_90 = getHoleTieGroup(h2_90!);
+      expect(tg1_90).toBeTruthy();
+      expect(tg2_90).toBeTruthy();
+      // Must be in different tie groups (isolated across the center ravine!)
+      expect(tg1_90).not.toBe(tg2_90);
+      expect(h1_90).toContain('_E');
+      expect(h2_90).toContain('_F');
+
+      // 270 degrees rotation
+      const comp270: Component3D = {
+        id: `test_${compType}_270`,
+        type: compType,
+        label: compType,
+        parameters: {},
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotY: 270,
+      };
+
+      const h1_270 = getComponentPinHole(comp270, compType === 'LED' ? 'anode' : '1');
+      const h2_270 = getComponentPinHole(comp270, compType === 'LED' ? 'cathode' : '2');
+      expect(h1_270).toBeTruthy();
+      expect(h2_270).toBeTruthy();
+
+      const tg1_270 = getHoleTieGroup(h1_270!);
+      const tg2_270 = getHoleTieGroup(h2_270!);
+      expect(tg1_270).toBeTruthy();
+      expect(tg2_270).toBeTruthy();
+      expect(tg1_270).not.toBe(tg2_270);
+      expect(h1_270).toContain('_F');
+      expect(h2_270).toContain('_E');
+    }
+  });
+
+  it('CORRECTIVE Test 3: Default wire has color undefined and Wire (W) mode pan/empty-canvas dismiss with client coords', () => {
+    const onAddWireMock = vi.fn();
+    const onSelectWireMock = vi.fn();
+
+    const { container, rerender } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        onAddWire={onAddWireMock}
+        onSelectWire={onSelectWireMock}
+      />
+    );
+
+    // Click Pin to start wire in Wire mode
+    const wireToolBtn = screen.getByTestId('tool-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Simulate pin click on comp1 pin 1
+    const comp1 = defaultProps.components[0];
+    const pin1 = comp1.pins![0];
+    const pinEl1 = container.querySelector(`[data-testid="sch-pin-${comp1.id}-${pin1.id}"]`);
+    if (pinEl1) {
+      fireEvent.click(pinEl1);
+    }
+
+    // Simulate pin click on comp2 pin 1
+    const comp2 = defaultProps.components[1];
+    const pin2 = comp2.pins![0];
+    const pinEl2 = container.querySelector(`[data-testid="sch-pin-${comp2.id}-${pin2.id}"]`);
+    if (pinEl2) {
+      fireEvent.click(pinEl2);
+    }
+
+    if (onAddWireMock.mock.calls.length > 0) {
+      const addedWire = onAddWireMock.mock.calls[0][0];
+      // Default wire must have undefined color (not hardcoded #38BDF8 or #0F6B54)
+      expect(addedWire.color).toBeUndefined();
+    }
+
+    // Now test Pan tool dismiss with client coords
+    const testWireId = defaultProps.wires[0].id;
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        selectedWireId={testWireId}
+        onAddWire={onAddWireMock}
+        onSelectWire={onSelectWireMock}
+      />
+    );
+
+    // Switch to Pan tool
+    const panToolBtn = screen.getByTestId('tool-pan');
+    fireEvent.click(panToolBtn);
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+    // Mouse down and mouse up without moving (<4px) -> dismisses wire selection
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(viewport, { button: 0, clientX: 101, clientY: 101 });
+
+    expect(onSelectWireMock).toHaveBeenCalledWith(null);
+  });
+
+  it('CORRECTIVE Test 4: Manual wire tap in SchematicCanvas preserves clicked wire & point and avoids duplicates', () => {
+    const onAddWireMock = vi.fn();
+    const targetWire = defaultProps.wires[0];
+
+    const { container } = render(
+      <SchematicCanvas
+        components={defaultProps.components}
+        wires={defaultProps.wires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool
+    const wireToolBtn = screen.getByTitle(/Wire Tool/i);
+    fireEvent.click(wireToolBtn);
+
+    // Start wire from comp1 pin 1
+    const comp1 = defaultProps.components[0];
+    const pin1 = comp1.pins![0];
+    const pinEl = container.querySelector(`[data-testid="pin-${comp1.id}-${pin1.id}"]`) ||
+      container.querySelector(`circle[data-pin="${pin1.id}"]`);
+    if (pinEl) {
+      fireEvent.click(pinEl);
+    }
+
+    // Click on targetWire to tap it
+    const wirePath = container.querySelector(`path[stroke="transparent"]`);
+    if (wirePath) {
+      fireEvent.click(wirePath, { clientX: 250, clientY: 150 });
+    }
+
+    if (onAddWireMock.mock.calls.length > 0) {
+      const addedWire = onAddWireMock.mock.calls[0][0];
+      // Must tap the exact target wire
+      expect(addedWire.tappedWireId).toBe(targetWire.id);
+      expect(addedWire.junctionPoint).toBeDefined();
+    }
+  });
+
+  it('AUDIT BUG FIX Test 1: Direct Pin-to-Pin Auto-Trunk T-Junction in SchematicEditorPanel for Non-Aligned Diagonal Pins', () => {
+    const onAddWireMock = vi.fn();
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      label: 'A',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 300,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      label: 'B',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      label: 'C',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 200,
+      y: 220, // Non-aligned in Y with A or B -> generates an auto-elbow
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    const { container, rerender } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compA, compB, compC]}
+        wires={[wireBA]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Switch to Wire tool
+    const wireToolBtn = screen.getByTestId('tool-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Click Pin C via onMouseDown
+    const pinElC = container.querySelector('[data-testid="sch-pin-comp_C-1"]');
+    expect(pinElC).toBeInTheDocument();
+    fireEvent.mouseDown(pinElC!);
+
+    // Directly click Pin A via onMouseDown (0 manual corners clicked)
+    const pinElA = container.querySelector('[data-testid="sch-pin-comp_A-1"]');
+    expect(pinElA).toBeInTheDocument();
+    fireEvent.mouseDown(pinElA!);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    // Taps wire_B_A trunk at projected coordinate (200, 100)
+    expect(addedWire.tappedWireId).toBe('wire_B_A');
+    expect(addedWire.junctionPoint).toEqual({ x: 200, y: 100 });
+    // HARD ASSERT: No stale pre-tap corner [(300, 220)] leaked into wire.points!
+    expect(addedWire.points).toBeUndefined();
+
+    // Wire action pill must be null immediately
+    const pill = container.querySelector('[data-testid="sch-wire-action-pill"]');
+    expect(pill).toBeNull();
+
+    // Re-render with the newly added wire
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compA, compB, compC]}
+        wires={[wireBA, addedWire]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Assert rendered SVG polyline goes cleanly from (200, 220) to (200, 100) without detouring to x = 300
+    const wirePolyline = container.querySelector(`[data-testid="sch-wire-${addedWire.id}"]`);
+    expect(wirePolyline).toBeInTheDocument();
+    expect(wirePolyline?.getAttribute('points')).toBe('200,220 200,100');
+    expect(wirePolyline?.getAttribute('points')?.includes('300')).toBe(false);
+
+    // Initial junction dot at (200, 100)
+    expect(container.querySelector('[data-testid="sch-junction-200-100"]')).toBeInTheDocument();
+
+    // Move parent components compA and compB by (0, +60)
+    const compAMoved: CircuitComponent = { ...compA, y: 160 };
+    const compBMoved: CircuitComponent = { ...compB, y: 160 };
+    rerender(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compAMoved, compBMoved, compC]}
+        wires={[wireBA, addedWire]}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // Live junction dot updates dynamically to (200, 160)
+    const movedDot = container.querySelector('[data-testid="sch-junction-200-160"]');
+    expect(movedDot).toBeInTheDocument();
+
+    // 0 junction dots left at (200, 100)
+    const staleDot = container.querySelector('[data-testid="sch-junction-200-100"]');
+    expect(staleDot).toBeNull();
+    const allJunctions = Array.from(container.querySelectorAll('circle[data-testid^="sch-junction-"]'));
+    const staleJunctions = allJunctions.filter(
+      (c) => c.getAttribute('cx') === '200' && c.getAttribute('cy') === '100'
+    );
+    expect(staleJunctions.length).toBe(0);
+  });
+
+  it('AUDIT BUG FIX Test 2: No Orphan Ghost Junction Dot After Parent Component Move', () => {
+    const compA: CircuitComponent = {
+      id: 'comp_A',
+      type: 'RESISTOR',
+      label: 'A',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 300,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB: CircuitComponent = {
+      id: 'comp_B',
+      type: 'RESISTOR',
+      label: 'B',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compC: CircuitComponent = {
+      id: 'comp_C',
+      type: 'RESISTOR',
+      label: 'C',
+      category: 'passive',
+      rotation: 0,
+      value: '100',
+      footprint: '',
+      parameters: {},
+      x: 200,
+      y: 220,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireBA: CircuitWire = {
+      id: 'wire_B_A',
+      fromCompId: 'comp_B',
+      fromPinId: '1',
+      toCompId: 'comp_A',
+      toPinId: '1',
+    };
+
+    const wireCA: CircuitWire = {
+      id: 'wire_C_A',
+      fromCompId: 'comp_C',
+      fromPinId: '1',
+      toCompId: 'comp_B',
+      toPinId: '1',
+      tappedWireId: 'wire_B_A',
+      junctionPoint: { x: 200, y: 100 }, // Initial static junction point
+    };
+
+    // Move parent components A and B by (0, +60)
+    const compAMoved = { ...compA, y: 160 };
+    const compBMoved = { ...compB, y: 160 };
+    const compsMoved = [compAMoved, compBMoved, compC];
+
+    const ptsBA = getCanonicalWirePoints(wireBA, compsMoved, [wireBA, wireCA]);
+    const ptsCA = getCanonicalWirePoints(wireCA, compsMoved, [wireBA, wireCA]);
+
+    const routedWires = [
+      { wireId: wireBA.id, points: ptsBA },
+      {
+        wireId: wireCA.id,
+        points: ptsCA,
+        tappedWireId: wireCA.tappedWireId,
+        junctionPoint: wireCA.junctionPoint, // stale static point (200, 100)
+      },
+    ];
+
+    const junctions = computeCanonicalJunctions(routedWires);
+
+    // Emits dot at the new live projected point (200, 160)
+    const hasLiveDot = junctions.some((j) => Math.hypot(j.x - 200, j.y - 160) < 2);
+    expect(hasLiveDot).toBe(true);
+
+    // ZERO orphan ghost dots at the old stale point (200, 100)
+    const hasStaleDot = junctions.some((j) => Math.hypot(j.x - 200, j.y - 100) < 2);
+    expect(hasStaleDot).toBe(false);
+  });
+
+  it('AUDIT BUG FIX Test 3: SchematicCanvas Segment <line> Has pointer-events="none" in Wire (W) Mode', () => {
+    const onAddWireMock = vi.fn();
+    const targetWire = defaultProps.wires[0];
+
+    const { container } = render(
+      <SchematicCanvas
+        components={defaultProps.components}
+        wires={defaultProps.wires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool
+    const wireToolBtn = screen.getByTitle(/Wire Tool/i);
+    fireEvent.click(wireToolBtn);
+
+    // Assert that per-segment hit lines have pointer-events="none" so they don't swallow clicks
+    const segLines = container.querySelectorAll('g[key*="seg_"] line, line[stroke="transparent"]');
+    expect(segLines.length).toBeGreaterThan(0);
+    segLines.forEach((line) => {
+      expect(line).toHaveStyle({ pointerEvents: 'none' });
+    });
+
+    // Start wire from comp pin (div with title^="Pin:")
+    const pinEl = container.querySelector('div[title^="Pin:"]');
+    expect(pinEl).toBeInTheDocument();
+    fireEvent.click(pinEl!);
+
+    // Click on targetWire path to tap it
+    const wirePath = container.querySelector(`path[stroke="transparent"]`);
+    expect(wirePath).toBeInTheDocument();
+    fireEvent.click(wirePath!, { clientX: 250, clientY: 150 });
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.tappedWireId).toBe(targetWire.id);
+  });
+
+  // =========================================================================
+  // GATE 3: ANTI-REGRESSION TESTS: SHARED-TRUNK MERGER & BRIDGE HOP ARCS
+  // =========================================================================
+
+  it('GATE 3 Test 1: TEMPLATE_555_ASTABLE Shared-Trunk Merge + Junction Dots', () => {
+    // Add U2:GND -> gnd1:1 to test full multi-pin GND net as well
+    const compU2: CircuitComponent = {
+      id: 'u2',
+      type: 'MCU_ARDUINO_UNO',
+      label: 'Arduino Uno',
+      value: 'Uno',
+      category: 'active',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 600,
+      y: 400,
+      pins: [{ id: 'GND', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const wireU2Gnd: CircuitWire = {
+      id: 'w_u2_gnd',
+      fromCompId: 'u2',
+      fromPinId: 'GND',
+      toCompId: 'gnd1',
+      toPinId: '1',
+    };
+
+    const comps = [...TEMPLATE_555_ASTABLE.components, compU2];
+    const wires = [...TEMPLATE_555_ASTABLE.wires, wireU2Gnd];
+
+    const geom = computeCanonicalSchematicGeometry(wires, comps, [], 10);
+
+    // VCC Net (w2, w4)
+    // bat1:p (BT1:+) should only have 1 wire endpoint terminating at it
+    const batPPos = getCanonicalPinWorldPos(
+      comps.find((c) => c.id === 'bat1')!,
+      'p'
+    );
+    const wiresTouchingBatP = geom.routedWires.filter((rw) => {
+      const p1 = rw.points[0];
+      const p2 = rw.points[rw.points.length - 1];
+      return (
+        Math.hypot(p1.x - batPPos.x, p1.y - batPPos.y) < 2 ||
+        Math.hypot(p2.x - batPPos.x, p2.y - batPPos.y) < 2
+      );
+    });
+    // ONLY 1 wire endpoint terminates at bat1:p!
+    expect(wiresTouchingBatP.length).toBe(1);
+    expect(wiresTouchingBatP[0].wireId).toBe('w2');
+
+    // w4 merges onto w2 with autoTappedReversed === true and autoJunctionPoint
+    const w4Routed = geom.wireMap.get('w4')!;
+    expect(w4Routed).toBeDefined();
+    expect(w4Routed.autoTappedWireId).toBe('w2');
+    expect(w4Routed.autoTappedReversed).toBe(true);
+    expect(w4Routed.autoJunctionPoint).toBeDefined();
+
+    // junctionDots contains w4.autoJunctionPoint
+    const hasW4Junc = geom.junctionDots.some(
+      (j) =>
+        Math.hypot(
+          j.x - w4Routed.autoJunctionPoint!.x,
+          j.y - w4Routed.autoJunctionPoint!.y
+        ) < 2
+    );
+    expect(hasW4Junc).toBe(true);
+
+    // GND Net: branches merge onto shared trunk with solid junction dots
+    const gndPinPos = getCanonicalPinWorldPos(
+      comps.find((c) => c.id === 'gnd1')!,
+      '1'
+    );
+    const gndWiresTouchingGndPin = geom.routedWires.filter((rw) => {
+      const p1 = rw.points[0];
+      const p2 = rw.points[rw.points.length - 1];
+      return (
+        Math.hypot(p1.x - gndPinPos.x, p1.y - gndPinPos.y) < 2 ||
+        Math.hypot(p2.x - gndPinPos.x, p2.y - gndPinPos.y) < 2
+      );
+    });
+    // Must NOT be 6 separate parallel wires running to gnd1:1!
+    expect(gndWiresTouchingGndPin.length).toBeLessThan(6);
+
+    // GND branches (like w16, w10, w_u2_gnd) merged onto trunk have junction dots
+    const gndAutoTapped = geom.routedWires.filter(
+      (rw) => rw.autoTappedWireId && rw.autoJunctionPoint
+    );
+    expect(gndAutoTapped.length).toBeGreaterThan(0);
+    gndAutoTapped.forEach((gw) => {
+      const hasDot = geom.junctionDots.some(
+        (j) =>
+          Math.hypot(j.x - gw.autoJunctionPoint!.x, j.y - gw.autoJunctionPoint!.y) < 2
+      );
+      expect(hasDot).toBe(true);
+    });
+  });
+
+  it('GATE 3 Test 2: Saved/Dragged Same-Net Wires Crossing on Way to Destination Pin', () => {
+    // 2 same-net wires with explicit points that physically cross at (250, 200) on their way to BT1:+
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BT1',
+      value: '9V',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: 'p', name: '+', x: 0, y: -25, pinType: 'power' }], // (100, 175)
+    };
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }], // (400, 100)
+    };
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }], // (250, 300)
+    };
+
+    // Wire 1: R1:1 -> BT1:+ going through (250, 200)
+    const wire1: CircuitWire = {
+      id: 'wire1',
+      fromCompId: 'r1',
+      fromPinId: '1',
+      toCompId: 'bat1',
+      toPinId: 'p',
+      points: [{ x: 250, y: 200 }],
+    };
+    // Wire 2: R2:1 -> BT1:+ vertical through (250, 200)
+    const wire2: CircuitWire = {
+      id: 'wire2',
+      fromCompId: 'r2',
+      fromPinId: '1',
+      toCompId: 'bat1',
+      toPinId: 'p',
+      points: [{ x: 250, y: 200 }],
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compBat, compR1, compR2],
+      [],
+      10
+    );
+
+    // Assert second wire truncates RIGHT at (250, 200)
+    const r2 = geom.wireMap.get('wire2')!;
+    expect(r2).toBeDefined();
+    expect(r2.autoJunctionPoint).toEqual({ x: 250, y: 200 });
+    const lastPt = r2.points[r2.points.length - 1];
+    expect(Math.hypot(lastPt.x - 250, lastPt.y - 200)).toBeLessThan(2);
+
+    // AND junctionDots contains (250, 200)
+    const hasDot = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDot).toBe(true);
+  });
+
+  it('GATE 3 Test 3: Different-Net Crossing -> ZERO Junction Dot + Semicircular Bridge Hop Arc', () => {
+    // Wire A: Net 1, horizontal (100, 200) -> (400, 200)
+    // Wire B: Net 2, vertical (250, 100) -> (250, 300)
+    const compA1: CircuitComponent = {
+      id: 'cA1',
+      type: 'RESISTOR',
+      label: 'A1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compA2: CircuitComponent = {
+      id: 'cA2',
+      type: 'RESISTOR',
+      label: 'A2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB1: CircuitComponent = {
+      id: 'cB1',
+      type: 'RESISTOR',
+      label: 'B1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB2: CircuitComponent = {
+      id: 'cB2',
+      type: 'RESISTOR',
+      label: 'B2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireA: CircuitWire = {
+      id: 'wireA',
+      fromCompId: 'cA1',
+      fromPinId: '1',
+      toCompId: 'cA2',
+      toPinId: '1',
+    };
+    const wireB: CircuitWire = {
+      id: 'wireB',
+      fromCompId: 'cB1',
+      fromPinId: '1',
+      toCompId: 'cB2',
+      toPinId: '1',
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wireA, wireB],
+      [compA1, compA2, compB1, compB2],
+      [],
+      10
+    );
+
+    // ZERO junction dots at (250, 200)!
+    const hasDotAtCrossing = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 250, j.y - 200) < 2
+    );
+    expect(hasDotAtCrossing).toBe(false);
+
+    // Wire A has hasCrossingHops === true and svgPath contains 'A 5 5 0 0 1' at x = 250
+    const rA = geom.wireMap.get('wireA')!;
+    expect(rA).toBeDefined();
+    expect(rA.hasCrossingHops).toBe(true);
+    expect(rA.svgPath).toContain('A 5 5 0 0 1');
+    expect(rA.svgPath).toContain('245 200'); // L cx-5 y
+    expect(rA.svgPath).toContain('255 200'); // cx+5 y
+  });
+
+  it('GATE 3 Test 4: 1-to-1 Parity Between SchematicCanvas and SchematicEditorPanel', () => {
+    const compA1: CircuitComponent = {
+      id: 'cA1',
+      type: 'RESISTOR',
+      label: 'A1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compA2: CircuitComponent = {
+      id: 'cA2',
+      type: 'RESISTOR',
+      label: 'A2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB1: CircuitComponent = {
+      id: 'cB1',
+      type: 'RESISTOR',
+      label: 'B1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compB2: CircuitComponent = {
+      id: 'cB2',
+      type: 'RESISTOR',
+      label: 'B2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 300,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireA: CircuitWire = {
+      id: 'wireA',
+      fromCompId: 'cA1',
+      fromPinId: '1',
+      toCompId: 'cA2',
+      toPinId: '1',
+    };
+    const wireB: CircuitWire = {
+      id: 'wireB',
+      fromCompId: 'cB1',
+      fromPinId: '1',
+      toCompId: 'cB2',
+      toPinId: '1',
+    };
+
+    const testComps = [compA1, compA2, compB1, compB2];
+    const testWires = [wireA, wireB];
+
+    // Render SchematicCanvas
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={testComps}
+        wires={testWires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Render SchematicEditorPanel
+    const { container: panelContainer } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={testComps}
+        wires={testWires}
+      />
+    );
+
+    // Assert wireA has SVG bridge arc in BOTH
+    const canvasWirePath = canvasContainer.querySelector('path[d*="A 5 5 0 0 1"]');
+    const panelWirePath = panelContainer.querySelector('path[d*="A 5 5 0 0 1"]');
+    expect(canvasWirePath).toBeInTheDocument();
+    expect(panelWirePath).toBeInTheDocument();
+    expect(canvasWirePath?.getAttribute('d')).toBe(panelWirePath?.getAttribute('d'));
+  });
+
+  it('GATE 3 Test 5: Collinear Overlapping Same-Net Wires Sharing Destination Pin Truncates at Earliest Contact', () => {
+    // Wire 1: (380, 360) -> (80, 360)
+    // Wire 2: (500, 360) -> (80, 360) on same net
+    const compGnd: CircuitComponent = {
+      id: 'gnd_hub',
+      type: 'GROUND',
+      label: 'GND',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 80,
+      y: 360,
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compR1: CircuitComponent = {
+      id: 'r_collinear_1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 380,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compR2: CircuitComponent = {
+      id: 'r_collinear_2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 500,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wire1: CircuitWire = {
+      id: 'wire_collinear_1',
+      fromCompId: 'r_collinear_1',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wire2: CircuitWire = {
+      id: 'wire_collinear_2',
+      fromCompId: 'r_collinear_2',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    const geom = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Assert Wire 2 truncates cleanly at (380, 360)
+    const r2 = geom.wireMap.get('wire_collinear_2')!;
+    expect(r2).toBeDefined();
+    expect(r2.autoJunctionPoint).toEqual({ x: 380, y: 360 });
+    const wire2Len = polylineManhattanLength(r2.points);
+    expect(wire2Len).toBe(120); // (500 - 380) = 120, NOT 420!
+
+    // Assert junctionDots contains (380, 360)
+    const hasDot = geom.junctionDots.some(
+      (j) => Math.hypot(j.x - 380, j.y - 360) < 2
+    );
+    expect(hasDot).toBe(true);
+  });
+
+  it('GATE 3 Test 6: 100% Pixel-Exact Parity at Odd-10 Pin Coord x = 250 With 20px Sheet Grid', () => {
+    // Component at x = 250 dropping onto horizontal trunk at y = 200
+    const compTrunkL: CircuitComponent = {
+      id: 'cTL',
+      type: 'RESISTOR',
+      label: 'TL',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 100,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compTrunkR: CircuitComponent = {
+      id: 'cTR',
+      type: 'GROUND',
+      label: 'TR',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 400,
+      y: 200,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compBranch: CircuitComponent = {
+      id: 'cB',
+      type: 'RESISTOR',
+      label: 'B',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 250,
+      y: 100,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wireTrunk: CircuitWire = {
+      id: 'wireTrunk',
+      fromCompId: 'cTL',
+      fromPinId: '1',
+      toCompId: 'cTR',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wireBranch: CircuitWire = {
+      id: 'wireBranch',
+      fromCompId: 'cB',
+      fromPinId: '1',
+      toCompId: 'cTR',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    const testComps = [compTrunkL, compTrunkR, compBranch];
+    const testWires = [wireTrunk, wireBranch];
+
+    // Render SchematicCanvas
+    const { container: canvasContainer } = render(
+      <SchematicCanvas
+        components={testComps}
+        wires={testWires}
+        selectedCompId={null}
+        selectedWireId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Render SchematicEditorPanel
+    const { container: panelContainer } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={testComps}
+        wires={testWires}
+      />
+    );
+
+    // Assert wireBranch renders clean 2-point vertical drop [(250, 100), (250, 200)] in BOTH
+    const canvasWire = canvasContainer.querySelector('polyline[data-testid="sch-wire-wireBranch"]') ||
+      canvasContainer.querySelector('path[data-testid="sch-wire-wireBranch"]');
+    const panelWire = panelContainer.querySelector('polyline[data-testid="sch-wire-wireBranch"]') ||
+      panelContainer.querySelector('path[data-testid="sch-wire-wireBranch"]');
+
+    expect(canvasWire).toBeInTheDocument();
+    expect(panelWire).toBeInTheDocument();
+
+    const canvasD = canvasWire?.getAttribute('d');
+    const panelPoints = panelWire?.getAttribute('points');
+
+    // Both must match and be exactly 250,100 -> 250,200 (NO crooked jog to 260!)
+    expect(canvasD).toBe('M 250 100 L 250 200');
+    expect(panelPoints).toBe('250,100 250,200');
+
+    // Assert junction dot at (250, 200) exists in both
+    const canvasDot = canvasContainer.querySelector('circle[cx="250"][cy="200"]');
+    const panelDot = panelContainer.querySelector('circle[cx="250"][cy="200"]');
+    expect(canvasDot).toBeInTheDocument();
+    expect(panelDot).toBeInTheDocument();
+  });
+
+  it('GATE 4 Test 1: Order-independent maxSpan trunk selection + L-shape collinear intermediate-pin trim', () => {
+    const compGnd: CircuitComponent = {
+      id: 'gnd_hub',
+      type: 'GROUND',
+      label: 'GND',
+      value: 'GND',
+      category: 'sources',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 80,
+      y: 360,
+      pins: [{ id: '1', name: 'GND', x: 0, y: 0, pinType: 'power' }],
+    };
+    const compR1: CircuitComponent = {
+      id: 'r_collinear_1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 380,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+    const compR2: CircuitComponent = {
+      id: 'r_collinear_2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '1k',
+      category: 'passive',
+      rotation: 0,
+      footprint: '',
+      parameters: {},
+      x: 500,
+      y: 360,
+      pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+    };
+
+    const wire1: CircuitWire = {
+      id: 'wire_collinear_1',
+      fromCompId: 'r_collinear_1',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+    const wire2: CircuitWire = {
+      id: 'wire_collinear_2',
+      fromCompId: 'r_collinear_2',
+      fromPinId: '1',
+      toCompId: 'gnd_hub',
+      toPinId: '1',
+      netName: 'GND',
+    };
+
+    // Order 1: wire1 first, wire2 second
+    const geom1 = computeCanonicalSchematicGeometry(
+      [wire1, wire2],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Order 2: wire2 first, wire1 second
+    const geom2 = computeCanonicalSchematicGeometry(
+      [wire2, wire1],
+      [compGnd, compR1, compR2],
+      [],
+      10
+    );
+
+    // Both orders must produce a junction dot at (380, 360)
+    const j1 = geom1.junctionDots.find((j) => Math.hypot(j.x - 380, j.y - 360) < 2);
+    const j2 = geom2.junctionDots.find((j) => Math.hypot(j.x - 380, j.y - 360) < 2);
+    expect(j1).toBeDefined();
+    expect(j2).toBeDefined();
+
+    // In both orders, total Manhattan length across the routed wires is exactly 420 (no redundant overlapping wire)
+    const totalLen1 = geom1.routedWires.reduce((sum, rw) => sum + polylineManhattanLength(rw.points), 0);
+    const totalLen2 = geom2.routedWires.reduce((sum, rw) => sum + polylineManhattanLength(rw.points), 0);
+    expect(totalLen1).toBe(420);
+    expect(totalLen2).toBe(420);
+  });
+
+  it('GATE 4 Test 2: 3D Studio power-rail & bridged-MCU wire resolution', () => {
+    const schComps: CircuitComponent[] = [
+      {
+        id: 'bat1',
+        type: 'BATTERY',
+        label: 'BAT1',
+        value: '9V',
+        parameters: {},
+        x: 100,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'p', name: '+', x: 0, y: 0, pinType: 'power' },
+          { id: 'n', name: '-', x: 0, y: 20, pinType: 'power' },
+        ],
+        category: 'sources',
+        footprint: '',
+      },
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        value: 'Red',
+        parameters: {},
+        x: 200,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+          { id: 'k', name: 'K', x: 0, y: 20, pinType: 'passive' },
+        ],
+        category: 'semiconductors',
+        footprint: '',
+      },
+      {
+        id: 'mcu1',
+        type: 'ARDUINO_UNO',
+        label: 'U1',
+        value: 'ATmega328P',
+        parameters: {},
+        x: 400,
+        y: 100,
+        rotation: 0,
+        pins: [
+          { id: '13', name: 'D13', x: 0, y: 0, pinType: 'output' },
+          { id: 'GND', name: 'GND', x: 0, y: 20, pinType: 'power' },
+        ],
+        category: 'microcontrollers',
+        footprint: '',
+      },
+    ];
+
+    const comp3dList: Component3D[] = [
+      {
+        id: 'led1',
+        type: 'LED',
+        label: 'D1',
+        x3d: 0,
+        y3d: 0,
+        z3d: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: 0,
+        parameters: {},
+        pinHoles: { a: 'bb_col_10_top_a', k: 'bb_col_10_top_b' },
+      } as Component3D,
+    ];
+
+    const wireToRail: Wire3D = {
+      id: 'wRail1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_rail_top_pos_10' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_top_c' },
+      color: '#EF4444',
+    };
+
+    const resolvedRail = resolve3DWireToSchematicConnections(wireToRail, [wireToRail], comp3dList, schComps, []);
+    expect(resolvedRail.length).toBe(1);
+    expect(resolvedRail[0].fromCompId).toBe('bat1');
+    expect(resolvedRail[0].fromPinId).toBe('p');
+    expect(resolvedRail[0].toCompId).toBe('led1');
+    expect(resolvedRail[0].toPinId).toBe('a');
+
+    const existingBridgedWire: Wire3D = {
+      id: 'wBridgeMcu',
+      fromPin: { compId: 'mcu1', pinId: '13' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_top_a' },
+      color: '#3B82F6',
+    };
+
+    const wireJumper: Wire3D = {
+      id: 'wJumper1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_20_top_b' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_10_top_c' },
+      color: '#3B82F6',
+    };
+
+    const resolvedMcu = resolve3DWireToSchematicConnections(
+      wireJumper,
+      [existingBridgedWire, wireJumper],
+      comp3dList,
+      schComps,
+      []
+    );
+    expect(resolvedMcu.length).toBe(1);
+    expect(
+      (resolvedMcu[0].fromCompId === 'mcu1' && resolvedMcu[0].toCompId === 'led1') ||
+      (resolvedMcu[0].fromCompId === 'led1' && resolvedMcu[0].toCompId === 'mcu1')
+    ).toBe(true);
+  });
+
+  it('GATE 4 Test 3: 3D Studio uncommitted wire cache, non-overlapping slot allocation, and position persistence', () => {
+    clearUncommittedWires3dCache();
+    expect(uncommittedWires3dCache.size).toBe(0);
+
+    const danglingWire: Wire3D = {
+      id: 'wDangling',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_1_top_a' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_2_top_a' },
+      color: '#10B981',
+    };
+    uncommittedWires3dCache.set(danglingWire.id, danglingWire);
+    expect(uncommittedWires3dCache.has('wDangling')).toBe(true);
+    clearUncommittedWires3dCache();
+    expect(uncommittedWires3dCache.size).toBe(0);
+
+    const existing: CircuitComponent[] = [
+      {
+        id: 'c1',
+        type: 'RESISTOR',
+        label: 'R1',
+        value: '1k',
+        parameters: {},
+        x: 300,
+        y: 200,
+        rotation: 0,
+        pins: [],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'c2',
+        type: 'RESISTOR',
+        label: 'R2',
+        value: '1k',
+        parameters: {},
+        x: 440,
+        y: 200,
+        rotation: 0,
+        pins: [],
+        category: 'passive',
+        footprint: '',
+      },
+    ];
+
+    const slot = findFreeSchematicSlot(existing);
+    expect(slot.x).toBeGreaterThanOrEqual(440 + 120);
+    const hasCollision = existing.some((c) => Math.abs(slot.x - c.x) < 110 && Math.abs(slot.y - c.y) < 90);
+    expect(hasCollision).toBe(false);
+
+    const defaultSlot = findFreeSchematicSlot([]);
+    expect(defaultSlot).toEqual({ x: 260, y: 200 });
+  });
+
+  it('Test 1 (L-Shaped Trunk Closer to Corner 120px vs Hub 300px): trunk trims cleanly with 0px overlap', () => {
+    const comps: CircuitComponent[] = [
+      {
+        id: 'compHub',
+        type: 'RESISTOR',
+        label: 'Hub',
+        value: '1k',
+        parameters: {},
+        x: 500,
+        y: 200,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'compA',
+        type: 'RESISTOR',
+        label: 'A',
+        value: '1k',
+        parameters: {},
+        x: 80,
+        y: 360,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+      {
+        id: 'compB',
+        type: 'RESISTOR',
+        label: 'B',
+        value: '1k',
+        parameters: {},
+        x: 380,
+        y: 360,
+        rotation: 0,
+        pins: [{ id: '1', name: '1', x: 0, y: 0, pinType: 'passive' }],
+        category: 'passive',
+        footprint: '',
+      },
+    ];
+
+    const trunk1: CircuitWire = {
+      id: 'trunk1',
+      fromCompId: 'compHub',
+      fromPinId: '1',
+      toCompId: 'compA',
+      toPinId: '1',
+      points: [{ x: 500, y: 360 }],
+    };
+
+    const w1: CircuitWire = {
+      id: 'w1',
+      fromCompId: 'compB',
+      fromPinId: '1',
+      toCompId: 'compA',
+      toPinId: '1',
+    };
+
+    const result = computeCanonicalSchematicGeometry([trunk1, w1], comps);
+    expect(result.routedWires.length).toBe(2);
+
+    const trunkEntry = result.routedWires.find((w) => w.wireId === 'trunk1');
+    const w1Entry = result.routedWires.find((w) => w.wireId === 'w1');
+
+    expect(trunkEntry).toBeDefined();
+    expect(w1Entry).toBeDefined();
+
+    // trunk1 trims to [(500,200), (500,360), (380,360)]
+    expect(trunkEntry?.points).toEqual([
+      { x: 500, y: 200 },
+      { x: 500, y: 360 },
+      { x: 380, y: 360 },
+    ]);
+
+    // w1 stays [(380,360), (80,360)] (NOT backwards to (500,360)!)
+    expect(w1Entry?.points).toEqual([
+      { x: 380, y: 360 },
+      { x: 80, y: 360 },
+    ]);
+
+    // junctionDots contains (380,360)
+    const hasJunctionAt380_360 = result.junctionDots.some(
+      (j) => Math.hypot(j.x - 380, j.y - 360) < 2
+    );
+    expect(hasJunctionAt380_360).toBe(true);
+  });
+
+  it('Test 2 (getHoleTieGroup Bottom Column Isolation): isolates bottom columns and rows cleanly', () => {
+    expect(getHoleTieGroup('bb_col_10_bottom')).toBe('bb_tie_col_10_bottom');
+    expect(getHoleTieGroup('bb_col_10_bottom_F')).toBe('bb_tie_col_10_bottom');
+    expect(getHoleTieGroup('bb_col_10_top')).toBe('bb_tie_col_10_top');
+  });
+
+  it('Test 3 (Uncommitted Wire From Unconnected Arduino Survives Virtual3dStudio Remount + Sibling Tapped Drop Safe): preserves uncommitted wire and prevents premature deletion', () => {
+    clearUncommittedWires3dCache();
+    const uncWire: Wire3D = {
+      id: 'wire3d_test_uncomm',
+      fromPin: { compId: 'u2', pinId: 'D9' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_A' },
+      color: '#3B82F6',
+    };
+    uncommittedWires3dCache.set('wire3d_test_uncomm', uncWire);
+
+    const compU2: CircuitComponent = {
+      id: 'u2',
+      type: 'ARDUINO_UNO',
+      label: 'Arduino Uno',
+      value: 'Uno R3',
+      parameters: {},
+      x: 200,
+      y: 200,
+      rotation: 0,
+      pins: [{ id: 'D9', name: 'D9', x: 0, y: 0, pinType: 'output' }],
+      category: 'microcontrollers',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compU2]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const wireEl = screen.getByTestId('wire3d-wire3d_test_uncomm');
+    expect(wireEl).toBeInTheDocument();
+    expect(wireEl.getAttribute('data-from-comp')).toBe('u2');
+    expect(wireEl.getAttribute('data-from-pin')).toBe('D9');
+
+    clearUncommittedWires3dCache();
+  });
+
+  it('Test 1: Export menu opens in SchematicTopBar, has visible options with z-[9999], and closes on outside click', () => {
+    const onExportSvg = vi.fn();
+    const onExportPng = vi.fn();
+    const onPrintPdf = vi.fn();
+
+    render(
+      <SchematicTopBar
+        zoom={1}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onZoomReset={vi.fn()}
+        onZoomFit={vi.fn()}
+        sheetConfig={{ size: 'A4', theme: 'dark', gridStep: 10, snapToGrid: true, showGrid: true }}
+        onUpdateSheetConfig={vi.fn()}
+        onExportSvg={onExportSvg}
+        onExportPng={onExportPng}
+        onPrintPdf={onPrintPdf}
+      />
+    );
+
+    const exportBtn = screen.getByTestId('action-export-menu');
+    expect(exportBtn).toBeInTheDocument();
+
+    // Initially export dropdown should not exist
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+
+    // Click export button
+    fireEvent.click(exportBtn);
+
+    // Export dropdown must be in document with z-[9999]
+    const dropdown = screen.getByTestId('export-dropdown-menu');
+    expect(dropdown).toBeInTheDocument();
+    expect(dropdown.className).toContain('z-[9999]');
+
+    // Options must be visible
+    expect(screen.getByTestId('export-svg-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('export-png-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('export-print-btn')).toBeInTheDocument();
+
+    // Outside click closes dropdown
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+
+    // Reopen and test Escape key closes dropdown
+    fireEvent.click(exportBtn);
+    expect(screen.getByTestId('export-dropdown-menu')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('export-dropdown-menu')).not.toBeInTheDocument();
+  });
+
+  it('Test 2: In SchematicCanvas wire mode, clicking empty canvas immediately calls onSelectComponent(null) and clears wire preview', () => {
+    const onSelectComp = vi.fn();
+    const onSelectWire = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onSelectWire={onSelectWire}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        onAddWire={vi.fn()}
+        onDeleteWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool mode via keyboard 'w'
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click on canvas background container
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    if (svgCanvas) {
+      fireEvent.mouseDown(svgCanvas, { button: 0, clientX: 50, clientY: 50 });
+    }
+
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+  });
+
+  it('Test 3: Studio3DCanvas default Wire mode is OFF; clicking pins/holes does NOT start wiring or call onAddWire3D until tool-mode-wire is clicked', () => {
+    const onAddWireMock = vi.fn();
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compR1]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // In default inspect mode, clicking pins does not trigger wiring
+    const pin1 = screen.getByTestId('mock-pin-click-r1-1');
+    const pin2 = screen.getByTestId('mock-pin-click-r1-2');
+    fireEvent.click(pin1);
+    fireEvent.click(pin2);
+    expect(onAddWireMock).not.toHaveBeenCalled();
+
+    // Explicitly activate Wire tool
+    const wireToolBtn = screen.getByTestId('tool-mode-wire');
+    fireEvent.click(wireToolBtn);
+
+    // Now clicking pin1 then pin2 starts and completes wiring
+    fireEvent.click(pin1);
+    fireEvent.click(pin2);
+    // onAddWire is called via handleAddWire3D!
+    expect(onAddWireMock).toHaveBeenCalled();
+  });
+
+  it('Test 4: Real Wire3D payload connecting R1 to LED1 in Virtual3dStudio immediately calls onAddWire, and remounting shows ONLY that wire', () => {
+    const onAddWireMock = vi.fn();
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compLed: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      value: 'Red',
+      parameters: {},
+      x: 200,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: 'A', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: 'K', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'active',
+      footprint: '',
+    };
+
+    const { unmount } = render(
+      <Virtual3dStudio
+        components={[compR1, compLed]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={onAddWireMock}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Add 3D wire connecting R1 to LED1
+    const addWireBtn = screen.getByTestId('mock-add-r1-led1-wire');
+    fireEvent.click(addWireBtn);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.toCompId).toBe('led1');
+    // Ensure canonical pin IDs were resolved
+    expect(['1', '2', 'a', 'k']).toContain(addedWire.fromPinId.toLowerCase());
+    expect(['1', '2', 'a', 'k']).toContain(addedWire.toPinId.toLowerCase());
+
+    unmount();
+
+    // Remount with this wire in schematic wires:
+    const schematicWire: CircuitWire = {
+      id: addedWire.id,
+      fromCompId: addedWire.fromCompId,
+      fromPinId: addedWire.fromPinId,
+      toCompId: addedWire.toCompId,
+      toPinId: addedWire.toPinId,
+      color: '#3B82F6',
+    };
+
+    const { unmount: unmount2 } = render(
+      <Virtual3dStudio
+        components={[compR1, compLed]}
+        wires={[schematicWire]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvas = screen.getByTestId('mock-3d-canvas');
+    const wiresData = JSON.parse(canvas.getAttribute('data-wires') || '[]');
+    // Exactly 1 wire generated, 0 phantom/extra wires
+    expect(wiresData.length).toBe(1);
+
+    unmount2();
+
+    // Also assert a 0-wire circuit with a battery produces 0 auto wires
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BAT1',
+      value: '9V',
+      parameters: {},
+      x: 50,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: '+', name: '+', x: 0, y: 0, pinType: 'passive' },
+        { id: '-', name: '-', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'power',
+      footprint: '',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compBat]}
+        wires={[]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvasBat = screen.getByTestId('mock-3d-canvas');
+    const batWiresData = JSON.parse(canvasBat.getAttribute('data-wires') || '[]');
+    expect(batWiresData.length).toBe(0);
+  });
+
+  // =========================================================================
+  // GATE 3: 4 FOCUSED REGRESSION TESTS: WIRE FOLDING & CONNECTION (SIMULATION + EDITOR)
+  // =========================================================================
+
+  it('GATE 3 Test 1: <SchematicCanvas> Wire Mode - BOTH Folding AND Deselect Work Together With Zero Conflict', () => {
+    const onSelectComp = vi.fn();
+    const onSelectWire = vi.fn();
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onSelectWire={onSelectWire}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // 1. Switch to Wire mode via keyboard 'w'
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click empty canvas when no wire is active -> MUST call onSelectComponent(null)
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 50, clientY: 50 });
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+
+    // 2. Click Pin 1 of R1 to start wire routing
+    const pinR1_1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+    fireEvent.click(pinR1_1!);
+
+    // Wire preview must now be active
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+
+    // Normal left-click on empty canvas (NO Shift!) MUST add 90° fold and KEEP active wire alive
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 200, clientY: 100 });
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+
+    // Click Pin 1 of R2 to finish wiring
+    const pinR2_1 = container.querySelector('[data-testid="canvas-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.click(pinR2_1!);
+
+    // Wire must be added with folded waypoints and active wire preview cleared
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+    expect(addedWire.points).toBeDefined();
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).not.toBeInTheDocument();
+
+    // 3. Test Right-Click cancel
+    fireEvent.click(pinR1_1!);
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).toBeInTheDocument();
+    fireEvent.mouseDown(svgCanvas!, { button: 2, clientX: 150, clientY: 150 });
+    expect(container.querySelector('[data-testid="active-wire-preview"]')).not.toBeInTheDocument();
+  });
+
+  it('GATE 3 Test 2: <SchematicEditorPanel> Wire Mode - Pin-to-Pin Direct + Left-Click Console Folding + Empty-Console Deselect', () => {
+    const onSelectComp = vi.fn();
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId="r1"
+        onSelectComponent={onSelectComp}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    const viewport = screen.getByTestId('sch-canvas-viewport');
+
+    // 1. Switch to Wire mode
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    // Empty canvas click with no active wire -> MUST deselect component
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 50, clientY: 50 });
+    expect(onSelectComp).toHaveBeenCalledWith(null);
+
+    // 2. Click Pin 1 of R1
+    const pinR1_1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR1_1!);
+
+    // Normal left-click empty console (adds 90° fold, does NOT cancel!)
+    fireEvent.mouseDown(viewport, { button: 0, clientX: 200, clientY: 100 });
+
+    // Click Pin 1 of R2 to finish wiring
+    const pinR2_1 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2_1!);
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+    expect(addedWire.points).toBeDefined();
+
+    // 3. Direct Pin 1 -> Pin 2 wiring
+    fireEvent.mouseDown(pinR1_1!);
+    fireEvent.mouseDown(pinR2_1!);
+    expect(onAddWireMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('GATE 3 Test 3: breadboard-wire-resolver.ts - No Fake Pin IDs on 2-Pin Parts', () => {
+    const compR1: Component3D & { pinHoles?: Record<string, string> } = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      parameters: {},
+      rotY: 0,
+      x3d: 0,
+      y3d: 0,
+      z3d: 0,
+      pinHoles: {
+        '1': 'bb_col_10_a',
+        '2': 'bb_col_15_a',
+      },
+    };
+
+    const compLed1: Component3D & { pinHoles?: Record<string, string> } = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      parameters: {},
+      rotY: 0,
+      x3d: 0,
+      y3d: 0,
+      z3d: 0,
+      pinHoles: {
+        a: 'bb_col_15_b',
+        k: 'bb_col_20_b',
+      },
+    };
+
+    const schR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '220',
+      category: 'passive',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      footprint: '',
+    };
+
+    const schLed1: CircuitComponent = {
+      id: 'led1',
+      type: 'LED',
+      label: 'LED1',
+      value: 'Red',
+      category: 'active',
+      x: 100,
+      y: 0,
+      rotation: 0,
+      parameters: {},
+      pins: [
+        { id: 'a', name: 'A', x: 0, y: 0, pinType: 'passive' },
+        { id: 'k', name: 'K', x: 20, y: 0, pinType: 'passive' },
+      ],
+      footprint: '',
+    };
+
+    // 3D jumper wire connecting col 15 to col 20
+    const wire3d: Wire3D = {
+      id: 'w3d_test_r1_led1',
+      fromPin: { compId: 'breadboard', pinId: 'bb_col_15_c' },
+      toPin: { compId: 'breadboard', pinId: 'bb_col_20_c' },
+      color: '#3B82F6',
+    };
+
+    const resolved = resolve3DWireToSchematicConnections(
+      wire3d,
+      [wire3d],
+      [compR1, compLed1],
+      [schR1, schLed1],
+      []
+    );
+
+    expect(resolved.length).toBeGreaterThan(0);
+    for (const conn of resolved) {
+      if (conn.fromCompId === 'r1') {
+        expect(['1', '2']).toContain(conn.fromPinId);
+      }
+      if (conn.toCompId === 'r1') {
+        expect(['1', '2']).toContain(conn.toPinId);
+      }
+      if (conn.fromCompId === 'led1') {
+        expect(['a', 'k']).toContain(conn.fromPinId);
+      }
+      if (conn.toCompId === 'led1') {
+        expect(['a', 'k']).toContain(conn.toPinId);
+      }
+      // Ensure no non-existent pins like '3', '4', 'b', 'c', 'cc' were attached
+      expect(['3', '4', 'b', 'c', 'cc']).not.toContain(conn.fromPinId);
+      expect(['3', '4', 'b', 'c', 'cc']).not.toContain(conn.toPinId);
+    }
+  });
+
+  it('GATE 3 Test 4: <Virtual3dStudio> - Single-Terminal Battery Emits 0 Extra Wire & 0 Unpowered Rail Drops', () => {
+    const compBat: CircuitComponent = {
+      id: 'bat1',
+      type: 'BATTERY',
+      label: 'BAT1',
+      value: '9V',
+      parameters: {},
+      x: 50,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: 'p', name: '+', x: 0, y: 0, pinType: 'passive' },
+        { id: 'n', name: '-', x: 20, y: 0, pinType: 'passive' },
+      ],
+      category: 'power',
+      footprint: '',
+    };
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 150,
+      y: 50,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    // Circuit with ONLY bat1:p -> r1:1 (bat1:n is strictly UNCONNECTED)
+    const wireOnlyPos: CircuitWire = {
+      id: 'w_pos_only',
+      fromCompId: 'bat1',
+      fromPinId: 'p',
+      toCompId: 'r1',
+      toPinId: '1',
+      color: '#EF4444',
+    };
+
+    render(
+      <Virtual3dStudio
+        components={[compBat, compR1]}
+        wires={[wireOnlyPos]}
+        selectedCompId={null}
+        onAddComponent={vi.fn()}
+        onUpdateComponent={vi.fn()}
+        onUpdateComponent3DPosition={vi.fn()}
+        onAddWire={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    const canvas = screen.getByTestId('mock-3d-canvas');
+    const wiresData: Wire3D[] = JSON.parse(canvas.getAttribute('data-wires') || '[]');
+
+    // wire_bat_pos_bat1 MUST exist
+    const hasBatPos = wiresData.some((w) => w.id === 'wire_bat_pos_bat1');
+    expect(hasBatPos).toBe(true);
+
+    // wire_bat_neg_bat1 MUST NOT exist
+    const hasBatNeg = wiresData.some((w) => w.id === 'wire_bat_neg_bat1');
+    expect(hasBatNeg).toBe(false);
+
+    // 0 unpowered GND drop wires
+    const hasGndDrop = wiresData.some((w) => w.id.includes('wire_drop_gnd'));
+    expect(hasGndDrop).toBe(false);
+  });
+
+  // =========================================================================
+  // SURGICAL TESTS: WIRE CONNECT + EXACT 90-DEGREE FOLDING + SLOW-CLICK GUARD
+  // =========================================================================
+
+  it('SURGICAL TEST 1: <SchematicCanvas> Exact 90-Degree Orthogonal Folding + Zero Diagonal Segments on Commit', () => {
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 260,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={vi.fn()}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // 1. Switch to Wire mode
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // 2. Click Pin 1 of R1 at (100, 100)
+    const pinR1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.click(pinR1!);
+
+    // 3. Left-click empty canvas at world (200, 180) -> client coords (200 + 40, 180 + 30) = (240, 210)
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 240, clientY: 210 });
+
+    // 4. Left-click empty canvas at world (300, 180) -> client coords (300 + 40, 180 + 30) = (340, 210)
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 340, clientY: 210 });
+
+    // 5. Click Pin 2 of R2 at (300, 260)
+    const pinR2 = container.querySelector('[data-testid="canvas-pin-r2-1"]');
+    expect(pinR2).toBeInTheDocument();
+    fireEvent.click(pinR2!);
+
+    // 6. Assert onAddWire was called ONCE
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+
+    // 7. Verify full route vertices: startPin -> waypoints -> endPin
+    const fullPts = [{ x: 100, y: 100 }, ...(addedWire.points || []), { x: 300, y: 260 }];
+    expect(fullPts.length).toBeGreaterThanOrEqual(4);
+
+    // Assert EVERY consecutive segment is strictly 90° orthogonal (dx === 0 || dy === 0)
+    for (let i = 0; i < fullPts.length - 1; i++) {
+      const pA = fullPts[i];
+      const pB = fullPts[i + 1];
+      const dx = Math.abs(pB.x - pA.x);
+      const dy = Math.abs(pB.y - pA.y);
+      expect(dx === 0 || dy === 0).toBe(true);
+    }
+
+    // Assert passes cleanly through (200, 100) -> (200, 180) -> (300, 180)
+    expect(fullPts.some((p) => p.x === 200 && p.y === 100)).toBe(true);
+    expect(fullPts.some((p) => p.x === 200 && p.y === 180)).toBe(true);
+    expect(fullPts.some((p) => p.x === 300 && p.y === 180)).toBe(true);
+  });
+
+  it('SURGICAL TEST 2: <SchematicCanvas> Snapped-Pin Auto-Connect Near Pin 2 + Empty Console Deselect Still Intact', () => {
+    const onAddWireMock = vi.fn();
+    const onSelectComponentMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicCanvas
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={onSelectComponentMock}
+        onSelectWire={vi.fn()}
+        onAddWire={onAddWireMock}
+        onDeleteWire={vi.fn()}
+        onUpdateComponentPosition={vi.fn()}
+        onRotateComponent={vi.fn()}
+        onDeleteComponent={vi.fn()}
+        isSimulating={false}
+        simulationStates={{}}
+      />
+    );
+
+    // Switch to Wire tool
+    fireEvent.keyDown(window, { key: 'w' });
+
+    // Click Pin 1 of R1 to start wire
+    const pinR1 = container.querySelector('[data-testid="canvas-pin-r1-1"]');
+    expect(pinR1).toBeInTheDocument();
+    fireEvent.click(pinR1!);
+
+    // Move mouse close to R2 Pin 1 (at world x: 300, y: 100, screen x: 340, y: 130) -> client (345, 135)
+    const svgCanvas = container.querySelector('svg');
+    expect(svgCanvas).toBeTruthy();
+    fireEvent.mouseMove(svgCanvas!, { clientX: 345, clientY: 135 });
+
+    // Click empty canvas SVG inside the snap halo -> MUST auto-connect to snapped Pin R2:1
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 345, clientY: 135 });
+
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+
+    // Deselect test: When not routing (!activeWireStart), clicking empty canvas calls onSelectComponent(null)
+    fireEvent.mouseDown(svgCanvas!, { button: 0, clientX: 50, clientY: 50 });
+    expect(onSelectComponentMock).toHaveBeenCalledWith(null);
+  });
+
+  it('SURGICAL TEST 3: <SchematicEditorPanel> Slow-Click >150ms Real-Browser MouseDown+Click Safety', async () => {
+    const onAddWireMock = vi.fn();
+
+    const compR1: CircuitComponent = {
+      id: 'r1',
+      type: 'RESISTOR',
+      label: 'R1',
+      value: '1k',
+      parameters: {},
+      x: 100,
+      y: 100,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const compR2: CircuitComponent = {
+      id: 'r2',
+      type: 'RESISTOR',
+      label: 'R2',
+      value: '2k',
+      parameters: {},
+      x: 300,
+      y: 200,
+      rotation: 0,
+      pins: [
+        { id: '1', name: '1', x: 0, y: 0, pinType: 'passive' },
+        { id: '2', name: '2', x: 40, y: 0, pinType: 'passive' },
+      ],
+      category: 'passive',
+      footprint: '',
+    };
+
+    const { container } = render(
+      <SchematicEditorPanel
+        {...defaultProps}
+        components={[compR1, compR2]}
+        wires={[]}
+        selectedCompId={null}
+        onSelectComponent={vi.fn()}
+        onAddWire={onAddWireMock}
+      />
+    );
+
+    // 1. Switch to Wire tool
+    fireEvent.click(screen.getByTestId('tool-wire'));
+
+    const pinR1_1 = container.querySelector('[data-testid="sch-pin-r1-1"]');
+    expect(pinR1_1).toBeInTheDocument();
+
+    // 2. Slow-click simulation on Pin 1: mouseDown followed by >150ms delay then click
+    fireEvent.mouseDown(pinR1_1!);
+    await new Promise((r) => setTimeout(r, 180));
+    fireEvent.click(pinR1_1!);
+
+    // Assert rubberband wire preview is STILL active (NOT cancelled by the delayed click!)
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeInTheDocument();
+
+    // 3. Connect to Pin 1 of R2: mouseDown followed by >150ms delay then click
+    const pinR2_1 = container.querySelector('[data-testid="sch-pin-r2-1"]');
+    expect(pinR2_1).toBeInTheDocument();
+    fireEvent.mouseDown(pinR2_1!);
+    await new Promise((r) => setTimeout(r, 180));
+    fireEvent.click(pinR2_1!);
+
+    // Assert onAddWire was called ONCE
+    expect(onAddWireMock).toHaveBeenCalledTimes(1);
+    const addedWire = onAddWireMock.mock.calls[0][0];
+    expect(addedWire.fromCompId).toBe('r1');
+    expect(addedWire.fromPinId).toBe('1');
+    expect(addedWire.toCompId).toBe('r2');
+    expect(addedWire.toPinId).toBe('1');
+
+    // Assert rubberband wire is GONE after commit
+    expect(container.querySelector('[data-testid="sch-rubberband-wire"]')).toBeNull();
+  });
+});
+

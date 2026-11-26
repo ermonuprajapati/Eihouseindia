@@ -119,10 +119,26 @@ const ShareProjectModal = dynamic(
   { ssr: false }
 );
 
+const SchematicEditorPanel = dynamic(
+  () => import('./Panels/SchematicEditorPanel').then((m) => m.SchematicEditorPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-[#060B14] text-slate-400 font-mono text-xs">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-cyan-400" />
+        Loading Professional Schematic Editor...
+      </div>
+    ),
+  }
+);
+
 const TAB_PARAM_MAP: Record<string, WorkspaceMode> = {
   'schematic': 'schematic',
   '3d-studio': 'virtual3d',
   'virtual3d': 'virtual3d',
+  'studio3d': 'virtual3d',
+  'schematic-editor': 'schematicEditor',
+  'schematicEditor': 'schematicEditor',
   'instruments': 'instruments',
   'pcb-2d': 'pcb2d',
   'pcb2d': 'pcb2d',
@@ -137,10 +153,13 @@ const TAB_PARAM_MAP: Record<string, WorkspaceMode> = {
 const MODE_TO_PARAM: Record<WorkspaceMode, string> = {
   'schematic': 'schematic',
   'virtual3d': '3d-studio',
+  'studio3d': '3d-studio',
+  'schematicEditor': 'schematic-editor',
   'instruments': 'instruments',
   'pcb2d': 'pcb-2d',
   'pcb3d': 'pcb-3d',
   'firmware': 'mcu',
+  'mcu': 'mcu',
   'calculators': 'calculators',
   'experiments': 'experiments',
   'simulation': 'schematic',
@@ -189,7 +208,11 @@ export function EngineeringLabApp() {
 
   // Synchronize Tab with URL query parameter and localStorage
   const handleModeChange = useCallback((newMode: WorkspaceMode) => {
-    setActiveMode(newMode);
+    const normalizedMode: WorkspaceMode =
+      newMode === 'studio3d' ? 'virtual3d' :
+      newMode === 'mcu' ? 'firmware' : newMode;
+    setActiveMode(normalizedMode);
+
     if (newMode === 'pcb2d' || newMode === 'pcb3d') {
       setProject((prev) => {
         if (!prev.pcb) {
@@ -385,6 +408,9 @@ export function EngineeringLabApp() {
   const [wireCurrents, setWireCurrents] = useState<Record<string, number>>({});
   const [waveformData, setWaveformData] = useState<Record<string, SimulationWaveformPoint[]>>({});
   const [activeFaults, setActiveFaults] = useState<SolverStepResult['faults']>([]);
+
+  // Schematic Editor Interactive Placement Ghost State
+  const [editorPlacingComponent, setEditorPlacingComponent] = useState<CircuitComponent | null>(null);
 
   // Firmware & MCU State
   const [isFlashing, setIsFlashing] = useState(false);
@@ -956,7 +982,9 @@ export function EngineeringLabApp() {
     recordHistory();
     setProject((prev) => ({
       ...prev,
-      wires: prev.wires.filter((w) => w.id !== wireId),
+      wires: prev.wires
+        .filter((w) => w.id !== wireId)
+        .map((w) => (w.tappedWireId === wireId ? { ...w, tappedWireId: undefined, junctionPoint: undefined } : w)),
     }));
     if (selectedWireId === wireId) {
       setSelectedWireId(null);
@@ -968,7 +996,9 @@ export function EngineeringLabApp() {
     recordHistory();
     setProject((prev) => ({
       ...prev,
-      wires: prev.wires.filter((w) => w.id !== wireId),
+      wires: prev.wires
+        .filter((w) => w.id !== wireId)
+        .map((w) => (w.tappedWireId === wireId ? { ...w, tappedWireId: undefined, junctionPoint: undefined } : w)),
     }));
     if (selectedWireId === wireId) {
       setSelectedWireId(null);
@@ -1573,6 +1603,97 @@ export function EngineeringLabApp() {
               onDeleteWire={handleDeleteWire}
               onDisconnectWire={handleDisconnectWire}
               onDisconnectWireEndpoint={handleDisconnectWireEndpoint}
+              onDuplicateComponent={handleDuplicateComponent}
+              onClose={() => setIsInspectorOpen(false)}
+              isOpen={isInspectorOpen}
+              onToggleOpen={() => setIsInspectorOpen(!isInspectorOpen)}
+              width={inspectorWidth}
+              onWidthChange={setInspectorWidth}
+              simState={selectedCompId ? simStates[selectedCompId] : undefined}
+              wireCurrent={selectedWireId ? wireCurrents[selectedWireId] : undefined}
+            />
+          </div>
+        )}
+
+        {/* Professional Schematic Capture & Design Mode */}
+        {activeMode === 'schematicEditor' && (
+          <div className="flex-1 flex overflow-hidden relative w-full h-full min-w-0">
+            {isBrowserOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                onClick={() => setIsBrowserOpen(false)}
+              />
+            )}
+            <ComponentBrowser
+              onAddComponent={(comp) => {
+                setEditorPlacingComponent(comp);
+              }}
+              existingComponents={project.components}
+              isOpen={isBrowserOpen}
+              onToggleOpen={() => setIsBrowserOpen(!isBrowserOpen)}
+              width={browserWidth}
+              onWidthChange={setBrowserWidth}
+            />
+
+            <main className="flex-1 min-h-0 min-w-0 h-full relative overflow-hidden">
+              <SchematicEditorPanel
+                project={project}
+                components={project.components}
+                wires={project.wires}
+                selectedCompId={selectedCompId}
+                selectedWireId={selectedWireId}
+                placingComponent={editorPlacingComponent}
+                onFinishPlacing={(placedComp) => {
+                  handleAddComponent(placedComp);
+                  setEditorPlacingComponent(null);
+                }}
+                onCancelPlacing={() => setEditorPlacingComponent(null)}
+                onSelectComponent={(id) => {
+                  setSelectedCompId(id);
+                  setSelectedWireId(null);
+                }}
+                onSelectWire={(id) => {
+                  setSelectedWireId(id);
+                  setSelectedCompId(null);
+                }}
+                onUpdateComponentPosition={handleUpdateComponentPosition}
+                onRotateComponent={handleRotateComponent}
+                onMirrorComponent={handleMirrorComponent}
+                onDeleteComponent={handleDeleteComponent}
+                onAddWire={handleAddWire}
+                onDeleteWire={handleDeleteWire}
+                onUpdateComponents={(comps) => {
+                  recordHistory();
+                  setProject((prev) => ({ ...prev, components: comps }));
+                  setHasUnsavedChanges(true);
+                }}
+                onUpdateWires={(wires) => {
+                  recordHistory();
+                  setProject((prev) => ({ ...prev, wires }));
+                  setHasUnsavedChanges(true);
+                }}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                canUndo={undoStack.length > 0}
+                canRedo={redoStack.length > 0}
+              />
+            </main>
+
+            <PropertiesInspector
+              component={selectedComponent}
+              selectedWire={selectedWire}
+              components={project.components}
+              wires={project.wires}
+              onUpdateComponent={handleUpdateComponent}
+              onRotateComponent={handleRotateComponent}
+              onDeleteComponent={handleDeleteComponent}
+              onUpdateWire={(updatedWire) => {
+                setProject((prev) => ({
+                  ...prev,
+                  wires: prev.wires.map((w) => (w.id === updatedWire.id ? updatedWire : w)),
+                }));
+                setHasUnsavedChanges(true);
+              }}
               onDuplicateComponent={handleDuplicateComponent}
               onClose={() => setIsInspectorOpen(false)}
               isOpen={isInspectorOpen}

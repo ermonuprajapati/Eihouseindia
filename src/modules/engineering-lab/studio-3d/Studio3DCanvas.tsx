@@ -1952,6 +1952,11 @@ export function Studio3DCanvas({
   // Terminal Pin Click Handler (Respects tool mode & wire endpoint editing)
   const handlePinClick = (compId: string, pinId: string, worldPos: THREE.Vector3) => {
     if (isPanMode) return;
+    // HARD IRONCLAD GATE: Wire routing ONLY runs when Wire tool mode is explicitly active (or editing wire endpoint)!
+    if (toolMode3D !== 'wire' && !editingWireEndpoint) {
+      return;
+    }
+
     // If currently editing an existing wire endpoint:
     if (editingWireEndpoint) {
       const targetWire = wires3d.find((w) => w.id === editingWireEndpoint.wireId);
@@ -1965,14 +1970,13 @@ export function Studio3DCanvas({
         setEditingWireEndpoint(null);
         return;
       }
+      setEditingWireEndpoint(null);
+      return;
     }
 
-    // Start wire routing if no wire is currently being drawn (works seamlessly across all tool modes):
+    // Start wire routing if no wire is currently being drawn:
     if (!activeWireStart) {
       setActiveWireStart({ compId, pinId, pos: worldPos });
-      if (toolMode3D !== 'wire') {
-        setToolMode3D('wire');
-      }
       toast.info(`Started wire from ${compId === 'breadboard' ? pinId : `${compId}:${pinId}`}. Click target pin or hole.`);
       return;
     }

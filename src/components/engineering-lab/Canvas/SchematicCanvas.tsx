@@ -42,13 +42,18 @@ import {
   ErcViolation,
 } from '@/modules/engineering-lab/circuit-engine/schematic-erc';
 import {
+  projectPointOntoPolyline,
+  getCanonicalWirePoints,
+  resolveShortestNetWire,
+  computeCanonicalSchematicGeometry,
+} from '@/components/engineering-lab/Panels/schematic-editor/canonical-geometry';
+import {
   Point,
   ElbowOrientation,
   getFullWireVertices,
   extractWireSegments,
   slideWireSegment,
   dragWireCornerVertex,
-  calculateJunctionDots,
   simplifyCollinearPoints,
   computeOrthogonalVertices,
   compute45Vertices,
@@ -273,6 +278,13 @@ export function SchematicCanvas({
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
+
+  // Unified Canonical Schematic Geometry & Junction Dots
+  const canonicalGeom = useMemo(
+    () => computeCanonicalSchematicGeometry(wires, components, [], 10),
+    [wires, components]
+  );
+  const junctionDots = canonicalGeom.junctionDots;
 
   // Synchronize single selection with parent prop
   useEffect(() => {
@@ -580,29 +592,78 @@ export function SchematicCanvas({
     const curY = (e.clientY - rect.top - pan.y) / zoom;
 
     if (e.button === 0) {
-      // Dismiss wire floating toolbar when clicking on empty canvas
-      if (selectedWireId && !e.shiftKey) {
-        setWireSelected(null);
-        if (onSelectWire) onSelectWire(null);
+      // In Wire mode with active wire start: Left click on canvas locks a 90° orthogonal fold waypoint or connects to snapped pin
+      if (toolMode === 'wire' && activeWireStart) {
+        // 1. Snapped-Pin Auto-Connect: if cursor is snapped to a pin, connect immediately!
+        const effectiveSnapPin = snappedPin || (() => {
+          let candidate: { compId: string; pinId: string; name: string; x: number; y: number; dist: number } | null = null;
+          components.forEach((c) => {
+            c.pins.forEach((p) => {
+              const wCoord = getPinWorldCoord(c, p);
+              const d = Math.sqrt((wCoord.x - curX) ** 2 + (wCoord.y - curY) ** 2);
+              if (d <= 18) {
+                if (!candidate || d < candidate.dist) {
+                  candidate = { compId: c.id, pinId: p.id, name: p.name, x: wCoord.x, y: wCoord.y, dist: d };
+                }
+              }
+            });
+          });
+          return candidate;
+        })();
+
+        if (effectiveSnapPin) {
+          commitWireToPin(effectiveSnapPin.compId, effectiveSnapPin.pinId, effectiveSnapPin.x, effectiveSnapPin.y);
+          return;
+        }
+
+        // 2. Exact 90° Orthogonal Waypoint Locking on empty canvas
+        const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+        const clickedPt = { x: Math.round(curX / 10) * 10, y: Math.round(curY / 10) * 10 };
+
+        if (Math.hypot(clickedPt.x - lastPt.x, clickedPt.y - lastPt.y) >= 5) {
+          if (activeRoutingStyle === 'orthogonal') {
+            const corner = elbowOrientation === 'horizontal-first'
+              ? { x: clickedPt.x, y: lastPt.y }
+              : { x: lastPt.x, y: clickedPt.y };
+            if (
+              Math.hypot(corner.x - lastPt.x, corner.y - lastPt.y) > 1 &&
+              Math.hypot(clickedPt.x - corner.x, clickedPt.y - corner.y) > 1
+            ) {
+              setActiveWaypoints((prev) => [...prev, corner, clickedPt]);
+              if (Math.abs(clickedPt.x - corner.x) < 1) {
+                setElbowOrientation('horizontal-first');
+              } else {
+                setElbowOrientation('vertical-first');
+              }
+            } else {
+              setActiveWaypoints((prev) => [...prev, clickedPt]);
+              if (Math.abs(clickedPt.y - lastPt.y) < 1) {
+                setElbowOrientation('vertical-first');
+              } else {
+                setElbowOrientation('horizontal-first');
+              }
+            }
+          } else {
+            setActiveWaypoints((prev) => [...prev, clickedPt]);
+          }
+        }
+        return;
       }
 
-      // If drawing a wire, clicking canvas locks a clean 90° corner waypoint
-      if (activeWireStart && toolMode === 'wire') {
-        const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
-        const snapX = Math.round(curX / 10) * 10;
-        const snapY = Math.round(curY / 10) * 10;
-        if (activeRoutingStyle === 'orthogonal') {
-          const corner = elbowOrientation === 'horizontal-first'
-            ? { x: snapX, y: lastPt.y }
-            : { x: lastPt.x, y: snapY };
-          if (Math.abs(corner.x - lastPt.x) > 1 || Math.abs(corner.y - lastPt.y) > 1) {
-            setActiveWaypoints((prev) => [...prev, corner]);
-          } else {
-            setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
-          }
-        } else {
-          setActiveWaypoints((prev) => [...prev, { x: snapX, y: snapY }]);
-        }
+      // Clear wire and net selection on empty canvas click when not routing
+      if (onSelectWire) onSelectWire(null);
+      setWireSelected(null);
+      setSelectedWireIds(new Set());
+      setHighlightedNetId(null);
+
+      // Clear component selection whenever toolMode !== 'select' || !e.shiftKey
+      if (toolMode !== 'select' || !e.shiftKey) {
+        onSelectComponent(null);
+        setSelectedCompIds(new Set());
+      }
+
+      // In Wire mode without active wire start, selections cleared above; return immediately
+      if (toolMode === 'wire') {
         return;
       }
 
@@ -618,12 +679,6 @@ export function SchematicCanvas({
         setIsMarqueeSelecting(true);
         setMarqueeStart({ x: curX, y: curY });
         setMarqueeEnd({ x: curX, y: curY });
-        if (!e.shiftKey) {
-          setSelectedCompIds(new Set());
-          setSelectedWireIds(new Set());
-          onSelectComponent(null);
-          setWireSelected(null);
-        }
         return;
       }
     } else if (e.button === 1) {
@@ -698,10 +753,31 @@ export function SchematicCanvas({
           targetCoord,
           10
         );
-        scheduleWireUpdate({
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
           ...targetWire,
           points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-        });
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
+        scheduleWireUpdate(wireToCommit);
         return;
       }
     }
@@ -716,10 +792,31 @@ export function SchematicCanvas({
           { x: curCanvasX, y: curCanvasY },
           10
         );
-        scheduleWireUpdate({
+        const routed = canonicalGeom.wireMap.get(targetWire.id);
+        let wireToCommit: CircuitWire = {
           ...targetWire,
           points: updatedWaypoints.length > 0 ? updatedWaypoints : undefined,
-        });
+        };
+        if (!targetWire.tappedWireId && routed?.autoTappedWireId) {
+          if (routed.autoTappedReversed === true) {
+            wireToCommit = {
+              ...wireToCommit,
+              fromCompId: targetWire.toCompId,
+              fromPinId: targetWire.toPinId,
+              toCompId: targetWire.fromCompId,
+              toPinId: targetWire.fromPinId,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          } else {
+            wireToCommit = {
+              ...wireToCommit,
+              tappedWireId: routed.autoTappedWireId,
+              junctionPoint: routed.autoJunctionPoint,
+            };
+          }
+        }
+        scheduleWireUpdate(wireToCommit);
         return;
       }
     }
@@ -775,6 +872,69 @@ export function SchematicCanvas({
     setZoom((prev) => Math.max(0.4, Math.min(2.5, prev * factor)));
   };
 
+  // Shared Wire Completion Helper (Handles both direct pin click & snapped-pin click)
+  const commitWireToPin = (compId: string, pinId: string, pinX: number, pinY: number) => {
+    if (!activeWireStart) return;
+    if (activeWireStart.compId === compId && activeWireStart.pinId === pinId) {
+      setActiveWireStart(null);
+      setActiveWaypoints([]);
+      setSnappedPin(null);
+      return;
+    }
+
+    const lastPt = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : activeWireStart;
+    const targetPt = { x: pinX, y: pinY };
+    let liveLeg: Point[] = [];
+    if (activeRoutingStyle === 'straight') {
+      liveLeg = [lastPt, targetPt];
+    } else if (activeRoutingStyle === 'diagonal45') {
+      liveLeg = compute45Vertices(lastPt, targetPt, elbowOrientation);
+    } else {
+      liveLeg = computeOrthogonalVertices(lastPt, targetPt, elbowOrientation);
+    }
+
+    const fullPreviewVerts = [activeWireStart, ...activeWaypoints, ...liveLeg.slice(1)];
+    const simplifiedFull = simplifyCollinearPoints(fullPreviewVerts);
+    const interiorWaypoints = simplifiedFull.length > 2 ? simplifiedFull.slice(1, -1) : undefined;
+
+    const waypointsForResolve =
+      activeWaypoints.length > 0 || elbowOrientation === 'vertical-first'
+        ? interiorWaypoints
+        : undefined;
+
+    const resolved = resolveShortestNetWire(
+      activeWireStart.compId,
+      activeWireStart.pinId,
+      compId,
+      pinId,
+      components,
+      wires,
+      waypointsForResolve,
+      10
+    );
+
+    if (resolved.skipDuplicate) {
+      toast.info('Pins are already electrically connected on the same net.');
+    } else {
+      onAddWire({
+        fromCompId: resolved.fromCompId,
+        fromPinId: resolved.fromPinId,
+        toCompId: resolved.toCompId,
+        toPinId: resolved.toPinId,
+        tappedWireId: resolved.tappedWireId,
+        junctionPoint: resolved.junctionPoint,
+        points: resolved.tappedWireId || resolved.fromCompId !== activeWireStart.compId
+          ? resolved.points
+          : (resolved.points || waypointsForResolve),
+        style: activeRoutingStyle,
+      });
+    }
+
+    setActiveWireStart(null);
+    setActiveWaypoints([]);
+    setSnappedPin(null);
+  };
+
   // STEP 2: Strict Wire Mode Rule for Pin Click
   const handlePinClick = (e: React.MouseEvent, compId: string, pinId: string, pinX: number, pinY: number) => {
     e.stopPropagation();
@@ -791,20 +951,7 @@ export function SchematicCanvas({
       setActiveWireStart({ compId, pinId, x: pinX, y: pinY });
       setActiveWaypoints([]);
     } else {
-      if (activeWireStart.compId !== compId || activeWireStart.pinId !== pinId) {
-        const cleanedWaypoints =
-          activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
-        onAddWire({
-          fromCompId: activeWireStart.compId,
-          fromPinId: activeWireStart.pinId,
-          toCompId: compId,
-          toPinId: pinId,
-          points: cleanedWaypoints && cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
-          style: activeRoutingStyle,
-        });
-      }
-      setActiveWireStart(null);
-      setActiveWaypoints([]);
+      commitWireToPin(compId, pinId, pinX, pinY);
     }
   };
 
@@ -834,33 +981,6 @@ export function SchematicCanvas({
     onUpdateWire({ ...wire, color });
     setWireContextMenu(null);
   };
-
-  // Calculate Electrical Solder Junction Dots (T-junctions & 3+ wire meeting nodes)
-  const junctionDots = useMemo(() => {
-    const wiresWithVertices = wires
-      .map((w) => {
-        const fromComp = components.find((c) => c.id === w.fromCompId);
-        const toComp = components.find((c) => c.id === w.toCompId);
-        const fromPin = fromComp?.pins.find((p) => p.id === w.fromPinId);
-        const toPin = toComp?.pins.find((p) => p.id === w.toPinId);
-        if (!fromComp || !toComp || !fromPin || !toPin) {
-          return { id: w.id, vertices: [] as Point[], netName: w.netName };
-        }
-        const p1 = getPinWorldCoord(fromComp, fromPin);
-        const p2 = getPinWorldCoord(toComp, toPin);
-        const vertices = getFullWireVertices(
-          p1,
-          p2,
-          w.points,
-          w.style || activeRoutingStyle,
-          elbowOrientation
-        );
-        return { id: w.id, vertices, netName: w.netName };
-      })
-      .filter((w) => w.vertices.length > 0);
-
-    return calculateJunctionDots(wiresWithVertices);
-  }, [wires, components, activeRoutingStyle, elbowOrientation]);
 
   return (
     <div
@@ -1216,22 +1336,35 @@ export function SchematicCanvas({
           {wires.map((wire) => {
             const fromComp = components.find((c) => c.id === wire.fromCompId);
             const toComp = components.find((c) => c.id === wire.toCompId);
-            if (!fromComp || !toComp) return null;
+            const isTapped = Boolean((wire.tappedWireId || wire.junctionPoint) && wire.junctionPoint);
+            if (!fromComp) return null;
+            if (!isTapped && !toComp) return null;
 
             const fromPin = fromComp.pins.find((p) => p.id === wire.fromPinId);
-            const toPin = toComp.pins.find((p) => p.id === wire.toPinId);
-            if (!fromPin || !toPin) return null;
+            const toPin = toComp?.pins.find((p) => p.id === wire.toPinId);
+            if (!fromPin) return null;
+            if (!isTapped && !toPin) return null;
 
-            const p1 = getPinWorldCoord(fromComp, fromPin);
-            const p2 = getPinWorldCoord(toComp, toPin);
+            const routed = canonicalGeom.wireMap.get(wire.id);
+            const p1Raw = getPinWorldCoord(fromComp, fromPin);
+            const canonicalVerts = (!routed || routed.points.length < 2)
+              ? getCanonicalWirePoints(wire, components, wires)
+              : routed.points;
+            const p2Raw = canonicalVerts.length >= 2
+              ? canonicalVerts[canonicalVerts.length - 1]
+              : (isTapped && wire.junctionPoint ? wire.junctionPoint : (toComp && toPin ? getPinWorldCoord(toComp, toPin) : { x: p1Raw.x, y: p1Raw.y }));
 
             const isShorted = ercViolations.some(
               (v) => v.code === 'ERR_DIRECT_SHORT' && v.wireIds?.includes(wire.id)
             );
             const routingStyle = wire.style || activeRoutingStyle;
-            const fullVertices = getFullWireVertices(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const fullVertices = routed && routed.points.length >= 2
+              ? (routed.points as Point[])
+              : (canonicalVerts.length >= 2 ? (canonicalVerts as Point[]) : getFullWireVertices(p1Raw, p2Raw, wire.points, routingStyle, elbowOrientation));
+            const p1 = fullVertices[0];
+            const p2 = fullVertices[fullVertices.length - 1];
             const segments = extractWireSegments(wire.id, fullVertices);
-            const pathData = computeWireSvgPath(p1, p2, wire.points, routingStyle, elbowOrientation);
+            const pathData = routed?.svgPath || verticesToSvgPath(fullVertices);
             const isWireSelected = selectedWireId === wire.id || selectedWireIds.has(wire.id);
             const isHighlighted = highlightedNetId === wire.id;
             const wireBaseColor = isShorted
@@ -1241,7 +1374,7 @@ export function SchematicCanvas({
             const midPoint =
               wire.points && wire.points.length > 0
                 ? wire.points[Math.floor(wire.points.length / 2)]
-                : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+                : (fullVertices.length >= 2 ? fullVertices[Math.floor(fullVertices.length / 2)] : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
 
             return (
               <g key={wire.id} className="group">
@@ -1258,6 +1391,42 @@ export function SchematicCanvas({
                       onDeleteWire(wire.id);
                     } else if (toolMode === 'net_highlight') {
                       setHighlightedNetId(wire.id);
+                    } else if (toolMode === 'wire' && activeWireStart) {
+                      const resolvedCheck = resolveShortestNetWire(
+                        activeWireStart.compId,
+                        activeWireStart.pinId,
+                        wire.fromCompId,
+                        wire.fromPinId,
+                        components,
+                        wires
+                      );
+                      if (resolvedCheck.skipDuplicate) {
+                        toast.info('Pins are already electrically connected on the same net.');
+                        setActiveWireStart(null);
+                        setActiveWaypoints([]);
+                        return;
+                      }
+
+                      const rect = containerRef.current?.getBoundingClientRect();
+                      const curX = rect ? (e.clientX - rect.left - pan.x) / zoom : e.clientX;
+                      const curY = rect ? (e.clientY - rect.top - pan.y) / zoom : e.clientY;
+                      const proj = projectPointOntoPolyline({ x: curX, y: curY }, fullVertices, 10);
+                      const snapX = proj ? proj.point.x : Math.round(curX / 10) * 10;
+                      const snapY = proj ? proj.point.y : Math.round(curY / 10) * 10;
+                      const cleanedWaypoints =
+                        activeWaypoints.length > 0 ? simplifyCollinearPoints(activeWaypoints) : undefined;
+                      onAddWire({
+                        fromCompId: activeWireStart.compId,
+                        fromPinId: activeWireStart.pinId,
+                        toCompId: wire.fromCompId,
+                        toPinId: wire.fromPinId,
+                        tappedWireId: wire.id,
+                        junctionPoint: { x: snapX, y: snapY },
+                        points: cleanedWaypoints && cleanedWaypoints.length > 0 ? cleanedWaypoints : undefined,
+                        style: activeRoutingStyle,
+                      });
+                      setActiveWireStart(null);
+                      setActiveWaypoints([]);
                     } else {
                       setWireSelected(wire.id);
                       onSelectComponent(null);
@@ -1279,6 +1448,7 @@ export function SchematicCanvas({
                 )}
 
                 <path
+                  data-testid={`sch-wire-${wire.id}`}
                   d={pathData}
                   fill="none"
                   stroke={wireBaseColor}
@@ -1301,6 +1471,8 @@ export function SchematicCanvas({
                         y2={seg.p2.y}
                         stroke="transparent"
                         strokeWidth={14}
+                        pointerEvents={toolMode === 'select' ? 'stroke' : 'none'}
+                        style={{ pointerEvents: toolMode === 'select' ? 'stroke' : 'none' }}
                         className={
                           toolMode === 'select'
                             ? isH
@@ -1462,7 +1634,7 @@ export function SchematicCanvas({
 
           {/* Active Wire being drawn with live waypoints preview */}
           {activeWireStart && toolMode === 'wire' && (
-            <g>
+            <g data-testid="active-wire-preview">
               <path
                 d={computeWireSvgPath(
                   activeWireStart,
@@ -1568,8 +1740,13 @@ export function SchematicCanvas({
           return (
             <div
               key={comp.id}
+              data-testid={`canvas-comp-${comp.id}`}
               onClick={(e) => {
                 e.stopPropagation();
+                // Prevent component-body hijack while routing a wire
+                if (toolMode === 'wire' && activeWireStart) {
+                  return;
+                }
                 if (toolMode === 'delete') {
                   onDeleteComponent(comp.id);
                 } else {
@@ -1585,7 +1762,11 @@ export function SchematicCanvas({
                 }
               }}
               onMouseDown={(e) => {
-                if (e.button === 0 && toolMode !== 'wire') {
+                if (toolMode === 'wire') {
+                  e.stopPropagation();
+                  return;
+                }
+                if (e.button === 0) {
                   e.stopPropagation();
                   let currentSelection = selectedCompIds;
                   if (!selectedCompIds.has(comp.id) && !e.shiftKey) {
@@ -1644,6 +1825,12 @@ export function SchematicCanvas({
                 return (
                   <div
                     key={pin.id}
+                    data-testid={`canvas-pin-${comp.id}-${pin.id}`}
+                    onMouseDown={(e) => {
+                      if (toolMode === 'wire') {
+                        e.stopPropagation();
+                      }
+                    }}
                     onClick={(e) => handlePinClick(e, comp.id, pin.id, world.x, world.y)}
                     className={`absolute w-3.5 h-3.5 rounded-full border-2 transition-all cursor-pointer z-30 flex items-center justify-center group/pin ${
                       isPinConnected

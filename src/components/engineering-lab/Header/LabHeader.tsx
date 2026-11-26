@@ -30,8 +30,10 @@ import {
   Upload,
   Sparkles,
   FileJson,
+  FileCode2,
 } from 'lucide-react';
 import { WorkspaceMode } from '@/modules/engineering-lab/types';
+import { VIRTUAL_LAB_NAV_ITEMS } from '@/modules/engineering-lab/navigation-config';
 
 export type ExportFormat =
   | 'eihouse'
@@ -200,83 +202,33 @@ export function LabHeader({
         className="hidden lg:flex flex-1 min-w-0 overflow-x-auto no-scrollbar items-center justify-center gap-0.5 py-0.5 select-none"
       >
         <div className="flex items-center bg-slate-900/90 rounded-lg p-0.5 border border-slate-800 gap-0.5 shrink-0">
-          <button
-            onClick={() => onModeChange('schematic')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'schematic'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="Schematic Circuit Designer"
-          >
-            <Cpu className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
-            <span>Schematic</span>
-          </button>
-
-          <button
-            onClick={() => onModeChange('virtual3d')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'virtual3d'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="3D Virtual Electronics Studio & Breadboard Simulator"
-          >
-            <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-            <span>3D Studio</span>
-          </button>
-
-          <button
-            onClick={() => onModeChange('instruments')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'instruments'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="Benchtop Virtual Instruments"
-          >
-            <Activity className="w-3.5 h-3.5 shrink-0 text-yellow-400" />
-            <span>Instruments</span>
-          </button>
-
-          <button
-            onClick={() => onModeChange('pcb2d')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'pcb2d'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="PCB 2D Layout Editor & Autorouter"
-          >
-            <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-            <span>PCB 2D</span>
-          </button>
-
-          <button
-            onClick={() => onModeChange('pcb3d')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'pcb3d'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="PCB 3D Photorealistic Inspection"
-          >
-            <Box className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-            <span>PCB 3D</span>
-          </button>
-
-          <button
-            onClick={() => onModeChange('firmware')}
-            className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
-              activeMode === 'firmware'
-                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-            title="Embedded Microcontroller Firmware IDE"
-          >
-            <Code2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
-            <span>MCU</span>
-          </button>
+          {VIRTUAL_LAB_NAV_ITEMS.map((item) => {
+            const active =
+              activeMode === item.mode ||
+              (item.id === 'studio3d' && (activeMode === 'virtual3d' || activeMode === 'studio3d')) ||
+              (item.id === 'mcu' && (activeMode === 'firmware' || activeMode === 'mcu'));
+            return (
+              <button
+                key={item.id}
+                onClick={() => onModeChange(item.mode)}
+                className={`px-1.5 py-1 text-[11px] rounded-md flex items-center gap-1 font-medium transition-all shrink-0 whitespace-nowrap ${
+                  active
+                    ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+                title={item.title}
+              >
+                {item.iconName === 'Cpu' && <Cpu className="w-3.5 h-3.5 shrink-0 text-cyan-400" />}
+                {item.iconName === 'Layers' && <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                {item.iconName === 'FileCode2' && <FileCode2 className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
+                {item.iconName === 'Grid' && <LayoutGrid className="w-3.5 h-3.5 shrink-0 text-teal-400" />}
+                {item.iconName === 'Box' && <Box className="w-3.5 h-3.5 shrink-0 text-sky-400" />}
+                {item.iconName === 'Activity' && <Activity className="w-3.5 h-3.5 shrink-0 text-yellow-400" />}
+                {item.iconName === 'Code2' && <Code2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />}
+                <span>{item.name}</span>
+              </button>
+            );
+          })}
 
           {/* Icon Tabs: Calculators, Experiments, Community */}
           <div className="w-[1px] h-3.5 bg-slate-700 mx-0.5 shrink-0" />
@@ -417,8 +369,8 @@ export function LabHeader({
           )}
         </div>
 
-        {/* Master Simulation Run / Stop Button (Hidden on PCB 2D & PCB 3D tabs) */}
-        {activeMode !== 'pcb2d' && activeMode !== 'pcb3d' && (
+        {/* Master Simulation Run / Stop Button (Hidden on PCB 2D, PCB 3D, and Schematic Editor tabs) */}
+        {activeMode !== 'pcb2d' && activeMode !== 'pcb3d' && activeMode !== 'schematicEditor' && (
           <>
             <button
               onClick={onToggleSimulation}
@@ -816,83 +768,33 @@ export function LabHeader({
       className="flex lg:hidden items-center bg-[#070D18] border-b border-slate-800 px-2 h-9 overflow-x-auto no-scrollbar touch-scroll gap-1 text-xs shrink-0 select-none shadow-inner w-full box-border"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
-      <button
-        onClick={() => onModeChange('schematic')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'schematic'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="Schematic Circuit Designer"
-      >
-        <Cpu className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-        <span>Schematic</span>
-      </button>
-
-      <button
-        onClick={() => onModeChange('virtual3d')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'virtual3d'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="3D Virtual Electronics Studio & Breadboard Simulator"
-      >
-        <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span>3D Studio</span>
-      </button>
-
-      <button
-        onClick={() => onModeChange('instruments')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'instruments'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="Benchtop Virtual Instruments"
-      >
-        <Activity className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-        <span>Instruments</span>
-      </button>
-
-      <button
-        onClick={() => onModeChange('pcb2d')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'pcb2d'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="PCB 2D Layout Editor & Autorouter"
-      >
-        <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span>PCB 2D</span>
-      </button>
-
-      <button
-        onClick={() => onModeChange('pcb3d')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'pcb3d'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="PCB 3D Photorealistic Inspection"
-      >
-        <Box className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-        <span>PCB 3D</span>
-      </button>
-
-      <button
-        onClick={() => onModeChange('firmware')}
-        className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
-          activeMode === 'firmware'
-            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
-        }`}
-        title="Embedded Microcontroller Firmware IDE"
-      >
-        <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-        <span>MCU</span>
-      </button>
+      {VIRTUAL_LAB_NAV_ITEMS.map((item) => {
+        const active =
+          activeMode === item.mode ||
+          (item.id === 'studio3d' && (activeMode === 'virtual3d' || activeMode === 'studio3d')) ||
+          (item.id === 'mcu' && (activeMode === 'firmware' || activeMode === 'mcu'));
+        return (
+          <button
+            key={`mobile-${item.id}`}
+            onClick={() => onModeChange(item.mode)}
+            className={`px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium transition-all shrink-0 whitespace-nowrap ${
+              active
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/80'
+            }`}
+            title={item.title}
+          >
+            {item.iconName === 'Cpu' && <Cpu className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
+            {item.iconName === 'Layers' && <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+            {item.iconName === 'FileCode2' && <FileCode2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+            {item.iconName === 'Grid' && <LayoutGrid className="w-3.5 h-3.5 text-teal-400 shrink-0" />}
+            {item.iconName === 'Box' && <Box className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+            {item.iconName === 'Activity' && <Activity className="w-3.5 h-3.5 text-yellow-400 shrink-0" />}
+            {item.iconName === 'Code2' && <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
+            <span>{item.name}</span>
+          </button>
+        );
+      })}
 
       <button
         onClick={() => onModeChange('calculators')}

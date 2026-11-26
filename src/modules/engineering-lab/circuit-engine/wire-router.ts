@@ -351,18 +351,26 @@ export function calculateJunctionDots(
   const junctions: WireJunction[] = [];
   const junctionKeySet = new Set<string>();
 
+  if (!Array.isArray(wiresWithVertices) || wiresWithVertices.length === 0) {
+    return junctions;
+  }
+
   // 1. T-Junction: Endpoint of one wire lies on a segment of another wire
   for (let i = 0; i < wiresWithVertices.length; i++) {
     const wA = wiresWithVertices[i];
+    if (!wA?.vertices || wA.vertices.length < 2) continue;
     const endsA = [wA.vertices[0], wA.vertices[wA.vertices.length - 1]];
 
     for (const endPt of endsA) {
+      if (!endPt) continue;
       for (let j = 0; j < wiresWithVertices.length; j++) {
         if (i === j) continue;
         const wB = wiresWithVertices[j];
+        if (!wB?.vertices || wB.vertices.length < 2) continue;
         for (let s = 0; s < wB.vertices.length - 1; s++) {
           const p1 = wB.vertices[s];
           const p2 = wB.vertices[s + 1];
+          if (!p1 || !p2) continue;
 
           // Check if endPt is strictly between p1 and p2
           const isH = Math.abs(p1.y - p2.y) < 1 && Math.abs(endPt.y - p1.y) < 1;
@@ -402,7 +410,9 @@ export function calculateJunctionDots(
   // 2. Vertex Node Junction: 3 or more wires sharing the exact same terminal/vertex point
   const coordCounts = new Map<string, { count: number; x: number; y: number; netName?: string }>();
   for (const w of wiresWithVertices) {
+    if (!w?.vertices) continue;
     for (const v of w.vertices) {
+      if (!v) continue;
       const key = `${Math.round(v.x)},${Math.round(v.y)}`;
       const entry = coordCounts.get(key) || { count: 0, x: Math.round(v.x), y: Math.round(v.y), netName: w.netName };
       entry.count += 1;
