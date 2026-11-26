@@ -640,19 +640,6 @@ export function LabHeader({
                 <>
                   <button
                     onClick={() => {
-                      onExportProject('gerber');
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
-                  >
-                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-medium text-xs truncate">Gerber & Drill Package</span>
-                    </span>
-                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
-                  </button>
-                  <button
-                    onClick={() => {
                       onExportProject('svg');
                       setShowExportMenu(false);
                     }}
@@ -721,19 +708,6 @@ export function LabHeader({
                     </span>
                     <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">JPG</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      onExportProject('gerber');
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
-                  >
-                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-medium text-xs truncate">Gerber Fabrication Package</span>
-                    </span>
-                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
-                  </button>
                 </>
               )}
 
@@ -774,6 +748,20 @@ export function LabHeader({
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Deliverables & Netlists
               </div>
+
+              <button
+                onClick={() => {
+                  onExportProject('gerber');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Production Gerber & Drill (.zip)</span>
+                </span>
+                <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">JLCPCB / PCBWay</span>
+              </button>
 
               <button
                 onClick={() => {

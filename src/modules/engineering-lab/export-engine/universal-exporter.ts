@@ -50,21 +50,59 @@ export interface ExportExecutionContext {
 }
 
 /**
+ * Helper to check if a color value is a valid solid color string (not transparent, none, or SVG url pattern)
+ */
+export function isSolidColor(val: string | null | undefined): val is string {
+  if (!val) return false;
+  const trimmed = val.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower === 'none' || lower === 'transparent' || lower === 'rgba(0, 0, 0, 0)') return false;
+  if (lower.startsWith('url(')) return false;
+  return true;
+}
+
+/**
  * Detects the background color of a live SVG element (e.g. from Schematic Editor)
+ * Priority order:
+ * 1. Explicit background marker: rect[data-bg="true"] -> return fill if isSolidColor
+ * 2. Explicit sheet theme class on svgEl.getAttribute('class')
+ * 3. Computed CSS background on svgEl
+ * 4. Direct-child full-size rect ONLY (width="100%", isSolidColor)
+ * 5. Fallback '#09101E'
  */
 export function detectLiveSvgBgColor(svgEl: SVGSVGElement | null): string {
   if (!svgEl) return '#09101E';
   try {
-    const bgRect = svgEl.querySelector('rect[data-bg="true"], rect[width="100%"]');
-    if (bgRect) {
-      const fill = bgRect.getAttribute('fill');
-      if (fill && fill !== 'none') return fill;
+    // 1. Explicit background marker: rect[data-bg="true"]
+    const bgMarker = svgEl.querySelector('rect[data-bg="true"]');
+    if (bgMarker) {
+      const fill = bgMarker.getAttribute('fill');
+      if (isSolidColor(fill)) return fill;
     }
-    const computed = typeof window !== 'undefined' ? window.getComputedStyle(svgEl).backgroundColor : '';
-    if (computed && computed !== 'rgba(0, 0, 0, 0)' && computed !== 'transparent') {
-      return computed;
+
+    // 2. Explicit sheet theme class on svgEl
+    const cls = svgEl.getAttribute('class') || '';
+    if (/bg-\[#ece8dc\]/i.test(cls)) return '#ECE8DC';
+    if (/bg-\[#09101e\]/i.test(cls)) return '#09101E';
+
+    // 3. Computed CSS background on svgEl
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      const computed = window.getComputedStyle(svgEl).backgroundColor;
+      if (isSolidColor(computed)) return computed;
+    }
+
+    // 4. Direct-child full-size rect ONLY (never nested symbol rects, never url(...))
+    const directFullRects = Array.from(svgEl.children).filter(
+      (el) => el.tagName.toLowerCase() === 'rect' && el.getAttribute('width') === '100%'
+    );
+    for (const rect of directFullRects) {
+      const fill = rect.getAttribute('fill');
+      if (isSolidColor(fill)) return fill;
     }
   } catch {}
+
+  // 5. Fallback
   return '#09101E';
 }
 

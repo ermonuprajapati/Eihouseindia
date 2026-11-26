@@ -205,8 +205,18 @@ export function Pcb2dEditor({
       }
       setIsExportMenuOpen(false);
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setIsExportMenuOpen(false);
+      }
+    };
     window.addEventListener('mousedown', handleOutsideClick, true);
-    return () => window.removeEventListener('mousedown', handleOutsideClick, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, [isExportMenuOpen]);
 
   // Stackup specs

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
 import { GerberExporter } from '../modules/engineering-lab/pcb-engine/gerber-exporter';
 import { buildCircuitPdfBlob } from '../modules/engineering-lab/export-engine/pdf-builder';
 import { buildStandaloneSchematicSvg, cloneAndSanitizeLiveSvg } from '../modules/engineering-lab/export-engine/schematic-svg-builder';
@@ -7,7 +9,10 @@ import {
   createEihouseProjectPayload,
   parseEihouseProject,
   runUniversalExport,
+  isSolidColor,
+  detectLiveSvgBgColor,
 } from '../modules/engineering-lab/export-engine/universal-exporter';
+import { LabHeader, ExportFormat } from '../components/engineering-lab/Header/LabHeader';
 import { TEMPLATE_555_ASTABLE } from '../modules/engineering-lab/templates/starter-templates';
 import { PcbGenerator } from '../modules/engineering-lab/pcb-engine/pcb-generator';
 import { EngineeringProject, PcbLayout, CircuitComponent } from '../modules/engineering-lab/types';
@@ -700,5 +705,118 @@ describe('Universal Export & CAM Manufacturing Suite', () => {
     const cplCsv = GerberExporter.exportPickAndPlaceCsv(pcb);
     expect(cplCsv).toContain('J1 ""Main""');
     expect(cplCsv).toContain('0.1"" Header');
+  });
+
+  // ============================================================================
+  // Test 12: isSolidColor & Priority-Safe detectLiveSvgBgColor
+  // ============================================================================
+  it('Test 12: isSolidColor and detectLiveSvgBgColor follow strict priority without url() or nested rect traps', () => {
+    // 1. isSolidColor checks
+    expect(isSolidColor(null)).toBe(false);
+    expect(isSolidColor(undefined)).toBe(false);
+    expect(isSolidColor('')).toBe(false);
+    expect(isSolidColor('   ')).toBe(false);
+    expect(isSolidColor('none')).toBe(false);
+    expect(isSolidColor('transparent')).toBe(false);
+    expect(isSolidColor('rgba(0, 0, 0, 0)')).toBe(false);
+    expect(isSolidColor('url(#sch-grid)')).toBe(false);
+    expect(isSolidColor('url(#pattern-dots)')).toBe(false);
+    expect(isSolidColor('#09101E')).toBe(true);
+    expect(isSolidColor('#ECE8DC')).toBe(true);
+    expect(isSolidColor('rgb(15, 23, 42)')).toBe(true);
+
+    // 2. Exact User Test: svg class="bg-[#ECE8DC]" containing <rect width="100%" height="100%" fill="url(#sch-grid)" /> AND nested <g><rect width="100%" fill="#000000" /></g>
+    const svgGrid = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgGrid.setAttribute('class', 'sch-canvas bg-[#ECE8DC] relative');
+    const gridRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    gridRect.setAttribute('width', '100%');
+    gridRect.setAttribute('height', '100%');
+    gridRect.setAttribute('fill', 'url(#sch-grid)');
+    svgGrid.appendChild(gridRect);
+
+    const nestedG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const nestedBlackRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    nestedBlackRect.setAttribute('width', '100%');
+    nestedBlackRect.setAttribute('fill', '#000000');
+    nestedG.appendChild(nestedBlackRect);
+    svgGrid.appendChild(nestedG);
+
+    expect(detectLiveSvgBgColor(svgGrid)).toBe('#ECE8DC');
+
+    // 3. Priority 1: rect[data-bg="true"] with solid fill
+    const svg1 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const bg1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg1.setAttribute('data-bg', 'true');
+    bg1.setAttribute('fill', '#1E293B');
+    svg1.appendChild(bg1);
+    expect(detectLiveSvgBgColor(svg1)).toBe('#1E293B');
+
+    // 4. Priority 2: dark theme class
+    const svg3 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg3.setAttribute('class', 'sch-canvas bg-[#09101e]');
+    expect(detectLiveSvgBgColor(svg3)).toBe('#09101E');
+
+    // 5. Priority 4: direct-child full-size rect ONLY (ignores nested rects)
+    const svg4 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const nestedRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    nestedRect.setAttribute('width', '100%');
+    nestedRect.setAttribute('fill', '#FF0000');
+    group.appendChild(nestedRect);
+    svg4.appendChild(group);
+
+    const directRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    directRect.setAttribute('width', '100%');
+    directRect.setAttribute('fill', '#0F172A');
+    svg4.appendChild(directRect);
+
+    expect(detectLiveSvgBgColor(svg4)).toBe('#0F172A');
+
+    // 6. Priority 5: Fallback when nothing matches
+    const svg5 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    expect(detectLiveSvgBgColor(svg5)).toBe('#09101E');
+    expect(detectLiveSvgBgColor(null)).toBe('#09101E');
+  });
+
+  // ============================================================================
+  // Test 13: LabHeader Unconditional Production Gerber & Drill Export
+  // ============================================================================
+  it('Test 13: LabHeader renders Production Gerber & Drill (.zip) unconditionally across all modes and triggers onExportProject("gerber")', () => {
+    const handleExport = vi.fn();
+    const defaultHeaderProps = {
+      projectTitle: '555 Timer Lab',
+      onTitleChange: vi.fn(),
+      activeMode: 'schematic' as const,
+      onModeChange: vi.fn(),
+      isSimulating: false,
+      onToggleSimulation: vi.fn(),
+      onResetSimulation: vi.fn(),
+      onNewProject: vi.fn(),
+      onSaveProject: vi.fn(),
+      onLoadProject: vi.fn(),
+      onExportProject: handleExport,
+      onOpenExperiments: vi.fn(),
+      hasUnsavedChanges: false,
+      canUndo: false,
+      canRedo: false,
+      onUndo: vi.fn(),
+      onRedo: vi.fn(),
+    };
+
+    // Render in schematic mode
+    render(<LabHeader {...defaultHeaderProps} />);
+
+    // Click Export button to open dropdown
+    const exportBtn = screen.getByTitle('Universal Export Options');
+    fireEvent.click(exportBtn);
+
+    // Assert unconditional Gerber button is present ONCE with JLCPCB / PCBWay badge
+    const gerberButtons = screen.getAllByText('Production Gerber & Drill (.zip)');
+    expect(gerberButtons.length).toBe(1);
+    expect(screen.getByText('JLCPCB / PCBWay')).toBeDefined();
+
+    // Click it and verify backward-compatible 'gerber' format is emitted
+    fireEvent.click(gerberButtons[0]);
+    expect(handleExport).toHaveBeenCalledWith('gerber');
   });
 });
