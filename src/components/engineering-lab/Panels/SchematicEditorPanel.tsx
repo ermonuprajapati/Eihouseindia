@@ -38,7 +38,8 @@ import { SchematicVectorSymbol } from './schematic-editor/SchematicVectorSymbols
 import { SchematicDrawingLayer } from './schematic-editor/SchematicDrawingLayer';
 import { SchematicTitleBlockView } from './schematic-editor/SchematicTitleBlockView';
 import { SchematicInlineEditor, InlineEditorTarget } from './schematic-editor/SchematicInlineEditor';
-import { exportSchematicSvg, exportSchematicPng, printSchematicSheet } from './schematic-editor/export-utils';
+import { exportSchematicSvg, exportSchematicPng, exportSchematicJpg, printSchematicSheet } from './schematic-editor/export-utils';
+import { UniversalExportFormat } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import { SchematicBomNetlistModal } from './schematic-editor/SchematicBomNetlistModal';
 import { loadEditorViewport, saveEditorViewport } from './schematic-editor/editor-session-store';
 import { Search, X, Trash2 } from 'lucide-react';
@@ -73,6 +74,9 @@ export interface SchematicEditorPanelProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  onExportProject?: (format: UniversalExportFormat) => void;
+  onTriggerImport?: () => void;
+  onSaveProject?: () => void;
 }
 
 export function SchematicEditorPanel({
@@ -98,6 +102,9 @@ export function SchematicEditorPanel({
   onCancelPlacing,
   onUndo,
   onRedo,
+  onExportProject,
+  onTriggerImport,
+  onSaveProject,
   canUndo = false,
   canRedo = false,
 }: SchematicEditorPanelProps) {
@@ -1411,7 +1418,17 @@ export function SchematicEditorPanel({
         }}
         onExportSvg={() => exportSchematicSvg(svgRef.current, `${project.title || 'schematic'}.svg`)}
         onExportPng={() => exportSchematicPng(svgRef.current, `${project.title || 'schematic'}.png`, 2)}
-        onPrintPdf={printSchematicSheet}
+        onExportJpg={() => exportSchematicJpg(svgRef.current, `${project.title || 'schematic'}.jpg`, 2)}
+        onPrintPdf={() => printSchematicSheet(svgRef.current, project.title, sheetConfig.theme)}
+        onExportGerber={onExportProject ? () => onExportProject('gerber-zip') : undefined}
+        onExportBom={onExportProject ? () => onExportProject('bom') : undefined}
+        onSaveProject={() => {
+          if (onExportProject) {
+            onExportProject('eihouse');
+          }
+          onSaveProject?.();
+        }}
+        onTriggerImport={onTriggerImport}
         selectedCompId={selectedCompId}
         selectedCompIds={selectedCompIds}
         selectedWireId={activeSelectedWireId}

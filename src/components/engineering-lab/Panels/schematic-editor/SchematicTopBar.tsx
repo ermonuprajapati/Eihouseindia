@@ -55,6 +55,11 @@ interface SchematicTopBarProps {
   onExportSvg: () => void;
   onExportPng: () => void;
   onPrintPdf: () => void;
+  onExportJpg?: () => void;
+  onExportGerber?: () => void;
+  onExportBom?: () => void;
+  onSaveProject?: () => void;
+  onTriggerImport?: () => void;
   selectedCompId?: string | null;
   selectedWireId?: string | null;
   selectedItemId?: string | null;
@@ -92,6 +97,11 @@ export function SchematicTopBar({
   onExportSvg,
   onExportPng,
   onPrintPdf,
+  onExportJpg,
+  onExportGerber,
+  onExportBom,
+  onSaveProject,
+  onTriggerImport,
   selectedCompId,
   selectedWireId,
   selectedItemId,
@@ -519,7 +529,7 @@ export function SchematicTopBar({
               data-testid="export-dropdown-menu"
               style={{ top: exportMenuPos.top, right: exportMenuPos.right }}
               onClick={(e) => e.stopPropagation()}
-              className="fixed bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-[9999] flex flex-col gap-1 w-40 text-[10px] font-mono"
+              className="fixed bg-slate-900 border border-slate-700 rounded-md p-1 shadow-2xl z-[9999] flex flex-col gap-1 w-44 text-[10px] font-mono"
             >
               <button
                 data-testid="export-svg-btn"
@@ -541,6 +551,18 @@ export function SchematicTopBar({
               >
                 <Download className="w-3 h-3" /> High-Res PNG (2x)
               </button>
+              {onExportJpg && (
+                <button
+                  data-testid="export-jpg-btn"
+                  onClick={() => {
+                    onExportJpg();
+                    setShowExportMenu(false);
+                  }}
+                  className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-sky-400 flex items-center gap-1.5"
+                >
+                  <Download className="w-3 h-3" /> Standard JPG (2x)
+                </button>
+              )}
               <button
                 data-testid="export-print-btn"
                 onClick={() => {
@@ -549,8 +571,56 @@ export function SchematicTopBar({
                 }}
                 className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-amber-400 flex items-center gap-1.5"
               >
-                <Printer className="w-3 h-3" /> Print / PDF
+                <Printer className="w-3 h-3" /> Vector / Print PDF
               </button>
+              {onExportGerber && (
+                <button
+                  data-testid="export-gerber-btn"
+                  onClick={() => {
+                    onExportGerber();
+                    setShowExportMenu(false);
+                  }}
+                  className="px-2 py-1 rounded text-left text-amber-300 hover:bg-slate-800 hover:text-amber-200 flex items-center gap-1.5 border-t border-slate-800/80 pt-1"
+                >
+                  <Download className="w-3 h-3 text-amber-400" /> Gerber & Drill (.zip)
+                </button>
+              )}
+              {onExportBom && (
+                <button
+                  data-testid="export-bom-btn"
+                  onClick={() => {
+                    onExportBom();
+                    setShowExportMenu(false);
+                  }}
+                  className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400 flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-400" /> BOM (.csv)
+                </button>
+              )}
+              {onSaveProject && (
+                <button
+                  data-testid="export-save-btn"
+                  onClick={() => {
+                    onSaveProject();
+                    setShowExportMenu(false);
+                  }}
+                  className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-cyan-400 flex items-center gap-1.5 border-t border-slate-800/80 pt-1"
+                >
+                  <Tag className="w-3 h-3 text-cyan-400" /> Save Local File (.eihouse.json)
+                </button>
+              )}
+              {onTriggerImport && (
+                <button
+                  data-testid="export-import-btn"
+                  onClick={() => {
+                    onTriggerImport();
+                    setShowExportMenu(false);
+                  }}
+                  className="px-2 py-1 rounded text-left text-slate-200 hover:bg-slate-800 hover:text-emerald-400 flex items-center gap-1.5"
+                >
+                  <Eye className="w-3 h-3 text-emerald-400" /> Import Project...
+                </button>
+              )}
             </div>
           )}
         </div>

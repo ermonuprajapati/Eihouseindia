@@ -2,7 +2,9 @@
 
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { CircuitComponent, CircuitWire, Component3D, Wire3D } from '@/modules/engineering-lab/types';
+import { CircuitComponent, CircuitWire, Component3D, Wire3D, EngineeringProject } from '@/modules/engineering-lab/types';
+import { UniversalExportMenu } from '../Shared/UniversalExportMenu';
+import { UniversalExportFormat, runUniversalExport } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import { Studio3DCanvas } from '@/modules/engineering-lab/studio-3d/Studio3DCanvas';
 import {
   BreadboardOccupancyMap,
@@ -57,6 +59,9 @@ interface Virtual3dStudioProps {
   isInspectorOpen?: boolean;
   onToggleInspector?: () => void;
   onSaveWorkspace?: () => void;
+  project?: EngineeringProject;
+  onExportProject?: (format: UniversalExportFormat) => void;
+  onTriggerImport?: () => void;
 }
 
 interface Studio3DHistoryState {
@@ -174,6 +179,9 @@ export function Virtual3dStudio({
   isInspectorOpen,
   onToggleInspector,
   onSaveWorkspace,
+  project,
+  onExportProject,
+  onTriggerImport,
 }: Virtual3dStudioProps) {
   const generatedWireSourceMapRef = useRef<Map<string, string[]>>(new Map());
   // Independent 3D Studio document state (Decoupled from 2D Schematic)
@@ -2388,6 +2396,26 @@ export function Virtual3dStudio({
             <span className="hidden sm:inline">Save 3D</span>
             <span className="sm:hidden">Save</span>
           </button>
+
+          <UniversalExportMenu
+            activeMode="virtual3d"
+            onExport={(fmt) => {
+              if (onExportProject) {
+                onExportProject(fmt);
+              } else {
+                const exportProject: EngineeringProject = (project || {
+                  title: '3D Studio Circuit',
+                  components,
+                  wires,
+                  pcb: undefined,
+                }) as unknown as EngineeringProject;
+                runUniversalExport(fmt, { activeMode: 'virtual3d', project: exportProject });
+              }
+            }}
+            onSaveProject={onSaveWorkspace || handleSave3DProject}
+            onTriggerImport={onTriggerImport}
+            testIdPrefix="3d-studio-"
+          />
 
           {onToggleInspector && (
             <button

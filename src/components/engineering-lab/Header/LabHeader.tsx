@@ -39,10 +39,15 @@ export type ExportFormat =
   | 'eihouse'
   | 'json'
   | 'gerber'
+  | 'gerber-zip'
+  | 'pdf'
   | 'bom'
+  | 'cpl'
   | 'firmware'
   | 'cpp'
   | 'png'
+  | 'jpg'
+  | 'jpeg'
   | 'svg'
   | 'netlist'
   | 'netlist-json';
@@ -573,6 +578,19 @@ export function LabHeader({
                   </button>
                   <button
                     onClick={() => {
+                      onExportProject('jpg');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">Crisp Image</span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">JPG</span>
+                  </button>
+                  <button
+                    onClick={() => {
                       onExportProject('svg');
                       setShowExportMenu(false);
                     }}
@@ -588,36 +606,38 @@ export function LabHeader({
               )}
 
               {is3D && (
-                <button
-                  onClick={() => {
-                    onExportProject('png');
-                    setShowExportMenu(false);
-                  }}
-                  className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
-                >
-                  <span className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
-                    <span className="font-medium text-xs truncate">3D Studio Photorealistic Shot</span>
-                  </span>
-                  <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
-                </button>
-              )}
-
-              {isPcb2D && (
                 <>
                   <button
                     onClick={() => {
-                      onExportProject('gerber');
+                      onExportProject('png');
                       setShowExportMenu(false);
                     }}
                     className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
                     <span className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-medium text-xs truncate">Gerber & Drill Package</span>
+                      <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">3D Studio Photorealistic Shot</span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('jpg');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">3D Studio Crisp Image</span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">JPG</span>
+                  </button>
+                </>
+              )}
+
+              {isPcb2D && (
+                <>
                   <button
                     onClick={() => {
                       onExportProject('svg');
@@ -630,6 +650,32 @@ export function LabHeader({
                       <span className="font-medium text-xs truncate">PCB 2D Vector Blueprint</span>
                     </span>
                     <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">SVG</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('png');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">PCB 2D Layout PNG</span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">PNG</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onExportProject('jpg');
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <ImageIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">PCB 2D Layout JPG</span>
+                    </span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">JPG</span>
                   </button>
                 </>
               )}
@@ -651,16 +697,16 @@ export function LabHeader({
                   </button>
                   <button
                     onClick={() => {
-                      onExportProject('gerber');
+                      onExportProject('jpg');
                       setShowExportMenu(false);
                     }}
                     className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
                   >
                     <span className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-medium text-xs truncate">Gerber Fabrication Package</span>
+                      <ImageIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                      <span className="font-medium text-xs truncate">PCB 3D Crisp Image</span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">.zip</span>
+                    <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">JPG</span>
                   </button>
                 </>
               )}
@@ -705,6 +751,34 @@ export function LabHeader({
 
               <button
                 onClick={() => {
+                  onExportProject('gerber');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Production Gerber & Drill (.zip)</span>
+                </span>
+                <span className="shrink-0 text-[10px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">JLCPCB / PCBWay</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onExportProject('pdf');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <FileText className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Engineering Drawing PDF</span>
+                </span>
+                <span className="shrink-0 text-[10px] font-mono text-rose-400 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/40">.pdf</span>
+              </button>
+
+              <button
+                onClick={() => {
                   onExportProject('bom');
                   setShowExportMenu(false);
                 }}
@@ -713,6 +787,20 @@ export function LabHeader({
                 <span className="flex items-center gap-2.5 min-w-0 flex-1">
                   <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="font-medium text-xs truncate">Bill of Materials</span>
+                </span>
+                <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.csv</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onExportProject('cpl');
+                  setShowExportMenu(false);
+                }}
+                className="w-full px-2.5 py-2 text-left text-slate-200 hover:bg-slate-800/90 hover:text-white rounded-lg flex items-center justify-between gap-3 transition-colors"
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <FileCode2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span className="font-medium text-xs truncate">Centroid / CPL Placement</span>
                 </span>
                 <span className="shrink-0 text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">.csv</span>
               </button>

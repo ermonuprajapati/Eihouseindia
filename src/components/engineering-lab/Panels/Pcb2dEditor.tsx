@@ -14,6 +14,7 @@ import {
 import { PcbAutoRouter, compute45RoutePoints } from '@/modules/engineering-lab/pcb-engine/autorouter';
 import { DrcEngine, DrcViolation } from '@/modules/engineering-lab/pcb-engine/drc-engine';
 import { GerberExporter } from '@/modules/engineering-lab/pcb-engine/gerber-exporter';
+import { UniversalExportFormat } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import { FootprintRenderer } from '@/modules/engineering-lab/pcb-engine/footprint-renderer';
 import { PcbGenerator, isVirtualSchematicSymbol, DEFAULT_GND_POUR_LAYER } from '@/modules/engineering-lab/pcb-engine/pcb-generator';
 import { resolvePhysicalSpec } from '@/modules/engineering-lab/circuit-engine/component-physical-registry';
@@ -48,7 +49,10 @@ import {
   Type,
   Copy,
   Check,
+  Save,
+  Upload,
 } from 'lucide-react';
+import { exportCanvasAsPng, exportCanvasAsJpg, exportCanvasAsPdf } from '@/modules/engineering-lab/export-engine/raster-export';
 import { toast } from 'sonner';
 
 export interface Pcb2dEditorProps {
@@ -59,6 +63,8 @@ export interface Pcb2dEditorProps {
   onUpdatePcb?: (updated: PcbLayout) => void;
   onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
   onExportGerber?: () => void;
+  onExportProject?: (format: UniversalExportFormat) => void;
+  onTriggerImport?: () => void;
 }
 
 const TRACE_WIDTH_PRESETS = [
@@ -91,6 +97,9 @@ export function Pcb2dEditor({
   projectTitle = 'EI_House_PCB',
   onUpdatePcb,
   onUpdateDimensions,
+  onExportGerber,
+  onExportProject,
+  onTriggerImport,
 }: Pcb2dEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -180,6 +189,35 @@ export function Pcb2dEditor({
 
   // Manufacturing Export Dropdown State
   const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
+  const exportBtnRef = useRef<HTMLButtonElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [exportMenuPos, setExportMenuPos] = useState<{ top: number; right: number }>({ top: 46, right: 12 });
+
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        exportBtnRef.current?.contains(target) ||
+        exportMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsExportMenuOpen(false);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setIsExportMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleOutsideClick, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isExportMenuOpen]);
 
   // Stackup specs
   const [copperLayers, setCopperLayers] = useState<2 | 4 | 6 | 8>(pcb.copperLayers || 2);
@@ -598,8 +636,13 @@ export function Pcb2dEditor({
   // Multi-Format Manufacturing File Exporters
   const handleDownloadGerberZip = () => {
     setIsExportMenuOpen(false);
-    GerberExporter.exportGerberZip(pcb, components, projectTitle);
-    toast.success(`Downloaded Production Gerber ZIP package for ${projectTitle}`);
+    if (onExportProject) {
+      onExportProject('gerber-zip');
+    } else if (onExportGerber) {
+      onExportGerber();
+    } else {
+      GerberExporter.exportGerberZip(pcb, components, projectTitle);
+    }
   };
 
   const handleDownloadBomCsv = () => {
@@ -2082,9 +2125,20 @@ export function Pcb2dEditor({
           {/* Export Manufacturing Files ▾ Dropdown Menu */}
           <div className="relative">
             <button
+              ref={exportBtnRef}
               type="button"
-              onClick={() => setIsExportMenuOpen((prev) => !prev)}
-              className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow"
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = exportBtnRef.current?.getBoundingClientRect();
+                if (rect) {
+                  setExportMenuPos({
+                    top: rect.bottom + 6,
+                    right: Math.max(8, (typeof window !== 'undefined' ? window.innerWidth : 1000) - rect.right),
+                  });
+                }
+                setIsExportMenuOpen((prev) => !prev);
+              }}
+              className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow cursor-pointer"
               title="Export complete manufacturing files (Gerbers, Drill, BOM, CPL, SVG)"
             >
               <Download className="w-3.5 h-3.5" />
@@ -2093,7 +2147,11 @@ export function Pcb2dEditor({
             </button>
 
             {isExportMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 bg-[#0B1528] border border-slate-700/80 rounded-xl shadow-2xl py-1.5 z-50 font-mono text-xs animate-in fade-in zoom-in-95 duration-100">
+              <div
+                ref={exportMenuRef}
+                style={{ top: exportMenuPos.top, right: exportMenuPos.right }}
+                className="fixed w-64 bg-[#0B1528] border border-slate-700/80 rounded-xl shadow-2xl py-1.5 z-[9999] font-mono text-xs animate-in fade-in zoom-in-95 duration-100"
+              >
                 <button
                   type="button"
                   onClick={handleDownloadGerberZip}
@@ -2130,6 +2188,82 @@ export function Pcb2dEditor({
                   <Printer className="w-3.5 h-3.5 text-purple-400" />
                   <span>2D Print Blueprint (.svg)</span>
                 </button>
+                <div className="h-px bg-slate-800 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExportProject) {
+                      onExportProject('pdf');
+                    } else if (canvasRef.current) {
+                      exportCanvasAsPdf(canvasRef.current, `${projectTitle}_pcb2d.pdf`, {
+                        title: projectTitle,
+                        viewLabel: 'PCB 2D Layout & Fabrication Blueprint',
+                      }, '#042F2E');
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Production PDF (.pdf)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExportProject) {
+                      onExportProject('png');
+                    } else if (canvasRef.current) {
+                      exportCanvasAsPng(canvasRef.current, `${projectTitle}_pcb2d.png`);
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  <span>2D Board Image (.png)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExportProject) {
+                      onExportProject('jpg');
+                    } else if (canvasRef.current) {
+                      exportCanvasAsJpg(canvasRef.current, `${projectTitle}_pcb2d.jpg`, '#042F2E');
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-slate-300 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>2D Board Image (.jpg)</span>
+                </button>
+                <div className="h-px bg-slate-800 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExportProject) {
+                      onExportProject('eihouse');
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-emerald-400 transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Local File (.eihouse.json)</span>
+                </button>
+                {onTriggerImport && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      onTriggerImport();
+                    }}
+                    className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-cyan-400 transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import Local Project...</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -2412,6 +2546,7 @@ export function Pcb2dEditor({
 
           {/* 2D EDA Canvas */}
           <canvas
+            id="pcb-2d-canvas"
             ref={canvasRef}
             width={850}
             height={560}

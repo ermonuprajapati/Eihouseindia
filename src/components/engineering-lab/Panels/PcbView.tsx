@@ -2,8 +2,10 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { PcbLayout, CircuitComponent, CircuitWire } from '@/modules/engineering-lab/types';
+import { PcbLayout, CircuitComponent, CircuitWire, EngineeringProject } from '@/modules/engineering-lab/types';
 import type { Pcb3dViewerProps } from '@/modules/engineering-lab/pcb-engine/Pcb3dViewer';
+import { UniversalExportMenu } from '../Shared/UniversalExportMenu';
+import { UniversalExportFormat, runUniversalExport } from '@/modules/engineering-lab/export-engine/universal-exporter';
 import {
   Box,
   Sliders,
@@ -49,6 +51,8 @@ export interface PcbViewProps {
   wires?: CircuitWire[];
   projectTitle?: string;
   onExportGerber: () => void;
+  onExportProject?: (format: UniversalExportFormat) => void;
+  onTriggerImport?: () => void;
   is3DMode?: boolean;
   onUpdateDimensions?: (widthMm: number, heightMm: number) => void;
   onUpdatePcb?: (updated: PcbLayout) => void;
@@ -62,6 +66,8 @@ export function PcbView({
   wires = [],
   projectTitle = 'EI_House_PCB',
   onExportGerber,
+  onExportProject,
+  onTriggerImport,
   is3DMode = false,
   onUpdateDimensions,
   onUpdatePcb,
@@ -89,6 +95,8 @@ export function PcbView({
         onUpdatePcb={onUpdatePcb}
         onUpdateDimensions={onUpdateDimensions}
         onExportGerber={onExportGerber}
+        onExportProject={onExportProject}
+        onTriggerImport={onTriggerImport}
       />
     );
   }
@@ -179,7 +187,7 @@ export function PcbView({
           </div>
         </div>
 
-        {/* Right Section: Soldermask Colors */}
+        {/* Right Section: Soldermask Colors & Universal Export */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-slate-400 font-mono text-[11px] mr-1">Mask:</span>
@@ -204,6 +212,27 @@ export function PcbView({
               ))}
             </div>
           </div>
+
+          <UniversalExportMenu
+            activeMode="pcb3d"
+            onExport={(fmt) => {
+              if (onExportProject) {
+                onExportProject(fmt);
+              } else if (fmt === 'gerber-zip' || fmt === 'gerber') {
+                onExportGerber();
+              } else {
+                const exportProject: EngineeringProject = {
+                  title: projectTitle || 'EIHouse PCB Project',
+                  components,
+                  wires,
+                  pcb,
+                } as unknown as EngineeringProject;
+                runUniversalExport(fmt, { activeMode: 'pcb3d', project: exportProject });
+              }
+            }}
+            onTriggerImport={onTriggerImport}
+            testIdPrefix="pcb-3d-"
+          />
         </div>
       </div>
 
