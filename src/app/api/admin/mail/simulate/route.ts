@@ -4,6 +4,16 @@ import { db } from '@/config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import type { AdminEmailMessage } from '@/types';
 
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -44,11 +54,13 @@ IIT Delhi`;
       tags: ['Test Inbound', 'Collaboration'],
     };
 
+    const docData = stripUndefined(newRecord as unknown as Record<string, unknown>);
+
     const adminDb = getAdminDb();
     if (adminDb) {
-      await adminDb.collection('adminEmails').doc(emailId).set(newRecord);
+      await adminDb.collection('adminEmails').doc(emailId).set(docData);
     } else {
-      await setDoc(doc(db, 'adminEmails', emailId), newRecord);
+      await setDoc(doc(db, 'adminEmails', emailId), docData);
     }
 
     return NextResponse.json({

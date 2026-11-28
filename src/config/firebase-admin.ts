@@ -66,5 +66,12 @@ export function getAdminAuth(): Auth | null {
 
 export function getAdminDb(): Firestore | null {
   const app = getOrInitAdminApp();
-  return app ? getFirestore(app) : null;
+  if (!app) return null;
+  const db = getFirestore(app);
+  try {
+    db.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // Already set or cannot be set again
+  }
+  return db;
 }

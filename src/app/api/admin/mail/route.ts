@@ -14,6 +14,16 @@ function getResendClient(): Resend | null {
   return new Resend(apiKey);
 }
 
+function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -134,24 +144,26 @@ export async function POST(request: Request) {
       folder: 'sent',
       from: senderDisplay,
       to,
-      cc,
-      bcc,
       subject,
       bodyHtml: bodyHtml || `<p>${bodyText}</p>`,
       bodyText: bodyText || bodyHtml.replace(/<[^>]*>?/gm, ''),
       status: 'read',
       isStarred: false,
       createdAt: new Date().toISOString(),
-      resendId,
       source: 'composer',
-      inReplyTo,
+      ...(cc ? { cc } : {}),
+      ...(bcc ? { bcc } : {}),
+      ...(resendId ? { resendId } : {}),
+      ...(inReplyTo ? { inReplyTo } : {}),
     };
+
+    const docData = stripUndefined(newRecord as unknown as Record<string, unknown>);
 
     const adminDb = getAdminDb();
     if (adminDb) {
-      await adminDb.collection('adminEmails').doc(emailId).set(newRecord);
+      await adminDb.collection('adminEmails').doc(emailId).set(docData);
     } else {
-      await setDoc(doc(db, 'adminEmails', emailId), newRecord);
+      await setDoc(doc(db, 'adminEmails', emailId), docData);
     }
 
     return NextResponse.json({
