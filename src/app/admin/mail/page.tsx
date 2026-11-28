@@ -12,22 +12,12 @@ import {
   Trash2,
   RefreshCw,
   Search,
-  Check,
-  CheckCircle2,
   X,
   Reply,
-  Forward,
-  Sparkles,
   ArrowLeft,
   ShieldAlert,
   SlidersHorizontal,
-  Info,
-  Clock,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
   FileText,
-  AlertCircle,
   Copy,
   Zap,
 } from 'lucide-react';
@@ -61,7 +51,7 @@ import type { AdminEmailMessage, ContactInquiryItem, EmailFolder } from '@/types
 
 export default function AdminMailPage() {
   const router = useRouter();
-  const { firebaseUser, profile, loading: authLoading, isAdmin, isEditor } = useAuth();
+  const { firebaseUser, profile, loading: authLoading, isEditor } = useAuth();
 
   // Navigation & folders
   const [currentFolder, setCurrentFolder] = useState<EmailFolder | 'inquiries'>('inbox');
@@ -425,9 +415,11 @@ export default function AdminMailPage() {
               <div>
                 <h1 className="text-xl font-bold text-[#0B1528] tracking-tight flex items-center gap-2">
                   <span>EI HOUSE Mail Suite</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Resend Inbox
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
+                    resendConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${resendConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                    {resendConfigured ? 'Resend Inbox' : 'Resend Offline'}
                   </span>
                 </h1>
                 <p className="text-xs text-slate-500">Official transactional & editorial communication platform</p>

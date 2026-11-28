@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const adminDb = getAdminDb();
 
     if (adminDb) {
-      let q = adminDb.collection('adminEmails').orderBy('createdAt', 'desc').limit(200);
+      const q = adminDb.collection('adminEmails').orderBy('createdAt', 'desc').limit(200);
       const snapshot = await q.get();
       snapshot.forEach((d) => {
         emails.push({ id: d.id, ...d.data() } as AdminEmailMessage);
