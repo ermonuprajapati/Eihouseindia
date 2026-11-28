@@ -363,3 +363,27 @@ export interface LibraryItem {
   updatedAt: string;
 }
 
+export type EmailFolder = 'inbox' | 'sent' | 'trash';
+
+export interface AdminEmailMessage {
+  id: string;
+  folder: EmailFolder;
+  from: string;
+  fromName?: string;
+  to: string;
+  toName?: string;
+  cc?: string;
+  bcc?: string;
+  replyTo?: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  status: 'unread' | 'read';
+  isStarred?: boolean;
+  createdAt: string;
+  resendId?: string;
+  source?: 'inbound_webhook' | 'composer' | 'contact_form' | 'simulation';
+  tags?: string[];
+  inReplyTo?: string;
+}
+

@@ -282,7 +282,13 @@ service cloud.firestore {
       allow read, update, delete: if isEditor();
     }
 
-    // 12. Immutable Audit & Moderation Logs
+    // 12. Admin & Inbound Emails (Resend Inbox)
+    match /adminEmails/{emailId} {
+      allow read, update, delete: if isEditor();
+      allow create: if true;
+    }
+
+    // 13. Immutable Audit & Moderation Logs
     match /moderationLogs/{logId} {
       allow read: if isEditor();
       allow create: if isEditor() && isValidId(logId);

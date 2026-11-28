@@ -136,6 +136,7 @@ import type {
 
 type AdminSection =
   | 'dashboard'
+  | 'mail'
   | 'all-articles'
   | 'products'
   | 'tools'
@@ -952,6 +953,7 @@ export default function AdminPanelPage() {
 
   const navItems: Array<{ id: AdminSection; label: string; adminOnly?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'mail', label: 'Mail & Resend Inbox' },
     { id: 'pending', label: `Pending Reviews (${pendingPosts.length})` },
     { id: 'inquiries', label: `Inquiries (${pendingInquiries.length})` },
     { id: 'products', label: `Store Products (EI House) (${productsList.length})` },
@@ -2537,6 +2539,91 @@ export default function AdminPanelPage() {
                           )}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                )}
+
+                {section === 'mail' && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="font-display text-2xl font-semibold text-[#0B1528] flex items-center gap-2">
+                          <Mail className="h-6 w-6 text-primary" />
+                          EI HOUSE Mail Suite &amp; Resend Inbox
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          Complete email workstation for sending and receiving official communications via Resend API and Inbound Webhooks.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button asChild className="bg-[#0B1528] text-white hover:bg-[#162746]">
+                          <Link href="/admin/mail">
+                            <Mail className="h-4 w-4 mr-2" />
+                            Open Dedicated Mail Client
+                            <ArrowRight className="h-4 w-4 ml-2" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Sender Address</span>
+                          <span className="text-emerald-700 font-semibold">Active</span>
+                        </div>
+                        <p className="font-mono text-sm font-bold text-slate-800">
+                          info@eihouseindia.in
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Official domain sender for all editorial updates and notifications.
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Inbound Webhook</span>
+                          <span className="text-blue-700 font-semibold">Ready</span>
+                        </div>
+                        <p className="font-mono text-xs font-semibold text-slate-800 truncate">
+                          /api/webhooks/resend
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Captures inbound emails sent to your domain and files them directly in the inbox.
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Mail Engine</span>
+                          <span className="text-purple-700 font-semibold">Resend API</span>
+                        </div>
+                        <p className="font-sans text-sm font-bold text-slate-800">
+                          RESEND_API_MAIN
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Full rich-text composer, template library, and direct quick-reply workflow.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-8 text-center space-y-4">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                        <Mail className="h-6 w-6" />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900">Dedicated Full-Screen Email Interface</h3>
+                      <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
+                        Access folders (Inbox, Sent, Starred, Inquiries, Trash), compose with pre-built editorial templates, test with instant inbound simulation, and review raw HTML or plain text messages.
+                      </p>
+                      <div className="pt-2">
+                        <Button asChild size="lg" className="bg-[#0B1528] text-white hover:bg-[#162746]">
+                          <Link href="/admin/mail">
+                            <Mail className="h-4 w-4 mr-2" />
+                            Launch EI HOUSE Mail Suite (/admin/mail)
+                            <ArrowRight className="h-4 w-4 ml-2" />
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}

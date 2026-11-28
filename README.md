@@ -134,7 +134,7 @@ In your Vercel project, go to **Settings ➔ Environment Variables** and add the
 | :--- | :--- |
 | `NEXT_PUBLIC_APP_URL` / `APP_URL` | Application root URL (`https://eihouseindia.in`) |
 | `NEXT_PUBLIC_FIREBASE_*` | Firebase Client SDK credentials (from Firebase Web App) |
-| `RESEND_API_KEY` | Resend API key for editorial email notifications |
+| `RESEND_API_MAIN` / `RESEND_API_KEY` | Resend API key for editorial email notifications |
 | `RESEND_FROM_EMAIL` | Sender email address (`EIHOUSE INDIA <info@eihouseindia.in>`) |
 | `CONTACT_EMAIL` | Primary contact address (`info@eihouseindia.in`) |
 | `BOOTSTRAP_ADMIN_EMAIL` | Designated administrator email (`er.monuprajapati.2024@gmail.com`) |
@@ -187,7 +187,7 @@ npx firebase deploy --only firestore:rules,firestore:indexes,storage
 
 All transactional editorial notifications are dispatched through [Resend](https://resend.com):
 - **Sender Address**: `info@eihouseindia.in` (configured as requested, no `noreply`).
-- **Resend API Key**: Configure via `RESEND_API_KEY` in environment variables.
+- **Resend API Key**: Configure via `RESEND_API_MAIN` (or `RESEND_API_KEY`) in environment variables.
 
 ### Verifying Domain in Resend:
 1. Open your [Resend Domains Dashboard](https://resend.com/domains).

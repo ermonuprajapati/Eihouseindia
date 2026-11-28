@@ -516,12 +516,12 @@ ${escapeHtml(input.message)}
 export async function sendEditorialEmail(
   input: SendEditorialEmailInput
 ): Promise<EmailDispatchResult> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env.RESEND_API_MAIN || process.env.RESEND_API_KEY;
   if (!apiKey || apiKey === 're_YOUR_RESEND_API_KEY') {
     return {
       sent: false,
       provider: 'unconfigured',
-      reason: 'RESEND_API_KEY is not configured in server environment.',
+      reason: 'RESEND_API_MAIN / RESEND_API_KEY is not configured in server environment.',
     };
   }
 

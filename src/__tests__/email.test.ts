@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { sendEditorialEmail } from '@/modules/email/email-service';
 
 describe('Email Service', () => {
-  it('returns unconfigured gracefully when RESEND_API_KEY is not set or placeholder', async () => {
+  it('returns unconfigured gracefully when RESEND_API_MAIN or RESEND_API_KEY is not set or placeholder', async () => {
+    const originalMain = process.env.RESEND_API_MAIN;
     const originalKey = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_MAIN;
     process.env.RESEND_API_KEY = 're_YOUR_RESEND_API_KEY';
 
     const result = await sendEditorialEmail({
@@ -15,11 +17,27 @@ describe('Email Service', () => {
     expect(result.sent).toBe(false);
     expect(result.provider).toBe('unconfigured');
 
+    // Also test with RESEND_API_MAIN placeholder
+    process.env.RESEND_API_MAIN = 're_YOUR_RESEND_API_KEY';
+    delete process.env.RESEND_API_KEY;
+
+    const resultMain = await sendEditorialEmail({
+      to: 'test@example.com',
+      event: 'WELCOME',
+      recipientName: 'Devang',
+    });
+
+    expect(resultMain.sent).toBe(false);
+    expect(resultMain.provider).toBe('unconfigured');
+
+    process.env.RESEND_API_MAIN = originalMain;
     process.env.RESEND_API_KEY = originalKey;
   });
 
   it('handles ADMIN_POST_SUBMITTED and ADMIN_CONTACT_INQUIRY events gracefully', async () => {
+    const originalMain = process.env.RESEND_API_MAIN;
     const originalKey = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_MAIN;
     process.env.RESEND_API_KEY = 're_YOUR_RESEND_API_KEY';
 
     const postResult = await sendEditorialEmail({
@@ -48,6 +66,7 @@ describe('Email Service', () => {
     expect(inquiryResult.sent).toBe(false);
     expect(inquiryResult.provider).toBe('unconfigured');
 
+    process.env.RESEND_API_MAIN = originalMain;
     process.env.RESEND_API_KEY = originalKey;
   });
 });
