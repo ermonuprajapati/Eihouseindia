@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         try {
           const fetched = await resend.emails.get(resendEmailId);
           if (fetched.data) {
-            const dataObj = fetched.data as Record<string, unknown>;
+            const dataObj = fetched.data as unknown as Record<string, unknown>;
             from = typeof dataObj.from === 'string' ? dataObj.from : from;
             subject = typeof dataObj.subject === 'string' ? dataObj.subject : subject;
             bodyHtml = typeof dataObj.html === 'string' ? dataObj.html : '';

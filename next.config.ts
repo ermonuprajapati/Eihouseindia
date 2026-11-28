@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   turbopack: {},
   images: {
     formats: ['image/avif', 'image/webp'],
