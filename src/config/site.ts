@@ -23,7 +23,7 @@ export const SITE_CONFIG = {
   whatsappDisplay: '+91 7080768737',
   entity: {
     legalName: 'Engineering Innovation House',
-    legalType: 'MSME / Udyam Registered Proprietorship',
+    legalType: 'Engineering & Technology Organization',
     country: 'India',
     focus: 'Engineering Education, Hardware R&D, IoT, Robotics & Technical Publishing',
     operatingRegion: 'Pan-India & Global',

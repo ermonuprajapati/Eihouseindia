@@ -215,7 +215,7 @@ export default function AboutPage() {
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-[#172D4D] to-[#0B1528] p-6 text-white space-y-4 shadow-md">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono uppercase tracking-wider text-[#F59E0B]">Core Ethos</span>
-                    <span className="text-xs text-slate-300">MSME / Udyam Registered</span>
+                    <span className="text-xs text-slate-300">Indigenous Engineering Platform</span>
                   </div>
                   <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-200">
                     <li className="flex items-start gap-2">
@@ -304,7 +304,7 @@ export default function AboutPage() {
                     <div>
                       <p className="font-semibold">Official Entity Ownership</p>
                       <p className="text-amber-800/90 text-[11px] leading-relaxed">
-                        Registered Proprietorship under MSME / Udyam (Govt. of India), spearheading engineering innovation, hardware prototyping, and technical education.
+                        Indian engineering and technology-driven organization spearheading engineering innovation, hardware prototyping, and technical education.
                       </p>
                     </div>
                   </div>

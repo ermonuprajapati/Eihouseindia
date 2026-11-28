@@ -170,7 +170,7 @@ export default function ContactPage() {
 
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Verified Indian MSME / Udyam Engineering Enterprise</span>
+                  <span>Indian Engineering &amp; Technology Organization</span>
                 </div>
               </div>
 

@@ -33,24 +33,6 @@ export function SiteFooter() {
               {SITE_CONFIG.description}
             </p>
             <div className="pt-2 text-xs text-slate-300 space-y-1.5 border-t border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-full overflow-hidden border border-amber-400/60 shrink-0 bg-slate-850">
-                  <Image
-                    src={SITE_CONFIG.founder.avatarImage}
-                    alt="Er. Monu Prajapati"
-                    width={24}
-                    height={24}
-                    sizes="24px"
-                    className="h-full w-full object-cover object-top"
-                  />
-                </div>
-                <p className="text-slate-200 font-medium">
-                  Founder &amp; Proprietor:{' '}
-                  <Link href="/about#founder" prefetch={false} className="text-[#F59E0B] hover:underline font-semibold py-1 inline-block">
-                    {SITE_CONFIG.founder.fullNameWithPrefix}
-                  </Link>
-                </p>
-              </div>
               <p className="text-slate-300">{SITE_CONFIG.entity.legalType} · {SITE_CONFIG.entity.country}</p>
               <p>Email: <a href={`mailto:${SITE_CONFIG.contactEmail}`} className="text-slate-200 hover:text-white underline py-1 inline-block">{SITE_CONFIG.contactEmail}</a></p>
             </div>
@@ -188,6 +170,9 @@ export function SiteFooter() {
             aria-label="Legal and compliance"
             className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300"
           >
+            <Link href="/about" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              About Us
+            </Link>
             <Link href="/privacy-policy" prefetch={false} className="hover:text-white hover:underline transition-colors">
               Privacy Policy
             </Link>
@@ -213,7 +198,7 @@ export function SiteFooter() {
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
             <p>© {new Date().getFullYear()} {SITE_CONFIG.name} · {SITE_CONFIG.tagline} All rights reserved.</p>
-            <p>Founded by {SITE_CONFIG.founder.fullNameWithPrefix} · MSME / Udyam Registered Indian Platform.</p>
+            <p>Built for Engineers &amp; Innovators · {SITE_CONFIG.entity.country}</p>
           </div>
         </div>
       </div>
