@@ -586,7 +586,7 @@ export default function AdminMailPage() {
                   </button>
                 ))}
                 <span className="ml-auto text-[11px] text-slate-400 tabular-nums">
-                  {currentFolder === 'inquiries' ? displayedInquiries.length : displayedEmails.length}
+                  {(currentFolder as string) === 'inquiries' ? displayedInquiries.length : displayedEmails.length}
                 </span>
               </div>
             )}

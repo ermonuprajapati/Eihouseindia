@@ -100,7 +100,7 @@ export async function POST() {
           status: 'unread',
           isStarred: false,
           createdAt: item.created_at || new Date().toISOString(),
-          source: 'inbound_sync',
+          source: 'inbound_webhook',
           tags: ['resend_receiving'],
         };
 
