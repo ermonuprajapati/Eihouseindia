@@ -11,7 +11,10 @@ export type EditorialEmailEvent =
   | 'ACCOUNT_NOTICE'
   | 'ADMIN_POST_SUBMITTED'
   | 'ADMIN_CONTACT_INQUIRY'
-  | 'ADMIN_INQUIRY_REPLY';
+  | 'ADMIN_INQUIRY_REPLY'
+  | 'PAYMENT_RECEIPT'
+  | 'SUBSCRIPTION_RECEIPT'
+  | 'COURSE_ACCESS';
 
 export interface SendEditorialEmailInput {
   to: string;
@@ -29,6 +32,13 @@ export interface SendEditorialEmailInput {
   authorEmail?: string;
   category?: string;
   excerpt?: string;
+  orderId?: string;
+  amount?: string;
+  currency?: string;
+  planName?: string;
+  courseName?: string;
+  invoiceUrl?: string;
+  fromAccount?: 'info' | 'admin' | 'founder';
 }
 
 export interface EmailDispatchResult {
@@ -491,6 +501,126 @@ ${escapeHtml(input.message)}
       };
     }
 
+    case 'PAYMENT_RECEIPT': {
+      const orderId = input.orderId || `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const amount = input.amount || 'INR';
+      const itemTitle = input.courseName || input.articleTitle || 'EI HOUSE Engineering Course / Material';
+      const content = `
+        <div style="text-align: center; margin-bottom: 24px;">
+          <span style="background-color: #dcfce7; color: #15803d; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 20px; display: inline-block;">
+            ✓ Payment Confirmed
+          </span>
+          <h1 style="color: #0B1528; font-size: 22px; font-weight: 700; margin: 16px 0 6px 0;">
+            Thank you for your order, ${escapeHtml(input.recipientName)}!
+          </h1>
+          <p style="color: #64748b; font-size: 14px; margin: 0;">Order Reference: <strong style="color: #0b1528; font-family: monospace;">${escapeHtml(orderId)}</strong></p>
+        </div>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 0 0 24px 0; padding: 18px 20px;">
+          <tr>
+            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Item Purchased:</td>
+            <td style="padding: 6px 0; color: #0f172a; font-size: 14px; font-weight: 600; text-align: right;">${escapeHtml(itemTitle)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Amount Paid:</td>
+            <td style="padding: 6px 0; color: #15803d; font-size: 15px; font-weight: 700; text-align: right;">${escapeHtml(amount)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Billing Entity:</td>
+            <td style="padding: 6px 0; color: #334155; font-size: 13px; text-align: right;">EI HOUSE Admin &amp; Billing</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Billing Support:</td>
+            <td style="padding: 6px 0; color: #1d4ed8; font-size: 13px; text-align: right;"><a href="mailto:admin@eihouseindia.in" style="color: #1d4ed8; text-decoration: none;">admin@eihouseindia.in</a></td>
+          </tr>
+        </table>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${siteUrl}/dashboard" style="background-color: #0B1528; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+            Access Your Course / Dashboard &rarr;
+          </a>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
+          Please retain this email as your official digital purchase receipt and tax invoice.
+        </p>
+      `;
+      return {
+        subject: `Payment Receipt: ${itemTitle} (${orderId})`,
+        html: wrapEmailTemplate(content, `Payment confirmed for ${itemTitle}.`),
+      };
+    }
+
+    case 'SUBSCRIPTION_RECEIPT': {
+      const planName = input.planName || 'EI HOUSE Pro Access';
+      const amount = input.amount || 'Subscription Active';
+      const content = `
+        <div style="text-align: center; margin-bottom: 24px;">
+          <span style="background-color: #dbeafe; color: #1d4ed8; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 20px; display: inline-block;">
+            ⚡ Subscription Active
+          </span>
+          <h1 style="color: #0B1528; font-size: 22px; font-weight: 700; margin: 16px 0 6px 0;">
+            Welcome to ${escapeHtml(planName)}
+          </h1>
+          <p style="color: #64748b; font-size: 14px; margin: 0;">Subscriber: <strong>${escapeHtml(input.recipientName)}</strong></p>
+        </div>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 0 0 24px 0;">
+          <p style="margin: 0 0 12px 0; font-weight: 700; color: #0b1528; font-size: 14px;">Your Membership Benefits:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #334155; font-size: 14px; line-height: 1.8;">
+            <li>Unlimited 3D Engineering Lab simulations and cloud exports</li>
+            <li>Direct engineering author publishing rights</li>
+            <li>Priority datasheet &amp; IC pinout library search</li>
+          </ul>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+          <p style="margin: 0; font-size: 13px; color: #64748b;">
+            Billing &amp; Invoices: <strong style="color: #0b1528;">${escapeHtml(amount)}</strong> &bull; Managed by <a href="mailto:admin@eihouseindia.in" style="color: #1d4ed8;">admin@eihouseindia.in</a>
+          </p>
+        </div>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${siteUrl}/dashboard" style="background-color: #1D4ED8; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+            Launch Pro Tools Now &rarr;
+          </a>
+        </div>
+      `;
+      return {
+        subject: `Subscription Activated: ${planName} — EI HOUSE INDIA`,
+        html: wrapEmailTemplate(content, `Your ${planName} subscription is now active.`),
+      };
+    }
+
+    case 'COURSE_ACCESS': {
+      const courseName = input.courseName || 'Engineering Course';
+      const content = `
+        <h1 style="color: #0B1528; font-size: 22px; font-weight: 700; margin: 0 0 16px 0; line-height: 1.3;">
+          You're enrolled in ${escapeHtml(courseName)}! 🎓
+        </h1>
+        <p style="color: #334155; margin: 0 0 16px 0; font-size: 15px;">
+          Hello ${escapeHtml(input.recipientName)}, your course workspace is prepared and ready on <strong>EI HOUSE INDIA</strong>.
+        </p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 20px; margin: 0 0 24px 0;">
+          <p style="margin: 0 0 8px 0; font-weight: 700; color: #0b1528; font-size: 14px;">Next steps to begin:</p>
+          <ol style="margin: 0; padding-left: 20px; color: #334155; font-size: 14px; line-height: 1.8;">
+            <li>Log into your account at <a href="${siteUrl}/auth/login" style="color: #1d4ed8;">${siteUrl}/auth/login</a></li>
+            <li>Head to your <strong>My Courses</strong> library</li>
+            <li>Start with Module 1: Core Fundamentals &amp; Simulation Setup</li>
+          </ol>
+        </div>
+        <p style="color: #64748b; font-size: 13px; margin: 0 0 24px 0;">
+          Need technical or lab support? Reply directly to this email (<a href="mailto:info@eihouseindia.in" style="color: #1d4ed8;">info@eihouseindia.in</a>).
+        </p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${siteUrl}/dashboard" style="background-color: #0B1528; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+            Open Course Library
+          </a>
+        </div>
+      `;
+      return {
+        subject: `Welcome to ${courseName} — Access Your Course Material`,
+        html: wrapEmailTemplate(content, `You are enrolled in ${courseName}.`),
+      };
+    }
+
     case 'ACCOUNT_NOTICE':
     default: {
       const content = `
@@ -527,7 +657,31 @@ export async function sendEditorialEmail(
 
   try {
     const resend = new Resend(apiKey);
-    const from = process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
+    
+    // Determine appropriate sender identity according to 3-tier architecture:
+    // admin@ -> Billing, payment receipts, subscriptions, financial invoices
+    // founder@ -> Executive, partnerships, VIP outreach
+    // info@ -> System onboarding, courses, inquiries, editorial notifications
+    const targetAccount = input.fromAccount || (
+      input.event === 'PAYMENT_RECEIPT' || input.event === 'SUBSCRIPTION_RECEIPT'
+        ? 'admin'
+        : 'info'
+    );
+
+    let from = process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
+    let replyTo = 'info@eihouseindia.in';
+
+    if (targetAccount === 'admin') {
+      from = 'EI HOUSE Admin & Billing <admin@eihouseindia.in>';
+      replyTo = 'admin@eihouseindia.in';
+    } else if (targetAccount === 'founder') {
+      from = 'Monu Prajapati | Founder EI HOUSE <founder@eihouseindia.in>';
+      replyTo = 'founder@eihouseindia.in';
+    } else {
+      from = process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
+      replyTo = 'info@eihouseindia.in';
+    }
+
     const { subject, html } = getEmailCopy(input);
     const isAdminEvent = input.event === 'ADMIN_POST_SUBMITTED' || input.event === 'ADMIN_CONTACT_INQUIRY';
     const recipientTo = isAdminEvent ? (input.to || SITE_CONFIG.bootstrapAdminEmail) : input.to;
@@ -537,6 +691,7 @@ export async function sendEditorialEmail(
       to: recipientTo,
       subject,
       html,
+      replyTo,
     });
 
     if (response.error) {

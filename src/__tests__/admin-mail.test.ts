@@ -11,14 +11,29 @@ describe('Admin Mail Suite', () => {
     expect(SENDER_ACCOUNTS.info.email).toBe('info@eihouseindia.in');
     expect(SENDER_ACCOUNTS.admin.email).toBe('admin@eihouseindia.in');
     expect(SENDER_ACCOUNTS.founder.email).toBe('founder@eihouseindia.in');
+
+    expect(SENDER_ACCOUNTS.info.role).toBe('System & Inquiries');
+    expect(SENDER_ACCOUNTS.admin.role).toBe('Billing & Operations');
+    expect(SENDER_ACCOUNTS.founder.role).toBe('Executive & VIP');
   });
 
-  it('loads preset mail templates properly', () => {
-    expect(PRESET_MAIL_TEMPLATES.length).toBeGreaterThanOrEqual(4);
+  it('loads preset mail templates properly with account routing', () => {
+    expect(PRESET_MAIL_TEMPLATES.length).toBeGreaterThanOrEqual(6);
     const editorial = PRESET_MAIL_TEMPLATES.find((t) => t.id === 'editorial_reply');
     expect(editorial).toBeDefined();
+    expect(editorial?.defaultAccount).toBe('info');
     expect(editorial?.subject).toContain('EI HOUSE INDIA');
     expect(editorial?.bodyText).toContain('eihouseindia.in');
+
+    const courseReceipt = PRESET_MAIL_TEMPLATES.find((t) => t.id === 'course_receipt');
+    expect(courseReceipt).toBeDefined();
+    expect(courseReceipt?.defaultAccount).toBe('admin');
+    expect(courseReceipt?.bodyText).toContain('admin@eihouseindia.in');
+
+    const founderOutreach = PRESET_MAIL_TEMPLATES.find((t) => t.id === 'founder_outreach');
+    expect(founderOutreach).toBeDefined();
+    expect(founderOutreach?.defaultAccount).toBe('founder');
+    expect(founderOutreach?.bodyText).toContain('Er. Monu Prajapati');
   });
 
   it('validates AdminEmailMessage structure and folder assignments', () => {

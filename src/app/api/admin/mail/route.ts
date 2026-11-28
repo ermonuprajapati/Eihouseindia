@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     } else if (fromAccount === 'admin') {
       senderDisplay = fromName
         ? `${fromName} <admin@eihouseindia.in>`
-        : 'EI HOUSE Admin <admin@eihouseindia.in>';
+        : 'EI HOUSE Admin & Billing <admin@eihouseindia.in>';
       replyToEmail = 'admin@eihouseindia.in';
     } else {
       senderDisplay = fromName

@@ -66,6 +66,36 @@ describe('Email Service', () => {
     expect(inquiryResult.sent).toBe(false);
     expect(inquiryResult.provider).toBe('unconfigured');
 
+    const receiptResult = await sendEditorialEmail({
+      to: 'student@example.com',
+      event: 'PAYMENT_RECEIPT',
+      recipientName: 'Aarav Sharma',
+      orderId: 'ORD-TEST-9988',
+      amount: 'INR 1,999',
+      courseName: 'Embedded Systems & RTOS Mastery',
+    });
+    expect(receiptResult.sent).toBe(false);
+    expect(receiptResult.provider).toBe('unconfigured');
+
+    const subResult = await sendEditorialEmail({
+      to: 'engineer@example.com',
+      event: 'SUBSCRIPTION_RECEIPT',
+      recipientName: 'Pooja Verma',
+      planName: 'EI HOUSE Pro Annual Plan',
+      amount: 'INR 4,999/year',
+    });
+    expect(subResult.sent).toBe(false);
+    expect(subResult.provider).toBe('unconfigured');
+
+    const courseResult = await sendEditorialEmail({
+      to: 'student@example.com',
+      event: 'COURSE_ACCESS',
+      recipientName: 'Aarav Sharma',
+      courseName: 'Embedded Systems & RTOS Mastery',
+    });
+    expect(courseResult.sent).toBe(false);
+    expect(courseResult.provider).toBe('unconfigured');
+
     process.env.RESEND_API_MAIN = originalMain;
     process.env.RESEND_API_KEY = originalKey;
   });

@@ -259,6 +259,10 @@ export default function AdminMailPage() {
     if (tmpl && tmpl.id !== 'blank') {
       setComposeSubject(tmpl.subject);
       setComposeBody(tmpl.bodyText);
+      if (tmpl.defaultAccount) {
+        setComposeFromAccount(tmpl.defaultAccount);
+        toast.info(`Sender account set to ${SENDER_ACCOUNTS[tmpl.defaultAccount].email} (${SENDER_ACCOUNTS[tmpl.defaultAccount].role})`);
+      }
     }
   };
 
@@ -542,15 +546,18 @@ export default function AdminMailPage() {
 
             {/* Sender identities */}
             <div className="mt-auto px-3 pt-6">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">Identities</p>
-              <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">Routing &amp; Identities</p>
+              <div className="space-y-1.5">
                 {(['info', 'admin', 'founder'] as const).map((key) => {
                   const acc = SENDER_ACCOUNTS[key];
                   const colorMap = { info: 'bg-blue-500', admin: 'bg-purple-500', founder: 'bg-amber-500' };
                   return (
-                    <div key={key} className="flex items-center gap-2 px-1 py-1">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${colorMap[key]}`} />
-                      <span className="text-[11px] text-slate-500 truncate font-mono">{acc.email}</span>
+                    <div key={key} className="p-1.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${colorMap[key]}`} />
+                        <span className="text-[11px] font-bold text-slate-800">{acc.role}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 block truncate font-mono">{acc.email}</span>
                     </div>
                   );
                 })}
@@ -858,9 +865,9 @@ export default function AdminMailPage() {
                         onChange={e => setQuickReplyFromAccount(e.target.value as SenderAccountType)}
                         className="text-[11px] text-slate-700 font-semibold bg-transparent border-none outline-none cursor-pointer pr-1"
                       >
-                        <option value="info">EIHOUSE INDIA — info@eihouseindia.in</option>
-                        <option value="admin">EI HOUSE Admin — admin@eihouseindia.in</option>
-                        <option value="founder">Monu Prajapati (Founder) — founder@eihouseindia.in</option>
+                        <option value="info">info@eihouseindia.in &bull; System &amp; Inquiries</option>
+                        <option value="admin">admin@eihouseindia.in &bull; Admin &amp; Billing (Receipts)</option>
+                        <option value="founder">founder@eihouseindia.in &bull; Monu Prajapati (VIP &amp; Executive)</option>
                       </select>
                     </div>
                     <textarea
@@ -939,7 +946,7 @@ export default function AdminMailPage() {
           <form onSubmit={handleSendEmail} className="px-6 py-5 space-y-4">
             {/* From account selector */}
             <div>
-              <p className="text-xs font-semibold text-slate-600 mb-2">Send from</p>
+              <p className="text-xs font-semibold text-slate-600 mb-2">Send from Account</p>
               <div className="grid grid-cols-3 gap-2">
                 {(['info', 'admin', 'founder'] as const).map(key => {
                   const acc = SENDER_ACCOUNTS[key];
@@ -951,14 +958,15 @@ export default function AdminMailPage() {
                       type="button"
                       onClick={() => setComposeFromAccount(key)}
                       className={`text-left p-3 rounded-xl border-2 transition-all cursor-pointer ${
-                        sel ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:border-slate-300'
+                        sel ? 'border-blue-500 bg-blue-50/60 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}
                     >
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
                         <span className={`h-2 w-2 rounded-full ${dotColor}`} />
                         <span className="text-xs font-bold text-slate-800">{acc.badge}</span>
                       </div>
-                      <p className="text-[10px] font-mono text-slate-500 truncate">{acc.email}</p>
+                      <p className="text-[11px] font-medium text-slate-600 truncate">{acc.role}</p>
+                      <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">{acc.email}</p>
                     </button>
                   );
                 })}
@@ -967,14 +975,16 @@ export default function AdminMailPage() {
 
             {/* Template */}
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Template</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Preset Template</label>
               <select
                 value={selectedTemplateId}
                 onChange={e => handleTemplateSelect(e.target.value)}
                 className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 {PRESET_MAIL_TEMPLATES.map(t => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.defaultAccount ? `[${SENDER_ACCOUNTS[t.defaultAccount].badge}] ` : ''}{t.title}
+                  </option>
                 ))}
               </select>
             </div>

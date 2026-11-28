@@ -16,6 +16,9 @@ const emailRequestSchema = z.object({
     'ADMIN_POST_SUBMITTED',
     'ADMIN_CONTACT_INQUIRY',
     'ADMIN_INQUIRY_REPLY',
+    'PAYMENT_RECEIPT',
+    'SUBSCRIPTION_RECEIPT',
+    'COURSE_ACCESS',
   ]),
   recipientName: z.string().min(1).max(100),
   articleTitle: z.string().max(160).optional(),
@@ -30,6 +33,13 @@ const emailRequestSchema = z.object({
   authorEmail: z.string().email().optional(),
   category: z.string().max(100).optional(),
   excerpt: z.string().max(1000).optional(),
+  orderId: z.string().max(100).optional(),
+  amount: z.string().max(60).optional(),
+  currency: z.string().max(10).optional(),
+  planName: z.string().max(120).optional(),
+  courseName: z.string().max(160).optional(),
+  invoiceUrl: z.string().url().optional(),
+  fromAccount: z.enum(['info', 'admin', 'founder']).optional(),
 });
 
 // Cache recently dispatched welcome emails to prevent duplicate sends during fast reloads

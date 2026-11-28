@@ -13,6 +13,11 @@ export const SITE_CONFIG = {
     'Engineering Innovation House (EI House) is an engineering and technology-driven platform founded by Monu Prajapati. Dedicated to engineering education, practical hardware projects, innovative products, technical services, and a collaborative technology community.',
   locale: 'en-IN',
   contactEmail: process.env.CONTACT_EMAIL || 'info@eihouseindia.in',
+  emails: {
+    info: 'info@eihouseindia.in',       // System notifications, user onboarding, public inquiries & general support
+    admin: 'admin@eihouseindia.in',     // Invoices, payment receipts, subscriptions, order confirmations & platform operations
+    founder: 'founder@eihouseindia.in', // Executive outreach, VIP students, high-value partnerships & personal mentorship
+  },
   bootstrapAdminEmail: process.env.BOOTSTRAP_ADMIN_EMAIL || 'er.monuprajapati.2024@gmail.com',
   whatsappNumber: '917080768737',
   whatsappDisplay: '+91 7080768737',
