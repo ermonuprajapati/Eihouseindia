@@ -182,9 +182,39 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-300">
-          <p>© {new Date().getFullYear()} {SITE_CONFIG.name} · {SITE_CONFIG.tagline} All rights reserved.</p>
-          <p>Founded by {SITE_CONFIG.founder.fullNameWithPrefix} · MSME / Udyam Registered Indian Platform.</p>
+        <div className="mt-12 border-t border-slate-800 pt-8 space-y-5">
+          {/* Mandatory Legal & Compliance Links Strip (AdSense + Payment Gateway Ready) */}
+          <nav
+            aria-label="Legal and compliance"
+            className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300"
+          >
+            <Link href="/privacy-policy" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Terms &amp; Conditions
+            </Link>
+            <Link href="/disclaimer" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Disclaimer
+            </Link>
+            <Link href="/cookie-policy" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Cookie Policy
+            </Link>
+            <Link href="/refund-policy" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Refund Policy
+            </Link>
+            <Link href="/shipping-policy" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Shipping &amp; Delivery
+            </Link>
+            <Link href="/contact" prefetch={false} className="hover:text-white hover:underline transition-colors">
+              Contact Us
+            </Link>
+          </nav>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
+            <p>© {new Date().getFullYear()} {SITE_CONFIG.name} · {SITE_CONFIG.tagline} All rights reserved.</p>
+            <p>Founded by {SITE_CONFIG.founder.fullNameWithPrefix} · MSME / Udyam Registered Indian Platform.</p>
+          </div>
         </div>
       </div>
     </footer>

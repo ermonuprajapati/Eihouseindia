@@ -40,10 +40,37 @@ export default function PrivacyPolicyPage() {
           approved and published. Uploaded images are securely stored and served via Cloudinary CDN.
         </p>
 
-        <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">3. Newsletter & Contact Inquiries</h2>
+        <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">3. Newsletter &amp; Contact Inquiries</h2>
         <p>
           Email addresses submitted for newsletter updates or editorial inquiries are used strictly
           for dispatching technical briefings or replying to your request.
+        </p>
+
+        <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">4. Google AdSense &amp; Third-Party Advertising</h2>
+        <p>
+          We may partner with Google AdSense to display advertisements. Google, as a third-party
+          vendor, uses cookies (including the DoubleClick DART cookie) to serve ads based on your
+          prior visits to {SITE_CONFIG.domain} or other websites. You may opt out of personalized
+          advertising by visiting Google&apos;s{' '}
+          <a
+            href="https://www.google.com/settings/ads"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#1D4ED8] hover:underline"
+          >
+            Ads Settings
+          </a>
+          .
+        </p>
+
+        <h2 className="font-display text-xl font-semibold text-[#0B1528] pt-2">5. Payments &amp; Contact</h2>
+        <p>
+          Course and store payments are processed via PCI-DSS compliant payment gateways; we do not
+          store card numbers or UPI PINs on our servers. For privacy requests, contact{' '}
+          <a href={`mailto:${SITE_CONFIG.emails.info}`} className="text-[#1D4ED8] hover:underline">
+            {SITE_CONFIG.emails.info}
+          </a>
+          .
         </p>
       </main>
       <SiteFooter />
