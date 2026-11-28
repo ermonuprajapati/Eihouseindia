@@ -60,6 +60,12 @@ export function SiteFooter() {
             <h3 className="text-sm font-semibold text-white mb-4 tracking-wider uppercase">Ecosystem</h3>
             <ul className="space-y-1.5 text-sm">
               <li>
+                <Link href="/engineering-lab" prefetch={false} className="inline-flex items-center gap-1.5 py-1 text-[#F59E0B] font-semibold hover:text-white transition-colors">
+                  <span>EI HOUSE Engineering Lab</span>
+                  <span className="text-[10px] bg-blue-600/40 text-blue-200 border border-blue-400/40 px-1.5 py-0.2 rounded font-mono">Online EDA</span>
+                </Link>
+              </li>
+              <li>
                 <Link href="/learn" prefetch={false} className="inline-block py-1 text-slate-300 hover:text-white transition-colors">
                   Learn & Training
                 </Link>

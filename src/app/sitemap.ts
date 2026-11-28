@@ -25,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${baseUrl}/engineering-lab`,
       lastModified: now,
       changeFrequency: 'daily',
-      priority: 0.95,
+      priority: 1.0,
       images: [
         `${baseUrl}/images/hero-semiconductor.jpg`,
       ],

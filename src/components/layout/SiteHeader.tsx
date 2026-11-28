@@ -255,13 +255,13 @@ export function SiteHeader() {
                   ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
                   : 'bg-blue-50/90 hover:bg-blue-100 text-blue-700 border border-blue-200/80'
               }`}
-              title="Launch Universal Engineering Lab (2D/3D Circuit Sim & PCB CAD)"
+              title="Launch EI HOUSE Engineering Lab (2D/3D Circuit Sim & PCB CAD)"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
               </span>
-              <span>Virtual Lab</span>
+              <span>Engineering Lab</span>
             </Link>
 
             {/* 2. Store */}
@@ -606,7 +606,7 @@ export function SiteHeader() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-blue-900">Universal Engineering Lab</span>
+                      <span className="text-sm font-bold text-blue-900">EI HOUSE Engineering Lab</span>
                     </div>
                     <p className="text-xs text-blue-700/90 mt-0.5">
                       2D/3D Circuit Simulation, Interactive PCB Routing &amp; Firmware IDE
