@@ -188,31 +188,31 @@ const CAPABILITY_MATRIX = [
     branch: 'Electrical & Power Systems',
     code: '02 · PWR / IND',
     capabilities:
-      'Switch-mode power converters (SMPS), custom magnetics, BLDC/servo motor drives, industrial PLC automation, power protection, and grid-scale diagnostics',
+      'Power electronics, custom magnetics, BLDC/servo drives, industrial PLC automation, power quality & grid-scale diagnostics',
   },
   {
     branch: 'Mechanical & Additive Mfg.',
     code: '03 · MECH / CAD',
     capabilities:
-      'Parametric 3D CAD/CAM, robotics kinematics, thermal/fluid prototyping, precision industrial 3D printing, and modular mechanical system fabrication',
+      '3D CAD/CAM modeling, robotics & kinematics, industrial FDM/resin 3D printing, functional enclosures, modular mechanical block systems',
   },
   {
     branch: 'Civil & Smart Infrastructure',
     code: '04 · CIV / INFRA',
     capabilities:
-      'Architectural & structural scale modeling, IoT-enabled structural health monitoring telemetry, environmental sensor arrays, and smart-city instrumentation',
+      'Architectural & structural 3D scale modeling, smart-city sensor networks, structural health telemetry, sustainable infrastructure instrumentation',
   },
   {
     branch: 'Computer Science & Edge AI',
     code: '05 · CS / TINYML',
     capabilities:
-      'Edge AI and TinyML inference on microcontrollers, embedded computer vision, deterministic real-time algorithms, and computational engineering solvers',
+      'TinyML & neural inference on MCUs, embedded computer vision, algorithmic system design, intelligent automation',
   },
   {
     branch: 'Information Technology & Cloud',
     code: '06 · IT / CLOUD',
     capabilities:
-      'Browser-native WebGL/EDA platforms, high-throughput MQTT/telemetry backends, full-stack enterprise portals, and cloud-synced engineering workspaces',
+      'Enterprise web & cloud platforms, industrial IoT dashboards, real-time telemetry pipelines, browser-based EDA & computational software',
   },
 ];
 
@@ -220,97 +220,102 @@ const TECHNICAL_COMMAND_2X2 = [
   {
     title: 'Hardware & PCB Architecture',
     detail:
-      'High-density multi-layer schematic capture, analog front-ends, mixed-signal layout, and DFM/EMC compliance engineering.',
+      'Schematic capture, high-density multi-layer layout, DFM/DFA optimization, power distribution networks, and hardware bring-up/debugging.',
   },
   {
-    title: 'Embedded Firmware & Silicon',
+    title: 'Embedded & Firmware Engineering',
     detail:
-      'Bare-metal & RTOS firmware across ARM Cortex-M, STM32, ESP32, AVR, and RISC-V microcontroller ecosystems.',
+      'Bare-metal C/C++, RTOS integration, peripheral driver architecture, and industrial communication protocols across modern silicon architectures.',
   },
   {
-    title: 'Power, Robotics & Industrial IoT',
+    title: 'Cross-Domain Systems Integration',
     detail:
-      'Industrial automation, BLDC/stepper motion control, power electronics diagnostics, and resilient telemetry networks.',
+      'Unifying electronics hardware with mechanical CAD enclosures, 3D additive manufacturing, sensor telemetry, and cloud interfaces.',
   },
   {
-    title: 'Virtual EDA & STEM Systems',
+    title: 'Engineering Standardization',
     detail:
-      'Architecting browser-based 3D simulation infrastructure and hands-on laboratory curricula for academic and industrial readiness.',
+      "Architecting EI House's datasheet-accurate component taxonomy, virtual lab simulation models, and institutional laboratory frameworks.",
   },
 ];
 
 const LIFECYCLE_STAGES = [
   {
     step: '01',
-    title: 'Concept & Feasibility',
-    desc: 'Requirements engineering, physics-based feasibility checks, and component selection via parametric datasheets.',
+    title: 'System Architecture & Specification',
+    desc: 'Defining rigorous electrical, mechanical, structural, thermal, and software requirements.',
   },
   {
     step: '02',
-    title: 'Digital Simulation & EDA',
-    desc: 'Behavioral circuit modeling, pinout verification, and breadboard emulation inside the 3D Virtual Lab.',
+    title: 'Digital Simulation & Parametric Verification',
+    desc: 'Validating circuit behavior, component footprints, and CAD tolerances via Online EDA, Virtual Labs, and computational tools.',
   },
   {
     step: '03',
-    title: 'Multi-Domain Architecture',
-    desc: 'Multi-layer PCB routing, mechanical CAD enclosure design, and embedded firmware architecture.',
+    title: 'Cross-Domain Engineering',
+    desc: 'Executing parallel PCB design, embedded firmware, mechanical/structural modeling, and enterprise software development.',
   },
   {
     step: '04',
-    title: 'Prototyping & Fabrication',
-    desc: 'DFM-compliant board assembly, precision 3D additive manufacturing, and custom harness fabrication.',
+    title: 'Precision Prototyping & Additive Manufacturing',
+    desc: 'Fabricating functional enclosures and mechanical assemblies through industrial 3D printing and indigenous board bring-up.',
   },
   {
     step: '05',
-    title: 'Bench Validation & QA',
-    desc: 'Oscilloscope, logic analyzer, thermal stress, and EMC/EMI pre-compliance bench diagnostics.',
+    title: 'Bench Validation & Quality Assurance',
+    desc: 'Conducting oscilloscope and logic-analyzer diagnostics, stress testing, and technical documentation audits.',
   },
   {
     step: '06',
-    title: 'Production & Deployment',
-    desc: 'Complete BOMs, verified documentation, turnkey hardware kits, and field telemetry deployment.',
+    title: 'Production Deployment & Lifecycle Support',
+    desc: 'Delivering turnkey enterprise R&D prototypes, standardized engineering kits, or institutional innovation centers.',
   },
 ];
 
 const GOVERNANCE_FACTS = [
-  { label: 'Official Entity Name', value: 'Engineering Innovation House (EI House)' },
-  { label: 'Enterprise Classification', value: 'Deep-Tech, Multi-Disciplinary R&D & Digital EDA Enterprise' },
-  { label: 'Founder & Principal Architect', value: 'Er. Monu Prajapati (Founder & Proprietor)' },
+  { label: 'Corporate Entity', value: 'Engineering Innovation House (EI House / EI HOUSE INDIA)' },
+  { label: 'Enterprise Classification', value: 'Deep-Tech Engineering & R&D Enterprise, India' },
   {
-    label: 'Core Engineering Disciplines',
-    value: 'Electronics, Electrical, Mechanical, Civil, Computer Science & Information Technology',
+    label: 'Founder & Principal Architect',
+    value: 'Er. Monu Prajapati (Electronics R&D Engineer & Proprietor)',
   },
   {
-    label: 'Operating Divisions',
-    value: 'Digital EDA Platforms · Turnkey R&D · Engineered Products & Kits · Institutional Labs & Library',
+    label: 'Engineering Disciplines',
+    value: 'Electronics, Electrical, Mechanical, Civil, Computer Science & IT',
   },
-  { label: 'Headquarters & Jurisdiction', value: 'India (Pan-India & Global Digital Footprint)' },
   {
-    label: 'Official Executive & Support Desks',
-    value: `${SITE_CONFIG.founder.email}  |  ${SITE_CONFIG.emails.info}`,
+    label: 'Core Operating Divisions',
+    value:
+      'Digital EDA & Virtual Labs · Turnkey R&D · 3D Additive Manufacturing · Engineered Hardware & DIY Kits · Modular Technical Blocks · Institutional Innovation Labs · Technical Publishing',
   },
+  {
+    label: 'Operational Jurisdiction',
+    value: 'Pan-India Operations & Global Digital Platform (eihouseindia.in)',
+  },
+  { label: 'Founder & Principal R&D Desk', value: SITE_CONFIG.founder.email },
+  { label: 'Corporate & Institutional Desk', value: SITE_CONFIG.emails.info },
 ];
 
 const INSTITUTIONAL_PRINCIPLES = [
   {
     number: '01',
-    title: 'First-Principles Rigor',
-    desc: 'Every schematic, simulation model, and firmware routine is verified against physics, silicon datasheets, and empirical bench measurements.',
+    title: 'R&D-Grade Engineering Rigor',
+    desc: 'Zero-compromise precision across semiconductor datasheets, PCB signal integrity, CAD tolerances, structural models, and software codebases.',
   },
   {
     number: '02',
-    title: 'Cross-Disciplinary Unity',
-    desc: 'We eliminate artificial boundaries between electronics, power, mechanics, civil infrastructure, and cloud software.',
+    title: 'Full-Stack Vertical Integration',
+    desc: 'Controlling the complete engineering chain from virtual simulation and custom R&D to 3D additive manufacturing and finished product delivery.',
   },
   {
     number: '03',
-    title: 'Indigenous Self-Reliance',
-    desc: 'Empowering Indian engineers, startups, and universities to design, simulate, and manufacture production-grade hardware locally.',
+    title: 'Cross-Disciplinary Synergy',
+    desc: 'Solving complex industrial and academic challenges by uniting Electronics, Electrical, Mechanical, Civil, CS, and IT expertise under one roof.',
   },
   {
     number: '04',
-    title: 'Open Technical Integrity',
-    desc: 'Maintaining transparent documentation, reproducible schematics, and peer-reviewed engineering knowledge for builders worldwide.',
+    title: 'Self-Reliant Innovation',
+    desc: 'Advancing indigenous engineering tools, hardware platforms, and technical literacy that empower builders, institutions, and enterprises globally.',
   },
 ];
 
@@ -578,15 +583,15 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* SECTION 4: Founder & Principal R&D Leadership Dossier */}
+        {/* SECTION 4: Founder & Principal R&D Leadership */}
         <section id="founder" className="border-b border-slate-200 bg-[#FAFBFD] py-20 sm:py-24">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 space-y-10">
             <div className="max-w-2xl space-y-2">
               <p className="text-xs font-mono font-semibold uppercase tracking-[0.14em] text-[#1D4ED8]">
-                04 · Executive Leadership Dossier
+                04 · Executive Dossier
               </p>
               <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[#0B1528]">
-                Founder &amp; Principal R&amp;D Architect
+                Founder &amp; Principal R&amp;D Leadership
               </h2>
             </div>
 
@@ -598,32 +603,29 @@ export default function AboutPage() {
                     <div className="h-24 w-24 shrink-0 overflow-hidden border border-slate-200 bg-slate-100">
                       <Image
                         src={SITE_CONFIG.founder.avatarImage}
-                        alt={`${SITE_CONFIG.founder.fullNameWithPrefix} — Founder, Proprietor & Principal R&D Architect`}
+                        alt="Er. Monu Prajapati — Founder, Proprietor & Principal R&D Architect"
                         width={192}
                         height={192}
                         className="h-full w-full object-cover object-top"
                       />
                     </div>
                     <div>
-                      <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#1D4ED8]">
-                        Principal R&amp;D Architect
-                      </p>
                       <h3 className="font-display text-2xl font-bold text-[#0B1528] leading-tight">
-                        {SITE_CONFIG.founder.fullNameWithPrefix}
+                        Er. Monu Prajapati
                       </h3>
-                      <p className="text-xs font-medium text-slate-500 mt-1">
-                        Founder, Proprietor &amp; Principal R&amp;D Architect
+                      <p className="text-xs font-medium text-slate-600 mt-1">
+                        Founder, Proprietor &amp; Principal R&amp;D Architect · Engineering Innovation House
                       </p>
                     </div>
                   </div>
 
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {SITE_CONFIG.founder.bio}
+                  <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#1D4ED8] border-y border-slate-100 py-2.5">
+                    Electronics R&amp;D Engineer | Hardware &amp; Systems Architect | Technology Entrepreneur
                   </p>
 
-                  <div className="border-t border-slate-100 pt-4 space-y-2 text-xs">
+                  <div className="space-y-2 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Executive Email</span>
+                      <span className="text-slate-500">Executive Desk</span>
                       <a
                         href={`mailto:${SITE_CONFIG.founder.email}`}
                         className="font-mono font-semibold text-[#1D4ED8] hover:underline"
@@ -638,17 +640,61 @@ export default function AboutPage() {
                   </div>
                 </div>
 
-                {/* Executive Quote + 2x2 Core Technical Command */}
+                {/* Biography + Executive Quote + 2x2 Core Technical Command */}
                 <div className="lg:col-span-8 space-y-8">
+                  <div className="space-y-4 text-sm sm:text-base text-slate-600 leading-relaxed">
+                    <p>
+                      Er. Monu Prajapati is a seasoned{' '}
+                      <strong className="text-[#0B1528] font-semibold">
+                        Electronics R&amp;D Engineer, Hardware Systems Architect, and Technology
+                        Entrepreneur
+                      </strong>{' '}
+                      who serves as the Founder and Principal Technical Architect of Engineering
+                      Innovation House (EI House).
+                    </p>
+                    <p>
+                      With extensive hands-on R&amp;D experience in{' '}
+                      <strong className="text-[#0B1528] font-semibold">
+                        electronic hardware design, multi-layer PCB engineering, embedded systems
+                        architecture, power electronics, circuit diagnostics, and full-lifecycle
+                        product development
+                      </strong>
+                      , he brings bench-level engineering rigor to the strategic leadership of EI
+                      House. Throughout his R&amp;D career, he has specialized in translating
+                      complex theoretical specifications into reliable, manufacturable electronic
+                      systems—navigating real-world engineering challenges across component
+                      selection, signal integrity, EMC/EMI behavior, firmware optimization,
+                      prototyping, and hardware validation.
+                    </p>
+                    <p>
+                      Recognizing a fundamental disconnect between textbook engineering education
+                      and actual industrial R&amp;D execution, Er. Monu Prajapati founded EI House
+                      to build a self-reliant, multi-disciplinary Indian engineering enterprise.
+                      Under his technical and strategic governance, EI House has evolved into a
+                      full-spectrum technology enterprise uniting{' '}
+                      <strong className="text-[#0B1528] font-semibold">
+                        Online EDA and Virtual Engineering Labs, parametric semiconductor databases,
+                        cross-disciplinary R&amp;D (Electronics, Electrical, Mechanical, Civil, CS
+                        &amp; IT), industrial 3D additive manufacturing, engineered hardware kits, and
+                        modular technical construction systems
+                      </strong>
+                      .
+                    </p>
+                  </div>
+
                   <blockquote className="border-l-2 border-[#0B1528] bg-[#FAFBFD] p-5 sm:p-6">
                     <div className="flex items-start gap-3">
                       <Quote className="h-5 w-5 text-[#1D4ED8] shrink-0 mt-0.5" />
                       <div className="space-y-2">
-                        <p className="text-base sm:text-lg text-[#0B1528] font-medium leading-relaxed">
-                          &ldquo;{SITE_CONFIG.founder.quote}&rdquo;
+                        <p className="text-base text-[#0B1528] font-medium leading-relaxed">
+                          &ldquo;True engineering authority is earned at the workbench—where theory
+                          meets real-world physics, tolerances, and noise. At EI House, every
+                          circuit architecture, 3D assembly, software platform, and hardware kit is
+                          engineered with the discipline of production-grade R&amp;D.&rdquo;
                         </p>
                         <footer className="text-xs font-mono uppercase tracking-wider text-slate-500">
-                          — {SITE_CONFIG.founder.fullNameWithPrefix}, {SITE_CONFIG.name}
+                          — Er. Monu Prajapati, Founder &amp; Principal R&amp;D Architect,
+                          Engineering Innovation House
                         </footer>
                       </div>
                     </div>
@@ -656,7 +702,7 @@ export default function AboutPage() {
 
                   <div className="space-y-4">
                     <p className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-500">
-                      Core Technical Command
+                      Core Technical Command of the Founder
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {TECHNICAL_COMMAND_2X2.map((cmd) => (
@@ -678,7 +724,7 @@ export default function AboutPage() {
         {/* SECTION 5: The EI House Engineering Lifecycle (01 to 06) */}
         <section className="border-b border-slate-200 bg-white py-20 sm:py-24">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 space-y-12">
-            <div className="max-w-2xl space-y-2">
+            <div className="max-w-3xl space-y-2">
               <p className="text-xs font-mono font-semibold uppercase tracking-[0.14em] text-[#1D4ED8]">
                 05 · Methodology
               </p>
@@ -686,8 +732,8 @@ export default function AboutPage() {
                 The EI House Engineering Lifecycle
               </h2>
               <p className="text-base text-slate-600">
-                A deterministic, six-stage engineering methodology taking systems from theoretical
-                first principles to validated physical deployment.
+                Every internal product, enterprise R&amp;D engagement, and institutional laboratory
+                deployment adheres to a disciplined six-stage engineering methodology:
               </p>
             </div>
 
@@ -695,7 +741,7 @@ export default function AboutPage() {
               {LIFECYCLE_STAGES.map((stage) => (
                 <div key={stage.step} className="bg-white p-6 sm:p-7 space-y-3">
                   <span className="inline-block font-mono text-xs font-bold text-[#1D4ED8] border border-blue-200 bg-blue-50 px-2 py-0.5">
-                    STAGE {stage.step}
+                    {stage.step}
                   </span>
                   <h3 className="font-display text-lg font-bold text-[#0B1528]">{stage.title}</h3>
                   <p className="text-sm text-slate-600 leading-relaxed">{stage.desc}</p>
@@ -722,7 +768,7 @@ export default function AboutPage() {
                 <tbody className="divide-y divide-slate-200 text-sm">
                   {GOVERNANCE_FACTS.map((item) => (
                     <tr key={item.label} className="flex flex-col sm:table-row">
-                      <th className="py-3.5 px-6 font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 bg-[#FAFBFD] sm:w-72 align-top">
+                      <th className="py-3.5 px-6 font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 bg-[#FAFBFD] sm:w-80 align-top">
                         {item.label}
                       </th>
                       <td className="py-3.5 px-6 text-[#0B1528] font-medium align-top">
@@ -745,9 +791,10 @@ export default function AboutPage() {
                 <span>Strategic Vision</span>
               </div>
               <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight max-w-4xl leading-snug">
-                &ldquo;To build an interconnected engineering ecosystem that empowers engineers,
-                researchers, and institutions to learn, simulate, innovate, and manufacture
-                technologies for a self-reliant future.&rdquo;
+                &ldquo;To establish Engineering Innovation House among India&apos;s foremost
+                multi-disciplinary engineering and technology enterprises—setting the benchmark for
+                integrated digital design platforms, indigenous hardware and STEM manufacturing, and
+                production-grade R&amp;D across all core technical disciplines.&rdquo;
               </h2>
             </div>
 
