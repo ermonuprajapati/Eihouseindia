@@ -28,7 +28,7 @@ export function mapAuthError(error: unknown): string {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return 'Invalid email or password.';
+      return 'Invalid mobile number, email, or password.';
     case 'auth/email-already-in-use':
       return 'An account with this email already exists.';
     case 'auth/account-exists-with-different-credential':

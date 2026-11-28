@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import type { User } from 'firebase/auth';
 import type { Timestamp } from 'firebase/firestore';
 import { SITE_CONFIG } from '@/config/site';
+import { isPhoneIdentifier, normalizePhoneNumber } from '@/lib/phone';
 import type { UserProfile, UserRole } from '@/types';
 
 interface AuthContextValue {
@@ -13,12 +14,13 @@ interface AuthContextValue {
   isAdmin: boolean;
   isEditor: boolean;
   effectiveRole: UserRole;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
+  loginWithEmail: (identifier: string, password: string) => Promise<void>;
   registerWithEmail: (params: {
     email: string;
     password: string;
-    displayName: string;
-    username: string;
+    phone?: string;
+    displayName?: string;
+    username?: string;
   }) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -169,7 +171,7 @@ function deriveSafeUsername(raw: string, uid: string): string {
 
 async function ensureUserProfileDocument(
   user: User,
-  overrides?: { displayName?: string; username?: string }
+  overrides?: { displayName?: string; username?: string; phone?: string; phoneNormalized?: string }
 ): Promise<UserProfile> {
   const { db, firebaseFirestore } = await loadFirebaseDeps();
   const { doc, getDoc, writeBatch, serverTimestamp } = firebaseFirestore;
@@ -189,6 +191,8 @@ async function ensureUserProfileDocument(
     return {
       uid: data.uid,
       email: data.email,
+      phone: data.phone || '',
+      phoneNormalized: data.phoneNormalized || '',
       username: data.username,
       displayName: data.displayName,
       avatar: data.avatar || '',
@@ -219,11 +223,15 @@ async function ensureUserProfileDocument(
   );
   const avatar = user.photoURL || '';
   const email = user.email || '';
+  const phone = overrides?.phone || '';
+  const phoneNormalized = overrides?.phoneNormalized || '';
 
   const batch = writeBatch(db);
   batch.set(userRef, {
     uid: user.uid,
     email,
+    phone,
+    phoneNormalized,
     username,
     displayName,
     avatar,
@@ -260,6 +268,8 @@ async function ensureUserProfileDocument(
   return {
     uid: user.uid,
     email,
+    phone,
+    phoneNormalized,
     username,
     displayName,
     avatar,
@@ -347,6 +357,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   const updatedProfile: UserProfile = {
                     uid: data.uid,
                     email: data.email,
+                    phone: data.phone || '',
+                    phoneNormalized: data.phoneNormalized || '',
                     username: data.username,
                     displayName: data.displayName,
                     avatar: data.avatar || '',
@@ -429,9 +441,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = effectiveRole === 'ADMIN';
   const isEditor = effectiveRole === 'ADMIN' || effectiveRole === 'EDITOR';
 
-  const loginWithEmail = useCallback(async (email: string, password: string) => {
+  const loginWithEmail = useCallback(async (identifier: string, password: string) => {
     const { auth, firebaseAuth } = await loadFirebaseDeps();
-    const credential = await firebaseAuth.signInWithEmailAndPassword(auth, email.trim(), password);
+    const rawIdentifier = identifier.trim();
+    let targetEmail = rawIdentifier;
+
+    if (isPhoneIdentifier(rawIdentifier)) {
+      const res = await fetch('/api/auth/resolve-identifier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: rawIdentifier }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.email) {
+        throw new Error(data?.error || 'No account found with this mobile number.');
+      }
+      targetEmail = data.email;
+    }
+
+    const credential = await firebaseAuth.signInWithEmailAndPassword(auth, targetEmail, password);
     await ensureUserProfileDocument(credential.user);
   }, []);
 
@@ -439,24 +467,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async ({
       email,
       password,
+      phone,
       displayName,
       username,
     }: {
       email: string;
       password: string;
-      displayName: string;
-      username: string;
+      phone?: string;
+      displayName?: string;
+      username?: string;
     }) => {
+      let cleanPhone = '';
+      let cleanNormalized = '';
+
+      if (phone && phone.trim()) {
+        const parsedPhone = normalizePhoneNumber(phone);
+        if (!parsedPhone.valid) {
+          throw new Error(parsedPhone.error || 'Please enter a valid mobile number.');
+        }
+        cleanPhone = parsedPhone.e164;
+        cleanNormalized = parsedPhone.normalized;
+
+        // Check if phone number is already registered before creating Firebase Auth account
+        const checkRes = await fetch('/api/auth/check-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone }),
+        });
+        const checkData = await checkRes.json().catch(() => ({ available: true }));
+        if (checkRes.status === 409 || checkData?.available === false) {
+          throw new Error(checkData?.error || 'An account with this mobile number already exists.');
+        }
+      }
+
       const { auth, firebaseAuth } = await loadFirebaseDeps();
+      const cleanEmail = email.trim().toLowerCase();
+      const resolvedDisplayName = displayName?.trim() || cleanEmail.split('@')[0] || 'Engineer';
+
       const credential = await firebaseAuth.createUserWithEmailAndPassword(
         auth,
-        email.trim(),
+        cleanEmail,
         password
       );
-      await firebaseAuth.updateProfile(credential.user, { displayName: displayName.trim() });
+      await firebaseAuth.updateProfile(credential.user, { displayName: resolvedDisplayName });
       await ensureUserProfileDocument(credential.user, {
-        displayName: displayName.trim(),
-        username: username.trim().toLowerCase(),
+        displayName: resolvedDisplayName,
+        username: username?.trim().toLowerCase(),
+        phone: cleanPhone,
+        phoneNormalized: cleanNormalized,
       });
       await firebaseAuth.sendEmailVerification(credential.user).catch(() => undefined);
     },

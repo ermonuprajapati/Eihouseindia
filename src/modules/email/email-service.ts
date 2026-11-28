@@ -14,7 +14,8 @@ export type EditorialEmailEvent =
   | 'ADMIN_INQUIRY_REPLY'
   | 'PAYMENT_RECEIPT'
   | 'SUBSCRIPTION_RECEIPT'
-  | 'COURSE_ACCESS';
+  | 'COURSE_ACCESS'
+  | 'PASSWORD_RESET_OTP';
 
 export interface SendEditorialEmailInput {
   to: string;
@@ -38,6 +39,7 @@ export interface SendEditorialEmailInput {
   planName?: string;
   courseName?: string;
   invoiceUrl?: string;
+  otpCode?: string;
   fromAccount?: 'info' | 'admin' | 'founder';
 }
 
@@ -618,6 +620,32 @@ ${escapeHtml(input.message)}
       return {
         subject: `Welcome to ${courseName} — Access Your Course Material`,
         html: wrapEmailTemplate(content, `You are enrolled in ${courseName}.`),
+      };
+    }
+
+    case 'PASSWORD_RESET_OTP': {
+      const otp = escapeHtml(input.otpCode || '000000');
+      const content = `
+        <h2 style="color: #0B1528; font-size: 21px; font-weight: 700; margin: 0 0 12px 0;">Password Reset Verification Code</h2>
+        <p style="color: #334155; margin: 0 0 16px 0;">Hello ${escapeHtml(input.recipientName)},</p>
+        <p style="color: #334155; margin: 0 0 20px 0;">
+          We received a request to reset your <strong>${SITE_CONFIG.name}</strong> account password. Use the 6-digit verification code below to proceed:
+        </p>
+        <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 10px; padding: 22px; text-align: center; margin: 0 0 24px 0;">
+          <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #0B1528;">
+            ${otp}
+          </span>
+          <p style="margin: 10px 0 0 0; font-size: 12px; color: #64748b;">
+            This OTP is valid for <strong>10 minutes</strong> and can only be used once.
+          </p>
+        </div>
+        <p style="color: #64748b; font-size: 13px; margin: 0;">
+          If you did not request a password reset, please ignore this email—your account remains secure.
+        </p>
+      `;
+      return {
+        subject: `${otp} is your ${SITE_CONFIG.name} password reset OTP`,
+        html: wrapEmailTemplate(content, `Your password reset OTP is ${otp}.`),
       };
     }
 

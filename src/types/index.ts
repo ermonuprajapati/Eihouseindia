@@ -33,6 +33,8 @@ export interface TiptapDocument {
 export interface UserProfile {
   uid: string;
   email: string;
+  phone?: string;
+  phoneNormalized?: string;
   username: string;
   displayName: string;
   avatar: string;
