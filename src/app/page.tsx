@@ -192,7 +192,7 @@ export default async function HomePage() {
                       <div className="flex items-center gap-2">
                         <div className="h-6 w-6 rounded-full overflow-hidden border border-amber-400/60 shrink-0 bg-slate-800">
                           <Image
-                            src="/images/founder/monu-prajapati-square.jpg"
+                            src={SITE_CONFIG.founder.avatarImage}
                             alt="Er. Monu Prajapati — Founder"
                             width={24}
                             height={24}

@@ -74,7 +74,7 @@ export default function ContactPage() {
                 <div className="flex items-center gap-4">
                   <div className="relative shrink-0 overflow-hidden rounded-xl border border-amber-400/50 shadow-md bg-slate-900 h-16 w-16">
                     <Image
-                      src="/images/founder/monu-prajapati-square.jpg"
+                      src={SITE_CONFIG.founder.avatarImage}
                       alt="Er. Monu Prajapati — Founder & Proprietor"
                       width={128}
                       height={128}

@@ -269,7 +269,7 @@ export default function AboutPage() {
                   <div className="flex items-center gap-4">
                     <div className="relative shrink-0 overflow-hidden rounded-2xl border-2 border-amber-400/60 shadow-lg bg-slate-900 h-24 w-24">
                       <Image
-                        src="/images/founder/monu-prajapati-square.jpg"
+                        src={SITE_CONFIG.founder.avatarImage}
                         alt="Monu Prajapati — Founder & Proprietor, Engineering Innovation House"
                         width={192}
                         height={192}
