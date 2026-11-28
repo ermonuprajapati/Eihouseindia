@@ -2,6 +2,44 @@ import { collection, query, orderBy, limit, getDocs, doc, updateDoc, deleteDoc }
 import { db } from '@/config/firebase';
 import type { AdminEmailMessage, EmailFolder } from '@/types';
 
+export type SenderAccountType = 'info' | 'admin' | 'founder';
+
+export interface SenderAccount {
+  id: SenderAccountType;
+  name: string;
+  email: string;
+  display: string;
+  description: string;
+  badge: string;
+}
+
+export const SENDER_ACCOUNTS: Record<SenderAccountType, SenderAccount> = {
+  info: {
+    id: 'info',
+    name: 'EIHOUSE INDIA',
+    email: 'info@eihouseindia.in',
+    display: 'EIHOUSE INDIA <info@eihouseindia.in>',
+    description: 'Official Info & Editorial Communications',
+    badge: 'Info',
+  },
+  admin: {
+    id: 'admin',
+    name: 'EI HOUSE Admin',
+    email: 'admin@eihouseindia.in',
+    display: 'EI HOUSE Admin <admin@eihouseindia.in>',
+    description: 'System & Platform Administration',
+    badge: 'Admin',
+  },
+  founder: {
+    id: 'founder',
+    name: 'EI HOUSE Founder',
+    email: 'founder@eihouseindia.in',
+    display: 'Monu Prajapati | Founder EI HOUSE <founder@eihouseindia.in>',
+    description: 'Executive & Strategic Outreach',
+    badge: 'Founder',
+  },
+};
+
 export interface SendMailParams {
   to: string;
   subject: string;
@@ -10,6 +48,7 @@ export interface SendMailParams {
   cc?: string;
   bcc?: string;
   fromName?: string;
+  fromAccount?: SenderAccountType;
   inReplyTo?: string;
 }
 

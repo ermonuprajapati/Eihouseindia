@@ -90,15 +90,34 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { to, subject, bodyHtml, bodyText, cc, bcc, fromName, inReplyTo } = body;
+    const { to, subject, bodyHtml, bodyText, cc, bcc, fromName, fromAccount = 'info', inReplyTo } = body;
 
     if (!to || !subject || (!bodyHtml && !bodyText)) {
       return NextResponse.json({ error: 'Missing required email fields (to, subject, body)' }, { status: 400 });
     }
 
     const resend = getResendClient();
-    const defaultFrom = process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
-    const senderDisplay = fromName ? `${fromName} <info@eihouseindia.in>` : defaultFrom;
+
+    // Configure sender identity and replyTo based on chosen account (info, admin, founder)
+    let senderDisplay = `${SITE_CONFIG.name} <info@eihouseindia.in>`;
+    let replyToEmail = 'info@eihouseindia.in';
+
+    if (fromAccount === 'founder') {
+      senderDisplay = fromName
+        ? `${fromName} <founder@eihouseindia.in>`
+        : 'Monu Prajapati | Founder EI HOUSE <founder@eihouseindia.in>';
+      replyToEmail = 'founder@eihouseindia.in';
+    } else if (fromAccount === 'admin') {
+      senderDisplay = fromName
+        ? `${fromName} <admin@eihouseindia.in>`
+        : 'EI HOUSE Admin <admin@eihouseindia.in>';
+      replyToEmail = 'admin@eihouseindia.in';
+    } else {
+      senderDisplay = fromName
+        ? `${fromName} <info@eihouseindia.in>`
+        : process.env.RESEND_FROM_EMAIL || `${SITE_CONFIG.name} <info@eihouseindia.in>`;
+      replyToEmail = 'info@eihouseindia.in';
+    }
 
     let resendId: string | undefined = undefined;
 
@@ -121,7 +140,7 @@ export async function POST(request: Request) {
         subject,
         html: emailHtml,
         text: emailText,
-        replyTo: 'info@eihouseindia.in',
+        replyTo: replyToEmail,
       };
 
       if (cc) {
@@ -151,6 +170,8 @@ export async function POST(request: Request) {
       isStarred: false,
       createdAt: new Date().toISOString(),
       source: 'composer',
+      replyTo: replyToEmail,
+      tags: [fromAccount],
       ...(cc ? { cc } : {}),
       ...(bcc ? { bcc } : {}),
       ...(resendId ? { resendId } : {}),

@@ -45,6 +45,8 @@ import {
   deleteAdminEmail,
   simulateInboundEmail,
   PRESET_MAIL_TEMPLATES,
+  SENDER_ACCOUNTS,
+  type SenderAccountType,
 } from '@/modules/admin/mail-service';
 import { getInquiriesForAdmin } from '@/modules/admin/admin-service';
 import type { AdminEmailMessage, ContactInquiryItem, EmailFolder } from '@/types';
@@ -68,6 +70,7 @@ export default function AdminMailPage() {
 
   // Compose Modal states
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeFromAccount, setComposeFromAccount] = useState<SenderAccountType>('info');
   const [composeTo, setComposeTo] = useState('');
   const [composeCc, setComposeCc] = useState('');
   const [composeBcc, setComposeBcc] = useState('');
@@ -78,6 +81,7 @@ export default function AdminMailPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('blank');
 
   // Quick reply in detail view
+  const [quickReplyFromAccount, setQuickReplyFromAccount] = useState<SenderAccountType>('info');
   const [quickReplyText, setQuickReplyText] = useState('');
   const [sendingQuickReply, setSendingQuickReply] = useState(false);
 
@@ -258,15 +262,15 @@ export default function AdminMailPage() {
       const res = await sendAdminMail({
         to: composeTo,
         subject: composeSubject,
+        fromAccount: composeFromAccount,
         bodyHtml: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1e293b;">
           ${composeBody.replace(/\n/g, '<br/>')}
           <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-          <p style="font-size: 12px; color: #64748b; margin: 0;">Dispatched via EI HOUSE INDIA Editorial Mail Services (<a href="https://eihouseindia.in" style="color: #0284c7;">eihouseindia.in</a>)</p>
+          <p style="font-size: 12px; color: #64748b; margin: 0;">Dispatched via EI HOUSE INDIA (${SENDER_ACCOUNTS[composeFromAccount].email})</p>
         </div>`,
         bodyText: composeBody,
         cc: composeCc || undefined,
         bcc: composeBcc || undefined,
-        fromName: 'EI HOUSE Editorial',
       });
 
       if (res.email) {
@@ -286,6 +290,7 @@ export default function AdminMailPage() {
   };
 
   const resetComposeFields = () => {
+    setComposeFromAccount('info');
     setComposeTo('');
     setComposeCc('');
     setComposeBcc('');
@@ -318,6 +323,7 @@ export default function AdminMailPage() {
       const res = await sendAdminMail({
         to: selectedEmail.from,
         subject: selectedEmail.subject.startsWith('Re:') ? selectedEmail.subject : `Re: ${selectedEmail.subject}`,
+        fromAccount: quickReplyFromAccount,
         bodyHtml: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1e293b;">
           ${quickReplyText.replace(/\n/g, '<br/>')}
           <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
@@ -591,13 +597,24 @@ export default function AdminMailPage() {
             {/* Quick Status Info Card */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm text-xs">
               <div className="flex items-center justify-between text-slate-500 font-medium">
-                <span>Domain Sender</span>
-                <span className="text-emerald-700 font-semibold">Verified</span>
+                <span>Active Sender Accounts</span>
+                <span className="text-emerald-700 font-semibold text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">3 Available</span>
               </div>
-              <p className="font-mono text-slate-800 break-all text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
-                info@eihouseindia.in
-              </p>
-              <div className="border-t border-slate-100 pt-3 flex items-center justify-between text-[11px] text-slate-500">
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded border border-slate-100">
+                  <span className="text-slate-800">info@eihouseindia.in</span>
+                  <span className="text-[9px] font-sans font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">Info</span>
+                </div>
+                <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded border border-slate-100">
+                  <span className="text-slate-800">admin@eihouseindia.in</span>
+                  <span className="text-[9px] font-sans font-bold bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded">Admin</span>
+                </div>
+                <div className="flex items-center justify-between p-1.5 bg-slate-50 rounded border border-slate-100">
+                  <span className="text-slate-800">founder@eihouseindia.in</span>
+                  <span className="text-[9px] font-sans font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">Founder</span>
+                </div>
+              </div>
+              <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[11px] text-slate-500">
                 <span>Webhook Receiver</span>
                 <span className="font-mono text-blue-600 font-medium">/api/webhooks/resend</span>
               </div>
@@ -973,9 +990,20 @@ export default function AdminMailPage() {
 
                 {/* Quick Reply Box */}
                 <div className="p-4 border-t border-slate-200 bg-slate-50/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-slate-700">Quick Reply to Sender</Label>
-                    <span className="text-[11px] text-slate-400">Replying to: {selectedEmail.from}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs font-semibold text-slate-700">Quick Reply</Label>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-[11px] text-slate-500">Reply as:</span>
+                      <select
+                        value={quickReplyFromAccount}
+                        onChange={(e) => setQuickReplyFromAccount(e.target.value as SenderAccountType)}
+                        className="h-7 text-xs bg-white border border-slate-200 rounded px-2 font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                      >
+                        <option value="info">EIHOUSE INDIA (info@eihouseindia.in)</option>
+                        <option value="admin">EI HOUSE Admin (admin@eihouseindia.in)</option>
+                        <option value="founder">Monu Prajapati | Founder (founder@eihouseindia.in)</option>
+                      </select>
+                    </div>
                   </div>
                   <Textarea
                     value={quickReplyText}
@@ -1047,7 +1075,9 @@ export default function AdminMailPage() {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-[#0B1528] flex items-center justify-between">
               <span>Compose New Email</span>
-              <span className="text-xs font-normal text-slate-500">Sender: info@eihouseindia.in</span>
+              <span className="text-xs font-normal text-slate-500">
+                From: <strong className="font-semibold text-slate-800">{SENDER_ACCOUNTS[composeFromAccount].email}</strong>
+              </span>
             </DialogTitle>
             <DialogDescription className="text-xs">
               Dispatch official transactional or editorial emails through Resend API.
@@ -1055,6 +1085,39 @@ export default function AdminMailPage() {
           </DialogHeader>
 
           <form onSubmit={handleSendEmail} className="space-y-4 pt-2">
+            {/* Sender Account Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <span>Send From Account *</span>
+                <span className="text-[11px] font-normal text-slate-500">Choose email identity</span>
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {(['info', 'admin', 'founder'] as const).map((accKey) => {
+                  const acc = SENDER_ACCOUNTS[accKey];
+                  const isSelected = composeFromAccount === accKey;
+                  return (
+                    <button
+                      key={accKey}
+                      type="button"
+                      onClick={() => setComposeFromAccount(accKey)}
+                      className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600 shadow-sm'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900">{acc.badge}</span>
+                        {isSelected && <span className="h-2 w-2 rounded-full bg-blue-600"></span>}
+                      </div>
+                      <p className="text-[11px] font-mono text-slate-700 truncate mt-0.5">{acc.email}</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{acc.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Template Selector */}
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">Pre-built Email Template</Label>

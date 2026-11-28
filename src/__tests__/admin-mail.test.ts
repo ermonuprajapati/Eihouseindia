@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { PRESET_MAIL_TEMPLATES } from '@/modules/admin/mail-service';
+import { PRESET_MAIL_TEMPLATES, SENDER_ACCOUNTS } from '@/modules/admin/mail-service';
 import type { AdminEmailMessage, EmailFolder } from '@/types';
 
 describe('Admin Mail Suite', () => {
+  it('configures all 3 sender accounts properly (info, admin, founder)', () => {
+    expect(SENDER_ACCOUNTS.info).toBeDefined();
+    expect(SENDER_ACCOUNTS.admin).toBeDefined();
+    expect(SENDER_ACCOUNTS.founder).toBeDefined();
+
+    expect(SENDER_ACCOUNTS.info.email).toBe('info@eihouseindia.in');
+    expect(SENDER_ACCOUNTS.admin.email).toBe('admin@eihouseindia.in');
+    expect(SENDER_ACCOUNTS.founder.email).toBe('founder@eihouseindia.in');
+  });
+
   it('loads preset mail templates properly', () => {
     expect(PRESET_MAIL_TEMPLATES.length).toBeGreaterThanOrEqual(4);
     const editorial = PRESET_MAIL_TEMPLATES.find((t) => t.id === 'editorial_reply');
