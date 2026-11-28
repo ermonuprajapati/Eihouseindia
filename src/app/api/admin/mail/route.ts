@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { getAdminDb } from '@/config/firebase-admin';
 import { db } from '@/config/firebase';
-import { collection, getDocs, doc, setDoc, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, query, orderBy, limit } from 'firebase/firestore';
 import { SITE_CONFIG } from '@/config/site';
 import type { AdminEmailMessage, EmailFolder } from '@/types';
 
@@ -149,15 +149,9 @@ export async function POST(request: Request) {
 
     const adminDb = getAdminDb();
     if (adminDb) {
-      await adminDb.collection('adminEmails').doc(emailId).set({
-        ...newRecord,
-        serverTimestamp: serverTimestamp(),
-      });
+      await adminDb.collection('adminEmails').doc(emailId).set(newRecord);
     } else {
-      await setDoc(doc(db, 'adminEmails', emailId), {
-        ...newRecord,
-        serverTimestamp: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'adminEmails', emailId), newRecord);
     }
 
     return NextResponse.json({

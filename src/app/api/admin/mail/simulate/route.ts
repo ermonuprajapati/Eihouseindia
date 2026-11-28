@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/config/firebase-admin';
 import { db } from '@/config/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import type { AdminEmailMessage } from '@/types';
 
 export async function POST(request: Request) {
@@ -46,15 +46,9 @@ IIT Delhi`;
 
     const adminDb = getAdminDb();
     if (adminDb) {
-      await adminDb.collection('adminEmails').doc(emailId).set({
-        ...newRecord,
-        serverTimestamp: serverTimestamp(),
-      });
+      await adminDb.collection('adminEmails').doc(emailId).set(newRecord);
     } else {
-      await setDoc(doc(db, 'adminEmails', emailId), {
-        ...newRecord,
-        serverTimestamp: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'adminEmails', emailId), newRecord);
     }
 
     return NextResponse.json({
