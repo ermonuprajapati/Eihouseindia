@@ -1142,7 +1142,7 @@ export default function AdminPanelPage() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSection(item.id)}
+                    onClick={() => { if (item.id === 'mail') { router.push('/admin/mail'); return; } setSection(item.id); }}
                     className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                       section === item.id
                         ? 'bg-[#0B1528] text-white'

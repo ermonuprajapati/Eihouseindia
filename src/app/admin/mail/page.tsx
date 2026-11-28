@@ -415,6 +415,30 @@ export default function AdminMailPage() {
                   )}
                 </div>
               </div>
+              {/* Current inbox/folder indicator */}
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+              <div className="flex items-center gap-1.5">
+                {(() => {
+                  const folderMeta: Record<string, { label: string; color: string; dot: string }> = {
+                    inbox:     { label: 'Inbox',     color: 'text-blue-700 bg-blue-50 border-blue-200',   dot: 'bg-blue-500' },
+                    sent:      { label: 'Sent',      color: 'text-slate-700 bg-slate-100 border-slate-200', dot: 'bg-slate-400' },
+                    starred:   { label: 'Starred',   color: 'text-amber-700 bg-amber-50 border-amber-200',  dot: 'bg-amber-400' },
+                    trash:     { label: 'Trash',     color: 'text-red-600 bg-red-50 border-red-200',        dot: 'bg-red-400' },
+                    inquiries: { label: 'Inquiries', color: 'text-orange-700 bg-orange-50 border-orange-200', dot: 'bg-orange-500' },
+                  };
+                  const key = filterType === 'starred' ? 'starred' : (currentFolder as string);
+                  const meta = folderMeta[key] ?? folderMeta['inbox'];
+                  return (
+                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${meta.color}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                      {meta.label}
+                      {currentFolder !== 'inquiries' && filterType !== 'starred' && counts.unreadInbox > 0 && currentFolder === 'inbox' && (
+                        <span className="ml-0.5 font-bold">{counts.unreadInbox} unread</span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
 
             {/* Right: action strip */}
@@ -446,16 +470,6 @@ export default function AdminMailPage() {
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Setup
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSimulateInbound()}
-                disabled={simulating}
-                title="Simulate incoming mail"
-                className="h-8 px-3 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                {simulating ? 'Receiving…' : 'Test Inbound'}
               </button>
               <button
                 type="button"
@@ -895,15 +909,6 @@ export default function AdminMailPage() {
                   >
                     <PenSquare className="h-3.5 w-3.5" />
                     Compose
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSimulateInbound()}
-                    disabled={simulating}
-                    className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    Test Inbound
                   </button>
                 </div>
               </div>
