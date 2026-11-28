@@ -44,6 +44,7 @@ import {
   updateAdminEmailStatus,
   deleteAdminEmail,
   simulateInboundEmail,
+  syncInboundEmails,
   PRESET_MAIL_TEMPLATES,
   SENDER_ACCOUNTS,
   type SenderAccountType,
@@ -88,12 +89,23 @@ export default function AdminMailPage() {
   // Webhook setup modal
   const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [previewMode, setPreviewMode] = useState<'html' | 'text'>('html');
 
   // Load emails & inquiries
-  const loadData = useCallback(async (showToast = false) => {
+  const loadData = useCallback(async (showToast = false, runSync = true) => {
     try {
       setLoading(true);
+
+      // Auto-sync incoming emails from Resend if runSync is enabled
+      if (runSync) {
+        try {
+          await syncInboundEmails();
+        } catch {
+          // Ignore background sync errors on load
+        }
+      }
+
       const [mailRes, inqRes] = await Promise.all([
         fetchAdminEmails({ folder: 'all' }),
         getInquiriesForAdmin().catch(() => []),
@@ -114,12 +126,29 @@ export default function AdminMailPage() {
     }
   }, []);
 
+  const handleManualSync = async () => {
+    try {
+      setSyncing(true);
+      const res = await syncInboundEmails();
+      if (res.syncedCount > 0) {
+        toast.success(`Synced ${res.syncedCount} new email(s) from Resend!`);
+      } else {
+        toast.info('Inbox is up to date with Resend.');
+      }
+      await loadData(false, false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !firebaseUser) {
       router.replace('/auth/login');
     }
     if (firebaseUser && isEditor) {
-      void loadData();
+      void loadData(false, true);
     }
   }, [firebaseUser, isEditor, authLoading, router, loadData]);
 
@@ -438,7 +467,18 @@ export default function AdminMailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void loadData(true)}
+              onClick={() => void handleManualSync()}
+              disabled={syncing || loading}
+              className="cursor-pointer text-blue-700 border-blue-200 bg-blue-50/60 hover:bg-blue-100"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+              <span>{syncing ? 'Syncing Resend...' : 'Sync Resend Inbox'}</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadData(true, false)}
               disabled={loading}
               className="cursor-pointer text-slate-700 bg-white"
             >

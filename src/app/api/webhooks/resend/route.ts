@@ -48,18 +48,20 @@ export async function POST(request: Request) {
     let bodyHtml = String(eventData.html || '');
     let bodyText = String(eventData.text || '');
 
-    // If body is missing but we have an email_id, fetch full content from Resend API
+    // If body is missing but we have an email_id, fetch full content from Resend Received Emails API
     if ((!bodyHtml && !bodyText) && resendEmailId) {
       const resend = getResendClient();
       if (resend) {
         try {
-          const fetched = await resend.emails.get(resendEmailId);
+          const fetched = await resend.emails.receiving.get(resendEmailId);
           if (fetched.data) {
-            const dataObj = fetched.data as unknown as Record<string, unknown>;
-            from = typeof dataObj.from === 'string' ? dataObj.from : from;
-            subject = typeof dataObj.subject === 'string' ? dataObj.subject : subject;
-            bodyHtml = typeof dataObj.html === 'string' ? dataObj.html : '';
-            bodyText = typeof dataObj.text === 'string' ? dataObj.text : '';
+            from = fetched.data.from || from;
+            subject = fetched.data.subject || subject;
+            bodyHtml = fetched.data.html || '';
+            bodyText = fetched.data.text || '';
+            if (Array.isArray(fetched.data.to)) {
+              // override to if present
+            }
           }
         } catch (fetchErr) {
           console.warn('Failed to retrieve full email from Resend API:', fetchErr);
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
       bodyHtml = `<p>${bodyText}</p>`;
     }
 
-    const emailId = `inbound_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const emailId = resendEmailId ? `inbound_${resendEmailId}` : `inbound_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newRecord: AdminEmailMessage = {
       id: emailId,
       folder: 'inbox',

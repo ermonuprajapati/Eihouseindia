@@ -240,3 +240,21 @@ export async function simulateInboundEmail(sample?: {
   }
   return data.email;
 }
+
+export async function syncInboundEmails(): Promise<{
+  success: boolean;
+  syncedCount: number;
+  totalReceived?: number;
+  message: string;
+}> {
+  const res = await fetch('/api/admin/mail/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to sync emails from Resend');
+  }
+  return data;
+}
