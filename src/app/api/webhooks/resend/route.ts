@@ -37,9 +37,41 @@ export async function POST(request: Request) {
     // Extract event details
     const eventType = String(payload.type || payload.event || 'email.received');
     const eventData = (payload.data || payload) as Record<string, unknown>;
-
-    // We process received emails or any inbound notification
     const resendEmailId = String(eventData.email_id || eventData.id || '');
+
+    // Handle outbound email events (delivered, opened, bounced, complained, clicked, sent)
+    if (eventType !== 'email.received') {
+      const adminDb = getAdminDb();
+      if (adminDb && resendEmailId) {
+        try {
+          const snapshot = await adminDb
+            .collection('adminEmails')
+            .where('resendId', '==', resendEmailId)
+            .limit(1)
+            .get();
+
+          if (!snapshot.empty) {
+            const docRef = snapshot.docs[0].ref;
+            const existingTags: string[] = snapshot.docs[0].data().tags || [];
+            await docRef.update({
+              deliveryStatus: eventType.replace('email.', ''),
+              tags: Array.from(new Set([...existingTags, eventType])),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (updateErr) {
+          console.warn('Could not update email delivery status:', updateErr);
+        }
+      }
+
+      return NextResponse.json({
+        received: true,
+        event: eventType,
+        message: `Outbound event ${eventType} logged successfully`,
+      });
+    }
+
+    // Process Inbound Email (email.received)
     let from = String(eventData.from || 'sender@example.com');
     const to = Array.isArray(eventData.to)
       ? eventData.to.join(', ')
